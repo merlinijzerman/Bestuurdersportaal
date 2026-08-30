@@ -3,12 +3,46 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { z } from "zod";
 import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.wijzigen" }, capability: "procedures.manage", schema: z.object({ "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.wijzigen" }, capability: "procedures.manage", schema: z.object({ "deadline": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;
 
-    const body = (await req.json()) as { status?: "actief" | "afgerond" };
+    const body = (await req.json()) as { status?: "actief" | "afgerond"; deadline?: string | null };
+
+    // §10: deadline betekent uitsluitend "uiterlijk gereed". Hij leidt nooit
+    // een status af en loopt via het bestaande, beheerde stappenpad.
+    if (Object.prototype.hasOwnProperty.call(body, "deadline")) {
+      const deadline = body.deadline === "" ? null : body.deadline;
+      if (deadline !== null && (typeof deadline !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(deadline))) {
+        return NextResponse.json({ error: "Deadline moet een datum zijn" }, { status: 400 });
+      }
+      const { data: stap } = await supabase
+        .from("procedure_stappen")
+        .select("id")
+        .eq("id", stapId)
+        .eq("procedure_id", id)
+        .maybeSingle();
+      if (!stap) return NextResponse.json({ error: "Stap niet gevonden" }, { status: 404 });
+      const { error } = await supabase
+        .from("procedure_stappen")
+        .update({ deadline })
+        .eq("id", stapId)
+        .eq("procedure_id", id);
+      if (error) {
+        console.error("Stapdeadline wijzigen mislukt:", error);
+        return NextResponse.json({ error: "Deadline wijzigen mislukt" }, { status: 500 });
+      }
+      await supabase.from("procedure_log").insert({
+        procedure_id: id,
+        event_type: "stap_deadline_gewijzigd",
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
+        payload: { stap_id: stapId, deadline },
+      });
+      return NextResponse.json({ ok: true, deadline });
+    }
+
     if (body.status !== "afgerond" && body.status !== "actief") {
       return NextResponse.json(
         { error: "Ongeldige status" },

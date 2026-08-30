@@ -17,7 +17,7 @@
 // Geen schema-wijziging. Hergebruikt bestaande blok-componenten als
 // tab-content.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   Assumption,
   RiskItem,
@@ -182,6 +182,15 @@ export default function OnderbouwingsPaneel({
 }: Props) {
   const [actief, setActief] = useState<TabId>("aannames");
 
+  // De homepage-werkbak verwijst rechtstreeks naar de bestaande Acties-tab.
+  // Zo blijft de werkbak een ingang op de bron, in plaats van een tweede UI
+  // waarin een actie zelfstandig zou kunnen afwijken van het dossier.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("dossier") === "acties") {
+      setActief("acties");
+    }
+  }, []);
+
   const aantalAannames = assumptions.filter((a) => a.status !== "verwijderd").length;
   const aantalRisicos = risks.length;
   const aantalVoorwaarden = conditions.length;
@@ -189,7 +198,7 @@ export default function OnderbouwingsPaneel({
   const aantalDissent = dissents.length;
 
   return (
-    <div className="bg-white border border-line rounded-xl overflow-hidden">
+    <div id="onderbouwing" className="bg-white border border-line rounded-xl overflow-hidden">
       {/* Paneel-header */}
       <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-ink">Onderbouwing</h3>

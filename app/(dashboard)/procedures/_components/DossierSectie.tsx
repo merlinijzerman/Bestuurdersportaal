@@ -12,7 +12,7 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 
-const OPEN_ANKERS = ["status-overgang", "afschriften"];
+const OPEN_ANKERS = ["status-overgang", "afschriften", "onderbouwing"];
 
 export default function DossierSectie({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -20,7 +20,8 @@ export default function DossierSectie({ children }: { children: ReactNode }) {
   useEffect(() => {
     const check = () => {
       const hash = window.location.hash.replace(/^#/, "");
-      if (hash && OPEN_ANKERS.includes(hash)) setOpen(true);
+      const dossierTab = new URLSearchParams(window.location.search).get("dossier");
+      if ((hash && OPEN_ANKERS.includes(hash)) || dossierTab === "acties") setOpen(true);
     };
     check();
     window.addEventListener("hashchange", check);

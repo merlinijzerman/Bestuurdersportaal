@@ -14,6 +14,7 @@ import type {
 import type { EvidenceItem } from "@/core/lib/decision-view";
 import BibliotheekPicker from "@/core/components/BibliotheekPicker";
 import VereisteToevoegen from "./VereisteToevoegen";
+import AantekeningenBlok from "./AantekeningenBlok";
 import VereisteKiezer from "./VereisteKiezer";
 import VaststellingFormulier from "./VaststellingFormulier";
 import { magLosmaken, magKoppelen, redenGeenKoppelAffordance } from "@/core/lib/vereiste-affordance";
@@ -763,9 +764,37 @@ export default function StapPaneel({
   const [toelichtingWaarde, setToelichtingWaarde] = useState(
     stap.beschrijving ?? ""
   );
+  // §10: instantie-deadline, één betekenis: uiterlijk gereed. Niet berekend,
+  // niet gekoppeld aan de statusmachine.
+  const [deadlineBewerken, setDeadlineBewerken] = useState(false);
+  const [deadlineWaarde, setDeadlineWaarde] = useState(stap.deadline ?? "");
   useEffect(() => {
     setToelichtingWaarde(stap.beschrijving ?? "");
   }, [stap.beschrijving]);
+  useEffect(() => {
+    setDeadlineWaarde(stap.deadline ?? "");
+  }, [stap.deadline]);
+
+  async function deadlineOpslaan() {
+    if (alleenLezen || !kanBeheren) return;
+    setFout(null);
+    setBezig("deadline");
+    try {
+      const res = await fetch(`/api/procedures/${procedureId}/stappen/${stap.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deadline: deadlineWaarde || null }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Deadline wijzigen mislukt");
+      setDeadlineBewerken(false);
+      router.refresh();
+    } catch (error) {
+      setFout(error instanceof Error ? error.message : "Deadline wijzigen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
 
   const stapEvidence = evidence.filter(
     (e) => e.stap_volgorde === stap.volgorde
@@ -1591,7 +1620,7 @@ export default function StapPaneel({
           <h2 className="text-base font-semibold text-ink mt-1">
             {stap.volgorde} — {stap.naam}
           </h2>
-          {alleenLezen && stap.status === "afgerond" && (
+      {alleenLezen && stap.status === "afgerond" && (
             <p className="text-xs text-muted mt-1">
               Afgerond
               {stap.voltooid_op
@@ -1602,9 +1631,18 @@ export default function StapPaneel({
           )}
         </div>
         <div className="text-right text-xs text-muted flex-shrink-0">
-          {stap.deadline && (
-            <div className="text-warn-ink font-medium">
-              Deadline {formatDatumKort(stap.deadline)}
+          {deadlineBewerken ? (
+            <div className="flex items-center justify-end gap-1.5">
+              <input aria-label="Uiterlijk gereed" type="date" value={deadlineWaarde} onChange={(event) => setDeadlineWaarde(event.target.value)} className="border border-line rounded px-1.5 py-1 text-xs bg-white" />
+              <button type="button" disabled={bezig === "deadline"} onClick={deadlineOpslaan} className="text-accent hover:underline disabled:opacity-50">Opslaan</button>
+              <button type="button" onClick={() => { setDeadlineBewerken(false); setDeadlineWaarde(stap.deadline ?? ""); }} className="hover:text-ink">Annuleren</button>
+            </div>
+          ) : (
+            <div className={stap.deadline ? "text-warn-ink font-medium" : "text-muted"}>
+              {stap.deadline ? `Uiterlijk gereed ${formatDatumKort(stap.deadline)}` : "Geen uiterlijke datum"}
+              {kanBeheren && !alleenLezen && (
+                <button type="button" onClick={() => setDeadlineBewerken(true)} className="ml-1.5 text-xs text-accent hover:underline">Wijzigen</button>
+              )}
             </div>
           )}
           {stap.eigenaar_naam && <div className="mt-1">{stap.eigenaar_naam}</div>}
@@ -1760,6 +1798,15 @@ export default function StapPaneel({
           )}
         </div>
       )}
+
+      <AantekeningenBlok
+        key={stap.id}
+        procedureId={procedureId}
+        stapId={stap.id}
+        kanBeheren={kanBeheren}
+        alleenLezen={alleenLezen}
+        currentUserId={currentUserId}
+      />
 
       {/* P1a (#165): fasecontext op het tabblad Overzicht. */}
       {fase && (
