@@ -133,7 +133,7 @@ export default function MaatregelenBlok({
   }
 
   return (
-    <div className="bg-white border border-line rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-ink">
           Getroffen maatregelen
