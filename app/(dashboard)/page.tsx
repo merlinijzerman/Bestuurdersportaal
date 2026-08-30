@@ -1,5 +1,8 @@
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { getPortaalContext } from "@/core/lib/portaalcontext";
+import { buildDecisionDossierView } from "@/core/lib/decision";
+import { bouwBestuurlijkeSignalen } from "@/core/lib/bestuurlijke-signalen";
+import type { DecisionDossierView } from "@/core/lib/decision-view";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import NotificatiesBlok from "./_components/NotificatiesBlok";
@@ -90,6 +93,22 @@ interface NotifRow {
   gerelateerd_aan_id: string | null;
   aangemaakt: string;
   gelezen_op: string | null;
+}
+
+interface SignaalProcedureRij {
+  id: string;
+  titel: string;
+  status: string;
+  decision_id: string | null;
+}
+
+interface AfwijkingsRij {
+  procedure_id: string;
+  afgerond_met_afwijking: boolean;
+}
+
+function vandaagAlsDatum() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default async function HomePage() {
@@ -202,6 +221,71 @@ export default async function HomePage() {
   // portaalcontext (besluit 0085); zelfde query, volgorde en limiet als voorheen.
   const openStappen = ctx.openStappen;
 
+  // §12 — bestuurlijke signalen zijn geen tweede takenlijst maar een compacte
+  // prioritering binnen de bestaande homepage-werkbak. De evidence-synthese
+  // komt uit dezelfde dossier-view als het procesdetail; zo ontstaat geen
+  // tweede, afwijkende definitie van een kritieke vereiste.
+  const { data: proceduresVoorSignalen } = await supabase
+    .from("procedures")
+    .select("id, titel, status, decision_id")
+    .eq("fonds_id", profiel?.fonds_id || "")
+    .neq("status", "afgerond");
+  const signalProcedureRijen = (proceduresVoorSignalen || []) as SignaalProcedureRij[];
+  const procedureIds = signalProcedureRijen.map((procedure) => procedure.id);
+  const { data: afwijkingsRijen } = procedureIds.length
+    ? await supabase
+        .from("procedure_stappen")
+        .select("procedure_id, afgerond_met_afwijking")
+        .in("procedure_id", procedureIds)
+        .eq("afgerond_met_afwijking", true)
+    : { data: [] as AfwijkingsRij[] };
+  const afwijkingenPerProcedure = new Map<string, number>();
+  for (const rij of (afwijkingsRijen || []) as AfwijkingsRij[]) {
+    if (!rij.afgerond_met_afwijking) continue;
+    afwijkingenPerProcedure.set(
+      rij.procedure_id,
+      (afwijkingenPerProcedure.get(rij.procedure_id) ?? 0) + 1
+    );
+  }
+
+  const dossierViews = new Map<string, DecisionDossierView>();
+  await Promise.all(
+    signalProcedureRijen
+      .filter((procedure) => procedure.decision_id)
+      .map(async (procedure) => {
+        try {
+          const dossier = await buildDecisionDossierView(supabase, procedure.decision_id!);
+          dossierViews.set(procedure.id, dossier);
+        } catch (fout) {
+          // Een incompleet oud dossier mag de homepage niet laten falen. Het
+          // ontbrekende dossier wordt ook niet als groen gepresenteerd: alleen
+          // de verifieerbare signalen worden geprojecteerd.
+          console.error("Bestuurlijke signalen: dossier niet geladen", procedure.id, fout);
+        }
+      })
+  );
+  const bestuurlijkeSignalen = bouwBestuurlijkeSignalen(
+    signalProcedureRijen.map((procedure) => {
+      const dossier = dossierViews.get(procedure.id);
+      return {
+        procedureId: procedure.id,
+        procedureTitel: procedure.titel,
+        actief: procedure.status !== "afgerond",
+        afwijkingenOpen: afwijkingenPerProcedure.get(procedure.id) ?? 0,
+        bewijs: dossier?.evidence ?? [],
+        besluit: dossier
+          ? {
+              status: dossier.decision.status,
+              gewensteBesluitdatum: dossier.decision.gewenste_besluitdatum,
+              acties: dossier.actions,
+              dissent: dossier.dissent,
+            }
+          : null,
+      };
+    }),
+    vandaagAlsDatum()
+  );
+
   return (
     <div className="p-4 sm:p-6 lg:p-7 space-y-5">
       {/* Persoonlijke welkomst */}
@@ -239,12 +323,13 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* Mijn open procedure-stappen */}
-      {openStappen.length > 0 && (
+      {/* Eén werkbak: bestuurlijke signalen krijgen voorrang; zonder signaal
+          blijven de persoonlijke open stappen de bruikbare, bestaande ingang. */}
+      {(bestuurlijkeSignalen.length > 0 || openStappen.length > 0) && (
         <div className="bg-white border border-line rounded-xl p-5">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div className="font-semibold text-ink text-sm">
-              Uw open procedure-stappen
+              Voor u
             </div>
             <Link
               href="/procedures"
@@ -254,7 +339,29 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="space-y-2">
-            {openStappen.map((s) => {
+            {bestuurlijkeSignalen.map((signaal) => (
+              <Link
+                key={signaal.soort}
+                href={signaal.href}
+                className="flex items-start gap-3 p-3 border border-line rounded-lg hover:border-accent transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-warn mt-1.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-ink">
+                    {signaal.titel}
+                  </div>
+                  <div className="text-xs text-muted mt-0.5 truncate">
+                    {signaal.toelichting}
+                  </div>
+                </div>
+              </Link>
+            ))}
+            {bestuurlijkeSignalen.length > 0 && openStappen.length > 0 && (
+              <div className="pt-2 text-[11px] font-semibold text-muted uppercase tracking-wide">
+                Uw open stappen
+              </div>
+            )}
+            {openStappen.slice(0, 3).map((s) => {
               const dagen = s.deadline
                 ? Math.ceil(
                     (new Date(s.deadline).getTime() - Date.now()) / 86400000
@@ -304,9 +411,11 @@ export default async function HomePage() {
 
       {/* Voor u open + Mijn activiteit */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* Voor u open */}
+        {/* Vergadering voorbereiden */}
         <div className="bg-white border border-line rounded-xl p-5">
-          <div className="font-semibold text-ink text-sm mb-3">Voor u open</div>
+          <div className="font-semibold text-ink text-sm mb-3">
+            Vergadering voorbereiden
+          </div>
           {volgendeVergadering ? (
             <div className="space-y-3">
               <div className="bg-app-bg rounded-lg p-3">
