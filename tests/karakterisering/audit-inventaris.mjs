@@ -146,11 +146,16 @@ const SPLIT_KLASSE = {
   "DELETE app/api/gesprekken/[id]/route.ts": "operationeel",
   "POST app/api/reflectie/transitie/route.ts": "operationeel",
   "PATCH app/api/profiel/route.ts": "operationeel", // fonds_id/rol-tabel (C-01), goedkope verzekering
-  // C. geen spoor nodig — 7
+  // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
   "POST app/api/agendapunten/[id]/voorbereiding/route.ts": "geen",
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",
   "POST app/api/notificaties/alles-lezen/route.ts": "geen",
+  // P5c/§9.3: bewerkbaar werkverkeer per stap, expliciet geen
+  // verantwoordingsfeit en buiten het afschrift. Auteur/tenantgrens zit in RLS.
+  "POST app/api/procedures/[id]/stappen/[stapId]/notities/route.ts": "geen",
+  "PATCH app/api/procedures/[id]/stappen/[stapId]/notities/[notitieId]/route.ts": "geen",
+  "DELETE app/api/procedures/[id]/stappen/[stapId]/notities/[notitieId]/route.ts": "geen",
   "POST app/api/procedures/[id]/afschrift/concept/route.ts": "geen", // AI-concept, geen state-change
   "POST app/api/procedures/[id]/stappen/[stapId]/besluit-concept/route.ts": "geen",
   "POST app/api/stuurinformatie/beheer/upload/route.ts": "geen", // parse-only preview
