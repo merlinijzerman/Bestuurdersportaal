@@ -76,7 +76,10 @@ export async function resolveRequirementBinding(
    *  `ps.volgorde = rij.stap_volgorde` als sleutelgelijkheid; een binding naar
    *  een vereiste op een ándere stap zou dus een dode binding zijn — hij telt
    *  nergens mee maar suggereert in de UI het tegendeel. */
-  stapVolgorde?: number
+  stapVolgorde?: number,
+  /** Standaard alleen de drie bewijsstuktypen. Andere feitendragers (zoals
+   * procedure_besluiten voor approval) geven hier hun eigen smalle allowlist. */
+  toegestaneTypen: readonly string[] = BINDBARE_REQUIREMENT_TYPES
 ): Promise<BindingResultaat> {
   if (
     typeof stapVolgorde === "number" &&
@@ -88,15 +91,13 @@ export async function resolveRequirementBinding(
     };
   }
   if (
-    !(BINDBARE_REQUIREMENT_TYPES as readonly string[]).includes(
-      vereiste.requirement_type
-    )
+    !toegestaneTypen.includes(vereiste.requirement_type)
   ) {
     return {
       ok: false,
-      fout:
-        "Dit type vereiste kan niet met een bewijsstuk worden vervuld " +
-        "(alleen document, external_submission en consultation)",
+      fout: `Dit type vereiste kan niet door deze feitendrager worden vervuld (${toegestaneTypen.join(
+        ", "
+      )})`,
     };
   }
 
@@ -109,7 +110,7 @@ export async function resolveRequirementBinding(
 
   const { data: proc, error: procFout } = await supabase
     .from("procedures")
-    .select("template_code")
+    .select("template_code, template_versie")
     .eq("id", procedureId)
     .single();
   if (procFout && procFout.code !== "PGRST116") {
@@ -118,13 +119,18 @@ export async function resolveRequirementBinding(
   }
   if (!proc) return { ok: false, fout: "Procedure niet gevonden" };
 
-  // Template-arm.
-  const { data: templateRijen, error: tplFout } = await supabase
+  // Template-arm. P1b (#166): versie-gefilterd op de gepinde versie van het
+  // dossier; fallback naar code-only als die (kortstondig) null is.
+  let tplQuery = supabase
     .from("procedure_requirements")
     .select("stap_volgorde, requirement_type, documenttype, label")
     .eq("template_code", proc.template_code)
     .eq("stap_volgorde", vereiste.stap_volgorde)
     .eq("requirement_type", vereiste.requirement_type);
+  if (proc.template_versie) {
+    tplQuery = tplQuery.eq("template_versie", proc.template_versie);
+  }
+  const { data: templateRijen, error: tplFout } = await tplQuery;
   if (tplFout) {
     console.error("Bindingslookup (procedure_requirements) mislukt:", tplFout);
     return { ok: false, fout: "Serverfout", serverfout: true };

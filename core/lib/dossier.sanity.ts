@@ -3,7 +3,7 @@
 //
 //  Dit is de TS-spiegel van de SQL-functie
 //  `public.fn_dossierstatus_van_decision`. We toetsen voor ELK van de
-//  17 Decision Object-statussen de verwachte dossierstatus + sublabel,
+//  18 Decision Object-statussen de verwachte dossierstatus + sublabel,
 //  plus de fallback-cases en de tijdlijnfase-afleiding.
 //
 //  De viewtest hoort 1-op-1 met de DB-mapping overeen te komen; deze
@@ -55,15 +55,16 @@ const verwacht: Record<
   teruggezet: { dossierstatus: "lopend", sublabel: "teruggezet" },
   geescaleerd: { dossierstatus: "lopend", sublabel: "geëscaleerd" },
   aangehouden: { dossierstatus: "lopend", sublabel: "aangehouden" },
+  beeindigd: { dossierstatus: "beeindigd", sublabel: "beëindigd" },
 };
 
-const alle17 = Object.keys(verwacht) as DecisionStatus[];
+const alle18 = Object.keys(verwacht) as DecisionStatus[];
 
-test("alle 17 Decision Object-statussen zijn gedekt", () => {
-  assert.equal(alle17.length, 17, "verwacht 17 statussen");
+test("alle 18 Decision Object-statussen zijn gedekt", () => {
+  assert.equal(alle18.length, 18, "verwacht 18 statussen");
 });
 
-for (const status of alle17) {
+for (const status of alle18) {
   test(`${status} → ${verwacht[status].dossierstatus}${
     verwacht[status].sublabel ? ` (${verwacht[status].sublabel})` : ""
   }`, () => {

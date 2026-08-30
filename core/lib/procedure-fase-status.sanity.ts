@@ -13,7 +13,6 @@ import {
   faseStatus,
   bewijslastDekking,
   faseAandacht,
-  aggregeerPortfolio,
   type FaseStatus,
 } from "./procedure-fase-status";
 
@@ -63,6 +62,29 @@ check("faseStatus: deels afgerond, rest niet begonnen → in behandeling", () =>
 
 check("faseStatus: lege fase → nog niet begonnen (defensief)", () => {
   assert.equal(faseStatus([]), "nog_niet_begonnen");
+});
+
+// P4 (#169) — 'vervallen': terminaal én niet-afgerond, géén vals groen.
+check("faseStatus: afgerond + vervallen (alle terminaal) → vervallen (geen vals groen)", () => {
+  assert.equal(
+    faseStatus([{ status: "afgerond" }, { status: "vervallen" }]),
+    "vervallen"
+  );
+});
+check("faseStatus: alle stappen vervallen → vervallen", () => {
+  assert.equal(faseStatus([{ status: "vervallen" }, { status: "vervallen" }]), "vervallen");
+});
+check("faseStatus: vervallen + nog open stap (niet alle terminaal) → in behandeling", () => {
+  assert.equal(
+    faseStatus([{ status: "vervallen" }, { status: "niet_begonnen" }]),
+    "in_behandeling"
+  );
+});
+check("faseStatus: alleen niet_begonnen/geblokkeerd → nog niet begonnen", () => {
+  assert.equal(
+    faseStatus([{ status: "niet_begonnen" }, { status: "geblokkeerd" }]),
+    "nog_niet_begonnen"
+  );
 });
 
 // ── bewijslastDekking ─────────────────────────────────────────────────────────
@@ -187,23 +209,6 @@ check("faseAandacht: alles sluitend, geen heropend → geen vlag", () => {
     ]),
     "geen"
   );
-});
-
-// ── aggregeerPortfolio ────────────────────────────────────────────────────────
-
-check("aggregeerPortfolio: telt uitsluitend lopende procedures", () => {
-  const agg = aggregeerPortfolio([
-    { isAfgerond: false, heeftAandacht: true, heeftRood: false, besluitrijp: false },
-    { isAfgerond: false, heeftAandacht: true, heeftRood: true, besluitrijp: false },
-    { isAfgerond: false, heeftAandacht: false, heeftRood: false, besluitrijp: true },
-    { isAfgerond: true, heeftAandacht: true, heeftRood: true, besluitrijp: true }, // afgerond → niet geteld
-  ]);
-  assert.deepEqual(agg, {
-    lopend: 3,
-    metAandacht: 2,
-    tijdkritisch: 1,
-    besluitrijp: 1,
-  });
 });
 
 console.log(`\nprocedure-fase-status.sanity: ${n} checks groen.`);

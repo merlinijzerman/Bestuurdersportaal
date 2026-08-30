@@ -468,13 +468,6 @@
           "toelichting": "Onderbouwt robuustheid en de afweging van alternatieven.",
           "verplicht": true,
           "blokkerend": false
-        },
-        {
-          "requirement_type": "evaluation",
-          "label": "Evenwichtigheidsoordeel bestuur",
-          "toelichting": "Expliciet besluit/oordeel met motivering per materiële deelnemersgroep en over de transitie als geheel.",
-          "verplicht": true,
-          "blokkerend": true
         }
       ]
     },
@@ -543,13 +536,6 @@
           "requirement_type": "document",
           "label": "Onderbouwing persoonlijke toelichtingen en peildatum",
           "toelichting": "Leg keuze van peildatum en aanpak van persoonlijke verschilverklaringen vast.",
-          "verplicht": true,
-          "blokkerend": false
-        },
-        {
-          "requirement_type": "evaluation",
-          "label": "Deelnemertesten en effectmeting",
-          "toelichting": "Resultaten plus aantoonbare verwerking van bevindingen in communicatie.",
           "verplicht": true,
           "blokkerend": false
         },
@@ -876,13 +862,6 @@
           "blokkerend": true
         },
         {
-          "requirement_type": "evaluation",
-          "label": "Segmentatie- en productiecontrole communicatie",
-          "toelichting": "Controle op populatie, conditionele teksten, bedragen en kanaalconsistentie.",
-          "verplicht": true,
-          "blokkerend": false
-        },
-        {
           "requirement_type": "document",
           "label": "Klantcontact-readiness (FAQ, scripts, training, klachten-/escalatieproces)",
           "toelichting": "Bevat eigenaarschap, escalatieroutes en monitoring van veelvoorkomende vragen en klachten.",
@@ -1090,13 +1069,6 @@
           "requirement_type": "kpi",
           "label": "Klachten-, klantcontact- en keuzemonitoring",
           "toelichting": "Analyseer volumes, categorieën, doelgroepen en trends en vertaal materiële signalen naar bestuurlijke acties.",
-          "verplicht": false,
-          "blokkerend": false
-        },
-        {
-          "requirement_type": "evaluation",
-          "label": "Bestuursevaluatie en verbeteracties",
-          "toelichting": "Leg lessons learned, openstaande beheersacties en overdracht naar lijnorganisatie vast.",
           "verplicht": false,
           "blokkerend": false
         }

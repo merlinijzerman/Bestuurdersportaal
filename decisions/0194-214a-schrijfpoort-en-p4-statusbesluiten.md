@@ -52,7 +52,7 @@ Twee eisen die zwaarder wegen dan de capability-vraag:
 1. **Getypeerde reden, niet alleen vrije tekst.** Het event legt de categorie vast — `correctie_bindingsfout` versus `gewijzigde_omstandigheden` — plus de verplichte motivering. Dat neemt §6.3's bezwaar weg: het spoor vertelt dan zélf dat dit een correctie was, geen inhoudelijke heropening. Zonder die typering is het spoor alleen mínder onwaar in plaats van waar.
 2. **Keten-reconstrueerbaarheid (gedragstoets).** Heropenen ontgrendelt het I1-ontkoppelslot (P2b). Wat daarna wordt losgemaakt logt zijn eigen regel. De gedragstoets bewijst dat de volgorde **heropening → ontkoppeling → herbinding → opnieuw besluiten** als één navolgbare reeks terugleesbaar is in `procedure_log` + `governance_events`. Zonder die keten is het een slot met een sleutel maar geen logboek.
 
-I1 blijft heel: `heropend` stelt geen feit (lege rij in de feitenmatrix), dus de edge verzwakt de invariant niet.
+**Correctie bij tranche 4:** conform de leidende matrix in `PROCEDURE-ENGINE-V2-ONTWERP.md` §4.6 stelt `heropend` wél een controleerbaar feit: de motivering én de terminale bronstatus moeten in het append-only spoor staan. De correctie-RPC legt beide atomair vast; de uitgestelde feitenpoort ziet het event vóór commit. De eerdere formulering “lege rij” was in strijd met §4.6 en vervalt hiermee.
 
 ### E. Twee heropeningen, expliciet uit elkaar
 
@@ -76,6 +76,27 @@ De cross-fonds-referentiecheck (I5, "elk gerefereerd object hoort bij hetzelfde 
 - #214-a levert: revoke-migratie(s) `procedure_stappen` + `procedure_besluiten` (kolom-revoke + DELETE-revoke), de omgelegde brekende `authenticated`-paden (RPC's), de statische gate, en de bijgewerkte `allowlist-grants.tsv` (gewijzigde grants + nieuwe functies).
 - De P4-plan-tranches 6/7 implementeren B–E; tranche 8 implementeert F.
 - Het bredere #214-restant (overige `decision_objects`-kolommen/velden, `is_primary_decision`, event-loze DELETE, de andere fonds-only ALL-tabellen) blijft in #214 als vervolg — #214-a is alleen de twee tabellen die de matrix direct ondergraven.
+
+## P4-uitvoeringsstatus (29-08)
+
+Op de P4-integratielijn geland en geverifieerd (tsc + sanity + container-gedragstoets waar DB-logica):
+
+| Tranche | Inhoud | Migraties/bestanden |
+|---|---|---|
+| 1 | statusdragers (`+beeindigd`, `+niet_begonnen`/`+vervallen`, dossierstatus 9, StapStatus) | `p4_01` + TS |
+| 2 | fasestatus `vervallen` (UI-laag) | `procedure-fase-status.ts` |
+| 3 | `niet_begonnen` + actief-trigger (`actief_sinds`/`gestart_door`) | `p4_03` + TS |
+| 4 | volledige status-feitenmatrix (18 statussen), uitgestelde constraint-trigger en besluitvastlegging met approval-binding + uitkomst | `p4_04` + `p4_status_feitenmatrix.sql` + API/UI |
+| 5 | `besluitmoment_stap`-arm in `fn_stap_open_per_zwaarte` (§7) | `p4_05` |
+| 6 | `procedures.beeindigen`/`.heropenen` (voorzitter+bestuurder) + RPC's + matrix-`beeindigd`-randen + 2 routes | `p4_06` + caps + routes |
+| 7 | §6.3 `besloten→heropend`-besluit (getypeerde reden, `decisions.manage`) + guard | `p4_07` + statusroute |
+| 8 | I5-composite-FK's (3) + gedragstoets | `p4_08` + `p4_i5_composite_fk.sql` |
+
+**Integratievolgorde uitgevoerd:** a1 staat op `main`; de epic is daarop gerebased en a2 is dun/additief toegevoegd; P4 is daarna op die epic gerebased en tranche 4 is additief voltooid. De uitgestelde constraint-trigger toetst het feit aan het einde van dezelfde transactie, zodat een statusomslag en het bijbehorende event atomair kunnen landen. Zie de promotieketen op [#171](https://github.com/merlinijzerman/Bestuurdersportaal/issues/171).
+
+**I1–I7-borging (§4.5):** I1 is nu in beide richtingen geborgd: achterwaarts door het P2b-ontkoppelslot en voorwaarts door de 18-regelige feitenmatrix met een fail-closed `geannuleerd`-arm. I2 (motivering DB-afgedwongen in alle status-RPC's), I3 (capability voor afwijking + beëindigen/heropenen), I4 (transitiematrix), I5 (composite-FK + routecheck-terugval), I6 (schemavorm) en I7 (template-immutabiliteit, PR-B) zijn eveneens geborgd.
+
+**Meting-correctie:** `procedure_vaststelling` bestáát op de epic (P2a `2026_08_24`); de #214-meting draaide op `main`, waar hij niet bestaat. Op de epic is het een echte fonds-only tabel met een eigen I5-composite-FK (tranche 8) — de rest van zijn schrijfpoort-profiel valt onder het bredere #214.
 
 ## Referenties
 

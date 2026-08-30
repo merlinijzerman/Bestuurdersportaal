@@ -165,6 +165,12 @@ SQL_V3="supabase/checks/2026_08_20_v3_grants_volledig.sql"
 # #214-a1 (0194) — schrijfpoort: statische gate + gedragstoets (directe PATCH dicht).
 SQL_P214A1="supabase/checks/2026_08_28_p214a1_schrijfpoort.sql"
 SQL_P214A1G="supabase/checks/2026_08_28_p214a1_gedrag.sql"
+# #214-a2 (0194) — epic-only afwijkingskolommen blijven buiten authenticated UPDATE.
+SQL_P214A2="supabase/checks/2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sql"
+# P4 tranche 8 (#169, 0194 F) — I5 composite-FK weigert cross-fonds referenties.
+SQL_P4I5="supabase/checks/2026_08_29_p4_i5_composite_fk.sql"
+# P4 tranche 4 (#169) — I1: statusclaim vereist matrixfeit.
+SQL_P4I1="supabase/checks/2026_08_29_p4_04_status_feitenmatrix.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -179,6 +185,12 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 # Bewijs↔vereiste-binding — expliciete één-op-éénbinding, fail-closed bij
 # ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
+# P2/PR-B (#167): procedure_vaststelling — binding, I1 en tenant-isolatie (0189).
+SQL_VAST="supabase/checks/2026_08_25_vaststelling_binding_cross_tenant.sql"
+# P3/PR-C (#168): afronden met afwijking — snapshot-pin (SQL-helft) + eigen slot (0192).
+SQL_P3C="supabase/checks/2026_08_27_p3c_afwijking.sql"
+# P3/PR-D (#168): atomaire besluitstatus-omslag met vastlegging (0193).
+SQL_P3D="supabase/checks/2026_08_28_p3d_besluit_omslag.sql"
 
 if [ "${XTENANT_FAST_LAGEN:-uitvoeren}" = "overslaan" ]; then
   echo "== [1–2/4] snelle lagen bewust niet herhaald =="
@@ -303,10 +315,33 @@ echo
 echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
 echo
+echo "-- Vaststelling-binding (type/I5/cross-procedure, I1-slot, tenant-isolatie) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VAST"
+echo
 
 echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1G"
+echo
+
+echo "-- #214-a2 afwijkingskolommen (vier epic-kolommen fail-closed + RPC-recht) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A2"
+echo
+
+echo "-- Afronden met afwijking (snapshot-pin SQL-helft, eigen slot, atomaire kern) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3C"
+echo
+
+echo "-- Besluitstatus-omslag (atomaire vastlegging, I2 DB-afgedwongen, eigen slot) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3D"
+echo
+
+echo "-- P4 I5 (composite-FK weigert cross-fonds referentie) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P4I5"
+echo
+
+echo "-- P4 I1 (statusclaim zonder matrixfeit wordt geweigerd) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P4I1"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"

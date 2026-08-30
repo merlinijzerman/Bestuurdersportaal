@@ -18,6 +18,7 @@
     "lint:quality:check": "node scripts/lint-quality.mjs --check",
     "lint:quality:baseline": "node scripts/lint-quality.mjs --write-baseline",
     "typecheck": "tsc --noEmit --skipLibCheck",
+    "gates": "bash scripts/gates.sh",
     "security:secrets": "bash scripts/check-committed-secrets.sh",
     "sanity": "node scripts/run-sanity.mjs",
     "test": "npm run test:unit && npm run test:component && npm run test:contract",

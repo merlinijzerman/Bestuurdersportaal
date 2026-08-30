@@ -30,6 +30,10 @@ const vereiste = (overrides: Partial<EvidenceItem>): EvidenceItem => ({
   bron_titel: null,
   bron: "template",
   instance_id: null,
+  besluitmoment_stap: null,
+  gebonden_feiten: [],
+  min_aantal: 1,
+  dissent_open: 0,
   ...overrides,
 });
 

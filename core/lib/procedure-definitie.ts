@@ -348,6 +348,7 @@ export function definitieNaarProcessTemplate(def: ProcedureDefinitie): ProcessTe
 
   return {
     code: def.code,
+    versie: def.versie, // P1b (#166): versie meenemen voor snapshot-bij-start.
     naam: def.naam,
     korte_omschrijving: def.korte_omschrijving,
     geschat_aantal_dagen: def.geschat_aantal_dagen,

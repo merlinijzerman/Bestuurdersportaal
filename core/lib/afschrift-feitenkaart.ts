@@ -171,11 +171,28 @@ function verzamelAfwijkingen(bron: AfschriftBron, bewijs: BewijsTelling): string
       );
     }
 
-    // Blokkerende, nog niet vervulde readiness-requirements.
+    // Blokkerende (kritieke), nog niet vervulde vereisten.
     const blokkerend = new Set<string>();
-    for (const res of Object.values(view.readiness)) {
-      for (const o of res.ontbrekend) {
-        if (o.blokkerend) blokkerend.add(`${o.requirement_type}:${o.stap_volgorde}:${o.label}`);
+    if (view.readiness) {
+      // OUD, append-only afschrift-snapshot: de readiness-vorm blijft leidend zodat
+      // bestaande afschriften exact ongewijzigd blijven (0187/§443-slot).
+      for (const res of Object.values(view.readiness)) {
+        for (const o of res.ontbrekend) {
+          if (o.blokkerend) blokkerend.add(`${o.requirement_type}:${o.stap_volgorde}:${o.label}`);
+        }
+      }
+    } else {
+      // NIEUW (readiness ontmanteld): de kritieke, nog niet vervulde vereisten uit
+      // de evidence (`blokkerend` = zwaarte kritiek). LET OP: een BEVROREN snapshot
+      // draagt geen evidence (die zit alleen in de live view) → dan blijft deze set
+      // leeg en toont het afschrift geen blokkerende-vereisten-regel. Het bevroren
+      // besluitmoment-afschrift toont deze regel dus pas als de snapshot-payload zelf
+      // de vervulling draagt — belegd bij #208 (decision_audit_snapshots). Het
+      // CONCEPT-afschrift (live view) toont 'm wél.
+      for (const item of view.evidence ?? []) {
+        if (!item.vervuld && item.blokkerend) {
+          blokkerend.add(`${item.requirement_type}:${item.stap_volgorde}:${item.label}`);
+        }
       }
     }
     if (blokkerend.size > 0) {

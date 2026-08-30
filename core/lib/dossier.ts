@@ -13,8 +13,9 @@ import type { DecisionStatus } from "./decision-view";
 
 // ── Statusmodellen ────────────────────────────────────────────────────
 
-/** De 8 dossierstatussen (FO §5). `gepland`/`gearchiveerd` komen alleen
- *  uit de handmatige fallback (procedures.status), nooit uit een DO. */
+/** De 9 dossierstatussen (FO §5; `beeindigd` toegevoegd in P4 #169). `gepland`/
+ *  `gearchiveerd` komen alleen uit de handmatige fallback (procedures.status),
+ *  nooit uit een DO; `beeindigd` wél uit een DO (besluitstatus `beeindigd`). */
 export type DossierStatus =
   | "gepland"
   | "lopend"
@@ -23,7 +24,8 @@ export type DossierStatus =
   | "in_implementatie"
   | "afgerond"
   | "heropend"
-  | "gearchiveerd";
+  | "gearchiveerd"
+  | "beeindigd";
 
 export const DOSSIER_STATUSSEN: DossierStatus[] = [
   "gepland",
@@ -34,6 +36,7 @@ export const DOSSIER_STATUSSEN: DossierStatus[] = [
   "afgerond",
   "heropend",
   "gearchiveerd",
+  "beeindigd",
 ];
 
 export const DOSSIER_STATUS_LABEL: Record<DossierStatus, string> = {
@@ -45,6 +48,7 @@ export const DOSSIER_STATUS_LABEL: Record<DossierStatus, string> = {
   afgerond: "Afgerond",
   heropend: "Heropend",
   gearchiveerd: "Gearchiveerd",
+  beeindigd: "Beëindigd",
 };
 
 export const PERIODE_TYPES = [
@@ -123,6 +127,9 @@ export function dossierstatusVanDecision(
     case "heropend":
       dossierstatus = "heropend";
       break;
+    case "beeindigd":
+      dossierstatus = "beeindigd";
+      break;
     default:
       dossierstatus = null;
   }
@@ -149,6 +156,9 @@ export function dossierstatusVanDecision(
       break;
     case "geannuleerd":
       sublabel = "geannuleerd";
+      break;
+    case "beeindigd":
+      sublabel = "beëindigd";
       break;
     default:
       sublabel = null;

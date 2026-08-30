@@ -14,6 +14,9 @@ import type {
 import type { EvidenceItem } from "@/core/lib/decision-view";
 import BibliotheekPicker from "@/core/components/BibliotheekPicker";
 import VereisteToevoegen from "./VereisteToevoegen";
+import VereisteKiezer from "./VereisteKiezer";
+import VaststellingFormulier from "./VaststellingFormulier";
+import { magLosmaken, magKoppelen, redenGeenKoppelAffordance } from "@/core/lib/vereiste-affordance";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import { bewijsUploadDocumenttypeBlokker } from "@/core/lib/document-ingest-classificatie";
@@ -21,6 +24,8 @@ import {
   BINDBARE_REQUIREMENT_TYPES,
   requirementSleutel,
 } from "@/core/lib/requirement-sleutel";
+import { zwaarteVanVereiste } from "@/core/lib/requirement-zwaarte";
+import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
 import {
   checklistSamenvatting,
   bewijsstukkenSamenvatting,
@@ -44,6 +49,37 @@ const REQUIREMENT_LABELS: Record<string, string> = {
   dissent_review: "Dissent-review",
   external_submission: "Externe indiening",
   consultation: "Consultatie",
+};
+
+// #192: de affordance-tekst per type (kiezer/opvoeren/vastleggen). Eén knop per
+// vereisteregel; de tekst volgt het type (mockup v0.1).
+const ACTIE_LABEL: Record<string, string> = {
+  document: "Opvoeren",
+  external_submission: "Opvoeren",
+  consultation: "Opvoeren",
+  risk: "Koppel bestaand risico",
+  assumption: "Koppel aannames",
+  kpi: "Koppel KPI",
+  approval: "Koppel besluit",
+  // evaluation/ai_validation staan bewust NIET in ACTIE_LABEL: zij hebben geen
+  // vervullingspad (besluit 0195) en tonen een uitgeschakelde affordance mét reden,
+  // geen actieve koppelknop.
+  dissent_review: "Leg vast",
+  mandate_check: "Leg vast",
+};
+
+// P2/PR-B (#167): herkomst van een vervulling — welk gebonden feit de vereiste
+// afvinkt (0189, D10). Spiegelt EvidenceItem.bron_type.
+const HERKOMST_LABELS: Record<string, string> = {
+  procedure_bewijs: "Bewijsstuk",
+  ai_output: "AI-validatie",
+  assumption: "Aanname",
+  risk: "Risico",
+  condition: "KPI/voorwaarde",
+  evaluation: "Evaluatie",
+  procedure_besluit: "Besluit",
+  procedure_vaststelling: "Vaststelling",
+  governance_event: "Governance-event",
 };
 
 interface Props {
@@ -71,9 +107,21 @@ interface Props {
       afgeronde stap heropenen? Alleen voorzitter/beheerder. Dit is een
       UI-signaal — de harde gate zit server-side in de routes. */
   kanBeheren?: boolean;
+  /** P3 (#168, §5.1): mag deze gebruiker een afwijking vastleggen bij het
+      afronden (capability procedures.afwijking.vastleggen — voorzitter/bestuurder)?
+      UI-signaal; de harde gate zit server-side in de route én in de DB-functie.
+      Bewust NIET kanBeheren hergebruiken: bestuurder draagt de capability wél maar
+      is geen kanBeheren (voorzitter/beheerder). */
+  magAfwijkingVastleggen?: boolean;
   /** Id van de ingelogde gebruiker — bepaalt of de verwijder-knop op een
       eigen bewijsstuk zichtbaar is (server-side check blijft leidend). */
   currentUserId?: string;
+  /** P1a (#165): fase van deze stap, voor de context op het tabblad Overzicht.
+      Puur presentatie; komt uit de per fonds overschrijfbare fasetitels/-tekst. */
+  fase?: { code: string; titel: string; beschrijving: string | null } | null;
+  /** #192: staat het besluit "op slot" (I1)? Bepaalt of losmaken vergrendeld is
+      met reden. UI-signaal — de harde gate zit server-side in de koppelroute. */
+  besluitOpSlot?: boolean;
 }
 
 function formatDatumKort(d: string) {
@@ -84,72 +132,98 @@ function formatDatumKort(d: string) {
   });
 }
 
-// ── Ingeklapte sectie (WO-3) ─────────────────────────────────────────────────
-// Checklist / Bewijsstukken / Vergaderingen openen standaard ingeklapt met een
-// samenvatting in de kop. `open`/`onToggle` zijn controlled zodat de "+ toevoegen"-
-// affordance de sectie tegelijk kan openklappen.
+// ── Sectie (WO-3 / P1a) ──────────────────────────────────────────────────────
+// P1a (#165): Checklist / Bewijsstukken / Vergaderingen / Besluit zijn tabs
+// geworden. Binnen een tab staat de sectie `statisch` open — geen collapse-chrome
+// meer, maar wél de kop met samenvatting en de "+ toevoegen"-affordance (mockup
+// `sectiekop`). De oude ingeklapte variant (`open`/`onToggle`) blijft bestaan
+// voor eventueel hergebruik buiten de tabs.
 function Sectie({
   titel,
   samenvatting,
   open,
   onToggle,
+  statisch = false,
   addLabel,
   onAdd,
   children,
 }: {
   titel: string;
   samenvatting: string;
-  open: boolean;
-  onToggle: () => void;
+  open?: boolean;
+  onToggle?: () => void;
+  statisch?: boolean;
   addLabel?: string;
   onAdd?: () => void;
   children: React.ReactNode;
 }) {
+  const toon = statisch ? true : !!open;
   return (
-    <div className="mt-6">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-        className="flex items-center gap-2 cursor-pointer select-none"
-      >
-        <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
-          {titel}
-        </div>
-        <span className="text-[11px] text-muted">· {samenvatting}</span>
-        <span className="ml-auto flex items-center gap-3">
+    <div className="mt-2">
+      {statisch ? (
+        <div className="flex items-center gap-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+            {titel}
+          </div>
+          <span className="text-[11px] text-muted">· {samenvatting}</span>
           {addLabel && onAdd && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAdd();
-              }}
-              className="text-xs text-accent hover:underline"
+              onClick={onAdd}
+              className="ml-auto text-xs text-accent hover:underline"
             >
               {addLabel}
             </button>
           )}
-          <span
-            aria-hidden
-            className={`text-muted text-xs transition-transform ${
-              open ? "" : "-rotate-90"
-            }`}
-          >
-            ▾
+        </div>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onToggle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onToggle?.();
+            }
+          }}
+          className="flex items-center gap-2 cursor-pointer select-none"
+        >
+          <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+            {titel}
+          </div>
+          <span className="text-[11px] text-muted">· {samenvatting}</span>
+          <span className="ml-auto flex items-center gap-3">
+            {addLabel && onAdd && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdd();
+                }}
+                className="text-xs text-accent hover:underline"
+              >
+                {addLabel}
+              </button>
+            )}
+            <span
+              aria-hidden
+              className={`text-muted text-xs transition-transform ${
+                open ? "" : "-rotate-90"
+              }`}
+            >
+              ▾
+            </span>
           </span>
-        </span>
-      </div>
-      {open && <div className="mt-3">{children}</div>}
+        </div>
+      )}
+      {toon && <div className="mt-3">{children}</div>}
     </div>
   );
 }
+
+// P1a (#165): tabs van het stapdetail.
+type StapTab = "overzicht" | "checklist" | "bewijs" | "vergaderingen" | "besluit";
 
 // ── Uitklapbaar checklistpunt (WO-3) ─────────────────────────────────────────
 // De toelichting per checklistpunt bestaat nog niet als data (OB-E10, aparte
@@ -318,15 +392,21 @@ function BewijsstukRij({
   r,
   alleenLezen,
   kanBeheren,
-  onOpvoeren,
+  slotAan,
+  onKoppelen,
   onVerwijderen,
+  onOntkoppelen,
+  bezigOntkoppelId,
   bezigDel,
 }: {
   r: EvidenceItem;
   alleenLezen: boolean;
   kanBeheren: boolean;
-  onOpvoeren: () => void;
+  slotAan: boolean;
+  onKoppelen: (r: EvidenceItem) => void;
   onVerwijderen: (r: EvidenceItem, reden: string) => void;
+  onOntkoppelen: (r: EvidenceItem, feitId: string) => void;
+  bezigOntkoppelId: string | null;
   bezigDel: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -368,23 +448,68 @@ function BewijsstukRij({
             ▾
           </span>
         </span>
-        {r.vervuld ? (
-          <span className="text-[11px] text-ok-ink font-medium shrink-0 whitespace-nowrap">
-            ✓ Opgevoerd
-          </span>
-        ) : alleenLezen ? (
-          <span className="text-[11px] text-muted shrink-0 whitespace-nowrap">
-            Nog op te voeren
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpvoeren}
-            className="text-[11px] text-accent hover:underline shrink-0 whitespace-nowrap"
-          >
-            Opvoeren
-          </button>
-        )}
+        {(() => {
+          const aantal = r.gebonden_feiten.length;
+          const nogNodig = Math.max(0, r.min_aantal - aantal);
+          // Status: vervuld / deels (bij min_aantal>1) / open.
+          const status = r.vervuld
+            ? {
+                cls: "text-ok-ink bg-ok-tint",
+                tekst:
+                  r.min_aantal > 1
+                    ? aantal > r.min_aantal
+                      ? `Vervuld · ${aantal} gekoppeld`
+                      : `Vervuld · ${aantal} van ${r.min_aantal}`
+                    : "Vervuld",
+              }
+            : aantal > 0
+              ? { cls: "text-warn-ink bg-warn-tint", tekst: `${aantal} van ${r.min_aantal}` }
+              : { cls: "text-muted bg-app-line", tekst: "Open" };
+          const koppelbaar = magKoppelen({
+            type: r.requirement_type,
+            kanBeheren,
+            alleenLezen,
+            slotAan,
+          });
+          // Typen zonder vervullingspad (evaluation, ai_validation — besluit 0195):
+          // geen actieve knop, maar de affordance uitgeschakeld MÉT reden i.p.v.
+          // niets, zodat de gebruiker niet hoeft te raden waarom er niets kan.
+          const redenGeenPad = redenGeenKoppelAffordance(r.requirement_type);
+          // Knop-tekst: nog niet genoeg → type-actie; genoeg/over → "Nog een toevoegen".
+          const knopTekst = nogNodig > 0 ? ACTIE_LABEL[r.requirement_type] ?? "Koppelen" : "Nog een toevoegen";
+          return (
+            <div className="flex flex-col items-end gap-1.5 shrink-0 min-w-[150px]">
+              <span className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 whitespace-nowrap ${status.cls}`}>
+                {status.tekst}
+              </span>
+              {/* magKoppelen dekt de field/alleen-lezen/beheer-poort én de typen
+                  zonder vervullingspad; die laatste krijgen een reden i.p.v. niets. */}
+              {koppelbaar ? (
+                <button
+                  type="button"
+                  onClick={() => onKoppelen(r)}
+                  className="border border-app-line-control rounded-lg px-3 py-1.5 text-[12.5px] font-medium bg-white text-ink hover:bg-accent-tint hover:border-accent whitespace-nowrap"
+                >
+                  {knopTekst}
+                </button>
+              ) : (
+                redenGeenPad && kanBeheren && !alleenLezen && (
+                  <span
+                    className="text-[11px] text-muted italic text-right max-w-[150px] leading-tight"
+                    title={`${redenGeenPad} Zie besluit 0195 (requirement-type zonder vervullingspad).`}
+                  >
+                    {redenGeenPad}
+                  </span>
+                )
+              )}
+              {nogNodig > 0 && r.min_aantal > 1 && (
+                <span className="text-[11px] text-muted text-right max-w-[150px] leading-tight">
+                  Nog {nogNodig} nodig
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </div>
       {open && (
         <div className="px-3 pb-3">
@@ -401,10 +526,66 @@ function BewijsstukRij({
                 Nog geen toelichting bij dit bewijsstuk.
               </p>
             )}
-            {r.vervuld && r.bron_titel && (
+            {/* Field-uitzondering (classificatie/veld): geen gebonden feit maar een
+                veld/governance-event — toon de tekstuele herkomst, geen losmaken. */}
+            {r.vervuld && r.gebonden_feiten.length === 0 && r.bron_titel && (
               <p className="text-[13px] text-ok-ink mt-2">
-                Opgevoerd: {r.bron_titel}
+                Herkomst: <span className="font-medium">{r.bron_titel}</span>
               </p>
+            )}
+            {/* #192: het volledige herkomst-spoor — elk gebonden feit met datum en
+                persoon, met per-feit losmaken (deur (a) van I1). Onder een besloten
+                besluit is losmaken vergrendeld mét reden i.p.v. een kale 409. */}
+            {r.gebonden_feiten.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+                  Herkomst
+                </div>
+                {r.gebonden_feiten.map((f) => {
+                  const meta = [f.datum, f.actor].filter(Boolean).join(" · ");
+                  // Toon de beheerregel als er in principe iets te beheren valt;
+                  // magLosmaken beslist of het echt kan (onder slot: nee → vergrendeld).
+                  const toonBeheer =
+                    kanBeheren && !alleenLezen && f.bron_type !== "governance_event";
+                  const losmaakbaar = magLosmaken({
+                    slotAan,
+                    kanBeheren,
+                    alleenLezen,
+                    bronType: f.bron_type,
+                  });
+                  return (
+                    <div
+                      key={f.id}
+                      className="flex items-start justify-between gap-3 text-[13px]"
+                    >
+                      <span className="text-ok-ink min-w-0">
+                        ✓ {f.titel ?? (f.bron_type ? HERKOMST_LABELS[f.bron_type] : null) ?? "vastgelegd"}
+                        {meta && <span className="text-muted font-normal"> · {meta}</span>}
+                      </span>
+                      {toonBeheer &&
+                        (losmaakbaar ? (
+                          <button
+                            type="button"
+                            onClick={() => onOntkoppelen(r, f.id)}
+                            disabled={bezigOntkoppelId === f.id}
+                            className="text-[11px] text-err-ink hover:underline shrink-0 disabled:opacity-50"
+                          >
+                            {bezigOntkoppelId === f.id ? "Bezig…" : "Losmaken"}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-muted italic shrink-0">
+                            vergrendeld
+                          </span>
+                        ))}
+                    </div>
+                  );
+                })}
+                {slotAan && (
+                  <p className="text-[11px] text-muted">
+                    Vergrendeld — het besluit is genomen. Losmaken kan pas na heropenen.
+                  </p>
+                )}
+              </div>
             )}
             {!r.vervuld && r.documenttype && (
               <p className="text-[13px] text-muted mt-2">
@@ -488,9 +669,20 @@ export default function StapPaneel({
   alleenLezen = false,
   voltooidDoorNaam = null,
   kanBeheren = false,
+  magAfwijkingVastleggen = false,
   currentUserId = "",
+  fase = null,
+  besluitOpSlot = false,
 }: Props) {
   const router = useRouter();
+  const slotAan = besluitOpSlot;
+  // #192: welke vereiste heeft de kiezer / het vaststellingsformulier open.
+  const [kiezerVereiste, setKiezerVereiste] = useState<EvidenceItem | null>(null);
+  const [vastformVereiste, setVastformVereiste] = useState<EvidenceItem | null>(null);
+  // P1a (#165): actief tabblad. Landingstabblad = Overzicht (mockup-default);
+  // of Checklist beter past voor een actieve stap is bewust een open punt
+  // (zie 00 Overzicht en status/openstaande-punten-en-risicos.md).
+  const [tab, setTab] = useState<StapTab>("overzicht");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
   const [bewijs, setBewijs] = useState<Bewijs[]>(initieelBewijs);
 
@@ -530,6 +722,9 @@ export default function StapPaneel({
   const [besluitForm, setBesluitForm] = useState(false);
   const [besluitFormulering, setBesluitFormulering] = useState("");
   const [besluitMotivering, setBesluitMotivering] = useState("");
+  const [besluitUitkomst, setBesluitUitkomst] = useState<
+    "instemmend" | "voorwaardelijk" | "afwijzend" | ""
+  >("");
   // Eén textarea, één alternatief per regel — bij vastleggen splitsen
   // we op `\n` en filteren we lege regels eruit.
   const [besluitAlternatieven, setBesluitAlternatieven] = useState("");
@@ -545,6 +740,15 @@ export default function StapPaneel({
   // vervolgstap open. Bewust gescheiden van `fout` — dat blok is rood en zegt
   // "er is iets misgegaan", wat hier niet klopt.
   const [melding, setMelding] = useState<string | null>(null);
+  // P3 (#168, §5.1): afronden met afwijking — het motiveringsformulier onder de
+  // afrondknop, en de expliciete bevestiging bij een openstaande kritieke vereiste.
+  const [afwijkingForm, setAfwijkingForm] = useState(false);
+  const [afwijkingMotivering, setAfwijkingMotivering] = useState("");
+  const [afwijkingBevestigd, setAfwijkingBevestigd] = useState(false);
+  // Als de SERVER om bevestiging vraagt (409) terwijl de client geen kritieke
+  // vereiste zag (client- en server-zwaarte kunnen afwijken), tonen we het
+  // bevestigingsvakje alsnog — anders zou elke retry vastlopen op 409.
+  const [serverVraagtBevestiging, setServerVraagtBevestiging] = useState(false);
   // WO-2 (D7): handmatig checklistpunt toevoegen aan een lopende stap.
   const [checklistForm, setChecklistForm] = useState(false);
   const [checklistLabel, setChecklistLabel] = useState("");
@@ -554,10 +758,6 @@ export default function StapPaneel({
   const [heropenMotivering, setHeropenMotivering] = useState("");
   // WO-2-vervolg: welk (titel-only) bewijsstuk koppelen we aan een document?
   const [koppelDoelId, setKoppelDoelId] = useState<string | null>(null);
-  // WO-3: ingeklapte secties (controlled zodat "+ toevoegen" ze kan openklappen).
-  const [checklistOpen, setChecklistOpen] = useState(false);
-  const [bewijsOpen, setBewijsOpen] = useState(false);
-  const [vergaderingOpen, setVergaderingOpen] = useState(false);
   // WO-3: stap-toelichting (onder de titel) bewerken.
   const [toelichtingBewerken, setToelichtingBewerken] = useState(false);
   const [toelichtingWaarde, setToelichtingWaarde] = useState(
@@ -570,6 +770,11 @@ export default function StapPaneel({
   const stapEvidence = evidence.filter(
     (e) => e.stap_volgorde === stap.volgorde
   );
+  const approvalKandidaten = stapEvidence.filter(
+    (e) => e.requirement_type === "approval"
+  );
+  const besluitApprovalVereiste =
+    approvalKandidaten.length === 1 ? approvalKandidaten[0] : null;
   const sleutelVan = (r: EvidenceItem) =>
     requirementSleutel(r.stap_volgorde, r.requirement_type, r.documenttype, r.label);
   // Vereisten die met een bewijsstuk vervuld kunnen worden — dezelfde const
@@ -599,6 +804,58 @@ export default function StapPaneel({
     label: r.label,
   });
 
+  // #192: één affordance per vereisteregel — routeer naar de juiste flow op type.
+  function koppelenVanuitVereiste(r: EvidenceItem) {
+    switch (r.requirement_type) {
+      case "document":
+      case "external_submission":
+      case "consultation":
+        opvoerenVanuitVereiste(r); // bestaande upload-flow (Opvoeren)
+        return;
+      case "dissent_review":
+      case "mandate_check":
+        setVastformVereiste(r); // objectloos → vaststellingsformulier
+        return;
+      case "field":
+      case "evaluation":
+        return; // geen koppel-affordance (veld / doodlopend #198)
+      default:
+        setKiezerVereiste(r); // risk/assumption/kpi/approval/ai_validation → kiezer
+    }
+  }
+
+  // P2/PR-B (#167), #192: ontkoppelen (deur a) via de ene koppelroute per gebonden
+  // feit. De route weigert onder een besloten besluit (I1) met een nette 409; onder
+  // slot toont de UI 'vergrendeld' i.p.v. de knop.
+  async function ontkoppelVereiste(r: EvidenceItem, feitId: string) {
+    setFout(null);
+    setBezig(`ontkoppel-${feitId}`);
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/vereisten/koppel`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            actie: "ontkoppel",
+            vereiste: vereisteAlsPayload(r),
+            bron_id: feitId,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setFout(data.error ?? "Losmaken mislukt");
+        return;
+      }
+      router.refresh();
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Losmaken mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   const voldaanCount = checklist.filter((c) => c.voldaan).length;
   const totaalCount = checklist.length;
   const allesVoldaan = totaalCount > 0 && voldaanCount === totaalCount;
@@ -608,6 +865,42 @@ export default function StapPaneel({
     allesVoldaan &&
     (bewijsVereist === 0 || heeftBewijs) &&
     (!stap.vereist_besluit || besluit !== null);
+
+  // P1a (#165): tab-badges. Zwaarte komt van de VEREISTE (blokkerend→kritiek,
+  // verplicht→vereist) via de enige afleidfunctie (swap-punt voor #168).
+  const bewijsTot = stapEvidence.length;
+  const bewijsVervuld = stapEvidence.filter((e) => e.vervuld).length;
+  const kritiekOpen = stapEvidence.filter(
+    (e) => !e.vervuld && zwaarteVanVereiste(e) === "kritiek"
+  ).length;
+  const vereistOpen = stapEvidence.filter(
+    (e) => !e.vervuld && zwaarteVanVereiste(e) === "vereist"
+  ).length;
+  // P3 (#168, §5.1): afronden-met-afwijking is een optie zodra er iets openstaat
+  // bóven optioneel en de gebruiker de capability draagt. Het normale "Stap
+  // voltooien" blijft in PR-C ongewijzigd bestaan; de telling die de normale
+  // afronding hierop blokkeert is §5.2 → P4. De open items komen uit stapEvidence.
+  const afwijkingMogelijk =
+    stap.status !== "afgerond" &&
+    !alleenLezen &&
+    magAfwijkingVastleggen &&
+    kritiekOpen + vereistOpen > 0;
+  const openBovenOptioneel = stapEvidence.filter(
+    (e) => !e.vervuld && zwaarteVanVereiste(e) !== "optioneel"
+  );
+
+  // "Nog open" voor de vaste voettekstbalk — dezelfde blokkers als kanVoltooien,
+  // nu permanent zichtbaar i.p.v. alleen als tooltip. P1a wijzigt het afrond-
+  // gedrag NIET (afronden-met-afwijking is #168); dit toont alleen wat er staat.
+  const nogOpen = [
+    !allesVoldaan
+      ? `${totaalCount - voldaanCount} checklistpunt${
+          totaalCount - voldaanCount === 1 ? "" : "en"
+        }`
+      : null,
+    bewijsVereist > 0 && !heeftBewijs ? "een bewijsstuk" : null,
+    stap.vereist_besluit && !besluit ? "het formele besluit" : null,
+  ].filter(Boolean) as string[];
 
   async function checklistToggle(item: ChecklistItem) {
     if (alleenLezen) return;
@@ -786,6 +1079,18 @@ export default function StapPaneel({
       setFout("Formulering is verplicht.");
       return;
     }
+    if (!besluitUitkomst) {
+      setFout("Kies de uitkomst van het besluit.");
+      return;
+    }
+    if (!besluitApprovalVereiste) {
+      setFout(
+        approvalKandidaten.length === 0
+          ? "Deze besluitstap heeft geen approval-vereiste om het besluit aan te binden."
+          : "Deze besluitstap heeft meerdere approval-vereisten; maak de binding eerst eenduidig."
+      );
+      return;
+    }
     setBezig("besluit");
     try {
       const verworpen = besluitAlternatieven
@@ -801,6 +1106,8 @@ export default function StapPaneel({
           motivering: besluitMotivering.trim() || null,
           datum: besluitDatum,
           verworpen_alternatieven: verworpen,
+          uitkomst: besluitUitkomst,
+          vereiste: vereisteAlsPayload(besluitApprovalVereiste),
         }),
       });
       if (!res.ok) {
@@ -808,6 +1115,9 @@ export default function StapPaneel({
         throw new Error(data.error || "Vastleggen mislukt");
       }
       setBesluitForm(false);
+      setBesluitFormulering("");
+      setBesluitMotivering("");
+      setBesluitUitkomst("");
       setBesluitAlternatieven("");
       router.refresh();
     } catch (err: unknown) {
@@ -907,6 +1217,50 @@ export default function StapPaneel({
       router.refresh();
     } catch (err: unknown) {
       setFout(err instanceof Error ? err.message : "Voltooien mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  // P3 (#168, §5.1): afronden met afwijking. De server (route + DB-functie) is
+  // leidend; bij een openstaande kritieke vereiste eist hij bevestiging (409).
+  // De UI vraagt die bevestiging vooraf omdat ze kritiekOpen zelf al kent.
+  async function afwijkingVastleggen() {
+    if (alleenLezen) return;
+    setFout(null);
+    setBezig("afwijking");
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/stappen/${stap.id}/afwijking`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            motivering: afwijkingMotivering,
+            bevestigd: afwijkingBevestigd,
+          }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.bevestiging_vereist) {
+        // Server vraagt expliciete bevestiging bij een kritieke vereiste. Toon het
+        // vakje ook als de client zelf geen kritieke vereiste zag.
+        setAfwijkingBevestigd(false);
+        setServerVraagtBevestiging(true);
+        setFout(data.error || "Bevestig expliciet om af te ronden.");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data.error || "Afronden met afwijking mislukt");
+      }
+      if (data.waarschuwing) setMelding(data.waarschuwing);
+      setAfwijkingForm(false);
+      setAfwijkingMotivering("");
+      setAfwijkingBevestigd(false);
+      setServerVraagtBevestiging(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Afronden met afwijking mislukt");
     } finally {
       setBezig(null);
     }
@@ -1071,7 +1425,7 @@ export default function StapPaneel({
   // vereiste als titel + documenttype-tag. De binding zelf wordt hier gezet:
   // titel en tag zijn suggesties, de binding is wat readiness bepaalt.
   function opvoerenVanuitVereiste(r: EvidenceItem) {
-    setBewijsOpen(true);
+    setTab("bewijs");
     setBewijsForm(true);
     setBewijsVereiste(r);
     if (!bewijsTitel.trim()) setBewijsTitel(r.label);
@@ -1164,6 +1518,57 @@ export default function StapPaneel({
     }
   }
 
+  // P1a (#165): tab-definities met badge. Kleur van de bewijs-badge volgt de
+  // zwaarte: kritiek open → rood, anders vereist open → oranje, anders volledig
+  // → groen.
+  const tabBadge = (tekst: string, kleur: string) => (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded ${kleur}`}>{tekst}</span>
+  );
+  const bewijsBadgeKleur =
+    kritiekOpen > 0
+      ? "bg-err-tint text-err-ink"
+      : vereistOpen > 0
+        ? "bg-warn-tint text-warn-ink"
+        : bewijsTot > 0 && bewijsVervuld === bewijsTot
+          ? "bg-ok-tint text-ok-ink"
+          : "bg-app-bg text-muted";
+  const TABS: { id: StapTab; label: string; badge: React.ReactNode }[] = [
+    { id: "overzicht", label: "Overzicht", badge: null },
+    {
+      id: "checklist",
+      label: "Checklist",
+      badge: tabBadge(
+        `${voldaanCount}/${totaalCount}`,
+        allesVoldaan ? "bg-ok-tint text-ok-ink" : "bg-app-bg text-muted"
+      ),
+    },
+    {
+      id: "bewijs",
+      label: "Bewijsstukken",
+      badge:
+        bewijsTot > 0
+          ? tabBadge(`${bewijsVervuld}/${bewijsTot}`, bewijsBadgeKleur)
+          : null,
+    },
+    {
+      id: "vergaderingen",
+      label: "Vergaderingen",
+      badge:
+        gekoppeldeAgendapunten.length > 0
+          ? tabBadge(String(gekoppeldeAgendapunten.length), "bg-app-bg text-muted")
+          : null,
+    },
+    {
+      id: "besluit",
+      label: "Besluit",
+      badge: besluit
+        ? tabBadge("✓", "bg-ok-tint text-ok-ink")
+        : stap.vereist_besluit
+          ? tabBadge("vereist", "bg-err-tint text-err-ink")
+          : null,
+    },
+  ];
+
   return (
     <div className="bg-white border border-line rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -1205,6 +1610,41 @@ export default function StapPaneel({
           {stap.eigenaar_naam && <div className="mt-1">{stap.eigenaar_naam}</div>}
         </div>
       </div>
+
+      {/* P1a (#165): tabbladen. De balk staat BUITEN de leesmodus-fieldset zodat
+          tab-switchen ook op een alleen-lezen stap werkt. */}
+      <div
+        role="tablist"
+        aria-label="Stapdetail"
+        className="mt-5 flex items-center gap-1 border-b border-line flex-wrap"
+      >
+        {TABS.map((t) => {
+          const actief = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={actief}
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-2 text-[13px] border-b-2 -mb-px inline-flex items-center gap-1.5 ${
+                actief
+                  ? "border-accent text-accent font-semibold"
+                  : "border-transparent text-muted hover:text-ink"
+              }`}
+            >
+              {t.label}
+              {t.badge}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Overzicht — het tabblad met context (toelichting + fase) en de
+          stap-brede acties. Bewust BUITEN de fieldset: toelichting en heropenen
+          moeten ook op een afgeronde stap door voorzitter/beheerder kunnen. */}
+      {tab === "overzicht" && (
+        <div className="mt-4">
 
       {/* WO-3: toelichting onder de staptitel (schrijft procedure_stappen.
           beschrijving). Bewerkbaar door voorzitter/beheerder — bewust BUITEN de
@@ -1321,26 +1761,40 @@ export default function StapPaneel({
         </div>
       )}
 
+      {/* P1a (#165): fasecontext op het tabblad Overzicht. */}
+      {fase && (
+        <div className="mt-5">
+          <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
+            Fase
+          </div>
+          <p className="text-[13px] text-ink max-w-2xl">
+            <b>
+              Fase {fase.code} — {fase.titel}.
+            </b>{" "}
+            {fase.beschrijving ?? ""}
+          </p>
+        </div>
+      )}
+        </div>
+      )}
+
       {/* T6-1A: in leesmodus schakelt de fieldset alle formuliercontrols
           (inputs, textareas, selects, knoppen) native uit — zichtbaar maar
           niet bedienbaar. Navigatielinks (agendapunten) blijven werken. */}
       <fieldset disabled={alleenLezen} className="min-w-0 border-0 p-0 m-0">
 
-      {/* Checklist — WO-3: ingeklapt met samenvatting; items uitklapbaar. */}
+      {/* Checklist (P1a: tabblad). */}
+      {tab === "checklist" && (
       <Sectie
         titel="Checklist"
         samenvatting={checklistSamenvatting(checklist)}
-        open={checklistOpen}
-        onToggle={() => setChecklistOpen((o) => !o)}
+        statisch
         addLabel={
           kanBeheren && !alleenLezen ? "+ Checklistpunt toevoegen" : undefined
         }
         onAdd={
           kanBeheren && !alleenLezen
-            ? () => {
-                setChecklistOpen(true);
-                setChecklistForm((f) => !f);
-              }
+            ? () => setChecklistForm((f) => !f)
             : undefined
         }
       >
@@ -1405,20 +1859,20 @@ export default function StapPaneel({
           </div>
         )}
       </Sectie>
+      )}
 
-      {/* Bewijsstukken — WO-3: vereist-gedreven (evidence-unie), ingeklapt.
+      {/* Bewijsstukken (P1a: tabblad) — vereist-gedreven (evidence-unie).
           Elk item uitklapbaar; "Opvoeren" hergebruikt het bewijs-formulier.
           Daaronder de reeds opgevoerde stukken (koppelen/verwijderen). */}
+      {tab === "bewijs" && (
       <Sectie
         titel="Bewijsstukken"
         samenvatting={bewijsstukkenSamenvatting(stapEvidence)}
-        open={bewijsOpen}
-        onToggle={() => setBewijsOpen((o) => !o)}
+        statisch
         addLabel={!alleenLezen ? "+ Bewijsstuk toevoegen" : undefined}
         onAdd={
           !alleenLezen
             ? () => {
-                setBewijsOpen(true);
                 if (bewijsForm) resetBewijsForm();
                 else setBewijsForm(true);
               }
@@ -1616,8 +2070,13 @@ export default function StapPaneel({
                 r={r}
                 alleenLezen={alleenLezen}
                 kanBeheren={kanBeheren}
-                onOpvoeren={() => opvoerenVanuitVereiste(r)}
+                slotAan={slotAan}
+                onKoppelen={koppelenVanuitVereiste}
                 onVerwijderen={bewijsstukVerwijderen}
+                onOntkoppelen={ontkoppelVereiste}
+                bezigOntkoppelId={
+                  bezig?.startsWith("ontkoppel-") ? bezig.slice("ontkoppel-".length) : null
+                }
                 bezigDel={bezig === reqDelKey(r)}
               />
             ))}
@@ -1674,6 +2133,20 @@ export default function StapPaneel({
                           : "Toegevoegd"}{" "}
                         · {formatDatumKort(b.toegevoegd_op)}
                       </div>
+                      {/* P1a (#165): "Vraag de AI over dit stuk" — zelfde route
+                          als de documentbibliotheek (/ai?doc=…). Alleen bij een
+                          gekoppeld document; een titel-only stuk (document_id
+                          null) heeft niets om over te vragen. Een <a> blijft ook
+                          in de leesmodus-fieldset klikbaar. */}
+                      {b.document_id && (
+                        <a
+                          href={`/ai?doc=${b.document_id}`}
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-1"
+                          title="Open de AI-assistent met de vraag beperkt tot dit document"
+                        >
+                          ✦ Vraag de AI over dit stuk
+                        </a>
+                      )}
                       {/* Bewijsbinding: welke vereiste vervult dit stuk?
                           Ongebonden stukken tellen niet mee — dat is zichtbaar
                           én ter plekke te herstellen. */}
@@ -1780,13 +2253,14 @@ export default function StapPaneel({
           </div>
         )}
       </Sectie>
+      )}
 
-      {/* Vergaderingen — WO-3: ingeklapt met samenvatting. */}
+      {/* Vergaderingen (P1a: tabblad). */}
+      {tab === "vergaderingen" && (
       <Sectie
         titel="Vergaderingen"
         samenvatting={vergaderingenSamenvatting(gekoppeldeAgendapunten.length)}
-        open={vergaderingOpen}
-        onToggle={() => setVergaderingOpen((o) => !o)}
+        statisch
         addLabel={
           !alleenLezen && komendeVergaderingen.length > 0
             ? "+ Voeg toe aan vergadering"
@@ -1794,10 +2268,7 @@ export default function StapPaneel({
         }
         onAdd={
           !alleenLezen && komendeVergaderingen.length > 0
-            ? () => {
-                setVergaderingOpen(true);
-                setVergaderingForm(true);
-              }
+            ? () => setVergaderingForm(true)
             : undefined
         }
       >
@@ -1887,9 +2358,12 @@ export default function StapPaneel({
           </p>
         )}
       </Sectie>
+      )}
 
-      {/* Besluit (alleen op stappen die dat vereisen) */}
-      {stap.vereist_besluit && (
+      {/* Besluit (P1a: tabblad). Ook zichtbaar als de stap geen besluit vereist,
+          dan met een korte toelichting. */}
+      {tab === "besluit" &&
+        (stap.vereist_besluit ? (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-xs uppercase tracking-wide text-muted font-semibold">
@@ -1931,6 +2405,11 @@ export default function StapPaneel({
                   {besluit.motivering}
                 </p>
               )}
+              {besluit.uitkomst && (
+                <div className="text-xs text-muted mt-1">
+                  Uitkomst: {besluit.uitkomst}
+                </div>
+              )}
               <div className="text-xs text-muted mt-2">
                 {new Date(besluit.datum).toLocaleDateString("nl-NL", {
                   day: "numeric",
@@ -1954,6 +2433,32 @@ export default function StapPaneel({
                 placeholder="Bv.: Akkoord met verhoging hedge-ratio naar 70%, conform voorstel."
                 className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
+              <select
+                value={besluitUitkomst}
+                onChange={(e) =>
+                  setBesluitUitkomst(
+                    e.target.value as
+                      | "instemmend"
+                      | "voorwaardelijk"
+                      | "afwijzend"
+                      | ""
+                  )
+                }
+                className="w-full border border-line rounded px-2 py-1.5 text-sm bg-white focus:border-accent outline-none"
+                aria-label="Uitkomst van het besluit"
+              >
+                <option value="">— kies uitkomst —</option>
+                <option value="instemmend">Instemmend</option>
+                <option value="voorwaardelijk">Voorwaardelijk</option>
+                <option value="afwijzend">Afwijzend</option>
+              </select>
+              {!besluitApprovalVereiste && (
+                <p className="text-xs text-err-ink">
+                  {approvalKandidaten.length === 0
+                    ? "Geen approval-vereiste gekoppeld aan deze stap."
+                    : "Meerdere approval-vereisten gevonden; de besluitbinding is niet eenduidig."}
+                </p>
+              )}
               <textarea
                 rows={3}
                 value={besluitMotivering}
@@ -1984,7 +2489,7 @@ export default function StapPaneel({
                 </button>
                 <button
                   type="submit"
-                  disabled={bezig === "besluit"}
+                  disabled={bezig === "besluit" || !besluitUitkomst || !besluitApprovalVereiste}
                   className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
                 >
                   {bezig === "besluit" ? "Bezig…" : "Vastleggen"}
@@ -1997,7 +2502,12 @@ export default function StapPaneel({
             </div>
           )}
         </div>
-      )}
+        ) : (
+          <div className="mt-4 text-sm text-muted italic">
+            Deze stap vereist geen formeel besluit. De uitkomst landt als
+            onderbouwing in het dossier.
+          </div>
+        ))}
 
       {fout && (
         <div className="mt-3 text-sm text-err-ink bg-err-tint border border-err/30 rounded-lg px-3 py-2">
@@ -2011,36 +2521,149 @@ export default function StapPaneel({
         </div>
       )}
 
-      {/* Voltooien — alleen de knop; wat nog ontbreekt staat als tooltip.
-          De blokkers zelf staan hierboven (checklist, bewijs, besluit). */}
-      <div className="mt-6 pt-5 border-t border-line flex items-center justify-end">
-        <button
-          onClick={stapVoltooien}
-          disabled={!kanVoltooien || bezig === "voltooien"}
-          title={
-            kanVoltooien
-              ? "Alle vereisten voldaan"
-              : `Nog nodig: ${[
-                  !allesVoldaan
-                    ? `${totaalCount - voldaanCount} checklist-item${
-                        totaalCount - voldaanCount === 1 ? "" : "s"
-                      }`
-                    : null,
-                  bewijsVereist > 0 && !heeftBewijs ? "bewijsstuk" : null,
-                  stap.vereist_besluit && !besluit ? "besluit" : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}`
-          }
-          className={`px-4 py-2 text-sm rounded-lg font-medium ${
-            kanVoltooien
-              ? "bg-accent text-white hover:bg-accent-ink"
-              : "bg-app-line text-muted cursor-not-allowed"
-          }`}
-        >
-          {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
-        </button>
+      {/* Vaste voettekstbalk (P1a #165): wat er nog open staat is nu permanent
+          zichtbaar i.p.v. alleen als tooltip. Het afrondgedrag zelf is
+          ONGEWIJZIGD — afronden-met-afwijking hoort bij #168. De blokkers zelf
+          staan in de tabs hierboven (checklist, bewijs, besluit). */}
+      <div className="mt-6 pt-5 border-t border-line flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs text-muted min-w-0">
+          {stap.status === "afgerond" ? (
+            <span className="text-ok-ink">Stap afgerond.</span>
+          ) : alleenLezen ? (
+            "Stap nog niet gestart — alleen-lezen."
+          ) : nogOpen.length > 0 ? (
+            <>
+              Nog open:{" "}
+              <span className="text-ink font-medium">
+                {nogOpen.join(" · ")}
+              </span>
+            </>
+          ) : (
+            <span className="text-ok-ink">
+              Alles voldaan — klaar om af te ronden.
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {afwijkingMogelijk && (
+            <button
+              onClick={() => setAfwijkingForm((o) => !o)}
+              disabled={bezig !== null}
+              className="px-4 py-2 text-sm rounded-lg font-medium border border-warn/40 text-warn-ink bg-warn-tint hover:bg-warn/10"
+            >
+              Afronden met afwijking
+            </button>
+          )}
+          <button
+            onClick={stapVoltooien}
+            disabled={!kanVoltooien || bezig === "voltooien"}
+            className={`px-4 py-2 text-sm rounded-lg font-medium ${
+              kanVoltooien
+                ? "bg-accent text-white hover:bg-accent-ink"
+                : "bg-app-line text-muted cursor-not-allowed"
+            }`}
+          >
+            {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
+          </button>
+        </div>
       </div>
+
+      {/* P3 (#168, §5.1): motiveringsformulier voor afronden-met-afwijking. */}
+      {afwijkingMogelijk && afwijkingForm && (
+        <div className="mt-4 border border-warn/30 rounded-lg bg-warn-tint/50 p-4">
+          <div className="text-sm font-medium text-ink">
+            Afronden terwijl er iets openstaat
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            Overrulen is niet vervullen: de onderstaande vereisten blijven daarna open
+            in het dossier. De afronding legt vast wat ontbrak, je motivering en wie
+            afrondde.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {openBovenOptioneel.map((e, i) => (
+              <li key={i} className="text-xs flex items-center gap-2">
+                <span
+                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                    zwaarteVanVereiste(e) === "kritiek"
+                      ? "bg-err/15 text-err-ink"
+                      : "bg-warn/15 text-warn-ink"
+                  }`}
+                >
+                  {zwaarteVanVereiste(e)}
+                </span>
+                <span className="text-ink">{e.label}</span>
+              </li>
+            ))}
+          </ul>
+          <label className="block mt-3 text-xs text-muted">
+            Motivering (verplicht)
+            <textarea
+              value={afwijkingMotivering}
+              onChange={(ev) => setAfwijkingMotivering(ev.target.value)}
+              rows={3}
+              className="mt-1 w-full text-sm rounded-lg border border-line bg-app px-3 py-2 text-ink"
+              placeholder="Waarom rond je deze stap af terwijl dit openstaat?"
+            />
+          </label>
+          {/* I2: de minimumlengte is blijvend zichtbaar — vóór verzending, niet pas
+              bij de weigering. */}
+          <div className="mt-1 text-[11px] text-muted">
+            Minimaal {MIN_MOTIVERING_LENGTE} tekens; deze motivering komt in het dossier en is achteraf niet te wijzigen.
+            {afwijkingMotivering.trim().length > 0 &&
+              afwijkingMotivering.trim().length < MIN_MOTIVERING_LENGTE && (
+                <span className="text-warn-ink">
+                  {" "}Nog {MIN_MOTIVERING_LENGTE - afwijkingMotivering.trim().length} tekens nodig.
+                </span>
+              )}
+          </div>
+          {(kritiekOpen > 0 || serverVraagtBevestiging) && (
+            <label className="flex items-start gap-2 mt-2 text-xs text-ink">
+              <input
+                type="checkbox"
+                checked={afwijkingBevestigd}
+                onChange={(ev) => setAfwijkingBevestigd(ev.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Ik bevestig dat er een <strong>kritieke</strong> vereiste openstaat en
+                de stap desondanks bewust wordt afgerond.
+              </span>
+            </label>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={afwijkingVastleggen}
+              disabled={
+                bezig === "afwijking" ||
+                afwijkingMotivering.trim().length < MIN_MOTIVERING_LENGTE ||
+                ((kritiekOpen > 0 || serverVraagtBevestiging) && !afwijkingBevestigd)
+              }
+              className={`px-4 py-2 text-sm rounded-lg font-medium ${
+                afwijkingMotivering.trim().length >= MIN_MOTIVERING_LENGTE &&
+                (kritiekOpen === 0 && !serverVraagtBevestiging
+                  ? true
+                  : afwijkingBevestigd)
+                  ? "bg-warn text-white hover:opacity-90"
+                  : "bg-app-line text-muted cursor-not-allowed"
+              }`}
+            >
+              {bezig === "afwijking" ? "Bezig…" : "Afronden met afwijking"}
+            </button>
+            <button
+              onClick={() => {
+                setAfwijkingForm(false);
+                setAfwijkingBevestigd(false);
+                setServerVraagtBevestiging(false);
+                setFout(null);
+              }}
+              disabled={bezig === "afwijking"}
+              className="px-3 py-2 text-sm rounded-lg text-muted hover:text-ink"
+            >
+              Annuleren
+            </button>
+          </div>
+        </div>
+      )}
 
       </fieldset>
 
@@ -2073,6 +2696,23 @@ export default function StapPaneel({
             if (doelId) bewijsKoppelen(doelId, id);
           }}
           onClose={() => setKoppelDoelId(null)}
+        />
+      )}
+
+      {/* #192: de kiezer voor bestaande artefacten en het vaststellingsformulier
+          voor de objectloze typen. */}
+      {kiezerVereiste && (
+        <VereisteKiezer
+          procedureId={procedureId}
+          vereiste={kiezerVereiste}
+          onClose={() => setKiezerVereiste(null)}
+        />
+      )}
+      {vastformVereiste && (
+        <VaststellingFormulier
+          procedureId={procedureId}
+          vereiste={vastformVereiste}
+          onClose={() => setVastformVereiste(null)}
         />
       )}
     </div>

@@ -360,7 +360,7 @@ function classificatieRegel(d: DecisionRij): string {
  * Proces-contextblok: reikwijdte + fase uit het Decision Object en de huidige
  * stap, plus de gekoppelde stukken als [Bron N]-set (die de route apart als
  * document-scope zet). Bewust GEEN vervuld/niet-vervuld-oordeel over de
- * requirements: dat vergt de readiness-engine en zou hier schijnzekerheid geven —
+ * requirements: dat oordeel (evidence/D10) hoort in de proceduremodule en zou hier schijnzekerheid geven —
  * de labels gaan neutraal mee als "wat deze stap vraagt".
  *
  * @param heeftBronnen  Of er doorzoekbare gekoppelde stukken zijn (bepaalt de

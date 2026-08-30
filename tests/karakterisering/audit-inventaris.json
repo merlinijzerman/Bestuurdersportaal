@@ -2,14 +2,14 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 94,
-    "metBewijsketen": 35,
-    "metEnigSpoor": 73,
+    "aantalHandlers": 98,
+    "metBewijsketen": 38,
+    "metEnigSpoor": 77,
     "zonderSpoor": 21,
     "klasseTelling": {
-      "domein": 38,
+      "domein": 39,
       "geen": 7,
-      "bewijsketen": 35,
+      "bewijsketen": 38,
       "machine": 6,
       "operationeel": 8
     },
@@ -42,6 +42,10 @@
         "fn_notulen_segment_verwijder",
         "fn_stap_heropenen",
         "fn_stap_afronden",
+        "fn_stap_afronden_met_afwijking",
+        "fn_besluit_status_omslag",
+        "fn_procedure_beeindigen",
+        "fn_procedure_heropenen",
         "fn_schrijf_vergelijking",
         "fn_schrijf_semantische_extractie",
         "log_word_export",
@@ -63,6 +67,7 @@
       "fonds_stuurinfo_reeks": "fonds_stuurinfo_log",
       "fonds_stuurinfo_reserve": "fonds_stuurinfo_log",
       "procedure_bewijs": "procedure_log",
+      "procedure_vaststelling": "procedure_log",
       "agendapunten": "governance_events",
       "agendapunt_inbreng": "governance_events",
       "vergaderingen": "governance_events",
@@ -521,9 +526,9 @@
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
-          "token": "governance_events",
+          "token": "fn_besluit_status_omslag",
           "via": "direct",
-          "soort": "tabel"
+          "soort": "rpc"
         }
       ],
       "domein": [],
@@ -1044,6 +1049,29 @@
       "platform": []
     },
     {
+      "handler": "POST app/api/procedures/[id]/beeindigen/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "fn_procedure_beeindigen",
+          "via": "direct",
+          "soort": "rpc"
+        },
+        {
+          "token": "governance_events",
+          "via": "ensureDecisionForProcedure",
+          "soort": "tabel"
+        }
+      ],
+      "domein": [],
+      "platform": []
+    },
+    {
       "handler": "POST app/api/procedures/[id]/besluiten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
@@ -1209,6 +1237,24 @@
       "platform": []
     },
     {
+      "handler": "POST app/api/procedures/[id]/heropenen/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "fn_procedure_heropenen",
+          "via": "direct",
+          "soort": "rpc"
+        }
+      ],
+      "domein": [],
+      "platform": []
+    },
+    {
       "handler": "PATCH app/api/procedures/[id]/requirements/[reqId]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
@@ -1284,6 +1330,24 @@
           "soort": "tabel"
         }
       ],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/procedures/[id]/stappen/[stapId]/afwijking/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "fn_stap_afronden_met_afwijking",
+          "via": "lokale-handler",
+          "soort": "rpc"
+        }
+      ],
+      "domein": [],
       "platform": []
     },
     {
@@ -1383,6 +1447,25 @@
           "token": "procedure_log",
           "via": "direct",
           "soort": "tabel"
+        }
+      ],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/procedures/[id]/vereisten/koppel/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": true,
+      "klasse": "domein",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [
+        {
+          "token": "procedure_log",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "procedure_vaststelling"
         }
       ],
       "platform": []

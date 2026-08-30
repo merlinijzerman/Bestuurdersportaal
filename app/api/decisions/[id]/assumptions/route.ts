@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { zonderLegeRequirementSleutel } from "@/core/lib/publieke-rij";
 import { z } from "zod";
 
 const ASSUMPTION_TYPES = [
@@ -139,7 +140,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       },
     });
 
-    return NextResponse.json({ assumption: nieuw }, { status: 201 });
+    return NextResponse.json({ assumption: zonderLegeRequirementSleutel(nieuw) }, { status: 201 });
   } catch (e) {
     console.error("Fout in POST /api/decisions/[id]/assumptions:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });

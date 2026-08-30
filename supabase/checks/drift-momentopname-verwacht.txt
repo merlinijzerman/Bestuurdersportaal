@@ -51,8 +51,6 @@ execute|public.fn_chunk_denorm_refresh|anon=false authenticated=true
 execute|public.fn_chunk_denorm|anon=false authenticated=true
 execute|public.fn_contact_aanvragen_no_delete|anon=false authenticated=true
 execute|public.fn_decision_code|anon=false authenticated=true
-execute|public.fn_decision_readiness_check|anon=false authenticated=true
-execute|public.fn_decision_readiness_overview|anon=false authenticated=true
 execute|public.fn_decision_snapshot|anon=false authenticated=true
 execute|public.fn_decision_status_check|anon=false authenticated=true
 execute|public.fn_decision_touch|anon=false authenticated=true
@@ -310,14 +308,12 @@ functie|public.fn_app_error_log|secdef=true searchpath=search_path=public, pg_te
 functie|public.fn_audit_procedure_bewijs_mutation|secdef=true searchpath=search_path=pg_temp md5=3dfd3382b681b64bc75a432f1f692528
 functie|public.fn_bron_whitelist_log_hash|secdef=false searchpath=niet gepind md5=1aa9977b6faa89b2602d8063635d7e78
 functie|public.fn_bron_whitelist_log_immutable|secdef=false searchpath=niet gepind md5=94349a2cbfe96fe81e4377f84fa535c2
-functie|public.fn_build_decision_dossier|secdef=false searchpath=niet gepind md5=9de829fe09d4db328ec955ae51997b28
+functie|public.fn_build_decision_dossier|secdef=false searchpath=niet gepind md5=44874fe3339eeb34052175977a30eb7a
 functie|public.fn_chunk_denorm_before_insert|secdef=false searchpath=search_path=public, pg_temp md5=67c83b5bcab8eb1599f65b56453b2b19
 functie|public.fn_chunk_denorm_refresh|secdef=false searchpath=search_path=public, pg_temp md5=b98c9d83fc5c31caf22d893427411d80
 functie|public.fn_chunk_denorm|secdef=false searchpath=search_path=public, pg_temp md5=7407172179d566288620b6040471d1f9
 functie|public.fn_contact_aanvragen_no_delete|secdef=false searchpath=niet gepind md5=1080388908f45c73657e4acb99ea8f89
 functie|public.fn_decision_code|secdef=false searchpath=niet gepind md5=c3cbda023278c39644055523be469deb
-functie|public.fn_decision_readiness_check|secdef=false searchpath=niet gepind md5=2d45edf37585a9793ad2abf3f302fcb3
-functie|public.fn_decision_readiness_overview|secdef=false searchpath=niet gepind md5=b66240a861a60d6f2cf87374b0732b08
 functie|public.fn_decision_snapshot|secdef=false searchpath=niet gepind md5=bab1eeaeb7ff99bb08f8c6bf573eb24c
 functie|public.fn_decision_status_check|secdef=false searchpath=niet gepind md5=07b816d9343f3bcdfefa2590d3a7337b
 functie|public.fn_decision_touch|secdef=false searchpath=niet gepind md5=ad400f9606ba5747eedfab918407f5ff
