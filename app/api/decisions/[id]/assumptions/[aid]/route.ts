@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { zonderLegeRequirementSleutel } from "@/core/lib/publieke-rij";
 import { z } from "zod";
 
 const ASSUMPTION_TYPES = [
@@ -136,7 +137,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     }
 
     if (Object.keys(wijzigingen).length === 0) {
-      return NextResponse.json({ assumption: huidig, gewijzigd: false });
+      return NextResponse.json({ assumption: zonderLegeRequirementSleutel(huidig), gewijzigd: false });
     }
 
     wijzigingen.gewijzigd_door = ctx.gebruikerId;
@@ -191,7 +192,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
       });
     }
 
-    return NextResponse.json({ assumption: bijgewerkt, gewijzigd: true });
+    return NextResponse.json({ assumption: zonderLegeRequirementSleutel(bijgewerkt), gewijzigd: true });
   } catch (e) {
     console.error("Fout in PATCH /api/decisions/[id]/assumptions/[aid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
