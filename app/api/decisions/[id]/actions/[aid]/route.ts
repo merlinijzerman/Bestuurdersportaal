@@ -17,7 +17,7 @@ const STATUS = [
 
 type WijzigBody = Partial<{
   actie: string;
-  eigenaar_naam: string | null;
+  eigenaar_id: string | null;
   deadline: string | null;
   status: (typeof STATUS)[number];
   voorwaarde_id: string | null;
@@ -26,13 +26,12 @@ type WijzigBody = Partial<{
 
 const INHOUDELIJK: (keyof WijzigBody)[] = [
   "actie",
-  "eigenaar_naam",
   "deadline",
   "voorwaarde_id",
   "afhankelijk_van",
 ];
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.actions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.actions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "eigenaar_id": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, aid } = params as { id: string; aid: string };
     const supabase = ctx.supabase;
@@ -41,6 +40,16 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     if (body.status !== undefined && !STATUS.includes(body.status)) {
       return NextResponse.json(
         { error: `Ongeldige status: ${body.status}` },
+        { status: 400 }
+      );
+    }
+    if (
+      body.eigenaar_id !== undefined &&
+      body.eigenaar_id !== null &&
+      typeof body.eigenaar_id !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "Ongeldige actie-eigenaar" },
         { status: 400 }
       );
     }
@@ -79,6 +88,34 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     const nieuw: Record<string, unknown> = {};
     const inhoudelijk: string[] = [];
     let statusGewijzigd = false;
+
+    if (body.eigenaar_id !== undefined) {
+      let eigenaar: { id: string; naam: string | null } | null = null;
+      if (body.eigenaar_id) {
+        const { data } = await supabase
+          .from("vw_fondsleden")
+          .select("id, naam")
+          .eq("id", body.eigenaar_id)
+          .maybeSingle();
+        eigenaar = data as { id: string; naam: string | null } | null;
+        if (!eigenaar) {
+          return NextResponse.json(
+            { error: "Eigenaar heeft geen profiel binnen dit fonds" },
+            { status: 400 }
+          );
+        }
+      }
+      const huidigeEigenaarId = huidig.eigenaar_id as string | null;
+      if ((eigenaar?.id ?? null) !== huidigeEigenaarId) {
+        wijzigingen.eigenaar_id = eigenaar?.id ?? null;
+        wijzigingen.eigenaar_naam = eigenaar?.naam?.trim() || null;
+        oude.eigenaar_id = huidigeEigenaarId;
+        oude.eigenaar_naam = huidig.eigenaar_naam;
+        nieuw.eigenaar_id = eigenaar?.id ?? null;
+        nieuw.eigenaar_naam = eigenaar?.naam?.trim() || null;
+        inhoudelijk.push("eigenaar_id");
+      }
+    }
 
     for (const veld of INHOUDELIJK) {
       if (body[veld] === undefined) continue;

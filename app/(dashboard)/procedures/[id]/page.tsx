@@ -276,6 +276,12 @@ export default async function ProcedureDetailPage({
   // Weergavenaam live uit vw_fondsleden waar een account bekend is; anders de
   // bevroren snapshot (co-eigenaar zonder account, of view nog niet gemigreerd).
   const fondsleden = await haalFondsleden(supabase);
+  // Actie-eigenaren zijn altijd echte profielen uit het eigen fonds. Zonder
+  // weergavenaam is een profiel niet zinvol kiesbaar in de interface.
+  const actieEigenaren = Array.from(fondsleden.values()).flatMap((lid) => {
+    const naam = lid.naam?.trim();
+    return naam ? [{ id: lid.id, naam }] : [];
+  });
   const eigenaren = (eigenarenRes.data || []).map(
     (e: { gebruiker_id: string | null; gebruiker_naam: string }) =>
       weergaveNaam(e.gebruiker_id, e.gebruiker_naam, fondsleden)
@@ -939,6 +945,7 @@ export default async function ProcedureDetailPage({
               risks={dossier.risks}
               conditions={dossier.conditions}
               actions={dossier.actions}
+              actieEigenaren={actieEigenaren}
               dissents={dossier.dissent}
               currentUserId={user.id}
               currentUserIsPrivileged={currentUserIsPrivileged}
