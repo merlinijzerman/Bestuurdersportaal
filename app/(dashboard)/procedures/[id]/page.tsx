@@ -502,13 +502,16 @@ export default async function ProcedureDetailPage({
     );
   }
 
-  // WO-3: rechter-weergavekeuze. ?stap wint > ?fase > default-stap. In fase-
-  // modus staat rechts alléén de fasebeschrijving; in stap-modus het stapscherm.
+  // WO-3: rechter-weergavekeuze. ?stap wint > ?fase > eerste procesfase.
+  // In fase-modus staat rechts alléén de fasebeschrijving; in stap-modus het
+  // stapscherm. Daardoor opent een proces altijd op zijn eerste fase, terwijl
+  // een expliciet gekozen stap intact blijft.
   const weergave = kiesWeergave({
     stapParam,
     faseParam,
     geldigeStapIds: stappen.map((s) => s.id),
     geldigeFaseCodes: faseGroepen.map((f) => f.fase_code),
+    defaultFaseCode: faseGroepen[0]?.fase_code ?? null,
     defaultStapId,
   });
   const geselecteerdeStap =
