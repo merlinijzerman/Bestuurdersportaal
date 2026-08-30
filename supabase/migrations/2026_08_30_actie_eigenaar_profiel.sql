@@ -80,7 +80,11 @@ begin
 end;
 $$;
 
-revoke all on function public.fn_guard_decision_action_eigenaar() from public;
+-- Triggerfunctie: nooit rechtstreeks aanroepen. Eerdere grant-hygiëne kent
+-- authenticated/service_role functies soms expliciet EXECUTE toe, dus trek ook
+-- die rechten expliciet in.
+revoke all on function public.fn_guard_decision_action_eigenaar()
+  from public, authenticated, service_role;
 
 drop trigger if exists trg_guard_decision_action_eigenaar on public.decision_actions;
 create trigger trg_guard_decision_action_eigenaar
