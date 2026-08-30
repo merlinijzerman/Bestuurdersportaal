@@ -46,6 +46,22 @@ export function isActiveerbaar(
 }
 
 /**
+ * Mag de gebruiker de eerste inhoudelijke handeling op deze stap doen?
+ *
+ * `niet_begonnen` is nadrukkelijk geen leesstatus: de eerste checklist-,
+ * bewijs- of besluitmutatie activeert de stap via de database-trigger. De UI
+ * moet die handeling dus toelaten, terwijl geblokkeerde, vervallen en afgeronde
+ * stappen leesbaar blijven.
+ */
+export function isInhoudelijkBewerkbaar(status: string): boolean {
+  return (
+    status === "niet_begonnen" ||
+    status === "actief" ||
+    status === "heropend"
+  );
+}
+
+/**
  * Initiële stap-statussen bij `procedure_start` (P4-model, #169): elke stap
  * waarvan de afhankelijkheden (nog) niet allemaal afgerond zijn wordt
  * 'geblokkeerd'; een activeerbare stap start als **'niet_begonnen'** (niet

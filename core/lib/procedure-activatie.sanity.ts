@@ -17,6 +17,7 @@ import {
   afhankelijkeAfgerondeStappen,
   alleStappenAfgerond,
   isActiveerbaar,
+  isInhoudelijkBewerkbaar,
   type StapActivatieState,
 } from "./procedure-activatie";
 
@@ -36,6 +37,14 @@ check("parallelle start: alle dep-loze stappen worden niet_begonnen (P4)", () =>
   const status = beginStatussen(stappen);
   assert.equal(status.size, 12);
   for (const [, s] of status) assert.equal(s, "niet_begonnen");
+});
+
+check("niet_begonnen is bewerkbaar voor de eerste inhoudelijke handeling", () => {
+  assert.equal(isInhoudelijkBewerkbaar("niet_begonnen"), true);
+  assert.equal(isInhoudelijkBewerkbaar("actief"), true);
+  assert.equal(isInhoudelijkBewerkbaar("heropend"), true);
+  assert.equal(isInhoudelijkBewerkbaar("geblokkeerd"), false);
+  assert.equal(isInhoudelijkBewerkbaar("afgerond"), false);
 });
 
 // ── Gate-fixture: keten 1 → 2 → 3 ─────────────────────────────────────
