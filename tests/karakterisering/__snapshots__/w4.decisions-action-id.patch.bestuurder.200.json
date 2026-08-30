@@ -6,6 +6,7 @@
       "afhankelijk_van": null,
       "deadline": null,
       "decision_id": "<uuid:1>",
+      "eigenaar_id": null,
       "eigenaar_naam": null,
       "id": "<uuid:2>",
       "status": "open",
