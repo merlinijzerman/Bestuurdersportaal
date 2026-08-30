@@ -19,6 +19,7 @@ interface Props {
   decisionId: string;
   actions: ActionItem[];
   conditions: DecisionCondition[];
+  actieEigenaren: { id: string; naam: string }[];
 }
 
 const STATUS_CYCLUS: ActionStatus[] = [
@@ -55,6 +56,7 @@ export default function ActiesPaneel({
   decisionId,
   actions,
   conditions,
+  actieEigenaren,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -62,7 +64,7 @@ export default function ActiesPaneel({
   const [fout, setFout] = useState<string | null>(null);
 
   const [actie, setActie] = useState("");
-  const [eigenaar, setEigenaar] = useState("");
+  const [eigenaarId, setEigenaarId] = useState("");
   const [deadline, setDeadline] = useState("");
   const [voorwaardeId, setVoorwaardeId] = useState("");
 
@@ -79,7 +81,7 @@ export default function ActiesPaneel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           actie: actie.trim(),
-          eigenaar_naam: eigenaar.trim() || null,
+          eigenaar_id: eigenaarId || null,
           deadline: deadline || null,
           voorwaarde_id: voorwaardeId || null,
         }),
@@ -87,7 +89,7 @@ export default function ActiesPaneel({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Toevoegen mislukt");
       setActie("");
-      setEigenaar("");
+      setEigenaarId("");
       setDeadline("");
       setVoorwaardeId("");
       setOpen(false);
@@ -118,6 +120,25 @@ export default function ActiesPaneel({
     }
   }
 
+  async function patchEigenaar(a: ActionItem, nieuweEigenaarId: string) {
+    setBezig(a.id);
+    setFout(null);
+    try {
+      const res = await fetch(`/api/decisions/${decisionId}/actions/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eigenaar_id: nieuweEigenaarId || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Eigenaar wijzigen mislukt");
+      router.refresh();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Onbekende fout");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   function cyclusStatus(a: ActionItem) {
     if (a.status === "vervallen" || a.status === "escalatie") return;
     const idx = STATUS_CYCLUS.indexOf(a.status as ActionStatus);
@@ -131,6 +152,9 @@ export default function ActiesPaneel({
 
   // Quick lookup van voorwaarde voor labelweergave
   const voorwaardeMap = new Map(conditions.map((c) => [c.id, c]));
+  const eigenaarMap = new Map(
+    actieEigenaren.map((eigenaar) => [eigenaar.id, eigenaar.naam])
+  );
 
   return (
     <div className="bg-white border border-line rounded-xl p-5">
@@ -167,13 +191,18 @@ export default function ActiesPaneel({
           </Veldgroep>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Veldgroep label="Eigenaar">
-              <input
-                type="text"
-                value={eigenaar}
-                onChange={(e) => setEigenaar(e.target.value)}
-                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
-                placeholder="Naam van eigenaar"
-              />
+              <select
+                value={eigenaarId}
+                onChange={(e) => setEigenaarId(e.target.value)}
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-accent/40"
+              >
+                <option value="">— geen eigenaar —</option>
+                {actieEigenaren.map((eigenaar) => (
+                  <option key={eigenaar.id} value={eigenaar.id}>
+                    {eigenaar.naam}
+                  </option>
+                ))}
+              </select>
             </Veldgroep>
             <Veldgroep label="Deadline">
               <input
@@ -250,14 +279,29 @@ export default function ActiesPaneel({
                       {a.actie}
                     </div>
                     <div className="flex items-center gap-3 mt-2 flex-wrap text-xs">
-                      {a.eigenaar_naam && (
-                        <span className="text-muted">
-                          Eigenaar:{" "}
-                          <span className="text-ink">
-                            {a.eigenaar_naam}
-                          </span>
-                        </span>
-                      )}
+                      <label className="text-muted flex items-center gap-1.5">
+                        Eigenaar:
+                        <select
+                          value={a.eigenaar_id ?? ""}
+                          onChange={(e) => void patchEigenaar(a, e.target.value)}
+                          disabled={bezig === a.id}
+                          className="max-w-48 text-xs text-ink border border-app-line-strong rounded px-1.5 py-1 bg-white disabled:opacity-50"
+                          aria-label={`Eigenaar van actie: ${a.actie}`}
+                        >
+                          <option value="">— geen eigenaar —</option>
+                          {actieEigenaren.map((eigenaar) => (
+                            <option key={eigenaar.id} value={eigenaar.id}>
+                              {eigenaar.naam}
+                            </option>
+                          ))}
+                        </select>
+                        {!a.eigenaar_id && a.eigenaar_naam && (
+                          <span className="text-ink">{a.eigenaar_naam}</span>
+                        )}
+                        {a.eigenaar_id && !eigenaarMap.has(a.eigenaar_id) && a.eigenaar_naam && (
+                          <span className="text-ink">{a.eigenaar_naam}</span>
+                        )}
+                      </label>
                       {a.deadline && (
                         <span className="text-muted">
                           Deadline:{" "}

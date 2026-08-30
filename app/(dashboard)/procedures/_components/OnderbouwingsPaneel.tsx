@@ -40,6 +40,8 @@ interface Props {
   risks: RiskItem[];
   conditions: DecisionCondition[];
   actions: ActionItem[];
+  /** Kiesbare actie-eigenaren: profielleden binnen het eigen fonds. */
+  actieEigenaren: { id: string; naam: string }[];
   dissents: DissentItem[];
   currentUserId: string;
   currentUserIsPrivileged: boolean;
@@ -172,6 +174,7 @@ export default function OnderbouwingsPaneel({
   risks,
   conditions,
   actions,
+  actieEigenaren,
   dissents,
   currentUserId,
   currentUserIsPrivileged,
@@ -258,6 +261,7 @@ export default function OnderbouwingsPaneel({
             decisionId={decisionId}
             actions={actions}
             conditions={conditions}
+            actieEigenaren={actieEigenaren}
           />
         )}
         {actief === "dissent" && (

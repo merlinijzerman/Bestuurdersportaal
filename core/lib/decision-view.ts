@@ -345,6 +345,9 @@ export interface ActionItem {
   decision_id: string;
   voorwaarde_id: string | null;
   actie: string;
+  /** Gekozen profiel binnen hetzelfde fonds; null voor oude/niet-toegewezen acties. */
+  eigenaar_id: string | null;
+  /** Historische naam-snapshot; live profielnaam wint in de weergave. */
   eigenaar_naam: string | null;
   deadline: string | null;
   status: ActionStatus;
