@@ -177,6 +177,9 @@ FUNC	public	fn_guard_stap_insert()	function	service_role	-
 FUNC	public	fn_guard_besluitstatus_feit()	function	anon	-
 FUNC	public	fn_guard_besluitstatus_feit()	function	authenticated	-
 FUNC	public	fn_guard_besluitstatus_feit()	function	service_role	-
+FUNC	public	fn_guard_decision_action_eigenaar()	function	anon	-
+FUNC	public	fn_guard_decision_action_eigenaar()	function	authenticated	-
+FUNC	public	fn_guard_decision_action_eigenaar()	function	service_role	-
 FUNC	public	fn_handelingen_retentie_guard()	function	anon	-
 FUNC	public	fn_handelingen_retentie_guard()	function	authenticated	-
 FUNC	public	fn_handelingen_retentie_guard()	function	service_role	EXECUTE
