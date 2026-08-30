@@ -194,6 +194,15 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
 11. **Actie-eigenaarprofiel (2026-08-30).** `fn_guard_decision_action_eigenaar()` is
    uitsluitend een `BEFORE`-trigger: geen client- of service-grant. Hij borgt dat een
    actie-eigenaar een profiel uit hetzelfde fonds is en laat geen nieuwe vrije-tekstnaam toe.
+12. **P5c-aantekeningen per processtap (§9.3).** `procedure_stap_notitie` is geen
+    verantwoordingsfeit maar bewerkbaar werkverkeer: `anon` heeft niets,
+    `authenticated` krijgt `SELECT, INSERT, UPDATE, DELETE`, en `service_role`
+    volledig beheer. RLS beperkt lezen en schrijven tot het eigen fonds en UPDATE/
+    DELETE aanvullend tot de auteur. `fn_validate_stap_notitie()` is uitsluitend de
+    SECURITY DEFINER-triggerfunctie voor de fonds-/procedure-/stapbinding (I5): geen
+    browser-EXECUTE, alleen `service_role` behoudt die technische grant. De
+    gedragstoets `2026_08_30_p5c_stap_notitie_gedrag.sql` meet precies deze
+    auteurs- en tenantgrens onder `authenticated`.
 
 ## Objecten die NIET in scope zijn
 

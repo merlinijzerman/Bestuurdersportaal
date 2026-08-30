@@ -786,6 +786,9 @@ export default function StapPaneel({
     setToelichtingWaarde(stap.beschrijving ?? "");
   }, [stap.beschrijving]);
   useEffect(() => {
+    // router.refresh() levert de serverwaarde opnieuw aan; het formulier moet
+    // die externe wijziging weerspiegelen wanneer een andere stap wordt getoond.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDeadlineWaarde(stap.deadline ?? "");
   }, [stap.deadline]);
 
