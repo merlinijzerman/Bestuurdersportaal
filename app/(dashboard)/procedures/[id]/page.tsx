@@ -232,6 +232,12 @@ export default async function ProcedureDetailPage({
     .single();
   const currentUserIsPrivileged =
     profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+  // Bestuurders mogen bewijs opvoeren én aan bestaande vereisten koppelen. Het
+  // is proceswerk (`procedures.manage`), niet het beheren van de vereisteset.
+  const magBewijsKoppelen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.manage"
+  );
   // P3 (#168, §5.1): afronden met afwijking hangt aan de capability, niet aan de
   // kanBeheren-hardcode — bestuurder draagt de capability wél maar is geen
   // kanBeheren. De harde gate zit server-side (route + DB-functie).
@@ -795,6 +801,7 @@ export default async function ProcedureDetailPage({
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}
               kanBeheren={currentUserIsPrivileged}
+              magBewijsKoppelen={magBewijsKoppelen}
               besluitOpSlot={
                 // #192/I1: staat het besluit op slot? Dan is losmaken vergrendeld
                 // (met reden). Harde gate zit server-side in de koppelroute.
