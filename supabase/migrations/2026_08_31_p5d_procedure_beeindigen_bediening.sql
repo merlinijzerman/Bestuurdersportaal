@@ -246,4 +246,23 @@ end $$;
 revoke all on function public.fn_procedure_heropenen(uuid, text, text) from public, anon, service_role;
 grant execute on function public.fn_procedure_heropenen(uuid, text, text) to authenticated;
 
+-- Eindcontrole binnen dezelfde transactie: een handmatige Preview-run mag nooit
+-- als groen worden behandeld als de verplichte reden-categorie, het oude
+-- ontsnappingspad of de browserrechten niet exact in de beoogde eindstaat staan.
+do $$
+begin
+  if to_regprocedure('public.fn_procedure_beeindigen(uuid,text)') is null
+     or to_regprocedure('public.fn_procedure_heropenen(uuid,text,text)') is null
+     or to_regprocedure('public.fn_procedure_heropenen(uuid,text)') is not null then
+    raise exception 'P5d FAALT: procedure-RPC-signaturen onvolledig of oud ontsnappingspad nog aanwezig.';
+  end if;
+  if not has_function_privilege('authenticated', 'public.fn_procedure_beeindigen(uuid,text)'::regprocedure, 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.fn_procedure_heropenen(uuid,text,text)'::regprocedure, 'EXECUTE')
+     or has_function_privilege('anon', 'public.fn_procedure_beeindigen(uuid,text)'::regprocedure, 'EXECUTE')
+     or has_function_privilege('anon', 'public.fn_procedure_heropenen(uuid,text,text)'::regprocedure, 'EXECUTE') then
+    raise exception 'P5d FAALT: execute-rechten van de procedure-RPC''s zijn niet fail-closed.';
+  end if;
+  raise notice 'P5d OK: procedure-RPC''s, verplichte reden-categorie en grants zijn volledig toegepast.';
+end $$;
+
 commit;
