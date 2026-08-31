@@ -1127,14 +1127,6 @@ export default function StapPaneel({
       setFout("Kies de uitkomst van het besluit.");
       return;
     }
-    if (!besluitApprovalVereiste) {
-      setFout(
-        approvalKandidaten.length === 0
-          ? "Deze besluitstap heeft geen approval-vereiste om het besluit aan te binden."
-          : "Deze besluitstap heeft meerdere approval-vereisten; maak de binding eerst eenduidig."
-      );
-      return;
-    }
     setBezig("besluit");
     try {
       const verworpen = besluitAlternatieven
@@ -1151,7 +1143,12 @@ export default function StapPaneel({
           datum: besluitDatum,
           verworpen_alternatieven: verworpen,
           uitkomst: besluitUitkomst,
-          vereiste: vereisteAlsPayload(besluitApprovalVereiste),
+          // Eén approval wordt automatisch gebonden. Zonder of met meerdere
+          // approvals bestaat het besluit eerst ongebonden; bij meerdere kiest
+          // de bestaande vereiste-koppelroute later de juiste vervulling.
+          vereiste: besluitApprovalVereiste
+            ? vereisteAlsPayload(besluitApprovalVereiste)
+            : null,
         }),
       });
       if (!res.ok) {
@@ -2473,6 +2470,11 @@ export default function StapPaneel({
                   Uitkomst: {besluit.uitkomst}
                 </div>
               )}
+              {besluit.requirement_sleutel === null && (
+                <div className="text-xs text-muted mt-1">
+                  Ongebonden besluit · vervult geen vereiste
+                </div>
+              )}
               <div className="text-xs text-muted mt-2">
                 {new Date(besluit.datum).toLocaleDateString("nl-NL", {
                   day: "numeric",
@@ -2516,10 +2518,10 @@ export default function StapPaneel({
                 <option value="afwijzend">Afwijzend</option>
               </select>
               {!besluitApprovalVereiste && (
-                <p className="text-xs text-err-ink">
+                <p className="text-xs text-muted">
                   {approvalKandidaten.length === 0
-                    ? "Geen approval-vereiste gekoppeld aan deze stap."
-                    : "Meerdere approval-vereisten gevonden; de besluitbinding is niet eenduidig."}
+                    ? "Geen approval-vereiste op deze stap. Het besluit wordt ongebonden vastgelegd en vervult niets."
+                    : "Meerdere approval-vereisten op deze stap. Het besluit wordt eerst ongebonden vastgelegd; koppel het daarna bij de juiste vereiste."}
                 </p>
               )}
               <textarea
@@ -2552,7 +2554,7 @@ export default function StapPaneel({
                 </button>
                 <button
                   type="submit"
-                  disabled={bezig === "besluit" || !besluitUitkomst || !besluitApprovalVereiste}
+                  disabled={bezig === "besluit" || !besluitUitkomst}
                   className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
                 >
                   {bezig === "besluit" ? "Bezig…" : "Vastleggen"}

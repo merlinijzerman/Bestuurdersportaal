@@ -3,6 +3,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import { z } from "zod";
 import {
+  haalApprovalVereisten,
   leesVereisteVerwijzing,
   resolveRequirementBinding,
 } from "@/core/lib/bewijs-binding";
@@ -66,25 +67,80 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       return NextResponse.json({ error: "Stap hoort niet bij deze procedure" }, { status: 400 });
     }
 
-    const verwijzing = leesVereisteVerwijzing(body.vereiste);
-    if (verwijzing === "ongeldig" || verwijzing === null || verwijzing === undefined) {
+    // D10/0189: een feit mag bestaan zonder iets te vervullen. Alleen bij exact
+    // één approval op deze stap is automatisch binden ondubbelzinnig. Bij nul
+    // blijft het besluit ongebonden; bij meer dan één bepaalt de bestaande
+    // koppelroute later de specifieke vervulling.
+    const approvals = await haalApprovalVereisten(supabase, id, stap.volgorde);
+    if (!approvals.ok) {
       return NextResponse.json(
-        { error: "Een besluit moet aan een approval-vereiste worden gebonden" },
-        { status: 400 }
+        { error: approvals.fout },
+        { status: approvals.serverfout ? 500 : 400 }
       );
     }
-    const binding = await resolveRequirementBinding(
-      supabase,
-      id,
-      verwijzing,
-      stap.volgorde,
-      ["approval"]
-    );
-    if (!binding.ok) {
-      return NextResponse.json(
-        { error: binding.fout },
-        { status: binding.serverfout ? 500 : 400 }
+    const verwijzing =
+      body.vereiste === undefined ? undefined : leesVereisteVerwijzing(body.vereiste);
+    if (verwijzing === "ongeldig") {
+      return NextResponse.json({ error: "Ongeldige vereiste-verwijzing" }, { status: 400 });
+    }
+
+    let requirementSleutel: string | null = null;
+    if (approvals.vereisten.length === 1) {
+      const enige = approvals.vereisten[0];
+      // Een client mag de automatische binding niet omzeilen of naar een andere
+      // approval wijzen. De server leidt de effectieve verwijzing zelf af.
+      if (
+        verwijzing !== undefined &&
+        verwijzing !== null &&
+        (verwijzing.stap_volgorde !== enige.stap_volgorde ||
+          verwijzing.requirement_type !== enige.requirement_type ||
+          verwijzing.documenttype !== enige.documenttype ||
+          verwijzing.label !== enige.label)
+      ) {
+        return NextResponse.json(
+          { error: "De opgegeven approval-vereiste hoort niet bij deze besluitstap" },
+          { status: 400 }
+        );
+      }
+      const binding = await resolveRequirementBinding(
+        supabase,
+        id,
+        enige,
+        stap.volgorde,
+        ["approval"]
       );
+      if (!binding.ok) {
+        return NextResponse.json(
+          { error: binding.fout },
+          { status: binding.serverfout ? 500 : 400 }
+        );
+      }
+      requirementSleutel = binding.sleutel;
+    } else if (approvals.vereisten.length === 0) {
+      if (verwijzing !== undefined && verwijzing !== null) {
+        return NextResponse.json(
+          { error: "Deze besluitstap heeft geen approval-vereiste om aan te binden" },
+          { status: 400 }
+        );
+      }
+    } else if (verwijzing !== undefined && verwijzing !== null) {
+      // Meerdere approvals: behoud de expliciete bindingsmogelijkheid voor API-
+      // clients. De interface legt ongebonden vast en gebruikt daarna de
+      // koppelroute, zodat zij nooit zelf een willekeurige keuze maakt.
+      const binding = await resolveRequirementBinding(
+        supabase,
+        id,
+        verwijzing,
+        stap.volgorde,
+        ["approval"]
+      );
+      if (!binding.ok) {
+        return NextResponse.json(
+          { error: binding.fout },
+          { status: binding.serverfout ? 500 : 400 }
+        );
+      }
+      requirementSleutel = binding.sleutel;
     }
 
     // Verworpen alternatieven: filter lege strings + trim.
@@ -107,7 +163,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         datum,
         verworpen_alternatieven: alternatieven,
         uitkomst: body.uitkomst,
-        requirement_sleutel: binding.sleutel,
+        requirement_sleutel: requirementSleutel,
         vastgelegd_door: ctx.gebruikerId,
         vastgelegd_door_naam: ctx.naam || null,
       })
@@ -127,7 +183,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       event_type: "besluit_vastgelegd",
       actor_id: ctx.gebruikerId,
       actor_naam: ctx.naam || null,
-      payload: { formulering, datum, uitkomst: body.uitkomst, requirement_sleutel: binding.sleutel },
+      payload: { formulering, datum, uitkomst: body.uitkomst, requirement_sleutel: requirementSleutel },
     });
 
     // 1D-3: ook in governance_events loggen op Decision Object niveau,
@@ -148,7 +204,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
           verworpen_alternatieven: alternatieven,
           stap_id: body.stap_id || null,
           uitkomst: body.uitkomst,
-          requirement_sleutel: binding.sleutel,
+          requirement_sleutel: requirementSleutel,
         },
       });
     }

@@ -1,0 +1,1085 @@
+{
+  "code": "pf_wtp_invaarbesluit",
+  "versie": "2.0.1",
+  "naam": "Wtp-invaarbesluit — bestuurlijke keten",
+  "sector": "pensioenfondsen",
+  "profiel_type": "beleidswijziging",
+  "korte_omschrijving": "Volledige bestuurlijke keten voor het invaren onder de Wtp: van opdrachtaanvaarding en beoordelingskader, via onderbouwing, evenwichtigheid en communicatie/keuzebegeleiding, naar besluitvorming, DNB/AFM-toezicht, go/no-go, omzetting en nazorg.",
+  "context": "Generieke bestuurlijke keten voor het invaren onder de Wet toekomst pensioenen. Per fonds aanpasbaar (opdrachtgever, regelingtype, transitiedatum, organenstructuur) — in het portaal via aanpasbare checklist, bewijslast en toelichtingen.",
+  "aanleiding": "Wettelijke Wtp-transitie; transitieplan van sociale partners of beroepspensioenvereniging.",
+  "frequentie": "eenmalig / incidenteel",
+  "eigenaar_rol": "voorzitter",
+  "regelgeving": [
+    "Wet toekomst pensioenen",
+    "Wet verplichte beroepspensioenregeling",
+    "DNB-toezicht",
+    "AFM-toezicht"
+  ],
+  "geschat_aantal_dagen": 640,
+  "classificatie_default": {
+    "complexiteit": "complex",
+    "risiconiveau": "hoog",
+    "mandaatgevoelig": true,
+    "toezichtgevoelig": true,
+    "beleidsafwijking": true,
+    "ai_risicoklasse": "middel"
+  },
+  "fasen": [
+    {
+      "fase_code": "I",
+      "volgorde": 1,
+      "titel": "Kaders",
+      "generieke_beschrijving": "Het bestuur legt de opdracht en de eigen beoordelingsmaatstaven vast vóórdat de inhoudelijke weging begint: wat vraagt de opdrachtgever, en op basis van welk kader beoordelen wij of de transitie verantwoord en evenwichtig is?"
+    },
+    {
+      "fase_code": "II",
+      "volgorde": 2,
+      "titel": "Onderbouwing",
+      "generieke_beschrijving": "Het bestuur bouwt de feitelijke onderbouwing op: uitvoerbaarheid en beheersing, betrouwbaarheid van data en modellen, de transitie-effecten en evenwichtigheid, en de uitlegbaarheid richting deelnemers."
+    },
+    {
+      "fase_code": "III",
+      "volgorde": 3,
+      "titel": "Besluitvorming",
+      "generieke_beschrijving": "Het bestuur vormt het voorgenomen besluit en doorloopt medezeggenschap en intern toezicht, met zichtbare weging van adviezen, hoorrecht en eventuele afwijkende inzichten."
+    },
+    {
+      "fase_code": "IV",
+      "volgorde": 4,
+      "titel": "Toezicht & voorbereiding",
+      "generieke_beschrijving": "Het dossier gaat naar DNB en AFM ter beoordeling, en de deelnemers en de klantbediening worden tijdig en persoonlijk voorbereid op de transitie."
+    },
+    {
+      "fase_code": "V",
+      "volgorde": 5,
+      "titel": "Gereedheid & invaren",
+      "generieke_beschrijving": "Het bestuur toetst de finale gereedheid tegen vooraf bepaalde criteria, neemt het go/no-go-besluit en voert — bij go — de daadwerkelijke omzetting uit."
+    },
+    {
+      "fase_code": "VI",
+      "volgorde": 6,
+      "titel": "Nazorg & verantwoording",
+      "generieke_beschrijving": "Na de transitie controleert en verklaart het bestuur de uitkomsten, informeert het definitief, en monitort het gemaakte keuzes, klachten en signalen als bestuurlijke feedback."
+    }
+  ],
+  "stappen": [
+    {
+      "volgorde": 1,
+      "naam": "Opdracht ontvangen en duiden",
+      "beschrijving": "Is de opdracht van de sociale partners of beroepspensioenvereniging voldoende duidelijk én kunnen wij die beheerst en evenwichtig uitvoeren? Opdrachtaanvaarding is een expliciet (voorgenomen) besluit.",
+      "fase_code": "I",
+      "fase_type": "intake",
+      "vereist_besluit": true,
+      "geschatte_dagen": 30,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Transitieplan van sociale partners / beroepspensioenvereniging ontvangen en inhoudelijk geduid",
+          "bewijs_vereist": true,
+          "toelichting": "Gebruik 'sociale partners' of 'beroepspensioenvereniging' afhankelijk van het fondstype. Het transitieplan is informatiebron voor de eigen fondsbesluitvorming; DNB houdt geen toezicht op de arbeidsvoorwaardelijke keuzes zelf."
+        },
+        {
+          "label": "Formeel invaarverzoek ontvangen; reikwijdte en beoogde transitiedatum zijn eenduidig",
+          "bewijs_vereist": true,
+          "toelichting": "Leg expliciet vast welke aanspraken/rechten het verzoek omvat en welke beoogde datum geldt. Dit voorkomt dat het fonds impliciete uitgangspunten hanteert."
+        },
+        {
+          "label": "Gewijzigde pensioenovereenkomst/-regeling en compensatieafspraken ontvangen, voor zover van toepassing",
+          "bewijs_vereist": true,
+          "toelichting": "Voor beroepspensioenfondsen kan de terminologie afwijken. Compensatie is conditioneel; het dossier moet zichtbaar maken of compensatie wel of niet speelt."
+        },
+        {
+          "label": "Doelstellingen, maatstaven, bandbreedtes en voorrangsregels uit het transitieplan geïnventariseerd",
+          "bewijs_vereist": true,
+          "toelichting": "Deze elementen vormen belangrijke input voor de latere beoordeling van transitie-effecten en evenwichtigheid."
+        },
+        {
+          "label": "Gecontroleerd dat het wettelijk hoorrecht in de arbeidsvoorwaardelijke fase is verwerkt, indien van toepassing",
+          "bewijs_vereist": true,
+          "toelichting": "Het hoorrecht ligt bij sociale partners / beroepspensioenvereniging en hoort niet bij de fondsorganenprocedure. Het fonds controleert of de relevante inbreng en verwerking daarvan uit het transitieplan blijken."
+        },
+        {
+          "label": "Onduidelijkheden en ontbrekende onderbouwing aantoonbaar teruggelegd bij sociale partners / beroepspensioenvereniging",
+          "bewijs_vereist": true,
+          "toelichting": "Het fonds moet voldoende duidelijkheid verkrijgen om de eigen wettelijke verantwoordelijkheid voor uitvoerbaarheid en evenwichtigheid te kunnen nemen."
+        },
+        {
+          "label": "Onderbouwing hoorrecht en verwerking in transitieplan",
+          "bewijs_vereist": true,
+          "toelichting": "Alleen indien representatieve verenigingen het wettelijke hoorrecht konden uitoefenen."
+        },
+        {
+          "label": "Vragen-, antwoorden- en verduidelijkingslog sociale partners / beroepspensioenvereniging",
+          "bewijs_vereist": true,
+          "toelichting": "Maakt zichtbaar welke onduidelijkheden zijn opgelost en welke uitgangspunten door het bestuur zijn gehanteerd."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Transitieplan",
+          "toelichting": "Definitieve, bestuurlijk gebruikte versie inclusief bijlagen en versiehistorie.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "document",
+          "label": "Formeel invaarverzoek",
+          "toelichting": "Bewaar het verzoek zoals ontvangen, inclusief reikwijdte, datum en eventuele voorwaarden.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "document",
+          "label": "(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken",
+          "toelichting": "Gebruik generieke terminologie; de precieze documentvorm verschilt per fondstype en arbeidsvoorwaardelijke context.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "approval",
+          "label": "Vaststellingsbesluit opdrachtontvangst en duiding",
+          "toelichting": "Leg het bestuurlijke besluit vast waarmee de ontvangen invaaropdracht is geduid en als uitgangspunt voor het vervolg is vastgesteld.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 2,
+      "naam": "Bestuurlijk beoordelingskader vaststellen",
+      "beschrijving": "Op basis van welk kader en welke maatstaven vinden wij de transitie straks wél/niet aanvaardbaar en evenwichtig? Verwijs expliciet naar het risicopreferentieonderzoek (RPO).",
+      "fase_code": "I",
+      "fase_type": "intake",
+      "vereist_besluit": true,
+      "geschatte_dagen": 30,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Risicopreferentieonderzoek uitgevoerd en risicohouding per relevante groep/cohort vastgesteld",
+          "bewijs_vereist": true,
+          "toelichting": "RPO is input voor de risicohouding; DNB beschrijft een volgtijdig proces van RPO, weging, vertaling naar beleid/toedelingsregels en toetsing."
+        },
+        {
+          "label": "Doelstellingen en beleidsuitgangspunten van het fonds voor de transitie expliciet vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Maak onderscheid tussen doelstellingen van sociale partners en de eigen bestuurlijke beoordelingscriteria van het fonds."
+        },
+        {
+          "label": "Evenwichtigheidsraamwerk vóór de uiteindelijke weging vastgesteld",
+          "bewijs_vereist": true,
+          "toelichting": "Voorkomt dat beoordelingscriteria achteraf worden aangepast aan de berekende uitkomsten."
+        },
+        {
+          "label": "Deelnemersgroepen/cohorten en materialiteitscriteria bepaald",
+          "bewijs_vereist": true,
+          "toelichting": "Leg vast welke groepen afzonderlijk worden beoordeeld en wanneer een effect bestuurlijk materieel is."
+        },
+        {
+          "label": "Maatstaven, bandbreedtes en voorrangsregels geoperationaliseerd voor bestuurlijke besluitvorming",
+          "bewijs_vereist": true,
+          "toelichting": "Vertaal abstracte doelstellingen naar concreet toepasbare criteria voor de latere weging."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "RPO-rapport en besluit risicohouding",
+          "toelichting": "Inclusief onderbouwing hoe RPO, deelnemerskenmerken en wetenschappelijke inzichten zijn gewogen.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Bestuurlijk beoordelingskader / evenwichtigheidsraamwerk",
+          "toelichting": "Bevat groepen, maatstaven, bandbreedtes, voorrangsregels en materialiteitscriteria.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "approval",
+          "label": "Vaststellingsbesluit beoordelingskader",
+          "toelichting": "Notulen/besluit waaruit blijkt dat het kader tijdig is vastgesteld.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 3,
+      "naam": "Uitvoerbaarheid en beheersing beoordelen",
+      "beschrijving": "Kunnen fonds, PUO en keten de nieuwe regeling en het invaren aantoonbaar beheerst uitvoeren? Expliciet eigenaarschap op ketenregie, escalatie en uitstelscenario. Doorlopend spoor → stap 11.",
+      "fase_code": "II",
+      "fase_type": "analyse",
+      "vereist_besluit": false,
+      "geschatte_dagen": 120,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Implementatieplan opgesteld als zelfstandig leesbare onderbouwing van de beheerste transitie",
+          "bewijs_vereist": true,
+          "toelichting": "DNB besteedt bij het implementatieplan bijzondere aandacht aan besluitvorming, risicobeheersing en datakwaliteit."
+        },
+        {
+          "label": "Governance en verantwoordelijkheidsverdeling fonds–PUO–vermogensbeheerder–overige ketenpartijen vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Maak eigenaarschap, besluitrechten, escalaties en afhankelijkheden expliciet; pas partijen aan op de fondssituatie."
+        },
+        {
+          "label": "Impact op pensioenadministratie, IT, vermogensbeheer, uitbesteding, continuïteit en communicatie integraal beoordeeld",
+          "bewijs_vereist": true,
+          "toelichting": "Het model is generiek; fondsen bepalen zelf welke keten- en operationele componenten materieel zijn."
+        },
+        {
+          "label": "Migratie-/conversieaanpak en teststrategie (keten-, acceptatie- en regressietesten) uitgewerkt",
+          "bewijs_vereist": true,
+          "toelichting": "Definieer vooraf acceptatiecriteria, onafhankelijke controles en escalatie bij niet-gehaalde testcriteria."
+        },
+        {
+          "label": "Fallback-/uitstelscenario inclusief besluitcriteria en consequenties uitgewerkt",
+          "bewijs_vereist": true,
+          "toelichting": "Een fallback is onderdeel van beheerste uitvoering en ondersteunt de latere go/no-go-besluitvorming."
+        },
+        {
+          "label": "Materiële transitie- en restrisico's expliciet beoordeeld en door het bestuur geaccepteerd of gemitigeerd",
+          "bewijs_vereist": true,
+          "toelichting": "Maak zichtbaar welk restrisico resteert, wie eigenaar is en waarom dit bestuurlijk aanvaardbaar is."
+        },
+        {
+          "label": "Kritieke mijlpalen, afhankelijkheden en readiness-gates vastgesteld",
+          "bewijs_vereist": true,
+          "toelichting": "Processtappen lopen deels parallel, maar cruciale besluiten kennen wel afhankelijkheden en gates."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Implementatieplan",
+          "toelichting": "Definitieve bestuursversie plus relevante bijlagen en wijzigingshistorie.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "risk",
+          "label": "Integrale transitie-risicoanalyse (bijv. ERB/RSA of vergelijkbaar)",
+          "toelichting": "Vorm is fondsspecifiek; de risicoanalyse moet de materiële Wtp-transitierisico's aantoonbaar afdekken.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "RACI/verantwoordelijkheidsmatrix en ketenafspraken",
+          "toelichting": "Onderbouwt dat de ketenverantwoordelijkheden niet alleen in projectdocumentatie maar bestuurlijk zijn geborgd.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Teststrategie / QA-plan en acceptatiecriteria",
+          "toelichting": "Koppel de criteria aan de latere go/no-go en leg onafhankelijke kwaliteitsborging vast.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Fallback-/uitstelplan",
+          "toelichting": "Beschrijft scenario, triggers, besluitbevoegdheid en deelnemers-/toezichtcommunicatie.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "assumption",
+          "label": "Materiële aannames uitvoerbaarheid",
+          "toelichting": "Geen kunstmatig minimumaantal: registreer alleen aannames die de besluitvorming of readiness materieel beïnvloeden.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "dissent_review",
+          "label": "Opinies en afwijkende inzichten sleutelfuncties",
+          "toelichting": "Leg zowel de opinie als de bestuurlijke verwerking van kritische punten vast.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 4,
+      "naam": "Datakwaliteit beoordelen",
+      "beschrijving": "Kunnen wij vertrouwen op data, modellen en uitkomsten? Het oordeel van de externe accountant/IT-auditor over datakwaliteit is een blokkerende voorwaarde vóór het invaarbesluit. Doorlopend spoor → stap 12.",
+      "fase_code": "II",
+      "fase_type": "analyse",
+      "vereist_besluit": false,
+      "geschatte_dagen": 120,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Datakwaliteitsbeleid, risicobereidheid/MTA en correctie- en herzieningenbeleid vastgesteld",
+          "bewijs_vereist": true,
+          "toelichting": "DNB verwacht een eigen fondsbeoordeling van datakwaliteit en duidelijke uitgangspunten voor toegestane afwijkingen en correcties."
+        },
+        {
+          "label": "Kritieke data-elementen en fondsspecifieke datarisico's geïdentificeerd",
+          "bewijs_vereist": true,
+          "toelichting": "De risicoanalyse bepaalt de omvang en diepgang van aanvullende data-analyses en deelwaarnemingen."
+        },
+        {
+          "label": "Data-analyses, correcties en opvolging van bevindingen aantoonbaar afgerond",
+          "bewijs_vereist": true,
+          "toelichting": "Materiële tekortkomingen die de invaarberekeningen een onjuist beeld kunnen geven moeten vóór het invaarbesluit zijn opgelost."
+        },
+        {
+          "label": "Rapport externe accountant of externe IT-auditor vóór vaststelling/indiening van invaarbesluit en implementatieplan ontvangen",
+          "bewijs_vereist": true,
+          "toelichting": "Het rapport stelt het bestuur in staat een eigen oordeel te vormen over juistheid en volledigheid van de relevante pensioendata."
+        },
+        {
+          "label": "Bestuursoordeel over juistheid, volledigheid en reproduceerbaarheid van de relevante pensioendata vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Het externe rapport vervangt het eigen bestuursoordeel niet; de opvolging van bevindingen moet zichtbaar zijn."
+        },
+        {
+          "label": "Modellen en berekeningen gevalideerd; plausibiliteits-, gevoeligheids- en reconciliatiecontroles uitgevoerd",
+          "bewijs_vereist": true,
+          "toelichting": "De vorm van validatie is fondsspecifiek. DNB verwacht dat het bestuur belangrijke uitkomsten kan begrijpen en verklaren."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Datakwaliteitsbeleid, risicoanalyse en correctie-/herzieningenbeleid",
+          "toelichting": "Inclusief kritieke data-elementen, MTA/risicobereidheid en uitgevoerde beheersmaatregelen.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Rapport externe accountant / externe IT-auditor vóór invaren",
+          "toelichting": "Minimaal werkzaamheden passend binnen de door DNB beschreven opdrachtvorm; bevindingen en opvolging zijn onderdeel van de fondsbeoordeling.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "approval",
+          "label": "Bestuursoordeel datakwaliteit",
+          "toelichting": "Expliciete bestuurlijke conclusie dat de data voldoende betrouwbaar zijn voor besluitvorming en invaren.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "document",
+          "label": "Modelvalidatie- en plausibiliteitsrapportage",
+          "toelichting": "Bevat modelscope, validatie, uitkomsten, gevoeligheden en verklaring van materiële afwijkingen.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "assumption",
+          "label": "Gevalideerde kernaannames data/model",
+          "toelichting": "Registreer alleen materiële aannames en leg vast hoe wijzigingen worden gemonitord.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "risk",
+          "label": "Restrisico datakwaliteit",
+          "toelichting": "Inclusief resterende bevindingen, impact, eigenaar, oplosdatum en acceptatie.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 5,
+      "naam": "Transitie-effecten en evenwichtigheid beoordelen",
+      "beschrijving": "Welke groepen worden geraakt, en waarom is het geheel evenwichtig? Netto-profijt, vermogenstoedeling, vulling van de solidariteits-/risicodelingsreserve, compensatiebesluit + financieringsbron. Voedt stap 7.",
+      "fase_code": "II",
+      "fase_type": "analyse",
+      "vereist_besluit": false,
+      "geschatte_dagen": 120,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Netto-profijt en pensioenverwachtingen per relevante deelnemersgroep/cohort berekend",
+          "bewijs_vereist": true,
+          "toelichting": "Beoordeel niet alleen één kengetal; combineer netto-profijt met pensioenverwachtingen en andere relevante maatstaven."
+        },
+        {
+          "label": "Transitie-effecten onder relevante economische scenario's en gevoeligheden inzichtelijk gemaakt",
+          "bewijs_vereist": true,
+          "toelichting": "Onderbouw dat het bestuur de robuustheid van effecten onder alternatieve omstandigheden heeft onderzocht."
+        },
+        {
+          "label": "Invaarmethodiek en aanwending/verdeling van vermogen onderbouwd",
+          "bewijs_vereist": true,
+          "toelichting": "Leg keuze en toepassing van standaard- of vba-methode vast, inclusief de relevante wettelijke grenzen en keuzes."
+        },
+        {
+          "label": "Initiële vulling solidariteits-/risicodelingsreserve en compensatie(depot) beoordeeld, voor zover van toepassing",
+          "bewijs_vereist": true,
+          "toelichting": "Terminologie en toepassing hangen af van SPR/FPR en de gekozen compensatie-inrichting."
+        },
+        {
+          "label": "Relevante alternatieven voor verdeling, reservehoogte en/of beleidskeuzes aantoonbaar beschouwd",
+          "bewijs_vereist": true,
+          "toelichting": "DNB vraagt op onderdelen expliciet om alternatieven; bestuurlijk laat dit zien dat niet alleen de voorkeursvariant is doorgerekend."
+        },
+        {
+          "label": "Materiële uitschieters en negatieve effecten per groep verklaard",
+          "bewijs_vereist": true,
+          "toelichting": "Een verklaring van het effect is iets anders dan een oordeel dat het effect evenwichtig is; leg beide vast."
+        },
+        {
+          "label": "Uitkomsten getoetst aan vooraf vastgestelde maatstaven, bandbreedtes en voorrangsregels",
+          "bewijs_vereist": true,
+          "toelichting": "De toets moet herleidbaar zijn naar het beoordelingskader uit stap 2."
+        },
+        {
+          "label": "Integrale belangenafweging en zelfstandig bestuursoordeel over evenwichtigheid vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Het bestuur blijft zelfstandig verantwoordelijk voor de evenwichtige belangenafweging en motiveert waarom het totaalresultaat aanvaardbaar is."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Transitie-effect- en evenwichtigheidsrapportage",
+          "toelichting": "Integreert effecten, verklaringen, alternatieven, criteria en de bestuurlijke weging.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "kpi",
+          "label": "Netto-profijt en pensioenverwachtingen per cohort/groep",
+          "toelichting": "Bewaar resultaten op voldoende detailniveau om later te kunnen reproduceren welke uitkomsten aan het bestuur zijn voorgelegd.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Onderbouwing invaarmethodiek en vermogensverdeling",
+          "toelichting": "Inclusief berekeningen, gekozen parameters en bestuurlijke argumentatie.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Reserve- en compensatieanalyse",
+          "toelichting": "Voor zover solidariteitsreserve, risicodelingsreserve en/of compensatie(depot) onderdeel zijn van de transitie.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Scenario-, alternatief- en gevoeligheidsanalyse",
+          "toelichting": "Onderbouwt robuustheid en de afweging van alternatieven.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 6,
+      "naam": "Communicatiestrategie, keuzebegeleiding en deelnemersimpact beoordelen",
+      "beschrijving": "Kunnen deelnemers de keuze en persoonlijke gevolgen correct en realistisch begrijpen — én relevante keuzes verantwoord maken? Keuzebegeleiding/zorgplicht als apart thema. Communicatiemoment ①. Doorlopend spoor → 10 → 12.",
+      "fase_code": "II",
+      "fase_type": "consultatie",
+      "vereist_besluit": false,
+      "geschatte_dagen": 120,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Communicatieplan uitgewerkt langs de zes AFM-focusaspecten",
+          "bewijs_vereist": true,
+          "toelichting": "AFM focust op doelgroepen, doelen, planning, onderbouwing wie/wat/wanneer/hoe, evaluatie/effectmeting en persoonlijke toelichtingen/peildatum."
+        },
+        {
+          "label": "Doelgroepen, kernboodschappen en verwachte deelnemersimpact per doelgroep vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Maak zichtbaar waar negatieve effecten, onzekerheid of compensatie extra uitleg vereisen."
+        },
+        {
+          "label": "Aanpak persoonlijke toelichtingen en peildatum prognose-transitieoverzicht onderbouwd",
+          "bewijs_vereist": true,
+          "toelichting": "AFM verlangt persoonlijke duiding van verschillen en benoemt peildatum expliciet als aandachtspunt."
+        },
+        {
+          "label": "Compensatiecommunicatie en uitleg voor groepen met én zonder compensatie uitgewerkt, indien van toepassing",
+          "bewijs_vereist": true,
+          "toelichting": "Voorkom dat compensatie alleen wordt benoemd bij deelnemers die een compensatiebedrag ontvangen."
+        },
+        {
+          "label": "Deelnemertesten / effectmeting voor begrijpelijkheid en handelingsperspectief uitgevoerd of gepland",
+          "bewijs_vereist": true,
+          "toelichting": "De AFM verwacht dat wordt onderbouwd hoe communicatie aansluit bij deelnemers en hoe het effect wordt geëvalueerd."
+        },
+        {
+          "label": "Keuzebegeleiding voor relevante deelnemerskeuzes ontworpen en getest, indien van toepassing",
+          "bewijs_vereist": true,
+          "toelichting": "Keuzebegeleiding is een structurele AFM-norm. De concrete keuzes hangen af van regeling en uitvoeringsmodel; maak dit daarom conditioneel."
+        },
+        {
+          "label": "Bestuurlijke beoordeling van uitlegbaarheid, risico's en verwachtingsmanagement vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Bestuurlijk relevant is niet alleen of informatie juridisch correct is, maar ook of materiële effecten begrijpelijk en evenwichtig kunnen worden uitgelegd."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Communicatieplan en AFM-aanleverformulier",
+          "toelichting": "Bewaar ingediende versie, bijlagen en onderbouwing van de gemaakte communicatiekeuzes.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "document",
+          "label": "Doelgroep-, boodschap- en kanalenmatrix",
+          "toelichting": "Herleidbaar overzicht van doelgroep, boodschap, kanaal, timing en gewenste uitkomst.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Onderbouwing persoonlijke toelichtingen en peildatum",
+          "toelichting": "Leg keuze van peildatum en aanpak van persoonlijke verschilverklaringen vast.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Keuzebegeleidingsontwerp en testresultaten",
+          "toelichting": "Alleen opnemen waar deelnemers materiële keuzes hebben waarop de wettelijke norm keuzebegeleiding van toepassing is.",
+          "verplicht": false,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 7,
+      "naam": "Voorgenomen invaarbesluit en opdrachtaanvaarding vormen",
+      "beschrijving": "Is er voldoende grond om de opdracht te aanvaarden en het invaren voor te nemen? Volgt logisch op stap 4 (datakwaliteit) en stap 5 (evenwichtigheid); geborgd via de readiness-ladder, niet via een blokkerende afhankelijkheid.",
+      "fase_code": "III",
+      "fase_type": "besluitvorming",
+      "vereist_besluit": true,
+      "geschatte_dagen": 30,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Integrale beslisnota opgesteld met samenvatting van opdracht, uitvoerbaarheid, data, effecten, risico's en communicatie",
+          "bewijs_vereist": true,
+          "toelichting": "De beslisnota verbindt de onderbouwingen uit stappen 1–6 tot één reproduceerbare bestuurlijke redeneerlijn."
+        },
+        {
+          "label": "Expliciet getoetst of wettelijke gronden bestaan om het invaarverzoek niet uit te voeren",
+          "bewijs_vereist": true,
+          "toelichting": "Leg vast dat het bestuur zelfstandig heeft beoordeeld of invaren binnen wettelijke voorschriften, evenwichtige belangenafweging en beheerste/integere bedrijfsvoering past."
+        },
+        {
+          "label": "Argumentatie van invaarmethodiek, vermogensverdeling en eventuele reserves/compensatie expliciet in het besluit opgenomen",
+          "bewijs_vereist": true,
+          "toelichting": "Het besluit moet herleidbaar zijn naar de analyses en alternatieven uit stap 5."
+        },
+        {
+          "label": "Opinies van sleutelfunctiehouders en materiële afwijkende inzichten bestuurlijk gewogen",
+          "bewijs_vereist": true,
+          "toelichting": "Niet alleen opnemen als bijlage; maak zichtbaar hoe kritische punten het besluit hebben beïnvloed."
+        },
+        {
+          "label": "Voorwaarden, afhankelijkheden en openstaande acties aan het voorgenomen besluit benoemd",
+          "bewijs_vereist": true,
+          "toelichting": "Deze voorwaarden vormen input voor toezichtopvolging en de latere go/no-go."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Voorgenomen invaarbesluit en integrale beslisnota",
+          "toelichting": "Centraal besluitdocument met bronverwijzingen naar onderliggende dossierstukken.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "approval",
+          "label": "Voorgenomen opdrachtaanvaarding / opdrachtbevestiging",
+          "toelichting": "Terminologie en exacte documentvorm kunnen per fonds verschillen; leg de formele aanvaarding van de uitvoeringsopdracht aantoonbaar vast.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Opinies sleutelfunctiehouders",
+          "toelichting": "Inclusief bestuurreactie op materiële bevindingen.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "dissent_review",
+          "label": "Afwijkende inzichten / dissent",
+          "toelichting": "Leg relevante minderheidsstandpunten of fundamentele twijfels vast, inclusief afweging door het bestuur.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "mandate_check",
+          "label": "Bevoegdheid en mandaat voorgenomen besluit",
+          "toelichting": "Toets statuten, reglementen en eventuele delegatie/mandatering.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 8,
+      "naam": "Fondsorganen en intern toezicht doorlopen",
+      "beschrijving": "Hebben medezeggenschap en intern toezicht tijdig, met voldoende informatie, aantoonbaar invloed gehad? Route volgens het geldende bestuursmodel en fondsregime; hoorrecht voor VO/gewezen deelnemers/gepensioneerden.",
+      "fase_code": "III",
+      "fase_type": "consultatie",
+      "vereist_besluit": false,
+      "geschatte_dagen": 45,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Toepasselijke governance-route vastgesteld: VO of BO en vorm van intern toezicht",
+          "bewijs_vereist": true,
+          "toelichting": "Het bestuursmodel bepaalt welke organen en bevoegdheden van toepassing zijn. Intern toezicht kan o.a. RvT, visitatiecommissie of NUB zijn."
+        },
+        {
+          "label": "Verantwoordingsorgaan tijdig om advies gevraagd, indien van toepassing",
+          "bewijs_vereist": true,
+          "toelichting": "Het VO heeft adviesrecht op het voorgenomen invaarbesluit. Geef voldoende informatie zodat het advies wezenlijke invloed kan hebben."
+        },
+        {
+          "label": "Bij negatief advies van VO of een geleding: sociale partners om heroverweging gevraagd en uitkomst verwerkt",
+          "bewijs_vereist": true,
+          "toelichting": "Dit is een specifieke wettelijke vervolgactie; leg ook de onderbouwing van de heroverweging vast."
+        },
+        {
+          "label": "Belanghebbendenorgaan om goedkeuring gevraagd, indien van toepassing",
+          "bewijs_vereist": true,
+          "toelichting": "Het BO heeft goedkeuringsrecht; dit is juridisch iets anders dan het adviesrecht van een VO."
+        },
+        {
+          "label": "Intern toezicht heeft toezicht op het invaren uitgevoerd en oordeel/aandachtspunten vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Intern toezicht houdt toezicht op het invaren. De vorm van het interne toezicht verschilt per bestuursmodel."
+        },
+        {
+          "label": "Raad van toezicht heeft het voorgenomen invaarbesluit goedgekeurd, indien een RvT aanwezig is",
+          "bewijs_vereist": true,
+          "toelichting": "Alleen de RvT heeft het specifieke wettelijke goedkeuringsrecht op het voorgenomen invaarbesluit; andere vormen van intern toezicht hebben een andere rol."
+        },
+        {
+          "label": "Reactie van het bestuur op adviezen, goedkeuringen en toezichtbevindingen vastgelegd; versieverschillen traceerbaar",
+          "bewijs_vereist": true,
+          "toelichting": "Maak aantoonbaar welke wijzigingen uit de governance zijn voortgekomen en welke aandachtspunten bewust niet zijn overgenomen."
+        },
+        {
+          "label": "Advies VO inclusief eventuele adviezen per geleding",
+          "bewijs_vereist": true,
+          "toelichting": "Inclusief adviesaanvraag en alle informatie die voor de advisering is verstrekt."
+        },
+        {
+          "label": "Herverweging sociale partners na negatief VO-advies",
+          "bewijs_vereist": true,
+          "toelichting": "Alleen als VO of een geleding negatief adviseert; bewaar verzoek, heroverweging en bestuursverwerking."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "approval",
+          "label": "Goedkeuring BO",
+          "toelichting": "Alleen bij een fonds met belanghebbendenorgaan.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Oordeel / rapportage intern toezicht",
+          "toelichting": "De vorm verschilt per bestuursmodel; de inhoudelijke aandachtspunten en reactie van het bestuur horen in het dossier.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "approval",
+          "label": "Goedkeuring Raad van Toezicht",
+          "toelichting": "Alleen indien een Raad van Toezicht aanwezig is.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "dissent_review",
+          "label": "Reactie- en wijzigingenmatrix governance",
+          "toelichting": "Praktische bewijslast om adviespunten, bestuursreactie en wijzigingen reproduceerbaar te koppelen.",
+          "verplicht": false,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 9,
+      "naam": "Invaarmelding en toezichtbeoordeling",
+      "beschrijving": "Is het dossier volledig, consistent en verdedigbaar richting DNB en AFM, en zijn bevindingen beheerst? Tijdkritisch: indiening ruim vóór de transitiedatum. Iteratielus → 4/5/6.",
+      "fase_code": "IV",
+      "fase_type": "externe_indiening",
+      "vereist_besluit": false,
+      "geschatte_dagen": 120,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Invaarsjabloon volledig ingevuld met exacte bronverwijzingen naar onderliggende documentatie",
+          "bewijs_vereist": true,
+          "toelichting": "Het invaarsjabloon is verplicht onderdeel van de invaarmelding en is voor DNB een belangrijke informatiebron bij de beoordeling."
+        },
+        {
+          "label": "Implementatieplan en invaarmelding tijdig bij DNB ingediend",
+          "bewijs_vereist": true,
+          "toelichting": "Het implementatieplan wordt binnen twee weken na vaststelling en uiterlijk twaalf maanden vóór de beoogde ingangsdatum ingediend; het invaarbesluit wordt gelijktijdig gemeld."
+        },
+        {
+          "label": "Communicatieplan en AFM-aanleverformulier tijdig bij AFM ingediend",
+          "bewijs_vereist": true,
+          "toelichting": "Voor uitvoerders die vanaf 1 juli 2026 invaren geldt uiterlijk één jaar vóór de transitiedatum als indienmoment."
+        },
+        {
+          "label": "Eventuele partiële beoordelingen en resterende informatieverplichtingen correct verwerkt",
+          "bewijs_vereist": true,
+          "toelichting": "Partiële beoordeling is optioneel; leg vast welke onderdelen al zijn beoordeeld en welke informatie in de volledige melding nog vereist is."
+        },
+        {
+          "label": "DNB-bevindingenbrieven en AFM-terugkoppeling centraal geregistreerd, beantwoord en aantoonbaar verwerkt",
+          "bewijs_vereist": true,
+          "toelichting": "Gebruik een change-log zodat zichtbaar blijft welke documenten, besluiten of maatregelen naar aanleiding van toezicht zijn aangepast."
+        },
+        {
+          "label": "DNB-beschikking ontvangen en eventuele voorschriften/toezichtbrief vertaald naar concrete acties",
+          "bewijs_vereist": true,
+          "toelichting": "DNB geeft geen 'goedkeuring' maar een beschikking waarin wel of geen verbod op invaren wordt opgelegd, eventueel met voorschriften."
+        },
+        {
+          "label": "AFM-terugkoppeling verwerkt zonder deze als voorafgaande goedkeuring van communicatie of transitieoverzichten te behandelen",
+          "bewijs_vereist": true,
+          "toelichting": "De AFM keurt transitieoverzichten niet vooraf goed; het fonds blijft zelf verantwoordelijk voor correcte, duidelijke, tijdige en evenwichtige informatie."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "external_submission",
+          "label": "Bevestiging invaarmelding DNB",
+          "toelichting": "Bewijs van tijdige en volledige indiening.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "document",
+          "label": "Ingevuld invaarsjabloon",
+          "toelichting": "Bewaar de ingediende versie plus eventuele latere versies met wijzigingshistorie.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "external_submission",
+          "label": "Bevestiging indiening communicatieplan AFM",
+          "toelichting": "Inclusief AFM-aanleverformulier en eventuele bijlagen.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Toezichtvragen-, bevindingen- en opvolgingslog",
+          "toelichting": "Combineer vraag, antwoord, bron, eigenaar, deadline, wijziging en closure.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "approval",
+          "label": "DNB-beschikking (wel/geen verbod) en eventuele voorschriften/toezichtbrief",
+          "toelichting": "Gebruik 'beschikking' in plaats van 'DNB-goedkeuring'. Voor daadwerkelijke invaren is een beschikking zonder verbod vereist.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "document",
+          "label": "AFM-terugkoppeling communicatieplan en opvolging",
+          "toelichting": "AFM-terugkoppeling is toezichtinput, geen formele goedkeuring.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 10,
+      "naam": "Deelnemers voorbereiden op de transitie",
+      "beschrijving": "Zijn deelnemers tijdig persoonlijk geïnformeerd en is de klantbediening (incl. keuzeproces) gereed? Tijdkritisch. Communicatiemoment ②. Doorlopend comm-spoor.",
+      "fase_code": "IV",
+      "fase_type": "implementatie",
+      "vereist_besluit": false,
+      "geschatte_dagen": 90,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Prognose-transitieoverzicht uiterlijk één maand vóór de transitiedatum aan de relevante deelnemers verstrekt",
+          "bewijs_vereist": true,
+          "toelichting": "De AFM benoemt dit als het prognose-transitieoverzicht / de eerste berekening. Bewijs van tijdige verstrekking is essentieel."
+        },
+        {
+          "label": "Persoonlijke toelichting op verschillen, scenariobedragen en relevante compensatie opgenomen",
+          "bewijs_vereist": true,
+          "toelichting": "Het overzicht moet persoonlijke gevolgen duiden; alleen bedragen tonen is onvoldoende."
+        },
+        {
+          "label": "Segmentatie en productiecontroles tonen dat de juiste deelnemers de juiste informatie ontvangen",
+          "bewijs_vereist": true,
+          "toelichting": "Controleer doelgroep, status, life-events, compensatie en andere conditionele teksten op persoonsniveau."
+        },
+        {
+          "label": "Communicatie via brief, portaal, website, FAQ en klantcontact is inhoudelijk consistent",
+          "bewijs_vereist": true,
+          "toelichting": "Inconsistenties tussen kanalen vergroten het risico op onduidelijke of onevenwichtige informatie."
+        },
+        {
+          "label": "Keuzeomgeving is live, getest en voorzien van passende keuzebegeleiding, indien relevante keuzes spelen",
+          "bewijs_vereist": true,
+          "toelichting": "Alleen toepassen voor keuzes die voor de regeling/deelnemer relevant zijn."
+        },
+        {
+          "label": "FAQ, scripts, training, klachten- en escalatieproces zijn gereed voor verhoogd klantcontact",
+          "bewijs_vereist": true,
+          "toelichting": "Klantbediening is onderdeel van operationele communication-readiness en levert na invaren belangrijke signalen op."
+        },
+        {
+          "label": "Indien een finale go/no-go ná verzending van het prognose-overzicht ligt: voorbehoud en handelwijze richting deelnemers zijn geborgd",
+          "bewijs_vereist": true,
+          "toelichting": "Maak transparant dat de transitie nog afhankelijk kan zijn van een later go/no-go-moment en borg communicatie bij uitstel/wijziging."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Prognose-transitieoverzicht (model en representatieve voorbeelden)",
+          "toelichting": "Bewaar zowel het generieke ontwerp als voorbeelden van de conditionele/persoonlijke invulling.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Bewijs tijdige verstrekking prognose-transitieoverzicht",
+          "toelichting": "Verzend-/publicatielog met dekking van de relevante populatie.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "document",
+          "label": "Klantcontact-readiness (FAQ, scripts, training, klachten-/escalatieproces)",
+          "toelichting": "Bevat eigenaarschap, escalatieroutes en monitoring van veelvoorkomende vragen en klachten.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 11,
+      "naam": "Gereedheid bewaken en finale go/no-go",
+      "beschrijving": "Zijn alle vooraf bepaalde criteria nog steeds vervuld om daadwerkelijk in te varen? Tijdkritisch, kort vóór de transitiedatum. Volgt logisch op 9·10 via de readiness-ladder.",
+      "fase_code": "V",
+      "fase_type": "besluitvorming",
+      "vereist_besluit": true,
+      "geschatte_dagen": 30,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Vooraf vastgestelde go/no-go-criteria integraal getoetst",
+          "bewijs_vereist": true,
+          "toelichting": "De finale beslissing moet teruggrijpen op vooraf vastgestelde objectieve criteria, niet alleen op projectstatussen."
+        },
+        {
+          "label": "Finale test-/QA-resultaten, datakwaliteit en openstaande bevindingen beoordeeld",
+          "bewijs_vereist": true,
+          "toelichting": "Maak onderscheid tussen opgeloste bevindingen, geaccepteerde restrisico's en blokkades."
+        },
+        {
+          "label": "Pensioenadministratie, IT, vermogensbeheer, ketenpartijen en klantbediening gereed verklaard",
+          "bewijs_vereist": true,
+          "toelichting": "Readiness moet end-to-end zijn; een groen oordeel van één uitvoerder is onvoldoende als kritieke ketenafhankelijkheden openstaan."
+        },
+        {
+          "label": "Actuele financiële invaarcondities en vooraf gedefinieerde bandbreedtes getoetst",
+          "bewijs_vereist": true,
+          "toelichting": "Monitor of de actuele situatie nog valt binnen de omstandigheden waarop de bestuurlijke besluitvorming is gebaseerd."
+        },
+        {
+          "label": "DNB-voorschriften, toezichtbevindingen en overige voorwaarden aantoonbaar afgehandeld",
+          "bewijs_vereist": true,
+          "toelichting": "DNB kan vóór invaren voorschriften stellen en naleving daarvan monitoren."
+        },
+        {
+          "label": "Materiële wijzigingen sinds de invaarmelding beoordeeld en waar nodig onmiddellijk aan DNB gemeld",
+          "bewijs_vereist": true,
+          "toelichting": "DNB verwacht melding van materiële wijzigingen en van onjuiste/onvolledige eerder verstrekte informatie."
+        },
+        {
+          "label": "Fallback-/uitstelscenario actueel en direct uitvoerbaar",
+          "bewijs_vereist": true,
+          "toelichting": "Inclusief gevolgen voor administratie, vermogen, deelnemerscommunicatie, planning en toezichthouders."
+        },
+        {
+          "label": "Formeel bestuurlijk go/no-go-besluit genomen en bevoegdheid gecontroleerd",
+          "bewijs_vereist": true,
+          "toelichting": "Leg besluit, voorwaarden, dissent en bevoegdheid vast in het bestuursdossier."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Go/no-go-dossier",
+          "toelichting": "Integraal overzicht van criteria, bewijs, bevindingen, voorwaarden en conclusie.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "kpi",
+          "label": "Readiness-criteria en finale statusrapportage",
+          "toelichting": "Minimaal administratie, IT, data, keten, vermogen, communicatie en toezichtvoorwaarden.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "risk",
+          "label": "Actuele restrisico's en fallback-/uitstelplan",
+          "toelichting": "Alle geaccepteerde restrisico's moeten expliciet bij de finale beslissing zijn betrokken.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "external_submission",
+          "label": "Bewijs naleving DNB-voorschriften / melding materiële wijzigingen",
+          "toelichting": "Alleen voor zover voorschriften of materiële wijzigingen aan de orde zijn.",
+          "verplicht": false,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "approval",
+          "label": "Finale go/no-go-besluit",
+          "toelichting": "Expliciet bestuursbesluit met datum, voorwaarden en verwijzing naar het go/no-go-dossier.",
+          "verplicht": true,
+          "blokkerend": true
+        },
+        {
+          "requirement_type": "mandate_check",
+          "label": "Bevoegdheid go/no-go-besluit",
+          "toelichting": "Controleer statutaire/reglementaire bevoegdheid en eventuele delegaties.",
+          "verplicht": true,
+          "blokkerend": false
+        }
+      ]
+    },
+    {
+      "volgorde": 12,
+      "naam": "Invaren, communiceren, controleren en verantwoorden",
+      "beschrijving": "Is uitgevoerd wat is besloten, klopt de vermogensverdeling, en kunnen verschillen worden verklaard? Tijdkritisch. Communicatiemoment ③. Monitoring van gemaakte keuzes als signaalfunctie.",
+      "fase_code": "VI",
+      "fase_type": "evaluatie",
+      "vereist_besluit": false,
+      "geschatte_dagen": 90,
+      "blokkerende_afhankelijkheden": [],
+      "checklist": [
+        {
+          "label": "Transitie op de invaardatum uitgevoerd en financiële/administratieve basisgegevens vastgesteld",
+          "bewijs_vereist": true,
+          "toelichting": "Leg de feitelijke uitvoering en de gebruikte basisgegevens vast zodat de overgang reproduceerbaar is."
+        },
+        {
+          "label": "Definitieve invaarberekeningen en reconciliaties vóór/na de transitie uitgevoerd",
+          "bewijs_vereist": true,
+          "toelichting": "Controleer aansluiting van totaalvermogen, individuele vermogens en relevante reserves/voorzieningen."
+        },
+        {
+          "label": "Externe accountant heeft na invaren de juistheid en volledigheid van de transitie onderzocht",
+          "bewijs_vereist": true,
+          "toelichting": "De externe accountant onderzoekt na invaren ten minste de berekeningen die aan de vermogensverdeling ten grondslag liggen. De certificerend actuaris kan conform de controleaanpak worden betrokken."
+        },
+        {
+          "label": "Bevindingen uit post-invaarcontroles en incidenten tijdig gecorrigeerd en bestuurlijk gevolgd",
+          "bewijs_vereist": true,
+          "toelichting": "Nieuwe datakwaliteitsbevindingen moeten in het kader van beheerste en integere uitvoering worden gecorrigeerd."
+        },
+        {
+          "label": "Definitief transitieoverzicht uiterlijk zes maanden na de transitiedatum aan de relevante deelnemers verstrekt",
+          "bewijs_vereist": true,
+          "toelichting": "Het definitieve overzicht toont de definitief vastgestelde bedragen en geeft het finale beeld van de persoonlijke transitie."
+        },
+        {
+          "label": "Verschillen tussen prognose- en definitief transitieoverzicht persoonlijk toegelicht",
+          "bewijs_vereist": true,
+          "toelichting": "AFM verlangt dat eventuele verschillen met het prognose-overzicht worden toegelicht."
+        },
+        {
+          "label": "Klachten, klantcontact, keuzes en andere deelnemerssignalen geanalyseerd op patronen en mogelijke fouten",
+          "bewijs_vereist": true,
+          "toelichting": "Gebruik deelnemerssignalen als bestuurlijke feedback op uitvoering, uitlegbaarheid en eventuele herstelbehoefte."
+        },
+        {
+          "label": "Intern toezicht heeft de uitvoering/nazorg betrokken in de verantwoording en openstaande acties worden bewaakt",
+          "bewijs_vereist": true,
+          "toelichting": "Intern toezicht houdt toezicht op het invaren en legt hierover verantwoording af; borg opvolging van resterende aandachtspunten."
+        },
+        {
+          "label": "Bestuursevaluatie van transitie, communicatie en beheersing uitgevoerd; verbeteracties vastgelegd",
+          "bewijs_vereist": true,
+          "toelichting": "Sluit de bestuurlijke cyclus: besloten, uitgevoerd, gecontroleerd, verklaard en geëvalueerd."
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_type": "document",
+          "label": "Post-invaar rapport externe accountant over juistheid en volledigheid van de transitie",
+          "toelichting": "Verplichte externe controle na transitie; reikwijdte omvat ten minste de vermogensverdelingsberekeningen.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Reconciliatie- en vermogensverdelingsrapport",
+          "toelichting": "Bewijs dat de feitelijke verdeling en administratieve verwerking aansluiten op het invaarbesluit en de gecontroleerde berekeningen.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Definitief transitieoverzicht (model en representatieve voorbeelden)",
+          "toelichting": "Bewaar voorbeelden voor verschillende relevante deelnemerssituaties.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Bewijs tijdige verstrekking definitief transitieoverzicht",
+          "toelichting": "Verzend-/publicatielog waaruit blijkt dat uiterlijk zes maanden na transitiedatum is verstrekt.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "document",
+          "label": "Verschillenanalyse prognose versus definitief",
+          "toelichting": "Onderbouw oorzaken van verschillen en koppel deze aan de persoonlijke toelichting.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "risk",
+          "label": "Incidenten-, correctie- en herstelregister",
+          "toelichting": "Bevat impact, deelnemersgroep, herstelactie, eigenaar, status en eventuele toezichtmelding.",
+          "verplicht": true,
+          "blokkerend": false
+        },
+        {
+          "requirement_type": "kpi",
+          "label": "Klachten-, klantcontact- en keuzemonitoring",
+          "toelichting": "Analyseer volumes, categorieën, doelgroepen en trends en vertaal materiële signalen naar bestuurlijke acties.",
+          "verplicht": false,
+          "blokkerend": false
+        }
+      ]
+    }
+  ]
+}
