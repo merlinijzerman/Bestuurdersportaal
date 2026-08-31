@@ -83,6 +83,7 @@ select count(*) as gepinde_dossiers
 | 30 | `2026_08_30_actie_eigenaar_profiel.sql` | Interne actiehouder aan profiel in hetzelfde fonds. | DB vóór P5-code. | `2026_08_30_actie_eigenaar_profiel_ROLLBACK.sql` |
 | 31 | `2026_08_30_p5a_02_actie_eigenaar_externe_houder.sql` | Externe houder: geen profiel, wel niet-lege naam. | Direct na 30. | `2026_08_30_p5a_02_actie_eigenaar_externe_houder_ROLLBACK.sql` |
 | 32 | `2026_08_30_p5c_procedure_stap_notitie.sql` | Gedeelde stap-aantekeningen met I5, RLS en statusneutraliteit. | DB vóór P5c-code. | `2026_08_30_p5c_procedure_stap_notitie_ROLLBACK.sql` |
+| 33 | `2026_08_31_contact_notificatie_status_herstel.sql` | Herstelt de begrensde publieke contactstatus-RPC die per abuis niet in de Preview-baseline zat: maximaal 1 uur, alleen nog niet gemarkeerde rij en fouttekst op 500 tekens. | DB vóór code; bestaande route blijft compatibel. | Geen veilige DB-rollback: behoud de reparatie en herstel zo nodig uitsluitend code/deploy. |
 
 ## Verplichte tussenijkpunten
 
