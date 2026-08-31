@@ -32,6 +32,78 @@ export type BindingResultaat =
    *  als "onbekende vereiste" en verdwijnt de oorzaak uit beeld. */
   | { ok: false; fout: string; serverfout?: boolean };
 
+/**
+ * Leest de actieve approval-vereisten op één processtap uit precies dezelfde
+ * definitie-unie als de bindingresolver: templateversie ∪ actieve
+ * instantievereisten. Een besluit mag bestaan zonder binding (0189/D10), maar
+ * bij exact één approval kan de schrijfroute hem wél automatisch en
+ * deterministisch binden. Bij nul of meer dan één wordt nooit gegokt.
+ */
+export async function haalApprovalVereisten(
+  supabase: SupabaseClient,
+  procedureId: string,
+  stapVolgorde: number
+): Promise<
+  | { ok: true; vereisten: VereisteVerwijzing[] }
+  | { ok: false; fout: string; serverfout?: boolean }
+> {
+  const { data: proc, error: procFout } = await supabase
+    .from("procedures")
+    .select("template_code, template_versie")
+    .eq("id", procedureId)
+    .single();
+  if (procFout && procFout.code !== "PGRST116") {
+    console.error("Approvallookup (procedures) mislukt:", procFout);
+    return { ok: false, fout: "Serverfout", serverfout: true };
+  }
+  if (!proc) return { ok: false, fout: "Procedure niet gevonden" };
+
+  let tplQuery = supabase
+    .from("procedure_requirements")
+    .select("stap_volgorde, requirement_type, documenttype, label")
+    .eq("template_code", proc.template_code)
+    .eq("stap_volgorde", stapVolgorde)
+    .eq("requirement_type", "approval");
+  if (proc.template_versie) {
+    tplQuery = tplQuery.eq("template_versie", proc.template_versie);
+  }
+  const { data: templateRijen, error: tplFout } = await tplQuery;
+  if (tplFout) {
+    console.error("Approvallookup (procedure_requirements) mislukt:", tplFout);
+    return { ok: false, fout: "Serverfout", serverfout: true };
+  }
+
+  const { data: decisions, error: decFout } = await supabase
+    .from("decision_objects")
+    .select("id")
+    .eq("procedure_id", procedureId);
+  if (decFout) {
+    console.error("Approvallookup (decision_objects) mislukt:", decFout);
+    return { ok: false, fout: "Serverfout", serverfout: true };
+  }
+  const decisionIds = (decisions ?? []).map((d: { id: string }) => d.id);
+  let instantieRijen: VereisteVerwijzing[] = [];
+  if (decisionIds.length > 0) {
+    const { data, error } = await supabase
+      .from("procedure_requirement_instance")
+      .select("stap_volgorde, requirement_type, documenttype, label")
+      .in("decision_id", decisionIds)
+      .eq("actief", true)
+      .eq("stap_volgorde", stapVolgorde)
+      .eq("requirement_type", "approval");
+    if (error) {
+      console.error("Approvallookup (procedure_requirement_instance) mislukt:", error);
+      return { ok: false, fout: "Serverfout", serverfout: true };
+    }
+    instantieRijen = (data ?? []) as VereisteVerwijzing[];
+  }
+
+  return {
+    ok: true,
+    vereisten: [...((templateRijen ?? []) as VereisteVerwijzing[]), ...instantieRijen],
+  };
+}
+
 /** Leest de verwijzing uit een request-body. `null` = expliciet ontbinden,
  *  `undefined` = veld niet meegestuurd (laat de binding ongemoeid). */
 export function leesVereisteVerwijzing(

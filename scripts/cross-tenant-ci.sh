@@ -171,6 +171,9 @@ SQL_P214A2="supabase/checks/2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sq
 SQL_P4I5="supabase/checks/2026_08_29_p4_i5_composite_fk.sql"
 # P4 tranche 4 (#169) — I1: statusclaim vereist matrixfeit.
 SQL_P4I1="supabase/checks/2026_08_29_p4_04_status_feitenmatrix.sql"
+# #228-familie / bevinding 2b — een besluit mag ongebonden bestaan; alleen een
+# gebonden approval voldoet aan de P4-status-feitenmatrix.
+SQL_P2C_ONGB="supabase/checks/2026_08_31_p2c_ongebonden_besluit.sql"
 # P5c (§9.3) — werkverkeer per stap: statusneutraal, I5 en auteur-/tenantgrens.
 SQL_P5C_NOTITIE="supabase/checks/2026_08_30_p5c_stap_notitie_gedrag.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
@@ -350,6 +353,10 @@ echo
 
 echo "-- P4 I1 (statusclaim zonder matrixfeit wordt geweigerd) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P4I1"
+echo
+
+echo "-- #228-familie (ongebonden besluit bestaat; alleen gebonden approval vervult) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P2C_ONGB"
 echo
 
 echo "-- P5c aantekeningen (statusneutraal, I5, auteur- en tenantgrens) --"

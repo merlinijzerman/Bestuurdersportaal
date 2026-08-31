@@ -31,6 +31,8 @@ const bindingMigratie = lees("supabase", "migrations", "2026_08_18_bewijs_requir
 const bindingHardening = lees("supabase", "migrations", "2026_08_22_bewijs_requirement_binding_hardening.sql");
 const bewijsRoute = lees("app", "api", "procedures", "[id]", "bewijs", "route.ts");
 const bewijsItemRoute = lees("app", "api", "procedures", "[id]", "bewijs", "[bewijsId]", "route.ts");
+const besluitenRoute = lees("app", "api", "procedures", "[id]", "besluiten", "route.ts");
+const stapPaneel = lees("app", "(dashboard)", "procedures", "_components", "StapPaneel.tsx");
 
 const rolGate = /\[\s*"voorzitter"\s*,\s*"beheerder"\s*\]\.includes\(/;
 
@@ -235,6 +237,24 @@ test("bewijsbinding: de normale route én DB-trigger blokkeren botsende instanti
   assert.match(requirementsRoute, /const botst = \[/);
   assert.match(requirementsRoute, /al een vereiste van dit type met dezelfde identiteit/);
   assert.match(bindingHardening, /trg_requirement_instance_validate_binding_sleutel/);
+});
+
+test("#228-familie: besluit bestaat ongebonden, maar exact één approval bindt server-side", () => {
+  // D10: requirement_sleutel is expliciet nullable; de route mag een feit niet
+  // weigeren alleen omdat een oude definitie geen approval modelleerde.
+  assert.match(besluitenRoute, /haalApprovalVereisten\(supabase, id, stap\.volgorde\)/);
+  assert.match(besluitenRoute, /let requirementSleutel: string \| null = null/);
+  assert.match(besluitenRoute, /approvals\.vereisten\.length === 1/);
+  assert.match(besluitenRoute, /requirement_sleutel: requirementSleutel/);
+  assert.doesNotMatch(
+    besluitenRoute,
+    /Een besluit moet aan een approval-vereiste worden gebonden/
+  );
+  // Zichtbaar in het dossier: ongebonden is niet hetzelfde als afwezig.
+  assert.match(stapPaneel, /Ongebonden besluit · vervult geen vereiste/);
+  // Bij meer dan één kiest de interface niet zelf; de vereiste-koppelroute doet
+  // dat na vastlegging van het ongebonden besluit.
+  assert.match(stapPaneel, /koppel het daarna bij de juiste vereiste/);
 });
 
 test("bewijsbinding: de seed-generator weigert een lege of dubbele matchsleutel", () => {

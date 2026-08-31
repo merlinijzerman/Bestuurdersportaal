@@ -47,6 +47,20 @@ forward als rollback→forward met een actieve I7-trigger. Deze uitzondering
 schept geen precedent: iedere toekomstige inhoudelijke wijziging van een
 gepubliceerde templateversie volgt I7 en krijgt een nieuwe versie.
 
+**7. Tweede aangetoonde geval voor OB-E17: een besluitmoment zonder `approval`.**
+De smokedefinitie `pf_wtp_invaarbesluit@2.0.0` had op stap 1
+`vereist_besluit=true`, maar geen gebonden `approval`-vereiste. Daardoor betekende
+"0 openstaand" daar uitsluitend dat de definitie niets vroeg; de besluitroute kon
+het feit bovendien niet binden. Dit is, naast het `evaluation`-geval, het tweede
+aangetoonde geval dat de definitielaag een harde poort nodig heeft.
+
+Fase C behandelt een stap met **`vereist_besluit` zonder ten minste één gebonden
+`approval`-vereiste als importfout**. Het is geen waarschuwing die een auteur kan
+wegklikken. De runtime blijft minder streng: een werkelijk besluit mag ongebonden
+worden vastgelegd wanneer een bestaande definitie dit toch mist (D10/0189), maar
+het vervult dan niets. De correctie zelf gebeurt I7-conform als
+`pf_wtp_invaarbesluit@2.0.1`; `2.0.0` blijft bevroren voor bestaande dossiers.
+
 ### Uitvoeringsmeting Preview
 
 Vóór de handmatige Preview-uitrol is op **2026-08-30 20:20 CEST** opnieuw

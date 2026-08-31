@@ -1,4 +1,4 @@
-import invaarDefinitieJson from "../../definities/pensioenfondsen/pf_wtp_invaarbesluit@2.0.0.json";
+import invaarDefinitieJson from "../../definities/pensioenfondsen/pf_wtp_invaarbesluit@2.0.1.json";
 import {
   definitieNaarProcessTemplate,
   type ProcedureDefinitie,
@@ -11,7 +11,7 @@ import {
 //
 // Sinds de proceduremodule-engine v2 (D6/D8) kan een template ook uit een
 // canonieke JSON-definitie komen (zie procedure-definitie.ts). De
-// invaarprocedure `pf_wtp_invaarbesluit@2.0.0` wordt onderaan dit bestand
+// invaarprocedure `pf_wtp_invaarbesluit@2.0.1` wordt onderaan dit bestand
 // via die weg geregistreerd zodat `vindTemplate` haar kan snapshotten.
 
 export interface ProcessTemplateChecklistItem {
