@@ -10,7 +10,7 @@ const runner = read("scripts/cross-tenant-ci.sh");
 
 test("#212 — elke browser-uitvoerbare DEFINER heeft een expliciete classificatie", () => {
   const expected = [
-    "aqlab_assurance_meetwaarden", "fn_afschrift_bevries_kolommen",
+    "aqlab_assurance_meetwaarden", "contact_aanvraag_insert", "resolve_tenant_host", "fn_afschrift_bevries_kolommen",
     "fn_ai_preflight", "fn_besluit_status_omslag", "fn_procedure_beeindigen",
     "fn_stap_afronden", "lees_governance_audit", "log_word_export",
     "schrijf_ai_interactie", "verwijder_gesprek",
@@ -27,6 +27,8 @@ test("#212 — fonds-, rol- en triggeruitzonderingen zijn fail-closed", () => {
   assert.match(gate, /fonds_id/);
   assert.match(gate, /rol\|capabilit\|voorzitter\|bestuurder\|mag_audit/);
   assert.match(gate, /pg_trigger t where t\.tgfoid = a\.oid/);
+  assert.match(gate, /publiek_begrensd/);
+  assert.match(gate, /publieke DEFINER-uitzondering mist haar expliciete begrenzing/);
 });
 
 test("#212 — de databasegate draait in de verplichte cross-tenant-keten", () => {

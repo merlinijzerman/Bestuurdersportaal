@@ -15,7 +15,7 @@ declare
 begin
   create temporary table secdef_beleid (
     identiteit text primary key,
-    klasse text not null check (klasse in ('rol_fonds', 'eigen_fonds', 'eigen_context', 'productbreed', 'trigger')),
+    klasse text not null check (klasse in ('rol_fonds', 'eigen_fonds', 'eigen_context', 'productbreed', 'publiek_begrensd', 'trigger')),
     motivering text not null
   ) on commit drop;
 
@@ -23,6 +23,8 @@ begin
     ('aqlab_assurance_meetwaarden(p_codes text[])', 'productbreed', 'Gecureerde synthetische product-QA-metadata; geen fondsdata.'),
     ('aqlab_audit_export_bron(p_export_id uuid)', 'productbreed', 'Alleen vrijgegeven productbreed auditrapport; embargo blijft null.'),
     ('aqlab_log_download(p_export_id uuid, p_herkomst text)', 'productbreed', 'Logt uitsluitend download van productbreed vrijgegeven rapport.'),
+    ('contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)', 'publiek_begrensd', 'Publieke contactinzending; alleen INSERT met server-side IP-venster, geen leespad.'),
+    ('contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)', 'publiek_begrensd', 'Alleen recente, nog niet gemarkeerde contactrij; uitsluitend twee operationele velden.'),
     ('fn_afschrift_bevries_kolommen()', 'trigger', 'BEFORE UPDATE-trigger; directe aanroep heeft geen NEW/TG-context.'),
     ('fn_ai_actie_afronden(p_actie_id uuid, p_status text, p_resultaat_ref text)', 'eigen_context', 'Een sessie kan uitsluitend de eigen AI-actie afronden.'),
     ('fn_ai_actietype_spec(p_actietype text)', 'productbreed', 'Read-only vaste actietypespecificatie, zonder fondsobject.'),
@@ -49,6 +51,7 @@ begin
     ('mag_audit_redacties(p_fonds uuid)', 'eigen_fonds', 'Autoriseerhelper vergelijkt het gevraagde fonds met auth.uid().'),
     ('mag_handelingen_lezen(p_fonds uuid)', 'eigen_fonds', 'Autoriseerhelper vergelijkt het gevraagde fonds met auth.uid().'),
     ('reflectie_transitie(p_gesprek_id uuid, p_actie text, p_ingang text, p_bronset_log_id uuid)', 'eigen_fonds', 'Gesprekstransitie is aan de actor en diens fonds gebonden.'),
+    ('resolve_tenant_host(p_host text)', 'publiek_begrensd', 'Exacte actieve host-resolutie; geen enumeratie van tenant_domains.'),
     ('schrijf_ai_interactie(p_vraag text, p_antwoord text, p_bronnen jsonb, p_modus text, p_model text, p_retrieval_meta jsonb, p_retrieval_meta_inhoud jsonb, p_gesprek_audit_id uuid, p_inhoud_hmac text, p_hmac_schema_versie smallint, p_hmac_sleutel_versie smallint)', 'eigen_fonds', 'AI-interactie leidt fonds en actor server-side af.'),
     ('verwijder_gesprek(p_gesprek_id uuid, p_request_id uuid)', 'eigen_fonds', 'Verwijderen is begrensd tot het eigen gesprek/fonds.');
 
@@ -117,6 +120,26 @@ begin
      and not exists (select 1 from pg_trigger t where t.tgfoid = a.oid and not t.tgisinternal);
   if fouten <> '' then
     raise exception E'#212 FAALT: trigger-only allowlistregel zonder gekoppelde trigger:\n  - %', fouten;
+  end if;
+
+  -- De drie openbare uitzonderingen zijn geen fonds-RPC's. Hun veiligheid zit
+  -- in een bewust klein, controleerbaar contract — nooit in "public is ok".
+  select coalesce(string_agg(a.identiteit, E'\n  - ' order by a.identiteit), '') into fouten
+    from secdef_actueel a
+    join secdef_beleid b using (identiteit)
+   where b.klasse = 'publiek_begrensd'
+     and (
+       (a.identiteit = 'resolve_tenant_host(p_host text)'
+        and (a.body !~ 'td\\.host = p_host' or a.body !~ 'td\\.actief = true'))
+       or
+       (a.identiteit like 'contact_aanvraag_insert(%'
+        and (a.body !~ 'p_ip_hash' or a.body !~ '10 minutes'))
+       or
+       (a.identiteit = 'contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)'
+        and (a.body !~ 'aangemaakt_op' or a.body !~ '1 hour' or a.body !~ 'notificatie_verzonden = false'))
+     );
+  if fouten <> '' then
+    raise exception E'#212 FAALT: publieke DEFINER-uitzondering mist haar expliciete begrenzing:\n  - %', fouten;
   end if;
 
   raise notice '#212 OK: % browser-uitvoerbare SECURITY DEFINER-functies zijn volledig geïnventariseerd; zelfsloten en uitzonderingen zijn expliciet.', (select count(*) from secdef_actueel);
