@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "requirement_sleutel is verplicht (queryparameter)"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

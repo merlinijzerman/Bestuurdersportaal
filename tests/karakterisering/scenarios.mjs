@@ -35,6 +35,11 @@ import {
 import { FIX, FONDS_ID } from "./config.mjs";
 
 const LEEG = {};
+const KANDIDATEN_DOELSLEUTEL = "9|approval|W6 kandidaat kiezen";
+const KANDIDATEN_GEBONDEN_SLEUTEL = "9|approval|W6 al gekoppeld";
+
+const kandidatenPad = (procedureId, sleutel) =>
+  `/api/procedures/${procedureId}/vereisten/kandidaten?requirement_sleutel=${encodeURIComponent(sleutel)}`;
 
 /** Delete met foutcontrole. Een ongecontroleerde delete in een preseed geeft
  *  hetzelfde stille falen als in seed.mjs: de opruiming wordt geweigerd (bv. door
@@ -182,6 +187,68 @@ async function zetProcedureStap(admin, extra = {}) {
     { onConflict: "id" }
   );
   if (error) throw new Error(`preseed procedureStap: ${error.message}`);
+}
+
+/** P6/#211 — één bestaand approval-feit voor de kandidaten-kiezer. De bron is
+ * bewust aan een ANDERE, actieve instantievereiste gebonden. Zo bewijst de
+ * opname zowel de kandidaatweergave als `gebonden_aan`, zonder een gepubliceerde
+ * templateversie te wijzigen (I7). Alles krijgt vaste ids en vaste datum. */
+async function zetKandidatenFixture(admin, users) {
+  const { error: decisionError } = await admin.from("decision_objects").upsert(
+    {
+      id: FIX.procedureKandidatenDecision,
+      procedure_id: FIX.procedure1,
+      fonds_id: FONDS_ID,
+      besluit_code: "W6-KAND-001",
+      titel: "W6 kandidaten-fixture",
+      besluitvraag: "Welke approval kan worden gekoppeld?",
+      status: "concept",
+      is_primary_decision: false,
+    },
+    { onConflict: "id" }
+  );
+  if (decisionError) throw new Error(`preseed kandidaten decision: ${decisionError.message}`);
+
+  for (const [id, label] of [
+    [FIX.procedureKandidatenRequirementDoel, "W6 kandidaat kiezen"],
+    [FIX.procedureKandidatenRequirementGebonden, "W6 al gekoppeld"],
+  ]) {
+    const { error } = await admin.from("procedure_requirement_instance").upsert(
+      {
+        id,
+        decision_id: FIX.procedureKandidatenDecision,
+        fonds_id: FONDS_ID,
+        stap_volgorde: 9,
+        requirement_type: "approval",
+        label,
+        documenttype: null,
+        // P3: verplicht/blokkerend zijn generated leeskolommen; zwaarte is de
+        // enige schrijfbare bron van waarheid.
+        zwaarte: "vereist",
+        min_aantal: 1,
+        bron: "handmatig",
+        actief: true,
+        aangemaakt_door: users.voorzitter.userId,
+      },
+      { onConflict: "id" }
+    );
+    if (error) throw new Error(`preseed kandidaten requirement ${label}: ${error.message}`);
+  }
+
+  const { error: approvalError } = await admin.from("procedure_besluiten").upsert(
+    {
+      id: FIX.procedureKandidaatApproval,
+      procedure_id: FIX.procedure1,
+      formulering: "W6 bestaand approval voor de kandidaten-kiezer",
+      datum: "2026-08-31",
+      vastgelegd_door: users.voorzitter.userId,
+      vastgelegd_door_naam: "W1 voorzitter",
+      requirement_sleutel: KANDIDATEN_GEBONDEN_SLEUTEL,
+      uitkomst: "instemmend",
+    },
+    { onConflict: "id" }
+  );
+  if (approvalError) throw new Error(`preseed kandidaten approval: ${approvalError.message}`);
 }
 
 /** Het besluitobject waar het hele decisions-domein aan hangt. Upsert-reset,
@@ -362,6 +429,24 @@ export const scenarios = [
   { slug: "procedures-requirements.get.anon", method: "GET", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "anon", verwacht: "json" },
   { slug: "procedures-requirements.post.bestuurder.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "bestuurder", body: { label: "x" }, verwacht: "json" },
   { slug: "procedures-requirements.post.beheerder.invalid", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "beheerder", body: LEEG, verwacht: "json" },
+
+  // ── P6: uitgestelde contractopnames (#211 / #192) ───────────────────────
+  // De route-eigen afwijkingspoort is strenger dan procedures.view: beide
+  // niet-bestuurlijke rollen moeten op de werkelijke server 403 blijven krijgen.
+  { slug: "p6.procedures-afwijking.post.beheerder.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/afwijking`, rol: "beheerder", body: { motivering: "W6 opname: beheerder mag geen afwijking vastleggen." }, verwacht: "json" },
+  { slug: "p6.procedures-afwijking.post.bestuursbureau.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/afwijking`, rol: "bestuursbureau", body: { motivering: "W6 opname: bestuursbureau mag geen afwijking vastleggen." }, verwacht: "json" },
+
+  // Kiezer: één echte kandidaat met leesbare `gebonden_aan`-context, plus alle
+  // afgesproken negatieve routevormen (401, 400 en geen Decision Object).
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.200", method: "GET", path: kandidatenPad(FIX.procedure1, KANDIDATEN_DOELSLEUTEL), rol: "bestuurder", verwacht: "json", preseed: async ({ admin, users }) => zetKandidatenFixture(admin, users) },
+  { slug: "p6.procedures-vereisten-kandidaten.get.anon.401", method: "GET", path: kandidatenPad(FIX.procedure1, KANDIDATEN_DOELSLEUTEL), rol: "anon", verwacht: "json" },
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.400-ontbrekende-sleutel", method: "GET", path: `/api/procedures/${FIX.procedure1}/vereisten/kandidaten`, rol: "bestuurder", verwacht: "json" },
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.200-geen-decision", method: "GET", path: kandidatenPad(FIX.procedureOnbekend, KANDIDATEN_DOELSLEUTEL), rol: "bestuurder", verwacht: "json" },
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.400-document", method: "GET", path: kandidatenPad(FIX.procedure1, "9|document|W6 document"), rol: "bestuurder", verwacht: "json" },
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.400-vaststelling", method: "GET", path: kandidatenPad(FIX.procedure1, "9|dissent_review|W6 vaststelling"), rol: "bestuurder", verwacht: "json" },
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.400-field", method: "GET", path: kandidatenPad(FIX.procedure1, "9|field|W6 veld"), rol: "bestuurder", verwacht: "json" },
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.400-evaluation", method: "GET", path: kandidatenPad(FIX.procedure1, "9|evaluation|W6 evaluatie"), rol: "bestuurder", verwacht: "json" },
+  { slug: "p6.procedures-vereisten-kandidaten.get.bestuurder.400-ai-validation", method: "GET", path: kandidatenPad(FIX.procedure1, "9|ai_validation|W6 AI-validatie"), rol: "bestuurder", verwacht: "json" },
 
   // ── /api/expertises + /api/focusgebieden — organen-factory (siblings) ──────
   { slug: "expertises.get.bestuurder", method: "GET", path: "/api/expertises", rol: "bestuurder", verwacht: "json" },

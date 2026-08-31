@@ -1,8 +1,8 @@
 {
   "meta": {
     "_commentaar": "GEGENEREERD door scripts/gen/w7-authz-matrix.mjs — niet met de hand wijzigen. Dit is het W7-autorisatiecontract: per karakteriseringsscenario de zou-uitkomst onder ENFORCE_CAPABILITY=on. 'onveranderd' = de poort laat door en het route-eigen gedrag blijft (vergelijk met het byte-identieke snapshot); '403' = de poort weigert. De statische test w7-autz-matrix.test.ts hergenereert dit en faalt op elk verschil; de flag-on-runner toetst het tegen de draaiende server.",
-    "scenarios_in_scope": 345,
-    "weigeringen_403": 28,
+    "scenarios_in_scope": 356,
+    "weigeringen_403": 30,
     "rollen": [
       "bestuurder",
       "voorzitter",
@@ -225,6 +225,94 @@
       "route": "/instellingen",
       "rol": "anon",
       "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-afwijking.post.beheerder.403",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/afwijking",
+      "rol": "beheerder",
+      "capability": "procedures.afwijking.vastleggen",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "p6.procedures-afwijking.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/afwijking",
+      "rol": "bestuursbureau",
+      "capability": "procedures.afwijking.vastleggen",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.anon.401",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.200",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.200-geen-decision",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.400-ai-validation",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.400-document",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.400-evaluation",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.400-field",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.400-ontbrekende-sleutel",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "p6.procedures-vereisten-kandidaten.get.bestuurder.400-vaststelling",
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
       "vlagAan": "onveranderd"
     },
     {
