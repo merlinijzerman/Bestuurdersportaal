@@ -1,5 +1,8 @@
 # EPIC P → Preview: migratiedraaiboek
 
+> Voor de daaropvolgende productierelease geldt uitsluitend
+> [`MIGRATIEDRAAIBOEK-EPIC-P-PRODUCTIE.md`](./MIGRATIEDRAAIBOEK-EPIC-P-PRODUCTIE.md).
+
 **Doelomgeving:** uitsluitend Supabase Preview.  Pas ieder bestand hieronder in
 deze volgorde, volledig en één voor één toe in de SQL-editor. Stop bij de eerste
 fout. De code-deploy volgt pas nadat alle 32 stappen groen zijn.
