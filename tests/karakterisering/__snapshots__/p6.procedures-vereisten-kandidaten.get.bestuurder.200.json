@@ -1,0 +1,19 @@
+{
+  "body": {
+    "kandidaten": [
+      {
+        "actor": "W1 voorzitter",
+        "datum": "2026-08-31",
+        "gebonden_aan": "W6 al gekoppeld",
+        "id": "<uuid:1>",
+        "meta": null,
+        "titel": "W6 bestaand approval voor de kandidaten-kiezer"
+      }
+    ],
+    "type": "approval"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

@@ -30,7 +30,8 @@ mv "$migraties" "$tijdelijk/migrations"
 if command -v supabase >/dev/null 2>&1; then
   supabase start
 else
-  # Lokale ontwikkelmachine: gebruik een actuele, tijdelijke CLI zonder de
-  # package-lock of applicatie-afhankelijkheden te wijzigen.
-  npx --yes supabase@latest start
+  # Lokale ontwikkelmachine: dezelfde gepinde CLI als CI. `latest` kan een
+  # andere Postgres-/default-ACL-combinatie starten en maakt de replay dan
+  # lokaal vals-rood of -groen t.o.v. de verplichte checks.
+  npx --yes supabase@2.114.0 start
 fi

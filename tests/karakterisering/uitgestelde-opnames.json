@@ -1,20 +1,7 @@
 {
-  "toelichting": "Gewrapte routes waarvan het authz-matrix-scenario en de OPGENOMEN snapshot nog volgen bij de stack-run. De stack/preview blijft uit tot P6 (#171); een contractwaarde wordt tegen een draaiende server opgenomen of niet — nooit voorspeld (besluit 0192, contractwaarde-regel). Deze lijst MOET leeg zijn vóór P6. Zolang een route hierin staat, hoort er GEEN scenario in scenarios.mjs voor te bestaan (anders oogt de matrix compleet terwijl het negatieve contract nooit is waargenomen).",
+  "toelichting": "Gewrapte routes waarvan het authz-matrix-scenario en de OPGENOMEN snapshot nog volgen bij de stack-run. De stack/preview blijft uit tot P6 (#171); een contractwaarde wordt tegen een draaiende server opgenomen of niet — nooit voorspeld (besluit 0192, contractwaarde-regel). De P6-opname van #211/#192 is tegen de wegwerpstack vastgelegd; de twee zware, additieve gevallen hieronder blijven expliciet geparkeerd.",
   "blokkeert": "#171 (via #211)",
-  "uitgesteld": [
-    {
-      "method": "POST",
-      "route": "/procedures/[id]/stappen/[stapId]/afwijking",
-      "capability": "procedures.afwijking.vastleggen",
-      "reden": "P3/PR-C (#168): nieuwe gate; de negatieve 403-cellen (beheerder + bestuursbureau) moeten tegen een draaiende server worden opgenomen, niet voorspeld. De inner rolgate is nu al met een gewone gedragstest bewezen (afwijking-rolgate.test.ts)."
-    },
-    {
-      "method": "GET",
-      "route": "/procedures/[id]/vereisten/kandidaten",
-      "capability": "procedures.view",
-      "reden": "#192 (0195): NIEUWE gewrapte route (leesroute achter de kiezer-UI), nog GEEN scenario in scenarios.mjs. Zowel het happy-200-contract (kandidatenlijst met id/titel/datum/actor + gebonden_aan, de titel/datum/actor uit REQUIREMENT_BRON+KANDIDAAT_WEERGAVE) als de negatieve paden (anon=401, ontbrekende requirement_sleutel=400, onbekende procedure/geen Decision Object, en 400 voor typen zonder kandidaten-kiezer: document/vaststelling/field én evaluation/ai_validation zonder vervullingspad) moeten tegen een draaiende server worden opgenomen — nooit voorspeld. Stack blijft uit tot P6."
-    }
-  ],
+  "uitgesteld": [],
   "nog_op_te_nemen_bij_stackrun": [
     {
       "method": "POST",
