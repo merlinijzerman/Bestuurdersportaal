@@ -111,6 +111,9 @@ interface Props {
   /** Mag bewijs opvoeren en aan een bestaande vereiste koppelen. Bestuurders
       dragen dit via `procedures.manage`; het is geen beheerdersrecht. */
   magBewijsKoppelen?: boolean;
+  /** Mag werk-aantekeningen bij een actieve stap toevoegen en eigen
+      aantekeningen beheren. Bestuurders dragen dit via `procedures.manage`. */
+  magAantekeningenWijzigen?: boolean;
   /** P3 (#168, §5.1): mag deze gebruiker een afwijking vastleggen bij het
       afronden (capability procedures.afwijking.vastleggen — voorzitter/bestuurder)?
       UI-signaal; de harde gate zit server-side in de route én in de DB-functie.
@@ -684,6 +687,7 @@ export default function StapPaneel({
   voltooidDoorNaam = null,
   kanBeheren = false,
   magBewijsKoppelen = false,
+  magAantekeningenWijzigen = false,
   magAfwijkingVastleggen = false,
   currentUserId = "",
   fase = null,
@@ -1814,7 +1818,7 @@ export default function StapPaneel({
         key={stap.id}
         procedureId={procedureId}
         stapId={stap.id}
-        kanBeheren={kanBeheren}
+        magAantekeningenWijzigen={magAantekeningenWijzigen}
         alleenLezen={alleenLezen}
         currentUserId={currentUserId}
       />
