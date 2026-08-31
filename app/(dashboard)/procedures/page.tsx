@@ -223,6 +223,7 @@ export default async function ProceduresPage() {
           }`
         : null,
       isAfgerond: isAfgerond(p),
+      isBeeindigd: dossierstatus === "beeindigd",
       fasen: afl?.fasen ?? [],
       stappenAfgerond: afl?.stappenAfgerond ?? 0,
       stappenTotaal: afl?.stappenTotaal ?? 0,

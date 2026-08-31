@@ -11,7 +11,7 @@ const runner = read("scripts/cross-tenant-ci.sh");
 test("#212 — elke browser-uitvoerbare DEFINER heeft een expliciete classificatie", () => {
   const expected = [
     "aqlab_assurance_meetwaarden", "contact_aanvraag_insert", "resolve_tenant_host", "fn_afschrift_bevries_kolommen",
-    "fn_ai_preflight", "fn_besluit_status_omslag", "fn_procedure_beeindigen",
+    "fn_ai_preflight", "fn_besluit_status_omslag", "fn_procedure_beeindigen", "fn_procedure_heropenen",
     "fn_stap_afronden", "lees_governance_audit", "log_word_export",
     "schrijf_ai_interactie", "verwijder_gesprek",
   ];
