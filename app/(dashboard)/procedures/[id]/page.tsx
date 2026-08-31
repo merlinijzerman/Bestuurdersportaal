@@ -238,6 +238,14 @@ export default async function ProcedureDetailPage({
     profiel?.rol,
     "procedures.manage"
   );
+  // P5c (§9.3): aantekeningen zijn bewerkbaar werkverkeer, geen
+  // beheerdershandeling. Een bestuurder heeft procedures.manage en mag op een
+  // actieve stap daarom zelf een aantekening toevoegen en de eigen tekst
+  // beheren. De route en RLS bewaken auteur- en fondsgrens opnieuw.
+  const magAantekeningenWijzigen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.manage"
+  );
   // P3 (#168, §5.1): afronden met afwijking hangt aan de capability, niet aan de
   // kanBeheren-hardcode — bestuurder draagt de capability wél maar is geen
   // kanBeheren. De harde gate zit server-side (route + DB-functie).
@@ -803,6 +811,7 @@ export default async function ProcedureDetailPage({
               alleenLezen={!geselecteerdeIsBewerkbaar}
               kanBeheren={currentUserIsPrivileged}
               magBewijsKoppelen={magBewijsKoppelen}
+              magAantekeningenWijzigen={magAantekeningenWijzigen}
               besluitOpSlot={
                 // #192/I1: staat het besluit op slot? Dan is losmaken vergrendeld
                 // (met reden). Harde gate zit server-side in de koppelroute.
