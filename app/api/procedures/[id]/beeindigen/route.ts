@@ -33,7 +33,7 @@ export const POST = withFondsRoute(
       }
       // Garandeer een primair Decision Object; de RPC zoekt het fail-closed op.
       await ensureDecisionForProcedure(supabase, id);
-      const { error } = await supabase.rpc("fn_procedure_beeindigen", {
+      const { data, error } = await supabase.rpc("fn_procedure_beeindigen", {
         p_procedure_id: id,
         p_reden: motivering,
       });
@@ -41,10 +41,12 @@ export const POST = withFondsRoute(
         const code = (error as { code?: string }).code;
         console.error("Procedure beëindigen fout:", error);
         if (code === "42501") return NextResponse.json({ error: error.message }, { status: 403 });
-        if (code === "PC002") return NextResponse.json({ error: error.message }, { status: 400 });
+        if (code === "PC002" || code === "PC004" || code === "23514") {
+          return NextResponse.json({ error: error.message }, { status: 409 });
+        }
         return NextResponse.json({ error: "Beëindigen mislukt" }, { status: 500 });
       }
-      return NextResponse.json({ ok: true });
+      return NextResponse.json(data ?? { ok: true });
     } catch (e) {
       console.error("Fout in POST …/beeindigen:", e);
       return NextResponse.json({ error: "Serverfout" }, { status: 500 });

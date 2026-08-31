@@ -231,9 +231,9 @@ FUNC	public	fn_platform_event_immutable()	function	service_role	EXECUTE
 FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	anon	-
 FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	authenticated	EXECUTE
 FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	service_role	-
-FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text)	function	anon	-
-FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text)	function	authenticated	EXECUTE
-FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text)	function	service_role	-
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)	function	anon	-
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)	function	authenticated	EXECUTE
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)	function	service_role	-
 FUNC	public	fn_procedure_requirements_versievast()	function	anon	-
 FUNC	public	fn_procedure_requirements_versievast()	function	authenticated	-
 FUNC	public	fn_procedure_requirements_versievast()	function	service_role	EXECUTE

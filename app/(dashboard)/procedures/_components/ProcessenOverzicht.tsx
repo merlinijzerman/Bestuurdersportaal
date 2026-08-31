@@ -40,6 +40,7 @@ export interface ProcesKaartVM {
   sublabel: string | null;
   periodeLabel: string | null;
   isAfgerond: boolean;
+  isBeeindigd: boolean;
   fasen: FaseSegment[];
   stappenAfgerond: number;
   stappenTotaal: number;
@@ -53,7 +54,7 @@ export interface ProcesKaartVM {
   aandachtspunten: Aandachtspunt[];
 }
 
-type StatusId = "lopend" | "afgerond" | "alle";
+type StatusId = "lopend" | "afgerond" | "beeindigd" | "alle";
 type SorteerId = "deadline" | "aandacht" | "voortgang" | "titel";
 
 interface Optie {
@@ -65,8 +66,9 @@ interface Optie {
 }
 
 const STATUS_OPTIES: { id: StatusId; label: string; test: (p: ProcesKaartVM) => boolean }[] = [
-  { id: "lopend", label: "Lopend", test: (p) => !p.isAfgerond },
+  { id: "lopend", label: "Lopend", test: (p) => !p.isAfgerond && !p.isBeeindigd },
   { id: "afgerond", label: "Afgerond", test: (p) => p.isAfgerond },
+  { id: "beeindigd", label: "Beëindigd", test: (p) => p.isBeeindigd },
   { id: "alle", label: "Alle", test: () => true },
 ];
 

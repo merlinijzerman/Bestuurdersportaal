@@ -21,6 +21,7 @@ import UitklapbaarPaneel from "../_components/UitklapbaarPaneel";
 import DossierSectie from "../_components/DossierSectie";
 import DossierStatusStrip from "../_components/DossierStatusStrip";
 import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
+import ProcedureEindstatusActie from "../_components/ProcedureEindstatusActie";
 import AfschriftenPaneel from "../_components/AfschriftenPaneel";
 import { auditEventLabel } from "@/core/lib/audit-labels";
 import { besluitStaatNog } from "@/core/lib/decision-view";
@@ -73,7 +74,7 @@ export interface Stap {
   // Engine v2 (D6): parallel-by-default statusmodel. 'open' is de legacy-waarde
   // (bestaande sequentiële procedures); nieuwe procedures gebruiken
   // 'geblokkeerd' voor nog-niet-activeerbare stappen. 'heropend' telt als actief.
-  status: "open" | "geblokkeerd" | "actief" | "afgerond" | "heropend";
+  status: "open" | "niet_begonnen" | "geblokkeerd" | "actief" | "afgerond" | "heropend" | "vervallen";
   eigenaar_naam: string | null;
   deadline: string | null;
   voltooid_op: string | null;
@@ -253,6 +254,8 @@ export default async function ProcedureDetailPage({
     profiel?.rol,
     "procedures.afwijking.vastleggen"
   );
+  const magProcesBeeindigen = rolHeeftCapability(profiel?.rol, "procedures.beeindigen");
+  const magProcesHeropenen = rolHeeftCapability(profiel?.rol, "procedures.heropenen");
   // T1 bureau-rol (§5.3): geen dissent vastleggen. UI-cosmetica; de weigering
   // staat in de dissent-routes en in de RLS-schrijfpolicy.
   const currentUserIsBureau = isBureauRol(profiel?.rol);
@@ -427,6 +430,22 @@ export default async function ProcedureDetailPage({
   } catch (e) {
     console.error("Dossier laden mislukt:", e);
   }
+
+  const beeindigingEvent = log.find((e) => e.event_type === "procedure_beeindigd") ?? null;
+  const beeindigingPayload = beeindigingEvent?.payload ?? {};
+  const beeindiging = beeindigingEvent
+    ? {
+        motivering: typeof beeindigingPayload.motivering === "string" ? beeindigingPayload.motivering : null,
+        actor: beeindigingEvent.actor_naam,
+        tijdstip: beeindigingEvent.tijdstip,
+      }
+    : null;
+  const beeindigingSnapshot = {
+    stappen: stappen.filter((s) => s.status !== "afgerond" && s.status !== "vervallen").length,
+    kritiek: (dossier?.evidence ?? []).filter((e) => !e.vervuld && e.blokkerend).length,
+    vereist: (dossier?.evidence ?? []).filter((e) => !e.vervuld && e.verplicht && !e.blokkerend).length,
+    optioneel: (dossier?.evidence ?? []).filter((e) => !e.vervuld && !e.verplicht && !e.blokkerend).length,
+  };
 
   // Signaal 3 (§12, Q2/0193): is dit besluit genomen terwijl er vereisten
   // openstonden? Afgeleid uit het append-only event (events zijn tijdstip-desc, dus
@@ -628,13 +647,23 @@ export default async function ProcedureDetailPage({
           <h1 className="font-serif text-ink text-lg font-bold">
             {procedure.titel}
           </h1>
-          <ProcedureMetadataEdit
-            procedureId={procedure.id}
-            titel={procedure.titel}
-            beschrijving={procedure.beschrijving}
-            deadline={procedure.deadline}
-            status={procedure.status}
-          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProcedureMetadataEdit
+              procedureId={procedure.id}
+              titel={procedure.titel}
+              beschrijving={procedure.beschrijving}
+              deadline={procedure.deadline}
+              status={procedure.status}
+            />
+            <ProcedureEindstatusActie
+              procedureId={procedure.id}
+              isBeeindigd={dossierstatus === "beeindigd"}
+              kanBeeindigen={magProcesBeeindigen}
+              kanHeropenen={magProcesHeropenen}
+              snapshot={beeindigingSnapshot}
+              beeindiging={beeindiging}
+            />
+          </div>
         </div>
         {procedure.beschrijving && (
           <p className="text-sm text-muted mt-1.5 max-w-3xl whitespace-pre-line">

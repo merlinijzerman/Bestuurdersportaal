@@ -173,6 +173,8 @@ SQL_P4I5="supabase/checks/2026_08_29_p4_i5_composite_fk.sql"
 SQL_P4I1="supabase/checks/2026_08_29_p4_04_status_feitenmatrix.sql"
 # P5c (§9.3) — werkverkeer per stap: statusneutraal, I5 en auteur-/tenantgrens.
 SQL_P5C_NOTITIE="supabase/checks/2026_08_30_p5c_stap_notitie_gedrag.sql"
+# P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
+SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
 # auth-/fonds-/rolslot, of staat als productbreed/trigger expliciet gemotiveerd
 # op de allowlist.
@@ -352,6 +354,10 @@ echo
 
 echo "-- P5c aantekeningen (statusneutraal, I5, auteur- en tenantgrens) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5C_NOTITIE"
+echo
+
+echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5D_BEEINDIGEN"
 echo
 
 echo "-- #212 SECURITY DEFINER zelfsloten (inventaris + auth/fonds/rol-gates) --"

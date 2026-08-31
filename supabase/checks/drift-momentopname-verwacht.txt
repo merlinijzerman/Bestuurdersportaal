@@ -408,7 +408,7 @@ functie|public.fn_platform_event_fork_declaration_immutable|secdef=true searchpa
 functie|public.fn_platform_event_hash|secdef=true searchpath=search_path=pg_catalog, public, pg_temp md5=3e654ca6fcb8ef411a8b331ea98f543d
 functie|public.fn_platform_event_immutable|secdef=false searchpath=niet gepind md5=b8fdf1fe9384e836325efa9b9fe9a053
 functie|public.fn_procedure_beeindigen|secdef=true searchpath=search_path=public, extensions, pg_temp md5=bb9a930cf9d6b9e7f571f7c2c817d525
-functie|public.fn_procedure_heropenen|secdef=true searchpath=search_path=public, extensions, pg_temp md5=9939b11cca874b9657cb44a6f24704ae
+functie|public.fn_procedure_heropenen|secdef=true searchpath=search_path=public, extensions, pg_temp md5=bbf4989c8c5051d2354ff25df11024e5
 functie|public.fn_procedure_requirements_versievast|secdef=false searchpath=search_path=public, pg_temp md5=2dc232a7c6a82df9fe1377333438783e
 functie|public.fn_profiel_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=1cb989181b99371810cd9cb65975b32f
 functie|public.fn_publicatie_append_only|secdef=false searchpath=search_path=public, pg_temp md5=6a6e7aad045637eebc4eb319bbc5e052

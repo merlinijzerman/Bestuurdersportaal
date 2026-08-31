@@ -34,7 +34,7 @@ begin
     ('fn_besluit_heropenen_correctie(p_decision_id uuid, p_reden_type text, p_motivering text)', 'rol_fonds', 'Bestuurlijke correctie op een besluit in het eigen fonds.'),
     ('fn_besluit_status_omslag(p_decision_id uuid, p_target text, p_reden text, p_motivering text, p_open_elders jsonb)', 'rol_fonds', 'Bestuurlijke statusovergang op een besluit in het eigen fonds.'),
     ('fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)', 'rol_fonds', 'Bestuurlijke procedureovergang in het eigen fonds.'),
-    ('fn_procedure_heropenen(p_procedure_id uuid, p_reden text)', 'rol_fonds', 'Bestuurlijke procedureovergang in het eigen fonds.'),
+    ('fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)', 'rol_fonds', 'Bestuurlijke procedureheropening in het eigen fonds, met verplichte getypeerde reden.'),
     ('fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)', 'eigen_context', 'Rate-limit is alleen op de huidige actor/sessie gebaseerd.'),
     ('fn_schrijf_handeling(p_handeling text, p_methode text, p_pad text, p_status integer, p_request_id uuid)', 'eigen_fonds', 'Append-only handeling leidt actor en fonds server-side af.'),
     ('fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)', 'eigen_fonds', 'Vergelijkingsresultaat leidt fonds en actor server-side af.'),
