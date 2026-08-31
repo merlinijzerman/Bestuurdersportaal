@@ -33,7 +33,7 @@ Alleen doorgaan als elke regel aantoonbaar groen is en in het releaselog staat.
   omdat de drie bestaande dossiers aantoonbaar niet in gebruik zijn. Elke andere
   uitkomst is een stop: dan wordt niet uit versie 1.0.0 verwijderd maar volgt
   eerst een nieuw definitiebesluit.
-- [ ] De uitvoerder heeft de rollbackbestanden voor alle 31 SQL-stappen geopend
+- [ ] De uitvoerder heeft de rollbackbestanden voor alle 32 SQL-stappen geopend
   en een herstelpad is afgesproken. Zie ook
   [`security/RUNBOOK-MIGRATIES.md`](./security/RUNBOOK-MIGRATIES.md).
 - [ ] Een herleidbaar productieherstelpad (backup/PITR) is bevestigd voor het
