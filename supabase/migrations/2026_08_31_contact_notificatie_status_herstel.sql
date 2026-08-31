@@ -46,8 +46,7 @@ begin
      or body !~ 'notificatie_verzonden = false'
      or body !~ 'left\(p_error, 500\)'
      or not has_function_privilege('anon', 'public.contact_notificatie_status(uuid,boolean,text)'::regprocedure, 'execute')
-     or not has_function_privilege('authenticated', 'public.contact_notificatie_status(uuid,boolean,text)'::regprocedure, 'execute')
-     or has_function_privilege('public', 'public.contact_notificatie_status(uuid,boolean,text)'::regprocedure, 'execute') then
+     or not has_function_privilege('authenticated', 'public.contact_notificatie_status(uuid,boolean,text)'::regprocedure, 'execute') then
     raise exception '#212 contact_notificatie_status is niet aantoonbaar publiek-begrensd hersteld';
   end if;
 end $$;
