@@ -20,13 +20,19 @@ function datum(iso: string) {
 export default function AantekeningenBlok({
   procedureId,
   stapId,
-  kanBeheren,
+  magAantekeningenWijzigen,
   alleenLezen,
   currentUserId,
 }: {
   procedureId: string;
   stapId: string;
-  kanBeheren: boolean;
+  /**
+   * Aantekeningen zijn werkverkeer. Een bestuurder mag ze dus, net als
+   * bewijsstukken, bij een actieve stap zelf toevoegen en alleen als auteur
+   * bewerken/verwijderen. Dit is bewust niet het smallere kanBeheren
+   * (voorzitter/beheerder) recht.
+   */
+  magAantekeningenWijzigen: boolean;
   alleenLezen: boolean;
   currentUserId: string;
 }) {
@@ -101,7 +107,7 @@ export default function AantekeningenBlok({
   }
 
   const zichtbareNotities = alles ? notities : notities.slice(0, 3);
-  const magToevoegen = kanBeheren && !alleenLezen;
+  const magToevoegen = magAantekeningenWijzigen && !alleenLezen;
 
   return (
     <section className="mt-6 pt-5 border-t border-line" aria-label="Aantekeningen">
