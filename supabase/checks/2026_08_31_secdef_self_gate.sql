@@ -89,7 +89,7 @@ begin
     from secdef_actueel a
     join secdef_beleid b using (identiteit)
    where b.klasse in ('rol_fonds', 'eigen_fonds')
-     and (a.body !~ 'auth\\.uid\\s*\\(\\)' or a.body !~ 'fonds_id');
+     and (a.body !~ 'auth\.uid\s*\(\)' or a.body !~ 'fonds_id');
   if fouten <> '' then
     raise exception E'#212 FAALT: fonds-gebonden DEFINER zonder aantoonbaar auth.uid()-afgeleid fonds-slot:\n  - %', fouten;
   end if;
@@ -98,7 +98,7 @@ begin
     from secdef_actueel a
     join secdef_beleid b using (identiteit)
    where b.klasse = 'rol_fonds'
-     and (a.body !~ 'auth\\.uid\\s*\\(\\)'
+     and (a.body !~ 'auth\.uid\s*\(\)'
        or a.body !~ '(rol|capabilit|voorzitter|bestuurder|mag_audit)');
   if fouten <> '' then
     raise exception E'#212 FAALT: bestuurlijke DEFINER zonder aantoonbare rol/capability-gate:\n  - %', fouten;
@@ -108,7 +108,7 @@ begin
     from secdef_actueel a
     join secdef_beleid b using (identiteit)
    where b.klasse = 'eigen_context'
-     and a.body !~ 'auth\\.uid\\s*\\(\\)';
+     and a.body !~ 'auth\.uid\s*\(\)';
   if fouten <> '' then
     raise exception E'#212 FAALT: sessie-gebonden DEFINER zonder auth.uid()-slot:\n  - %', fouten;
   end if;
@@ -130,7 +130,7 @@ begin
    where b.klasse = 'publiek_begrensd'
      and (
        (a.identiteit = 'resolve_tenant_host(p_host text)'
-        and (a.body !~ 'td\\.host = p_host' or a.body !~ 'td\\.actief = true'))
+        and (a.body !~ 'td\.host = p_host' or a.body !~ 'td\.actief = true'))
        or
        (a.identiteit like 'contact_aanvraag_insert(%'
         and (a.body !~ 'p_ip_hash' or a.body !~ '10 minutes'))

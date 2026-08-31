@@ -23,7 +23,7 @@ test("#212 — elke browser-uitvoerbare DEFINER heeft een expliciete classificat
 });
 
 test("#212 — fonds-, rol- en triggeruitzonderingen zijn fail-closed", () => {
-  assert.match(gate, /auth\\\\\.uid\\\\s\*\\\\\(\\\\\)/);
+  assert.ok(gate.includes("auth\\.uid\\s*\\(\\)"));
   assert.match(gate, /fonds_id/);
   assert.match(gate, /rol\|capabilit\|voorzitter\|bestuurder\|mag_audit/);
   assert.match(gate, /pg_trigger t where t\.tgfoid = a\.oid/);
