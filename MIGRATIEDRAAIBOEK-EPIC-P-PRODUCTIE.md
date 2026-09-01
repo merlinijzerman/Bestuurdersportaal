@@ -138,7 +138,7 @@ select
 select
   to_regprocedure('public.fn_besluit_status_omslag(uuid,text,text,text,jsonb)') is not null as statusomslag_rpc,
   not has_column_privilege('authenticated', 'public.decision_objects', 'status', 'UPDATE') as status_direct_dicht,
-  exists (select 1 from pg_trigger where tgname = 'trg_decision_status_insert_guard' and not tgisinternal) as status_insert_slot;
+  exists (select 1 from pg_trigger where tgname = 'trg_decision_insert_status_slot' and not tgisinternal) as status_insert_slot;
 ```
 
 > **Verwacht onderbroken venster na stap 19.** De oude productiecode gebruikt
