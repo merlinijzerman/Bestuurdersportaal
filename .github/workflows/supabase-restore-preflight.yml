@@ -47,6 +47,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Node.js-dependencies installeren
+        run: npm ci
+
       - name: Supabase CLI gepind instellen
         uses: supabase/setup-cli@v2.1.1
         with:

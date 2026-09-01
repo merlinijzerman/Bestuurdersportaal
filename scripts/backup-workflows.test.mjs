@@ -89,7 +89,10 @@ test("watchdog accepteert zowel ISO-tijd als het bestaande contract-v2 manifest"
 
 test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd op", async () => {
   const text = await workflow("supabase-restore-preflight.yml");
+  const dependencyInstall = text.indexOf("run: npm ci");
+  const restoreTests = text.indexOf("run: npm run test:backup-restore");
   assert.match(text, /if: github\.ref == 'refs\/heads\/main'/);
+  assert.ok(dependencyInstall >= 0 && dependencyInstall < restoreTests);
   assert.match(text, /B2_READONLY_APPLICATION_KEY_ID/);
   assert.match(text, /cryptsetup luksFormat/);
   assert.match(text, /"data-root": \$data_root/);
