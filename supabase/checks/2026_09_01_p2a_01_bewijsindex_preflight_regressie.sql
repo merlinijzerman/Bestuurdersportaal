@@ -6,6 +6,8 @@
 -- Deze pure fixture bewijst beide kanten van de gecorrigeerde correlatie:
 --   1. een hoge drempel op een ANDERE sleutel telt niet;
 --   2. een hoge drempel op DEZELFDE, versievaste sleutel telt wel.
+-- ROL: postgres; dit is een isolatievrije, volledig synthetische CTE-fixture
+-- zonder tabeltoegang. Zij toetst uitsluitend de eigenaarspreflight en rolt af.
 
 begin;
 
