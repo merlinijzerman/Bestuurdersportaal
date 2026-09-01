@@ -165,6 +165,9 @@ SQL_V3="supabase/checks/2026_08_20_v3_grants_volledig.sql"
 # #214-a1 (0194) — schrijfpoort: statische gate + gedragstoets (directe PATCH dicht).
 SQL_P214A1="supabase/checks/2026_08_28_p214a1_schrijfpoort.sql"
 SQL_P214A1G="supabase/checks/2026_08_28_p214a1_gedrag.sql"
+# Productieherstel 01-09: bewijst zonder authfixture dat specifiek de herstelde
+# BEFORE INSERT-trigger overgangsstatus en voltooiingsmetadata weigert.
+SQL_P214A1_HERSTEL="supabase/checks/2026_09_01_p214a1_05_stap_insert_guard_herbevestiging.sql"
 # #214-a2 (0194) — epic-only afwijkingskolommen blijven buiten authenticated UPDATE.
 SQL_P214A2="supabase/checks/2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sql"
 # P4 tranche 8 (#169, 0194 F) — I5 composite-FK weigert cross-fonds referenties.
@@ -338,6 +341,7 @@ echo
 
 echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1_HERSTEL"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1G"
 echo
 
