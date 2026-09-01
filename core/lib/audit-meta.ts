@@ -100,6 +100,11 @@ export const META_BASIS = [
   "niet_vastgesteld",
   "verduidelijking",
   "geen_modelcall",
+  // Plateau 1 — `geen_generatiecall` staat BEWUST niet hier op top-niveau maar als
+  // subsleutel van het bestaande gemengde object `invoer` (zie SUB_NIVEAUS.invoer /
+  // RetrievalMeta.invoer). Zo blijft het via de bestaande SQL-projectie op
+  // basisniveau zichtbaar zonder wijziging van meta_basisniveau()/meta_bronniveau()
+  // — Plateau 1 blijft migratievrij.
   "context_geneutraliseerd",
   "gereformuleerd",
   // P5-telemetrie — zie de waarschuwing in de header
@@ -187,8 +192,13 @@ export const SUB_NIVEAUS: Record<string, { bron?: string[]; inhoud?: string[] }>
   module_scope: { bron: ["procedure_id", "risico_id", "bron_ids"] },
   volledige_analyse: { bron: ["vorige_log_id", "document_id"] },
   // beurten/tekens zijn telemetrie; historie_hash is een vingerafdruk van de
-  // gespreksinhoud en hoort daarom bij het verwijderbare deel
-  invoer: { inhoud: ["historie_hash"] },
+  // gespreksinhoud en hoort daarom bij het verwijderbare deel.
+  // Plateau 1 (contextresolver): `context` (modus/relatie/vertrouwen/methode/
+  // meetmetadata) is telemetrie en blijft basis (niet genoemd = basis);
+  // `context_kandidaat_vraag` is de door de resolver voorgestelde vraagtekst en
+  // is dus verwijderbare inhoud. De effectieve zoekvraag zelf wordt niet hier
+  // maar via het bestaande `zoekvraag`-veld vastgelegd (geen dubbele kopie).
+  invoer: { inhoud: ["historie_hash", "context_kandidaat_vraag"] },
   // procesinstantie_ids zijn objectreferenties
   filters: { bron: ["procesinstantie_ids"] },
   // domeinen en URL's zijn bronidentiteit; tellingen en foutcode zijn telemetrie

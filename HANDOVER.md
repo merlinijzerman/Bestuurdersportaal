@@ -362,6 +362,33 @@ TENANT_ENFORCE=on      # aan = afdwingen; leeg/anders = observe (default)
 die hosts niet in `tenant_domains` staan. **Rollback = variabele weghalen** (instant,
 geen redeploy).
 
+### Feature-flag: `CHATCONTEXT_RESOLVER` (contextvaste vervolgvragen, plateau 1 / besluit 0200)
+
+Stuurt de vroege contextresolver in de AI-chat (`core/lib/vraag-context.ts`). Drie standen;
+onbekende of lege waarde → `off`.
+
+```
+CHATCONTEXT_RESOLVER=off        # default (fail-safe): resolver draait niet, huidig gedrag
+CHATCONTEXT_RESOLVER=observe    # resolver draait + logt, maar stuurt downstream NIET aan
+CHATCONTEXT_RESOLVER=enforce    # de effectieve vraag stuurt de hele beslisketen
+```
+
+- **off** — byte-identiek aan het huidige gedrag; geen extra modelcall.
+- **observe** — gedragsmatig niet-afdwingend: dezelfde downstream-beslissingen en antwoordinhoud,
+  maar wél een extra `claude-sonnet-4-6`-call per niet-eerste beurt, extra latency/kosten en extra
+  auditmetadata (`invoer.context` + `invoer.context_kandidaat_vraag`). Bedoeld om vóór/na te meten.
+- **enforce** — de effectieve vraag stuurt bronintentie, router, antwoordmodus, retrievalmodus,
+  bronsoort, retrieval + fusie, webprofiel en de prompt.
+
+**Uitrolvolgorde (bindend):**
+1. eerste Preview-deploy met `off`;
+2. daarna `observe` **uitsluitend op preview-stable** — beoordeel kwaliteit, latency,
+   fallbackpercentage (`invoer.context.resolvermethode`/`fallback_reden`) en PII-gedrag;
+3. `enforce` pas ná die beoordeling;
+4. **Production blijft `off`** totdat daarvoor een afzonderlijke go/no-go is gegeven.
+
+**Rollback = `off` + redeploy.** Geen migratie of DB-wijziging nodig (de vlag is puur env-gestuurd).
+
 ---
 
 ## Werkwijze
@@ -706,6 +733,7 @@ In nieuwe sessies hoef je niet de geschiedenis van keuzes uit te leggen — die 
 
 ## Release-historie
 
+- **1 september 2026 — Plateau 1: contextvaste vervolgvragen in de AI-chat (branch `codex/plateau1-chatcontext`, nog niet gemerged).** Een vervolgvraag binnen één gesprek verloor zijn onderwerp ("Breng het wettelijke kader in kaart." na een vraag over de solidariteitsreserve). Opgelost met één vroege, server-side contextresolver (`core/lib/vraag-context.ts`) die uit de vraag + de al meegestuurde historie één `effectieveVraag` afleidt; die stuurt in `enforce` de hele beslisketen (bronintentie, vraagrouter det+model, antwoordmodus, retrievalmodus, bronsoortprofiel biblio+web, documentnaam-detectie, vergelijk-intent, analyseplan, portaalstand, schaduwtelling, retrieval + additieve fusie, generatieprompt). De losse Fase-B1-reformulatie is daarmee gesubsumeerd. Achter `CHATCONTEXT_RESOLVER=off|observe|enforce` (fail-safe `off`). **`off` is byte-identiek** aan het huidige gedrag; **`observe` is gedragsmatig niet-afdwingend** — zelfde downstream-beslissingen en antwoordinhoud, maar wél een extra resolver-modelcall, latency/kosten en auditmetadata. De originele vraag blijft leidend voor weergave, opslag (`p_vraag`), inhoudszegel en toon. PII wordt fail-closed op **beide** vraagvormen gecontroleerd. Audit is append-only en **migratievrij (geen SQL-wijziging)**: telemetrie in `invoer.context` (basis), de voorgestelde vraag verwijderbaar in `invoer.context_kandidaat_vraag` (inhoud), effectieve zoekvraag op het bestaande `zoekvraag`-veld; `invoer.geen_generatiecall` (basis-subsleutel ónder `invoer`, geen top-level veld, dus geen projectiewijziging) onderscheidt "geen antwoord-generatie" van top-level `geen_modelcall` ("geen enkele providercall", afgeleid uit de expliciete `modelAangeroepen`, semantiek 0092 ongewijzigd). Alle vroege returns (bronintentie-verduidelijking, succesvolle vergelijking, niet-eenduidige vergelijking) sluiten de gereserveerde AI-actie nu expliciet af (besluit 0180); de niet-eenduidige vergelijking kreeg daarvoor een governance-logregel. Timeout is een echte abort (~3500 ms). Verificatie op schone `origin/preview`: `tsc` groen, `npm run sanity` groen (vraag-context 23, audit-meta 19), vitest node + `verify-vitest-parity` groen (127), cross-tenant app-laag groen (329, incl. web-privacy). DB-laag ongewijzigd (geen migratie). Zie `AI-CHATCONTEXT-ONTWERP.md` en besluit 0200. Plateau 1 dekt géén context over refresh/tab/sessie/gesprek (plateau 2) en géén rechtsregime-afbakening.
 - **29 augustus 2026 — #214-a1 productie afgerond; epic op main-met-a1 gerebased en #214-a2 dun toegevoegd.** A1 is in de vastgelegde volgorde `01 → code → 02 + 03 + 04` op Productie toegepast; de UI-smokes (stap afronden + besluit vastleggen) bleven groen. De afsluitende driftcontrole [run `33251299405`](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33251299405) was volledig groen: repo↔Productie en Preview↔Productie schemagelijk. De `ENFORCE_CAPABILITY`-flip is niet in dit releasewindow gecombineerd. Daarna is `epic/proceduremodule-v2` op actuele `main` mét a1 gerebased. De gecombineerde staat uit `wip/214-epic-gecombineerd` is selectief gereconcilieerd: normale afronding, handmatig activeren, heropenen en de gedeelde activatiecascade schrijven de bewaakte stapstatus nu uitsluitend via de a1-RPC's. **A2 blijft bewust dun/additief:** aparte gate [`2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sql`](./supabase/checks/2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sql), aangesloten op `cross-tenant-ci.sh`, bewaakt dat de vier epic-only afwijkingskolommen niet UPDATE-baar zijn voor `authenticated` en dat `fn_stap_afronden_met_afwijking` SECURITY DEFINER/alleen-authenticated blijft. Geen migratie en geen V3-allowlistwijziging: a1's her-grant laat nieuwe kolommen al fail-closed vallen. Volgende volgorde: deze epic publiceren, daarna pas P4 op de bijgewerkte epic rebasen en tranche 4 uitvoeren.
 
 - **29 augustus 2026 — #214-a1 Preview-acceptatie en productiepoort.** Deze statusupdate vervangt de aanduiding “NIET gedeployed” in de oorspronkelijke a1-entry hieronder: PR [`#225`](https://github.com/merlinijzerman/Bestuurdersportaal/pull/225) is als `54d0052` in `preview` gemerged; migraties `01` → code → `02` → `03` → `04` zijn afzonderlijk op Preview toegepast. De UI-smokes zijn groen: een processtap werd afgerond (`1 van 5`, volgende stap automatisch actief) en een formeel besluit werd vastgelegd en na herladen teruggelezen. **Productie is nog niet vrijgegeven of gewijzigd.** De release-PR `preview` → `main` mag worden voorbereid, maar merge/deploy/migraties wachten op expliciet akkoord. Niet in hetzelfde releasewindow combineren met de `ENFORCE_CAPABILITY`-flip (#210 / 0186); bij samenloop schuift één wijziging. Na productie is `DRIFT_PROD_URL=… DRIFT_PREVIEW_URL=… bash scripts/drift-vergelijk.sh` verplicht en alleen een volledig groene tweesignalencontrole sluit het rondje af. **Integratie daarna:** eerst de epic rebasen op `main` mét a1; dan de gecombineerde staat uit `wip/214-epic-gecombineerd` terughalen en a2 dun/additief op de epic schrijven; pas daarna `feat/p4-status-feitenmatrix` op de bijgewerkte epic rebasen en tranche 4 uitvoeren.

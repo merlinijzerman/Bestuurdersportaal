@@ -209,7 +209,29 @@ const VOLLEDIGE_META: Record<string, unknown> = {
   niet_vastgesteld: { documenten: 1, chunks: 4, meegenomen: false },
   verduidelijking: false,
   geen_modelcall: false,
-  invoer: { beurten: 3, tekens: 240, historie_hash: "abc123" },
+  invoer: {
+    beurten: 3,
+    tekens: 240,
+    historie_hash: "abc123",
+    // Plateau 1 — `geen_generatiecall` staat als subsleutel van `invoer` (basis),
+    // niet op top-niveau: migratievrij zichtbaar via de bestaande SQL-projectie.
+    geen_generatiecall: true,
+    // Plateau 1 — contextresolver: telemetrie (basis) + verwijderbare kandidaatvraag (inhoud).
+    context: {
+      modus: "enforce",
+      relatie: "vervolg",
+      vertrouwen: "hoog",
+      historie_gebruikt: true,
+      resolvermethode: "model",
+      afgedwongen: true,
+      model: "claude-sonnet-4-6",
+      duur_ms: 120,
+      tokens_in: 200,
+      tokens_out: 40,
+      timeout: false,
+    },
+    context_kandidaat_vraag: "Breng het wettelijke kader van de solidariteitsreserve in kaart",
+  },
   context_geneutraliseerd: 0,
   terugval: { termen: ["dekkingsgraad"], query: "dekkingsgraad | abtn", versie: "v1" },
   duur_ms: 4200,
@@ -325,9 +347,47 @@ test("gemengde objecten worden per subsleutel gesplitst", () => {
   assert.deepEqual(scopeInhoud, { titels: ["ABTN 2026"] });
   assert.equal(scopeSpoor.strategie, "targeted");
 
-  // invoer: tellingen blijven, de historie-vingerafdruk vertrekt
-  assert.deepEqual(spoor.invoer, { beurten: 3, tekens: 240 });
-  assert.deepEqual(inhoud.invoer, { historie_hash: "abc123" });
+  // invoer: tellingen + contexttelemetrie blijven, de historie-vingerafdruk en
+  // de kandidaatvraag (letterlijke tekst) vertrekken naar het verwijderbare deel
+  assert.deepEqual(spoor.invoer, {
+    beurten: 3,
+    tekens: 240,
+    // geen_generatiecall blijft op basisniveau (subsleutel van invoer, geen inhoud)
+    geen_generatiecall: true,
+    context: {
+      modus: "enforce",
+      relatie: "vervolg",
+      vertrouwen: "hoog",
+      historie_gebruikt: true,
+      resolvermethode: "model",
+      afgedwongen: true,
+      model: "claude-sonnet-4-6",
+      duur_ms: 120,
+      tokens_in: 200,
+      tokens_out: 40,
+      timeout: false,
+    },
+  });
+  assert.deepEqual(inhoud.invoer, {
+    historie_hash: "abc123",
+    context_kandidaat_vraag: "Breng het wettelijke kader van de solidariteitsreserve in kaart",
+  });
+});
+
+test("Plateau 1 — geen_generatiecall staat UITSLUITEND onder invoer (migratievrij)", () => {
+  // Onder invoer met alléén basis-subsleutels: geen_generatiecall blijft in het
+  // spoor en er ontstaat geen invoer-inhoud.
+  const { spoor, inhoud } = splitsRetrievalMeta({
+    methode: "geen",
+    invoer: { beurten: 1, tekens: 10, geen_generatiecall: true },
+  } as unknown as Parameters<typeof splitsRetrievalMeta>[0]);
+  assert.equal((spoor.invoer as Record<string, unknown>).geen_generatiecall, true);
+  assert.equal("invoer" in inhoud, false, "geen inhoud-subsleutels → invoer niet in inhoud");
+
+  // Top-level is GEEN geldige plek meer: fail-closed als onbekend (test 1 zou falen).
+  const top = splitsRetrievalMeta({ methode: "geen", geen_generatiecall: true });
+  assert.deepEqual(top.onbekend, ["geen_generatiecall"]);
+  assert.equal("geen_generatiecall" in top.spoor, false);
 });
 
 test("besluit 0151 — module_scope: sleutels naar bron, status/telemetrie op basis", () => {

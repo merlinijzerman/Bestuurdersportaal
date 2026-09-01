@@ -984,6 +984,36 @@ export interface RetrievalMeta {
     beurten: number;
     tekens: number;
     historie_hash: string;
+    // Plateau 1 — contextresolver-telemetrie (basis) en de door de resolver
+    // voorgestelde kandidaatvraag (verwijderbare inhoud; zie audit-meta.ts
+    // SUB_NIVEAUS.invoer). De effectieve zoekvraag zelf staat in `zoekvraag`.
+    context?: {
+      modus: "off" | "observe" | "enforce";
+      relatie: "eerste_beurt" | "vervolg" | "nieuw_onderwerp" | "onduidelijk";
+      vertrouwen: "hoog" | "middel" | "laag";
+      historie_gebruikt: boolean;
+      resolvermethode:
+        | "geen_historie"
+        | "overgeslagen"
+        | "model"
+        | "model_laag_vertrouwen"
+        | "fallback";
+      afgedwongen: boolean;
+      model_aangeroepen: boolean;
+      fallback_reden?: string;
+      model?: string;
+      duur_ms?: number;
+      tokens_in?: number;
+      tokens_out?: number;
+      timeout?: boolean;
+    };
+    context_kandidaat_vraag?: string;
+    // Plateau 1 — geen ANTWOORD-generatiecall (deterministische verduidelijkings-/
+    // vergelijkingsreturn), terwijl er wél een contextresolver-providercall kan zijn
+    // geweest. Onderscheiden van top-level `geen_modelcall` (= geen enkele
+    // providercall). Bewust onder `invoer` zodat het migratievrij op basisniveau
+    // blijft (geen wijziging aan de SQL-projecties).
+    geen_generatiecall?: boolean;
   };
   // H-10 (review 2026-07-30) — hoeveel bronlabel-achtige patronen zijn
   // geneutraliseerd in de chunktekst vóórdat die de prompt in ging. >0 betekent

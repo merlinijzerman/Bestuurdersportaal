@@ -16,6 +16,15 @@ import { effectieveStatus, isActief as isReflectieActief, isReflectieIngang, typ
 import { valideerVerdiepingsvraag, standaardVraag, tegenperspectiefVraag } from "@/core/lib/reflectie-richtingen";
 import { bepaalBronset } from "@/core/lib/bronset";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
+// Plateau 1 — vroege contextresolutie: leidt één zelfstandige `effectieveVraag`
+// af die de normale-informatie-downstream stuurt (bronintentie, router,
+// antwoordmodus, retrieval, webprofiel, prompt). Zie AI-CHATCONTEXT-ONTWERP.md.
+import {
+  resolveVraagContext,
+  chatcontextModus,
+  contextTelemetrie,
+  type VraagContext,
+} from "@/core/lib/vraag-context";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { valideerChatInvoer } from "@/core/lib/chat-invoer";
 import { rateLimited, badRequest } from "@/core/lib/api-errors";
@@ -154,6 +163,17 @@ const AANVULLEND_BUDGET = 5;
 // afkortingen verkeerd expanderen) vergiftigen álle downstream-resultaten. De
 // meerkosten zijn klein (één korte call), de hefboom op antwoordkwaliteit groot.
 const REWRITE_MODEL = "claude-sonnet-4-6";
+
+// Plateau 1 — harde timeout op de vroege contextresolver. De resolver blokkeert
+// de retrieval, dus een trage call mag de hele chat niet ophouden: bij overschrijding
+// breken we de call écht af (AbortController + signal, patroon map-stap) en vallen
+// we terug op de originele vraag.
+const CONTEXTRESOLVER_TIMEOUT_MS = 3500;
+// De AbortController is het HARDE budget (3500 ms). De SDK-timeout staat bewust
+// ruimer, zodat de signal-abort altijd als eerste vuurt en een overschrijding
+// betrouwbaar als `timeout` (aborted) wordt geregistreerd i.p.v. als providerfout —
+// géén race tussen twee timers op dezelfde deadline.
+const CONTEXTRESOLVER_SDK_TIMEOUT_MS = CONTEXTRESOLVER_TIMEOUT_MS + 2000;
 
 // ── Document-scope increment 2: dekkingsbrede strategieën ──────────────────
 // Drempel full-document vs. map-reduce, in geschatte tokens (≈ tekens/4). Onder
@@ -831,6 +851,118 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         );
     if (gevraagdeScopeIds.length > 0) scopeHerkomst = "geselecteerd_document";
 
+    // ── Plateau 1 — vroege contextresolutie ────────────────────────────────
+    // Leidt vóór de eerste contextgevoelige routering/detectie één zelfstandige
+    // `effectieveVraag` af uit de actuele vraag + de al meegestuurde historie.
+    // Plaats: ná de poorten (rate limit/fonds/host/module/preflight) en ná de
+    // agendapunt-seed, maar vóór documentnaam-detectie en bronintentie.
+    //
+    // Skip (geen modelcall) op de speciale paden met een eigen contract: die doen
+    // geen onderwerp-arme-vervolg-retrieval. Een enkel laat-bekend pad
+    // (server-status-reflectie, doorgronden zonder body-secties) kan de resolver
+    // tóch draaien, maar `effectieveVraag` wordt daar bewust NIET geconsumeerd —
+    // die takken houden de ruwe `vraag`/`vraagVoorPrompt`.
+    const contextModus = chatcontextModus();
+    const contextPriorBeurten = messages.slice(0, -1).map((b) => ({
+      role: b.role,
+      content: b.content,
+    }));
+    const contextSpeciaalPad =
+      reflectieVervolg ||
+      body.reflectie_antwoord === true ||
+      body.reflectie_herformuleren === true ||
+      !!body.reflectie_start ||
+      body.transformatie === true ||
+      !!body.stukvoorbereiding?.stuksoort ||
+      (body.doorgrond?.secties?.length ?? 0) > 0 ||
+      agendapuntModusActief ||
+      gevraagdeScopeIds.length > 0 ||
+      !!body.module_scope?.soort ||
+      volledigeAnalyseUitgevoerd;
+    const magContextResolveren =
+      contextPriorBeurten.length > 0 && !contextSpeciaalPad;
+
+    let vraagContext: VraagContext | null = null;
+    if (contextModus !== "off") {
+      vraagContext = await resolveVraagContext({
+        origineleVraag: vraag,
+        priorBeurten: contextPriorBeurten,
+        modus: contextModus,
+        magResolveren: magContextResolveren,
+        roepModelAan: async (systeem, gebruiker) => {
+          // Echte, afbreekbare timeout — patroon van de map-stap (AbortController
+          // + signal). Puur Promise.race zou de call laten dooretteren.
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), CONTEXTRESOLVER_TIMEOUT_MS);
+          const start = Date.now();
+          // Expliciete runtimewaarde: pas true zodra de PROVIDERCALL echt start.
+          // Een poortweigering (bewaakteAnthropic) draait de callback niet en telt
+          // dus NIET als modelcall; een timeout ná start telt wél.
+          let providercallGestart = false;
+          try {
+            const resp = await bewaakteAnthropic(aiPoort, REWRITE_MODEL, (client) => {
+              providercallGestart = true;
+              return client.messages.create(
+                {
+                  model: REWRITE_MODEL,
+                  max_tokens: 220,
+                  temperature: 0,
+                  system: systeem,
+                  messages: [{ role: "user", content: gebruiker }],
+                },
+                { timeout: CONTEXTRESOLVER_SDK_TIMEOUT_MS, signal: ctrl.signal }
+              );
+            });
+            const tekst =
+              resp.content[0]?.type === "text" ? resp.content[0].text : "";
+            return {
+              tekst,
+              meting: {
+                model: REWRITE_MODEL,
+                duurMs: Date.now() - start,
+                tokensIn: resp.usage?.input_tokens ?? 0,
+                tokensOut: resp.usage?.output_tokens ?? 0,
+                timeout: false,
+                modelAangeroepen: true,
+              },
+            };
+          } catch {
+            // Nooit throwen: de resolver beslist de fallback op basis van de meting.
+            // Drie onderscheidbare gevallen, expliciet (niet uit lege tekst afgeleid):
+            //   aborted            → timeout ná callstart;
+            //   call gestart, fout → providerfout;
+            //   niet gestart       → poortweigering (geen modelcall).
+            const aborted = ctrl.signal.aborted;
+            return {
+              tekst: "",
+              meting: {
+                model: REWRITE_MODEL,
+                duurMs: Date.now() - start,
+                tokensIn: 0,
+                tokensOut: 0,
+                timeout: aborted,
+                modelAangeroepen: providercallGestart,
+                ...(!aborted && providercallGestart
+                  ? { foutreden: "providerfout" as const }
+                  : {}),
+              },
+            };
+          } finally {
+            clearTimeout(timer);
+          }
+        },
+      });
+    }
+    // Downstream-vraag: alleen in enforce stuurt de effectieve vraag de keten.
+    // In off én observe sturen de downstream-callsites op de ruwe vraag. Verschil:
+    // `off` is byte-identiek aan het huidige gedrag (geen resolver); `observe` is
+    // gedragsmatig NIET-afdwingend — dezelfde downstream-beslissingen en antwoord-
+    // inhoud, maar mét een resolver-modelcall, extra latency/kosten en auditmetadata.
+    const effectieveVraag =
+      contextModus === "enforce" && vraagContext
+        ? vraagContext.effectieveVraag
+        : vraag;
+
     // M3 — een letterlijk genoemd document mag alleen automatisch scope worden
     // als precies één actief/geïndexeerd/toegankelijk document onder RLS past.
     // Bij meerdere kandidaten vragen we gericht te kiezen; nooit gokken.
@@ -869,7 +1001,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         if (vanaf + titelPagina >= titelCap) titelsetCompleet = false;
       }
       const naamResultaat = resolveerGenoemdDocument(
-        vraag,
+        effectieveVraag,
         titelsetCompleet ? benoembareRijen : []
       );
       if (naamResultaat.status === "meerdere") {
@@ -1299,7 +1431,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // geen nieuwe ankerloze vraag. Zet de intentie op "zeker" zodat de
           // verduidelijkingsvraag niet vuurt; fondsgericht (nooit stil algemeen).
           { intent: "fonds", vertrouwen: "zeker" }
-        : bepaalBronIntent(vraag);
+        : bepaalBronIntent(effectieveVraag);
     const bronIntent: BronIntent | undefined = bronIntentResultaat?.intent;
 
     // Expliciete verbreding (chip "Neem niet-vastgestelde stukken mee"). Staat
@@ -1479,7 +1611,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         : alleenFondsdocumenten
         ? "fondscollectie"
         : "fonds_plus_algemeen_kader";
-      const basisRoute = routeerVraag(vraag, {
+      const basisRoute = routeerVraag(effectieveVraag, {
         scope: routeScope,
         // Alleen strict/named document-scope ontsluit volledige dekking. Een
         // agendapunt of fondscollectie wordt niet stil volledig gemap-reduced.
@@ -1514,7 +1646,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         };
       } else {
         const verfijnd = await verfijnVraagrouteMetModel({
-          vraag,
+          vraag: effectieveVraag,
           basis: basisRoute,
           documentAantal: scopeActief ? scopeDocumentIds?.length ?? 0 : 0,
           actief: vraagrouterVlaggen.modelrouter,
@@ -1618,7 +1750,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // niets en de chat verloopt exact als voorheen (terugdraaibaarheid). fondsId is
     // hier al server-side afgeleid en non-null (guard hierboven).
     const vergelijkIntent = vergelijkmodusAan()
-      ? bepaalVergelijkIntent(vraag)
+      ? bepaalVergelijkIntent(effectieveVraag)
       : { isVergelijk: false, bronHint: null, doelHint: null, vertrouwen: "onzeker" as const };
     if (vergelijkIntent.isVergelijk) {
       const streamHeaders = {
@@ -1666,34 +1798,107 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             `Vergelijking ${koppeling.bron.titel} ↔ ${koppeling.doel.titel}: ` +
             `${resultaat.findings.length} bevinding(en) over ${resultaat.dimensies.length} dimensie(s).`;
           const zegel = bouwInhoudZegel(vraag, samenvatting);
-          await supabase.rpc("schrijf_ai_interactie", {
-            p_vraag: vraag,
-            p_antwoord: samenvatting,
-            p_bronnen: [],
-            p_modus: "documenten",
-            p_model: VERGELIJK_MODEL,
-            p_retrieval_meta: {
-              vergelijkmodus: true,
-              comparison_run_id: resultaat.comparison_run_id,
-              bron_document_id: koppeling.bron.id,
-              doel_document_id: koppeling.doel.id,
-              aantal_findings: resultaat.findings.length,
-              dimensies: resultaat.dimensies.map((d) => d.key),
-            },
-            p_retrieval_meta_inhoud: {},
-            p_gesprek_audit_id: gesprekAuditId,
-            p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
-            p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
-            p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
-          });
+          const { data: vergelijkLogId, error: logFout } = await supabase.rpc(
+            "schrijf_ai_interactie",
+            {
+              p_vraag: vraag,
+              p_antwoord: samenvatting,
+              p_bronnen: [],
+              p_modus: "documenten",
+              p_model: VERGELIJK_MODEL,
+              p_retrieval_meta: {
+                vergelijkmodus: true,
+                comparison_run_id: resultaat.comparison_run_id,
+                bron_document_id: koppeling.bron.id,
+                doel_document_id: koppeling.doel.id,
+                aantal_findings: resultaat.findings.length,
+                dimensies: resultaat.dimensies.map((d) => d.key),
+                // Plateau 1 — een contextresolver-call kan vóór deze vroege return
+                // hebben gedraaid; leg de telemetrie vast zodat hij niet stil buiten
+                // het auditspoor valt.
+                ...(vraagContext
+                  ? { invoer: { context: contextTelemetrie(vraagContext, contextModus) } }
+                  : {}),
+              },
+              p_retrieval_meta_inhoud:
+                vraagContext && vraagContext.kandidaatVraag.trim() !== vraag.trim()
+                  ? { invoer: { context_kandidaat_vraag: vraagContext.kandidaatVraag } }
+                  : {},
+              p_gesprek_audit_id: gesprekAuditId,
+              p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
+              p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
+              p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
+            }
+          );
+          if (logFout) throw logFout;
+          // AI-begrenzing (besluit 0180): sluit de gereserveerde AI-actie op deze
+          // vroege return (een vergelijkingsmodel én mogelijk de resolver draaiden).
+          await rondAf(
+            supabase,
+            aiActieId,
+            "voltooid",
+            vergelijkLogId ? `governance_log:${vergelijkLogId}` : null
+          );
         } catch (e) {
           console.error("Governance-log voor vergelijking mislukt:", e);
+          await rondAf(supabase, aiActieId, "mislukt", null);
         }
 
         return new Response(stuurStream({ type: "vergelijking", resultaat }), { headers: streamHeaders });
       }
 
       // Niet eenduidig → gerichte verduidelijking met de kandidaten (nooit gokken).
+      // Ook dit is een AI-interactie: leg een governance-logregel vast (incl. een
+      // eventuele resolver-providercall) en sluit de AI-actie af — nooit pending.
+      const vergelijkVerduidelijkingResolverModel = vraagContext?.modelAangeroepen ?? false;
+      try {
+        const vvSamenvatting =
+          `Vergelijkingsverduidelijking: bron «${vergelijkIntent.bronHint ?? "?"}» ↔ ` +
+          `doel «${vergelijkIntent.doelHint ?? "?"}» — meerdere kandidaten, gericht nagevraagd.`;
+        const vvZegel = bouwInhoudZegel(vraag, vvSamenvatting);
+        const { data: vvLogId, error: vvLogFout } = await supabase.rpc(
+          "schrijf_ai_interactie",
+          {
+            p_vraag: vraag,
+            p_antwoord: vvSamenvatting,
+            p_bronnen: [],
+            p_modus: "documenten",
+            p_model: vergelijkVerduidelijkingResolverModel ? REWRITE_MODEL : null,
+            p_retrieval_meta: {
+              vergelijkmodus: true,
+              verduidelijking: true,
+              // Geen ANTWOORD-generatie; wél mogelijk een resolver-providercall.
+              // `geen_generatiecall` onder `invoer` (basis, migratievrij).
+              geen_modelcall: !vergelijkVerduidelijkingResolverModel,
+              invoer: {
+                geen_generatiecall: true,
+                ...(vraagContext
+                  ? { context: contextTelemetrie(vraagContext, contextModus) }
+                  : {}),
+              },
+            },
+            p_retrieval_meta_inhoud:
+              vraagContext && vraagContext.kandidaatVraag.trim() !== vraag.trim()
+                ? { invoer: { context_kandidaat_vraag: vraagContext.kandidaatVraag } }
+                : {},
+            p_gesprek_audit_id: gesprekAuditId,
+            p_inhoud_hmac: vvZegel?.inhoud_hmac ?? null,
+            p_hmac_schema_versie: vvZegel?.hmac_schema_versie ?? null,
+            p_hmac_sleutel_versie: vvZegel?.hmac_sleutel_versie ?? null,
+          }
+        );
+        if (vvLogFout) throw vvLogFout;
+        await rondAf(
+          supabase,
+          aiActieId,
+          "voltooid",
+          vvLogId ? `governance_log:${vvLogId}` : null
+        );
+      } catch (e) {
+        console.error("Governance-log voor vergelijking_verduidelijking mislukt:", e);
+        await rondAf(supabase, aiActieId, "mislukt", null);
+      }
+
       return new Response(
         stuurStream({
           type: "vergelijking_verduidelijking",
@@ -1714,36 +1919,71 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // probleem waar core/lib/audit-fonds-guard.ts tegen beschermde
         // structureel weg in plaats van per aanroeppunt bewaakt.
         const zegel = bouwInhoudZegel(vraag, VERDUIDELIJKINGSVRAAG);
-        const { error: logFout } = await supabase.rpc("schrijf_ai_interactie", {
-          p_vraag: vraag,
-          p_antwoord: VERDUIDELIJKINGSVRAAG,
-          p_bronnen: [],
-          // `modus` kent een CHECK op documenten|combineren|algemeen; we leggen de
-          // modus vast waar de vraag naartoe onderweg was (combineren-vloer, of
-          // documenten bij een expliciete fondsrestrictie) — niet een verzonnen waarde.
-          p_modus: bepaalAutoBronModus(alleenFondsdocumenten),
-          p_model: null,
-          p_retrieval_meta: {
-            // Markeert de regel als een TERUGVRAAG, geen antwoord. Zo is in het log
-            // te onderscheiden en te meten hoe vaak de assistent doorvraagt.
-            verduidelijking: true,
-            geen_modelcall: true,
-            bron_intent: bronIntentResultaat.intent,
-            bron_vertrouwen: bronIntentResultaat.vertrouwen,
-            alleen_fondsdocumenten: alleenFondsdocumenten,
-          },
-          // Deze tak kent geen retrieval, dus ook geen inhoudsdragende meta.
-          p_retrieval_meta_inhoud: {},
-          p_gesprek_audit_id: gesprekAuditId,
-          p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
-          p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
-          p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
-        });
+        // Plateau 1 — modelcall-semantiek. Deze tak doet geen ANTWOORD-generatie,
+        // maar de contextresolver kan wél een providercall hebben gestart. Dan is
+        // `geen_modelcall` false en registreren we REWRITE_MODEL als gebruikt model;
+        // `geen_generatiecall` legt afzonderlijk vast dat er geen generatie was.
+        const resolverModelGebruikt = vraagContext?.modelAangeroepen ?? false;
+        const { data: verduidelijkingLogId, error: logFout } = await supabase.rpc(
+          "schrijf_ai_interactie",
+          {
+            p_vraag: vraag,
+            p_antwoord: VERDUIDELIJKINGSVRAAG,
+            p_bronnen: [],
+            // `modus` kent een CHECK op documenten|combineren|algemeen; we leggen de
+            // modus vast waar de vraag naartoe onderweg was (combineren-vloer, of
+            // documenten bij een expliciete fondsrestrictie) — niet een verzonnen waarde.
+            p_modus: bepaalAutoBronModus(alleenFondsdocumenten),
+            // Registreer het door de resolver gebruikte model waar het auditcontract
+            // een modelveld verwacht; null als er geen enkele providercall was.
+            p_model: resolverModelGebruikt ? REWRITE_MODEL : null,
+            p_retrieval_meta: {
+              // Markeert de regel als een TERUGVRAAG, geen antwoord. Zo is in het log
+              // te onderscheiden en te meten hoe vaak de assistent doorvraagt.
+              verduidelijking: true,
+              // `geen_modelcall` = geen ENKELE providercall in deze interactie. Draaide
+              // de resolver wél een call, dan is dat false (semantiek besluit 0092
+              // ongewijzigd). `geen_generatiecall` staat onder `invoer` (basis,
+              // migratievrij) en markeert de deterministische, generatie-loze return —
+              // ook als er geen resolver draaide.
+              geen_modelcall: !resolverModelGebruikt,
+              bron_intent: bronIntentResultaat.intent,
+              bron_vertrouwen: bronIntentResultaat.vertrouwen,
+              alleen_fondsdocumenten: alleenFondsdocumenten,
+              invoer: {
+                geen_generatiecall: true,
+                ...(vraagContext
+                  ? { context: contextTelemetrie(vraagContext, contextModus) }
+                  : {}),
+              },
+            },
+            // Deze tak kent geen retrieval; alleen de eventuele resolver-kandidaatvraag
+            // is inhoud (verwijderbaar).
+            p_retrieval_meta_inhoud:
+              vraagContext && vraagContext.kandidaatVraag.trim() !== vraag.trim()
+                ? { invoer: { context_kandidaat_vraag: vraagContext.kandidaatVraag } }
+                : {},
+            p_gesprek_audit_id: gesprekAuditId,
+            p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
+            p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
+            p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
+          }
+        );
         if (logFout) throw logFout;
+        // AI-begrenzing (besluit 0180): sluit de gereserveerde AI-actie óók op deze
+        // vroege return, zodat een resolver-providercall geen actie in `pending` laat.
+        await rondAf(
+          supabase,
+          aiActieId,
+          "voltooid",
+          verduidelijkingLogId ? `governance_log:${verduidelijkingLogId}` : null
+        );
       } catch (e) {
         // Fail-safe: een mislukte logregel mag de terugvraag niet blokkeren. Wel
-        // zichtbaar in de serverlog, zodat een structureel probleem opvalt.
+        // zichtbaar in de serverlog. De AI-actie mag echter niet in pending blijven:
+        // sluit haar expliciet af als 'mislukt' (rondAf is een no-op bij null-id).
         console.error("Governance-log voor verduidelijking mislukt:", e);
+        await rondAf(supabase, aiActieId, "mislukt", null);
       }
 
       const encoder = new TextEncoder();
@@ -1811,7 +2051,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     let breedOphaalresultaat: DocumentChunkOphaalresultaat | null = null;
     let documentDekking: DocumentDekking = gerichteDekking(0);
     let totaalPassagesVoorAanbod: number | null = null;
-    const analyseCriteria = vraagRoute ? bouwAnalyseplan(vraagRoute, vraag) : [];
+    const analyseCriteria = vraagRoute ? bouwAnalyseplan(vraagRoute, effectieveVraag) : [];
     const analyseplanTekst = formatteerAnalyseplan(analyseCriteria);
     const analyseplanMeta: RetrievalMeta["analyseplan"] | undefined =
       analyseCriteria.length > 0
@@ -1832,7 +2072,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // korte zichtbare zin geen breed-signaalwoord bevat (bv. alleen "Afwijkingen").
       const vraagtBredeDekking = vraagRoute
         ? vraagRoute.dekking !== "targeted"
-        : bepaalVraagtype(vraag) === "breed";
+        : bepaalVraagtype(effectieveVraag) === "breed";
       if (vraagtBredeDekking || doorgrondActief) {
         // T4 — geef de server-side fonds mee: dit dekkingsbrede pad loopt niet via
         // de RPC (met p_fonds_id), dus de app-guard in haalDocumentChunks is hier de
@@ -1901,7 +2141,21 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const doorgrondInstructie = doorgrondActief
       ? bouwDoorgrondInstructie(doorgrondSecties, doorgrondVorigeTitel)
       : null;
-    const vraagVoorPrompt = doorgrondInstructie ?? vraag;
+    // Plateau 1: op de niet-doorgrond-paden stuurt de effectieve vraag ook de
+    // reduce-/map-prompt. Doorgronden (scope) houdt zijn samengestelde instructie
+    // en draait sowieso met effectief == origineel (resolver overgeslagen).
+    const vraagVoorPrompt = doorgrondInstructie ?? effectieveVraag;
+
+    // Plateau 1 — dubbele prompt-framing voor de normale enkelvoudige antwoord-
+    // takken: geef het model ZOWEL de originele formulering (toon/bedoeling van de
+    // bestuurder) ALS de zelfstandige interpretatie die de bronselectie stuurde.
+    // Alleen wanneer ze verschillen (enforce + echte vervolgvraag); anders exact de
+    // bestaande `VRAAG: …`-regel, zodat de prompt in off (byte-identiek) én observe
+    // (niet-afdwingend) ongewijzigd blijft; alleen enforce framet dubbel.
+    const vraagBlok =
+      effectieveVraag.trim() !== vraag.trim()
+        ? `ORIGINELE VRAAG VAN DE GEBRUIKER: ${vraag}\nZELFSTANDIGE INTERPRETATIE VOOR CONTEXT EN BRONSELECTIE: ${effectieveVraag}`
+        : `VRAAG: ${vraag}`;
 
     // ── Antwoordmodusfamilie (Increment G) ──────────────────────────────────
     // Orthogonaal op de bron-modus. Vastgezet (gesprekken.actieve_antwoordmodus)
@@ -1921,7 +2175,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const vastgezetteModus: Antwoordmodus | null = body.actieve_antwoordmodus ?? null;
     const gedetecteerdeModus: Antwoordmodus = reflectieActief
       ? "sparring"
-      : bepaalAntwoordmodus(vraag);
+      : bepaalAntwoordmodus(effectieveVraag);
     const antwoordmodus: Antwoordmodus = reflectieActief
       ? "sparring"
       : vastgezetteModus ?? gedetecteerdeModus;
@@ -1958,9 +2212,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const bibliotheekFilters: RetrievalFilters = {
       modus: neemNietVastgesteldeMee
         ? "alles"
-        : retrievalModusVoorVraag(antwoordmodus, vraag),
+        : retrievalModusVoorVraag(antwoordmodus, effectieveVraag),
       peildatum: vandaag,
-      bronsoortprofiel: bepaalBronsoortprofiel(vraag),
+      bronsoortprofiel: bepaalBronsoortprofiel(effectieveVraag),
       // T4 — regime-demotie op basis van het geldende fondsregime.
       primairRegime: fondsRegime,
     };
@@ -2055,7 +2309,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       let zoekVraag = vraag;
       let gereformuleerd = false;
 
-      if (heeftReformulatieNodig(vraag, priorBeurten.length > 0)) {
+      if (contextModus === "enforce" && vraagContext) {
+        // Plateau 1 (enforce): de vroege contextresolver leverde al één
+        // zelfstandige `effectieveVraag`. Die IS de zoekvraag — de losse Fase-B1-
+        // reformulatie hieronder is daarmee gesubsumeerd (geen tweede modelcall,
+        // geen tweede concurrerende vraagrepresentatie). De additieve fusie met de
+        // originele vraag blijft (zie retrievalOpties, besluit 0139 M-R3).
+        if (effectieveVraag.trim() !== vraag.trim()) {
+          zoekVraag = effectieveVraag.trim();
+          gereformuleerd = true;
+        }
+      } else if (heeftReformulatieNodig(vraag, priorBeurten.length > 0)) {
+        // off/observe: ongewijzigd gedrag — de bestaande history-aware
+        // reformulatie (Fase B1) stuurt uitsluitend de zoekvraag.
         // Voortgang (besluit 0087): de reformulatie draait op het STERKE model en
         // is meestal het grootste stille-tijd-blok. Melden vóór en na de call.
         send({ type: "progress", fase: "reformulatie", status: "bezig", label: VOORTGANG_LABEL.reformulatie });
@@ -2374,7 +2640,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // dan gaat de persoonlijke portaalstand + het generieke fondsbrede modulesBlok
       // niet óók mee (kosten/ruis, en de scope is bewust specifiek).
       !moduleScopeActief &&
-      heeftPortaalstandNodig(vraag);
+      heeftPortaalstandNodig(effectieveVraag);
     if (portaalstandNodig) {
       const stand = await getPortaalContext({
         userId: ctx.gebruikerId,
@@ -2599,7 +2865,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       }
     } else if (promptModus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus, null, false, opstelTaak);
-      gebruikersPrompt = `${portaalContextPrefix}VRAAG: ${vraag}`;
+      gebruikersPrompt = `${portaalContextPrefix}${vraagBlok}`;
     } else if (promptModus === "combineren") {
       // Bij nul interne treffers valt het antwoord terug op algemene kennis. Gebruik
       // dan ook de algemene-kennis-regels (die [Bron N] verbieden) i.p.v. de
@@ -2615,8 +2881,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       );
       gebruikersPrompt =
         chunks.length > 0
-          ? `${portaalContextPrefix}BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
-          : `${portaalContextPrefix}Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\nVRAAG: ${vraag}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
+          ? `${portaalContextPrefix}BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\n${vraagBlok}`
+          : `${portaalContextPrefix}Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\n${vraagBlok}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
     } else {
       // documenten (strikte modus)
       systeemBlokken = bouwSysteemBlokken(
@@ -2629,8 +2895,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       );
       gebruikersPrompt =
         chunks.length > 0
-          ? `${portaalContextPrefix}BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
-          : `${portaalContextPrefix}Er zijn geen relevante documenten gevonden voor deze vraag.\n\nVRAAG: ${vraag}\n\nGeef aan dat er geen relevante bronnen zijn gevonden en stel voor welk type document zou kunnen helpen.`;
+          ? `${portaalContextPrefix}BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\n${vraagBlok}`
+          : `${portaalContextPrefix}Er zijn geen relevante documenten gevonden voor deze vraag.\n\n${vraagBlok}\n\nGeef aan dat er geen relevante bronnen zijn gevonden en stel voor welk type document zou kunnen helpen.`;
     }
 
     // Bij een actieve scope is het gedrag strict-document, ongeacht de gekozen
@@ -2711,7 +2977,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       !neemNietVastgesteldeMee &&
       retrievalFilters?.modus === "actueel"
     ) {
-      const telling = await telNietActueleFondstreffers(vraag, fondsId, vandaag);
+      const telling = await telNietActueleFondstreffers(effectieveVraag, fondsId, vandaag);
       if (telling.documenten > 0) nietVastgesteld = telling;
     }
 
@@ -2762,7 +3028,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // gelezen als de vlag aan staat (Scenario B doet géén extra query). fondsId is
     // server-side afgeleid; de PII-gate blokkeert de uitgaande zoekvraag bij
     // persoons-/fondsgegevens (AVG). Alles hierna is no-op bij WEB_RETRIEVAL_ACTIEF=false.
-    const webBronsoortprofiel = bepaalBronsoortprofiel(vraag);
+    const webBronsoortprofiel = bepaalBronsoortprofiel(effectieveVraag);
     // T4/G2 — live deskresearch is een expliciete bestuursbureau-capability.
     // De client kan deze poort niet beïnvloeden: de rol komt uit het onder RLS
     // geladen profiel. Zonder capability lezen we zelfs de whitelist niet en
@@ -2775,7 +3041,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       WEB_RETRIEVAL_ACTIEF && deskresearchCapability && !scopeActief
         ? await haalActieveWhitelist(supabase)
         : [];
-    const piiUitkomst = bevatPersoonsgegevens(vraag, [fondsnaam]);
+    // Plateau 1 (§4.3) — fail-closed op BEIDE vraagvormen: als de originele óf de
+    // effectieve vraag persoonsgegevens bevat, wordt live web-retrieval geblokkeerd.
+    // Een contextresolutie mag een persoonsgegeven uit de originele vraag nooit
+    // wegpoetsen. In off/observe is `effectieveVraag === vraag`, dus dit is daar een
+    // no-op; alleen in enforce voegt het de effectieve vraag als tweede controle toe.
+    const piiOrigineel = bevatPersoonsgegevens(vraag, [fondsnaam]);
+    const piiEffectief = bevatPersoonsgegevens(effectieveVraag, [fondsnaam]);
+    const piiUitkomst = {
+      bevatPii: piiOrigineel.bevatPii || piiEffectief.bevatPii,
+      soorten: Array.from(new Set([...piiOrigineel.soorten, ...piiEffectief.soorten])),
+    };
     const webGate = beoordeelWebGate({
       vlagAan: WEB_RETRIEVAL_ACTIEF && deskresearchCapability,
       aantalActieveEntries: whitelistEntries.length,
@@ -2994,7 +3270,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                         messages: [
                           {
                             role: "user",
-                            content: `VRAAG: ${vraag}\n\n${
+                            content: `VRAAG: ${effectieveVraag}\n\n${
                               analyseplanTekst ? `${analyseplanTekst}\n\n` : ""
                             }DOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
                           },
@@ -3423,6 +3699,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               beurten: messages.length,
               tekens: invoer.tekens,
               historie_hash: invoer.historieHash,
+              // Plateau 1 — contextresolver. `context` is telemetrie (basis:
+              // modus/relatie/vertrouwen/methode/meetmetadata, geen vraagtekst).
+              // `context_kandidaat_vraag` is de door de resolver voorgestelde vraag
+              // en is verwijderbare inhoud (audit-meta SUB_NIVEAUS.invoer). In
+              // observe blijft dit zichtbaar zonder dat het downstream iets stuurt;
+              // de effectieve zoekvraag zelf staat (in enforce) al in `zoekvraag`.
+              ...(vraagContext
+                ? { context: contextTelemetrie(vraagContext, contextModus) }
+                : {}),
+              ...(vraagContext &&
+              vraagContext.kandidaatVraag.trim() !== vraag.trim()
+                ? { context_kandidaat_vraag: vraagContext.kandidaatVraag }
+                : {}),
             },
             ...(contextGeneutraliseerd > 0
               ? { context_geneutraliseerd: contextGeneutraliseerd }
