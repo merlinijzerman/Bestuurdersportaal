@@ -29,6 +29,16 @@ de gate wordt de hash niet stilzwijgend aangepast: dit blijft een tweede
 stopconditie totdat een expliciete driftreview en nieuwe Preview-validatie groen
 zijn.
 
+Op 1 september 2026 is die drift expliciet gereviewd: de volledige
+catalogusmomentopname week uitsluitend af voor de reeds gevalideerde
+P5d-definitie van `fn_procedure_beeindigen`. PR #261 actualiseerde alleen de
+volledige driftmomentopname en de afgeleide fidelityhash. De PR, beide
+Vercel-deployments en alle gates waren groen; mergecommit
+`41720f126192afa1a91e613d1231ed8c680bebe4` is vervolgens opnieuw met de
+read-only fidelityworkflow getoetst. Run
+[`33477165971`](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33477165971)
+is volledig groen. De fidelity-stopconditie is daarmee gesloten.
+
 ## Preview-database
 
 Voor toepassing gaf de voorcontrole exact `63 / 0 / false`: 2.0.0 had 63
@@ -82,7 +92,8 @@ aanwezig.
 - Productie is in deze Preview-fase niet aangeraakt.
 - Beoogde productievolgorde zodra de vereiste EPIC-P-baseline aanwezig is:
   migratie 2.0.1 eerst, aantallen/publicatie controleren, daarna exact
-  Preview-head `d8821cf` naar `main`, vervolgens productie-smoke, gates en
+  de definitieve volledig groene Preview-head naar `main`, vervolgens
+  productie-smoke, gates en
   driftcontrole.
 
 ## Productievoorcontrole — stopuitkomst
@@ -111,9 +122,9 @@ Daarom kan `2026_08_31_zz_pf_wtp_invaarbesluit_201_approval.sql` niet veilig als
 losse productiemigratie worden toegepast: hij vereist de schema- en I7-basis van
 `2026_08_24_p1b_versievastheid.sql` en de daaropvolgende EPIC-P-reeks. De
 release blijft gestopt vóór iedere productiewijziging. Eerst moeten stappen
-2–33 uit het productiedraaiboek, inclusief hun metingen en tussenijkpunten, als
+2–34 uit het productiedraaiboek, inclusief hun metingen en tussenijkpunten, als
 één apart goedgekeurd productie-uitrolvenster worden voorbereid en uitgevoerd;
-pas daarna kan de expliciete go/no-go voor stap 34 worden gevraagd.
+pas daarna kan de expliciete go/no-go voor stap 35 worden gevraagd.
 
 Omdat de release vóór het uitrolvenster is gestopt, is nog geen nieuw
 productieherstelpunt gemaakt. Dat herstelpunt moet pas direct voor de later

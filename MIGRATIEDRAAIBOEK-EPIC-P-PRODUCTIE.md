@@ -33,9 +33,9 @@ Alleen doorgaan als elke regel aantoonbaar groen is en in het releaselog staat.
   omdat de drie bestaande dossiers aantoonbaar niet in gebruik zijn. Elke andere
   uitkomst is een stop: dan wordt niet uit versie 1.0.0 verwijderd maar volgt
   eerst een nieuw definitiebesluit.
-- [ ] De uitvoerder heeft de rollbackbestanden voor alle 32 SQL-stappen geopend
-  en een herstelpad is afgesproken. Voor de rollbackbare reeks betreft dit
-  stappen 2–32; stappen 33 en 34 hebben bewust geen database-rollback na commit.
+- [ ] De uitvoerder heeft de rollbackbestanden voor alle rollbackbare SQL-stappen
+  geopend en een herstelpad is afgesproken. Dit betreft stappen 2–32 en 34;
+  stappen 33 en 35 hebben bewust geen database-rollback na commit.
   Zie ook
   [`security/RUNBOOK-MIGRATIES.md`](./security/RUNBOOK-MIGRATIES.md).
 - [ ] Een herleidbaar productieherstelpad (backup/PITR) is bevestigd voor het
@@ -43,15 +43,17 @@ Alleen doorgaan als elke regel aantoonbaar groen is en in het releaselog staat.
   uitbreiding van deze release.
 - [ ] Het Preview-bewijs voor bevinding 2a/2b is volledig groen en vastgelegd in
   [`RELEASEBEWIJS-228-2A-2B-PREVIEW-2026-08-31.md`](./RELEASEBEWIJS-228-2A-2B-PREVIEW-2026-08-31.md).
-  De productiekandidaat is exact Preview-head `d8821cfd87a61ebc3c573f82d99b71d9c89aad54`;
-  neem geen latere commit mee zonder een nieuwe Preview-waarneming.
-- [ ] Vlak vóór stap 34 is de handmatige productiemigratie nogmaals expliciet
+  De applicatiecode is gevalideerd op `d8821cfd87a61ebc3c573f82d99b71d9c89aad54`.
+  Leg de uiteindelijke Preview-head inclusief uitsluitend gereviewde
+  baseline-/runbookcommits vlak voor de productie-PR exact vast; neem geen
+  latere commit mee zonder een nieuwe Preview-waarneming.
+- [ ] Vlak vóór stap 35 is de handmatige 2.0.1-productiemigratie nogmaals expliciet
   door de opdrachtgever goedgekeurd.
-- [ ] Productie staat aantoonbaar ná stap 33: `procedure_requirements` heeft
+- [ ] Productie staat aantoonbaar ná stap 34: `procedure_requirements` heeft
   `template_versie`, `procedure_definitie_publicatie` bestaat en de 2.0.0-set
-  telt exact 63 requirements. Ontbreekt één van deze voorwaarden, dan is stap 34
+  telt exact 63 requirements. Ontbreekt één van deze voorwaarden, dan is stap 35
   **geen zelfstandige migratie**: stop en voer eerst de volledige, gevalideerde
-  reeks 2–33 met alle tussenijkpunten uit.
+  reeks 2–34 met alle tussenijkpunten uit.
 
 ```sql
 select count(*) as gepinde_dossiers
@@ -97,7 +99,8 @@ select count(*) as gepinde_dossiers
 | 31 | `2026_08_30_p5a_02_actie_eigenaar_externe_houder.sql` | Externe houder: geen profiel, wel niet-lege naam. | Direct na 30. | `2026_08_30_p5a_02_actie_eigenaar_externe_houder_ROLLBACK.sql` |
 | 32 | `2026_08_30_p5c_procedure_stap_notitie.sql` | Gedeelde stap-aantekeningen met I5, RLS en statusneutraliteit. | DB vóór P5c-code. | `2026_08_30_p5c_procedure_stap_notitie_ROLLBACK.sql` |
 | 33 | `2026_08_31_contact_notificatie_status_herstel.sql` | Herstelt de begrensde publieke contactstatus-RPC die per abuis niet in de Preview-baseline zat: maximaal 1 uur, alleen nog niet gemarkeerde rij en fouttekst op 500 tekens. | DB vóór code; bestaande route blijft compatibel. | Geen veilige DB-rollback: behoud de reparatie en herstel zo nodig uitsluitend code/deploy. |
-| 34 | `2026_08_31_zz_pf_wtp_invaarbesluit_201_approval.sql` | Publiceert I7-conform `pf_wtp_invaarbesluit@2.0.1`: kopieert de bevroren 63 requirements van 2.0.0, voegt op stap 1 exact één approval toe en publiceert pas als laatste. | **DB vóór code.** Pas na de groene controlequery mag `preview` naar `main`. | Geen database-rollback na commit: het publicatieregister is append-only. Bij een deployprobleem code terug naar de vorige release; 2.0.1 blijft ongebruikt gepubliceerd. Bij iedere fout vóór commit rolt de transactie volledig terug en stopt de uitrol. |
+| 34 | `2026_08_31_p5d_procedure_beeindigen_bediening.sql` | Maakt beëindigen/heropenen auditinhoudelijk compleet: snapshot en herstel van stappen, open-vereistentelling en verplichte getypeerde heropenreden. | DB vóór P5d-code. | `2026_08_31_p5d_procedure_beeindigen_bediening_ROLLBACK.sql` |
+| 35 | `2026_08_31_zz_pf_wtp_invaarbesluit_201_approval.sql` | Publiceert I7-conform `pf_wtp_invaarbesluit@2.0.1`: kopieert de bevroren 63 requirements van 2.0.0, voegt op stap 1 exact één approval toe en publiceert pas als laatste. | **DB vóór code.** Pas na de groene controlequery mag `preview` naar `main`. | Geen database-rollback na commit: het publicatieregister is append-only. Bij een deployprobleem code terug naar de vorige release; 2.0.1 blijft ongebruikt gepubliceerd. Bij iedere fout vóór commit rolt de transactie volledig terug en stopt de uitrol. |
 
 ## Verplichte tussenijkpunten
 
@@ -124,9 +127,12 @@ select
 > tussen stap 19 en de code-deploy; rond de SQL-reeks eerst af. Dit venster moet
 > zo kort mogelijk zijn en valt binnen het afgesproken onderhoudsvenster.
 
-## Tussenijkpunt bevinding 2a/2b — direct na stap 34
+**Na stap 34:** de P5d-signaturen en browserrechten moeten exact kloppen; draai
+`supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql` vóór stap 35.
 
-Vóór stap 34 moet eerst de schemagate volledig `true` zijn. Deze query blijft ook
+## Tussenijkpunt bevinding 2a/2b — direct na stap 35
+
+Vóór stap 35 moet eerst de schemagate volledig `true` zijn. Deze query blijft ook
 veilig uitvoerbaar op een oudere productiebaseline.
 
 ```sql
@@ -160,7 +166,7 @@ from public.procedure_requirements
 where template_code = 'pf_wtp_invaarbesluit';
 ```
 
-Direct na stap 34 moet de volgende query exact `63 / 64 / 1 / true` opleveren.
+Direct na stap 35 moet de volgende query exact `63 / 64 / 1 / true` opleveren.
 Pas daarna mag de codepromotie beginnen.
 
 ```sql
@@ -183,7 +189,7 @@ from public.procedure_requirements
 where template_code = 'pf_wtp_invaarbesluit';
 ```
 
-**Stopactie voor stap 34.** Fout vóór `commit`: de transactie heeft niets
+**Stopactie voor stap 35.** Fout vóór `commit`: de transactie heeft niets
 gepubliceerd; noteer de letterlijke fout en stop. Fout ná een geslaagde commit:
 verwijder of wijzig 2.0.1 niet. Laat de vorige productiecode actief of herstel die
 deploy, en start geen nieuw 2.0.1-proces totdat een nieuwe codepromotie groen is.
@@ -202,6 +208,7 @@ deploy, en start geen nieuw 2.0.1-proces totdat een nieuwe codepromotie groen is
    - `supabase/checks/2026_08_29_p4_i5_composite_fk.sql`
    - `supabase/checks/2026_08_29_zz_0195_vervullingspad.sql`
    - `supabase/checks/2026_08_31_p2c_ongebonden_besluit.sql`
+   - `supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql`
    - `supabase/checks/2026_08_31_secdef_self_gate.sql`
 3. Doe op productie als bevoegde testrol: processtap afronden, besluit
    vastleggen, beëindigen en heropenen. Noteer deployment-id, rol, tijd en
