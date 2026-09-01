@@ -4,8 +4,7 @@ import StatusOvergangPaneel from "@/app/(dashboard)/procedures/_components/Statu
 import type {
   DecisionObject,
   DecisionStatus,
-  ReadinessOverview,
-  ReadinessTarget,
+  EvidenceItem,
 } from "@/core/lib/decision-view";
 import { verwachtGeenErnstigeAxeBevindingen } from "./axe";
 import { verwachtFetchEenmaal } from "./fetch-mock";
@@ -21,33 +20,25 @@ const decisionBasis = (status: DecisionStatus): DecisionObject =>
     risiconiveau: "laag",
   }) as DecisionObject;
 
-const readinessResultaat = (target: ReadinessTarget, voldoet = true) => ({
-  decision_id: "decision-1",
-  target,
-  voldoet,
-  blokkerend: !voldoet,
-  kan_overrulen: ["voorzitter"],
-  ontbrekend: voldoet
-    ? []
-    : [
-        {
-          requirement_type: "document" as const,
-          stap_volgorde: 1,
-          label: "Onderbouwing ontbreekt",
-          documenttype: "notitie",
-          blokkerend: true,
-        },
-      ],
-});
-
-const readiness = (reviewrijp = true): ReadinessOverview => ({
-  onderbouwing_compleet: readinessResultaat("onderbouwing_compleet"),
-  reviewrijp: readinessResultaat("reviewrijp", reviewrijp),
-  bespreekrijp: readinessResultaat("bespreekrijp"),
-  besluitrijp: readinessResultaat("besluitrijp"),
-  verantwoordingsrijp: readinessResultaat("verantwoordingsrijp"),
-  evaluatierijp: readinessResultaat("evaluatierijp"),
-});
+const openVereiste: EvidenceItem = {
+  requirement_type: "document",
+  stap_volgorde: 1,
+  label: "Onderbouwing ontbreekt",
+  toelichting: null,
+  documenttype: "notitie",
+  verplicht: true,
+  blokkerend: true,
+  vervuld: false,
+  bron_type: null,
+  bron_id: null,
+  bron_titel: null,
+  bron: "template",
+  instance_id: null,
+  besluitmoment_stap: 2,
+  gebonden_feiten: [],
+  min_aantal: 1,
+  dissent_open: 0,
+};
 
 describe("StatusOvergangPaneel", () => {
   it("voert een geldige overgang via het toetsenbord uit", async () => {
@@ -60,8 +51,8 @@ describe("StatusOvergangPaneel", () => {
     const { user, container } = renderMetProviders(
       <StatusOvergangPaneel
         decision={decisionBasis("concept")}
-        readiness={readiness()}
-        currentUserIsPrivileged={false}
+        evidence={[]}
+        besluitmomentStappen={[]}
       />,
     );
 
@@ -75,20 +66,34 @@ describe("StatusOvergangPaneel", () => {
     await verwachtGeenErnstigeAxeBevindingen(container);
   });
 
-  it("blokkeert een readiness-overgang voor een niet-bevoorrechte gebruiker", async () => {
+  it("vereist motivering bij een besluit met openstaande vereisten", async () => {
+    verwachtFetchEenmaal({
+      url: "/api/decisions/decision-1/status",
+      method: "POST",
+      controleerBody: (body) =>
+        expect(body).toEqual({
+          status: "besloten",
+          motivering: "Besluit kan nu; de onderbouwing volgt aantoonbaar na.",
+        }),
+    });
     const { user, container } = renderMetProviders(
       <StatusOvergangPaneel
-        decision={decisionBasis("in_validatie")}
-        readiness={readiness(false)}
-        currentUserIsPrivileged={false}
+        decision={decisionBasis("in_bespreking")}
+        evidence={[openVereiste]}
+        besluitmomentStappen={[2]}
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText("Volgende status"), "in_review");
+    await user.selectOptions(screen.getByLabelText("Volgende status"), "besloten");
 
-    expect(screen.getByText(/Alleen voorzitter of beheerder/)).toBeVisible();
+    expect(screen.getByText(/Openstaande vereisten voor dit besluitmoment/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Overgang doorvoeren" })).toBeDisabled();
-    expect(fetch).not.toHaveBeenCalled();
+    await user.type(
+      screen.getByLabelText("Motivering (verplicht — besluit met openstaande vereisten)"),
+      "Besluit kan nu; de onderbouwing volgt aantoonbaar na.",
+    );
+    await user.click(screen.getByRole("button", { name: "Overgang doorvoeren" }));
+    expect(fetch).toHaveBeenCalledOnce();
     await verwachtGeenErnstigeAxeBevindingen(container);
   });
 
@@ -102,17 +107,15 @@ describe("StatusOvergangPaneel", () => {
     const { user } = renderMetProviders(
       <StatusOvergangPaneel
         decision={decisionBasis("concept")}
-        readiness={readiness()}
-        currentUserIsPrivileged={false}
+        evidence={[]}
+        besluitmomentStappen={[]}
       />,
     );
 
     await user.selectOptions(screen.getByLabelText("Volgende status"), "in_onderbouwing");
     await user.click(screen.getByRole("button", { name: "Overgang doorvoeren" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Ongeldige overgang Ververs het dossier.",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ongeldige overgang");
   });
 
   it("blokkeert herhaald uitvoeren terwijl de route nog antwoordt", async () => {
@@ -122,8 +125,8 @@ describe("StatusOvergangPaneel", () => {
     const { user } = renderMetProviders(
       <StatusOvergangPaneel
         decision={decisionBasis("concept")}
-        readiness={readiness()}
-        currentUserIsPrivileged={false}
+        evidence={[]}
+        besluitmomentStappen={[]}
       />,
     );
 

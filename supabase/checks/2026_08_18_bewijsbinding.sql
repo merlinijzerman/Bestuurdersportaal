@@ -3,22 +3,17 @@
 -- ----------------------------------------------------------------------------
 -- Draai dit ná migraties 2026_08_18_bewijs_requirement_binding.sql en
 -- 2026_08_22_bewijs_requirement_binding_hardening.sql tegen de
--- doeldatabase. Toetst de gate (fn_decision_readiness_check) op exact dezelfde
--- fixture als de TS-sanity core/lib/decision.sanity.ts, zodat weergave en gate
--- aantoonbaar hetzelfde oordeel geven:
---
---   3 blokkerende document-vereisten op één stap, alle zónder documenttype
---   (zoals in de invaarseed v2) + 1 gebonden bewijsstuk
---     ⇒ 2 ontbrekend, blokkerend = true, voldoet = false
---
--- Verder gedekt:
---   • een ONgebonden bewijsstuk vervult niets (ook niet met kloppende titel) —
---     de oude wildcard/titel-like is weg;
---   • één bewijsstuk vervult nooit meer dan één vereiste;
---   • de sleutel die de functie bouwt is exact stap|type|coalesce(dt,label);
---   • external_submission bindt op zijn eigen type, niet op 'document';
---   • unieke indexes, DB-validatie, atomische audit en snapshots staan goed;
---   • de EXECUTE-hygiëne (gate H) staat goed.
+-- doeldatabase. Toetst de BINDING (requirement_sleutel) zelf — niet de vervulling-
+-- reflectie, die sinds de readiness-ontmanteling (PR-D #168/0187) in het D10-model
+-- zit (2026_08_27_p3c_afwijking.sql via fn_stap_open_per_zwaarte). Gedekt:
+--   • de bindingskolom + de niet-unieke opzoekindex (#160-correctie);
+--   • de validatie- en atomische audittrigger, geen EXECUTE voor API-rollen;
+--   • de write-weigeringen: verkeerd type (#5), andere stap (#6), dubbele
+--     vereistesleutel (#8a/#8b) — fail-closed bij de write;
+--   • de niet-unieke index staat meerdere gebonden stukken per vereiste toe (#8c);
+--   • de snapshotbron (fn_build_decision_dossier) draagt bewijs en stappen, en
+--     GEEN readiness-key meer (#0b);
+--   • tenant-isolatie op de kolom onder échte RLS (DEEL 3).
 --
 -- Zelf-seedend (1 fonds, eigen template_code). Alles in één transactie met
 -- ROLLBACK: de database blijft ongewijzigd. psql exit 0 + de "OK #"-notices =
@@ -47,13 +42,19 @@ begin
   ) then
     raise exception 'DEEL 1a FAALT: kolom procedure_bewijs.requirement_sleutel ontbreekt.';
   end if;
+  -- P2/PR-A (#160-correctie, 0189 §6.2): de index is bewust NIET-uniek — uniciteit
+  -- verbood min_aantal > 1. "Eén artefact vervult hoogstens één vereiste" borgt de
+  -- kolomvorm (één requirement_sleutel per rij), niet de index.
   select i.indisunique into v_uniek
     from pg_index i
     join pg_class c on c.oid = i.indexrelid
    where c.relname='idx_procbewijs_req_sleutel'
      and c.relnamespace='public'::regnamespace;
-  if v_uniek is distinct from true then
-    raise exception 'DEEL 1a FAALT: idx_procbewijs_req_sleutel ontbreekt of is niet uniek.';
+  if v_uniek is null then
+    raise exception 'DEEL 1a FAALT: idx_procbewijs_req_sleutel ontbreekt.';
+  end if;
+  if v_uniek is distinct from false then
+    raise exception 'DEEL 1a FAALT: idx_procbewijs_req_sleutel is uniek — de #160-correctie (niet-uniek, min_aantal) is niet toegepast.';
   end if;
   if not exists (
     select 1 from pg_class where relname='idx_procedure_stappen_volgorde_uniek'
@@ -61,39 +62,15 @@ begin
   ) then
     raise exception 'DEEL 1a FAALT: unieke stapvolgorde-index ontbreekt.';
   end if;
-  raise notice 'DEEL 1a OK: bindingskolom + unieke indexes aanwezig.';
+  raise notice 'DEEL 1a OK: bindingskolom aanwezig, opzoekindex niet-uniek (#160-correctie), stapvolgorde-index uniek.';
 end $$;
 
--- 1b. De oude wildcard mag niet meer in de functiebody staan.
-do $$
-declare src text;
-begin
-  select pg_get_functiondef(p.oid) into src
-    from pg_proc p
-   where p.pronamespace='public'::regnamespace
-     and p.proname='fn_decision_readiness_check';
-  if src is null then
-    raise exception 'DEEL 1b FAALT: fn_decision_readiness_check bestaat niet.';
-  end if;
-  if src not like '%requirement_sleutel%' then
-    raise exception 'DEEL 1b FAALT: de functie gebruikt de bewijsbinding niet — draai de migratie.';
-  end if;
-  if src like '%rij.documenttype is null%' then
-    raise exception 'DEEL 1b FAALT: de wildcard "rij.documenttype is null" staat nog in de document-tak.';
-  end if;
-  -- Fail-closed: zonder de guard op de procedure-lookup levert een onvindbare
-  -- procedure nul requirements op en antwoordt de gate `voldoet = true,
-  -- ontbrekend = []`. Statisch getoetst — het gedrag zelf nabootsen zou een
-  -- FK moeten loskoppelen, en dat is een te zware ingreep voor een check die
-  -- ook tegen een productiedatabase kan draaien.
-  if src not like '%procedure_not_found%' then
-    raise exception 'DEEL 1b FAALT: de gate mist de fail-closed guard op een onvindbare procedure.';
-  end if;
-  if src not like '%v_sleutel_count = 1%' then
-    raise exception 'DEEL 1b FAALT: dubbele vereistesleutels falen niet gesloten.';
-  end if;
-  raise notice 'DEEL 1b OK: binding exact, wildcard weg, ambiguïteit en ontbrekende procedure fail-closed.';
-end $$;
+-- (1b/1c vervielen met de readiness-ontmanteling, PR-D #168/0187: de gate
+--  fn_decision_readiness_check bestaat niet meer. De vervulling-REFLECTIE van de
+--  binding — dat een gebonden stuk de juiste vereiste vervult en een ongebonden
+--  niets — wordt nu getoetst in supabase/checks/2026_08_27_p3c_afwijking.sql via
+--  het D10-model fn_stap_open_per_zwaarte. Deze check houdt de BINDING zelf:
+--  kolom+index, triggers, atomische audit, write-weigering en tenant-isolatie.)
 
 -- 1d. Triggers aanwezig en niet direct uitvoerbaar door API-rollen.
 do $$
@@ -118,18 +95,6 @@ begin
     raise exception 'DEEL 1d FAALT: authenticated kan een triggerfunctie direct uitvoeren.';
   end if;
   raise notice 'DEEL 1d OK: DB-validatie en atomische audittrigger staan; API-rollen hebben geen EXECUTE.';
-end $$;
-
--- 1c. EXECUTE-hygiëne (gate H): anon niet, authenticated wel.
-do $$
-begin
-  if has_function_privilege('anon','public.fn_decision_readiness_check(uuid,text)','execute') then
-    raise exception 'DEEL 1c FAALT: anon mag fn_decision_readiness_check uitvoeren.';
-  end if;
-  if not has_function_privilege('authenticated','public.fn_decision_readiness_check(uuid,text)','execute') then
-    raise exception 'DEEL 1c FAALT: authenticated mag fn_decision_readiness_check NIET uitvoeren.';
-  end if;
-  raise notice 'DEEL 1c OK: EXECUTE-hygiëne op fn_decision_readiness_check.';
 end $$;
 
 -- ╔════════════════════════════════════════════════════════════════════════╗
@@ -161,13 +126,13 @@ values ('33333333-0000-0000-0000-0000000000d1'::uuid,
 -- Drie blokkerende document-vereisten zonder documenttype — exact het patroon
 -- van stap 1 in de invaarseed v2 — plus één external_submission op stap 9.
 insert into public.procedure_requirements
-  (template_code, stap_volgorde, requirement_type, label, documenttype,
-   veld_pad, verplicht, blokkerend, min_aantal)
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
+   veld_pad, zwaarte, min_aantal)
 values
-  ('bb_test_template', 1, 'document', 'Transitieplan',            null, null, true, true, 1),
-  ('bb_test_template', 1, 'document', 'Formeel invaarverzoek',    null, null, true, true, 1),
-  ('bb_test_template', 1, 'document', '(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken',     null, null, true, true, 1),
-  ('bb_test_template', 9, 'external_submission', 'DNB-indiening', null, null, true, true, 1);
+  ('bb_test_template', '1.0.0', 1, 'document', 'Transitieplan',            null, null, 'kritiek', 1),
+  ('bb_test_template', '1.0.0', 1, 'document', 'Formeel invaarverzoek',    null, null, 'kritiek', 1),
+  ('bb_test_template', '1.0.0', 1, 'document', '(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken',     null, null, 'kritiek', 1),
+  ('bb_test_template', '1.0.0', 9, 'external_submission', 'DNB-indiening', null, null, 'kritiek', 1);
 
 -- Eén bewijsstuk, gebonden aan de EERSTE vereiste.
 insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
@@ -198,86 +163,28 @@ begin
     '33333333-0000-0000-0000-0000000000d1'::uuid);
   if jsonb_array_length(dossier->'bewijs') <> 1
      or dossier#>>'{bewijs,0,requirement_sleutel}' <> '1|document|Transitieplan'
-     or dossier->'steps' is null
-     or dossier->'readiness' is null then
-    raise exception 'FAALT #0b: dossier-snapshotbron mist bewijsbinding, stappen of readiness (%).', dossier;
+     or dossier->'steps' is null then
+    raise exception 'FAALT #0b: dossier-snapshotbron mist bewijsbinding of stappen (%).', dossier;
   end if;
-  raise notice 'OK #0b: dossier-snapshotbron bevat bewijsbinding, stappen en readiness.';
+  -- PR-D (#168/0187): de snapshot draagt geen 'readiness'-key meer.
+  if dossier ? 'readiness' then
+    raise exception 'FAALT #0b: de dossier-snapshot draagt nog een readiness-key na de ontmanteling (%).', dossier;
+  end if;
+  raise notice 'OK #0b: dossier-snapshotbron bevat bewijsbinding en stappen, geen readiness.';
 end $$;
 
--- #1 — de kernassertie uit de werkopdracht.
-do $$
-declare r jsonb; n int;
-begin
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'onderbouwing_compleet');
-  n := jsonb_array_length(r->'ontbrekend');
-  if n <> 2 then
-    raise exception 'FAALT #1: verwacht 2 ontbrekende vereisten na één gebonden stuk, kreeg % (%).', n, r;
-  end if;
-  if (r->>'blokkerend') <> 'true' or (r->>'voldoet') <> 'false' then
-    raise exception 'FAALT #1: onderbouwing_compleet had geblokkeerd moeten blijven (%).', r;
-  end if;
-  raise notice 'OK #1: 3 vereisten, 1 gebonden stuk -> 2 ontbrekend en nog steeds blokkerend.';
-end $$;
+-- (De vervulling-REFLECTIE-scenario's #1–#5/#7 — dat één gebonden stuk precies zijn
+--  vereiste vervult, dat een ongebonden stuk niets vervult, en dat external_submission/
+--  documenttype op de eigen identiteit binden — draaiden via fn_decision_readiness_check.
+--  Die functie is met de readiness-ontmanteling weg (PR-D). Dezelfde reflectie wordt nu
+--  in het D10-model getoetst: 2026_08_27_p3c_afwijking.sql #1 (snapshot per zwaarte:
+--  min_aantal>1 vervuld, instantie/uitsluiting, labels) en #9 (alle 8 bronnen). Hier
+--  houden we uitsluitend de BINDING zelf: de write-weigeringen (#5-type, #6-stap,
+--  #8a-dubbel), de atomische audit (#0a), de niet-unieke index (#8c) en tenant-isolatie.)
 
--- #2 — het gebonden stuk vervult precies de vereiste waaraan het hangt.
+-- #5 — external_submission bindt op zijn eigen type: een 'document'-sleutel op een
+-- external_submission-vereiste wordt bij de write geweigerd.
 do $$
-declare r jsonb;
-begin
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'onderbouwing_compleet');
-  if exists (select 1 from jsonb_array_elements(r->'ontbrekend') e
-              where e->>'label' = 'Transitieplan') then
-    raise exception 'FAALT #2: de gebonden vereiste staat nog als ontbrekend (%).', r;
-  end if;
-  if not exists (select 1 from jsonb_array_elements(r->'ontbrekend') e
-                  where e->>'label' = 'Formeel invaarverzoek')
-  or not exists (select 1 from jsonb_array_elements(r->'ontbrekend') e
-                  where e->>'label' = '(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken') then
-    raise exception 'FAALT #2: de twee ongebonden vereisten ontbreken niet allebei (%).', r;
-  end if;
-  raise notice 'OK #2: precies de gebonden vereiste is vervuld, de andere twee niet.';
-end $$;
-
--- #3 — een ONgebonden stuk vervult niets, ook niet met een titel die exact
--- gelijk is aan het label (dat was de oude titel-like-fallback).
-do $$
-declare r jsonb; n int;
-begin
-  insert into public.procedure_bewijs (stap_id, titel, requirement_sleutel)
-  values ('33333333-0000-0000-0000-000000000011'::uuid, 'Formeel invaarverzoek', null);
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'onderbouwing_compleet');
-  n := jsonb_array_length(r->'ontbrekend');
-  if n <> 2 then
-    raise exception 'FAALT #3: een ongebonden stuk veranderde de uitkomst (% ontbrekend).', n;
-  end if;
-  raise notice 'OK #3: ongebonden bewijsstuk vervult niets.';
-end $$;
-
--- #4 — één bewijsstuk kan nooit twee vereisten vervullen. Het stuk uit #3
--- alsnog binden zet er precies één bij, niet twee.
-do $$
-declare r jsonb; n int;
-begin
-  update public.procedure_bewijs
-     set requirement_sleutel = '1|document|Formeel invaarverzoek'
-   where stap_id = '33333333-0000-0000-0000-000000000011'::uuid
-     and requirement_sleutel is null;
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'onderbouwing_compleet');
-  n := jsonb_array_length(r->'ontbrekend');
-  if n <> 1 then
-    raise exception 'FAALT #4: verwacht nog 1 ontbrekende vereiste, kreeg % (%).', n, r;
-  end if;
-  raise notice 'OK #4: elk gebonden stuk vervult precies één vereiste.';
-end $$;
-
--- #5 — external_submission bindt op zijn eigen type, niet op 'document'.
--- (v_type mapt de tak naar document, maar de sleutel houdt het echte type.)
-do $$
-declare r jsonb;
 begin
   begin
     insert into public.procedure_bewijs (stap_id, titel, requirement_sleutel)
@@ -287,17 +194,11 @@ begin
   exception
     when check_violation then null;
   end;
-
+  -- De correcte binding wordt wél geaccepteerd (write slaagt).
   insert into public.procedure_bewijs (stap_id, titel, requirement_sleutel)
   values ('33333333-0000-0000-0000-000000000019'::uuid, 'DNB-indiening',
           '9|external_submission|DNB-indiening');
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'verantwoordingsrijp');
-  if exists (select 1 from jsonb_array_elements(r->'ontbrekend') e
-              where e->>'label' = 'DNB-indiening') then
-    raise exception 'FAALT #5: correcte binding op external_submission vervulde de vereiste niet (%).', r;
-  end if;
-  raise notice 'OK #5: external_submission bindt op het eigen requirement_type.';
+  raise notice 'OK #5: external_submission bindt op het eigen requirement_type (verkeerd type geweigerd).';
 end $$;
 
 -- #6 — een bewijsstuk op een ándere stap telt niet mee, ook niet met dezelfde
@@ -316,40 +217,8 @@ begin
   raise notice 'OK #6: binding naar een andere stap wordt bij de write geweigerd.';
 end $$;
 
--- #7 — een getagde vereiste bindt op documenttype, niet meer op de tag van het
--- bewijsstuk. Een stuk met de juiste pb.documenttype maar zonder binding telt
--- niet; met binding wel.
-do $$
-declare r jsonb;
-begin
-  insert into public.procedure_requirements
-    (template_code, stap_volgorde, requirement_type, label, documenttype,
-     veld_pad, verplicht, blokkerend, min_aantal)
-  values ('bb_test_template', 9, 'document', 'ALM-analyse', 'alm_analyse',
-          null, true, true, 1);
-
-  insert into public.procedure_bewijs (id, stap_id, titel, documenttype, requirement_sleutel)
-  values ('33333333-0000-0000-0000-0000000000b7'::uuid,
-          '33333333-0000-0000-0000-000000000019'::uuid,
-          'ALM-analyse 2026', 'alm_analyse', null);
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'onderbouwing_compleet');
-  if not exists (select 1 from jsonb_array_elements(r->'ontbrekend') e
-                  where e->>'label' = 'ALM-analyse') then
-    raise exception 'FAALT #7: pb.documenttype vervulde de vereiste zonder binding (%).', r;
-  end if;
-
-  update public.procedure_bewijs
-     set requirement_sleutel = '9|document|alm_analyse'
-   where id = '33333333-0000-0000-0000-0000000000b7'::uuid;
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'onderbouwing_compleet');
-  if exists (select 1 from jsonb_array_elements(r->'ontbrekend') e
-              where e->>'label' = 'ALM-analyse') then
-    raise exception 'FAALT #7: binding op documenttype-identiteit werkte niet (%).', r;
-  end if;
-  raise notice 'OK #7: getagde vereiste gebruikt coalesce(documenttype,label) als identiteit.';
-end $$;
+-- (#7 — documenttype-identiteit in de vervulling — draaide via readiness en is nu
+--  gedekt door het sleutelformaat in het D10-model (p3c-check). Vervallen hier.)
 
 -- #8 — een identieke sleutel in template- én instantie-arm wordt al bij de
 -- configuratiewrite geweigerd. Daarna simuleren we legacy-/productiedrift door
@@ -360,10 +229,10 @@ begin
   begin
     insert into public.procedure_requirement_instance
       (decision_id, stap_volgorde, requirement_type, label, documenttype,
-       verplicht, blokkerend, fonds_id)
+       zwaarte, fonds_id)
     values
       ('33333333-0000-0000-0000-0000000000d1'::uuid,
-       1, 'document', 'Transitieplan', null, true, true,
+       1, 'document', 'Transitieplan', null, 'kritiek',
        '33333333-3333-3333-3333-333333333333'::uuid);
     raise exception 'FAALT #8: DB-trigger accepteerde een dubbele vereistesleutel.';
   exception
@@ -376,24 +245,20 @@ alter table public.procedure_requirement_instance
   disable trigger trg_requirement_instance_validate_binding_sleutel;
 insert into public.procedure_requirement_instance
   (decision_id, stap_volgorde, requirement_type, label, documenttype,
-   verplicht, blokkerend, fonds_id)
+   zwaarte, fonds_id)
 values
   ('33333333-0000-0000-0000-0000000000d1'::uuid,
-   1, 'document', 'Transitieplan', null, true, true,
+   1, 'document', 'Transitieplan', null, 'kritiek',
    '33333333-3333-3333-3333-333333333333'::uuid);
 alter table public.procedure_requirement_instance
   enable trigger trg_requirement_instance_validate_binding_sleutel;
 
+-- #8b — ook bij legacy-drift (twee identieke vereistesleutels, via een tijdelijk
+--  uitgezette trigger geplaatst) weigert de bewijs-validatietrigger een nieuwe
+--  binding aan die ambigue sleutel fail-closed. (De vervulling-kant hiervan —
+--  ambiguïteit → fail-closed niet-vervuld — zit in de p3c-check #10.)
 do $$
-declare r jsonb;
 begin
-  r := public.fn_decision_readiness_check(
-         '33333333-0000-0000-0000-0000000000d1'::uuid, 'onderbouwing_compleet');
-  if (select count(*) from jsonb_array_elements(r->'ontbrekend') e
-       where e->>'label' = 'Transitieplan') <> 2 then
-    raise exception 'FAALT #8: dubbele vereistesleutel faalde niet gesloten (%).', r;
-  end if;
-
   update public.procedure_bewijs
      set requirement_sleutel = null
    where id = '33333333-0000-0000-0000-0000000000b1'::uuid;
@@ -405,22 +270,29 @@ begin
   exception
     when check_violation then null;
   end;
-  raise notice 'OK #8b: legacy-dubbele sleutel faalt gesloten in readiness én bij bewijswrite.';
+  raise notice 'OK #8b: legacy-dubbele sleutel faalt gesloten bij de bewijswrite.';
 end $$;
 
--- #8c — de unieke partiële index verhindert dat twee bewijsstukken hetzelfde
--- vereiste claimen, onafhankelijk van de API-route.
+-- #8c — sinds de #160-correctie (niet-uniek, 0189 §6.2) mag één vereiste door
+-- MEER dan één bewijsstuk gedekt worden: vervulling = count(gebonden feiten) >=
+-- min_aantal, en de kolomvorm borgt nog steeds "één artefact vervult hoogstens
+-- één vereiste". De DB weigert de tweede binding dus niet meer.
 do $$
+declare v_na int;
 begin
-  begin
-    insert into public.procedure_bewijs (stap_id, titel, requirement_sleutel)
-    values ('33333333-0000-0000-0000-000000000011'::uuid,
-            'Dubbele claim', '1|document|Formeel invaarverzoek');
-    raise exception 'FAALT #8c: een tweede bewijsstuk claimde hetzelfde vereiste.';
-  exception
-    when unique_violation then null;
-  end;
-  raise notice 'OK #8c: één vereiste kan door maximaal één bewijsstuk worden geclaimd.';
+  -- TWEE bewijsstukken op dezelfde vereistesleutel: een unieke index zou het
+  -- tweede weigeren; de #160-correctie (niet-uniek) staat beide toe.
+  insert into public.procedure_bewijs (stap_id, titel, requirement_sleutel)
+  values ('33333333-0000-0000-0000-000000000011'::uuid,
+          'Eerste stuk zelfde vereiste', '1|document|Formeel invaarverzoek'),
+         ('33333333-0000-0000-0000-000000000011'::uuid,
+          'Tweede stuk zelfde vereiste', '1|document|Formeel invaarverzoek');
+  select count(*) into v_na from public.procedure_bewijs
+   where requirement_sleutel = '1|document|Formeel invaarverzoek';
+  if v_na <> 2 then
+    raise exception 'FAALT #8c: tweede binding aan dezelfde vereiste geweigerd — de #160-correctie (niet-uniek, min_aantal) ontbreekt (%).', v_na;
+  end if;
+  raise notice 'OK #8c: niet-unieke index staat meerdere gebonden stukken per vereiste toe (min_aantal/oververvulling).';
 end $$;
 
 rollback;
@@ -456,9 +328,9 @@ values ('33333333-aaaa-0000-0000-000000000001','33333333-aaaa-aaaa-aaaa-33333333
 insert into public.procedure_stappen (id, procedure_id, volgorde, naam)
 values ('33333333-aaaa-0000-0000-000000000011','33333333-aaaa-0000-0000-000000000001',1,'Stap 1');
 insert into public.procedure_requirements
-  (template_code, stap_volgorde, requirement_type, label, documenttype,
-   veld_pad, verplicht, blokkerend, min_aantal)
-values ('bb_test_template',1,'document','Transitieplan',null,null,true,true,1);
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
+   veld_pad, zwaarte, min_aantal)
+values ('bb_test_template','1.0.0',1,'document','Transitieplan',null,null, 'kritiek', 1);
 insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
 values ('33333333-aaaa-0000-0000-0000000000b1','33333333-aaaa-0000-0000-000000000011',
         'Transitieplan A','1|document|Transitieplan');

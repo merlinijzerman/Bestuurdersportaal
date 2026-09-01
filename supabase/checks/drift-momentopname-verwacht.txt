@@ -42,7 +42,18 @@ execute|public.fn_ai_quota_wijzigen|anon=false authenticated=false
 execute|public.fn_ai_reserveer_intern|anon=false authenticated=false
 execute|public.fn_ai_switch_stoppen|anon=false authenticated=false
 execute|public.fn_app_error_log|anon=false authenticated=true
+execute|public.fn_assert_feit_ontgrendeld|anon=false authenticated=false
+execute|public.fn_assert_gebonden_feit|anon=false authenticated=false
+execute|public.fn_audit_aivalidation_binding|anon=false authenticated=false
+execute|public.fn_audit_approval_binding|anon=false authenticated=false
+execute|public.fn_audit_assumption_binding|anon=false authenticated=false
+execute|public.fn_audit_evaluation_binding|anon=false authenticated=false
+execute|public.fn_audit_kpi_binding|anon=false authenticated=false
 execute|public.fn_audit_procedure_bewijs_mutation|anon=false authenticated=false
+execute|public.fn_audit_risk_binding|anon=false authenticated=false
+execute|public.fn_audit_vaststelling_binding|anon=false authenticated=false
+execute|public.fn_besluit_heropenen_correctie|anon=false authenticated=true
+execute|public.fn_besluit_status_omslag|anon=false authenticated=true
 execute|public.fn_bron_whitelist_log_hash|anon=false authenticated=true
 execute|public.fn_bron_whitelist_log_immutable|anon=false authenticated=true
 execute|public.fn_build_decision_dossier|anon=false authenticated=true
@@ -51,8 +62,6 @@ execute|public.fn_chunk_denorm_refresh|anon=false authenticated=true
 execute|public.fn_chunk_denorm|anon=false authenticated=true
 execute|public.fn_contact_aanvragen_no_delete|anon=false authenticated=true
 execute|public.fn_decision_code|anon=false authenticated=true
-execute|public.fn_decision_readiness_check|anon=false authenticated=true
-execute|public.fn_decision_readiness_overview|anon=false authenticated=true
 execute|public.fn_decision_snapshot|anon=false authenticated=true
 execute|public.fn_decision_status_check|anon=false authenticated=true
 execute|public.fn_decision_touch|anon=false authenticated=true
@@ -76,10 +85,18 @@ execute|public.fn_generiek_transitie|anon=false authenticated=true
 execute|public.fn_govevent_fonds|anon=false authenticated=true
 execute|public.fn_govevent_hash|anon=false authenticated=true
 execute|public.fn_govevent_immutable|anon=false authenticated=true
+execute|public.fn_guard_besluitstatus_feit|anon=false authenticated=false
+execute|public.fn_guard_bewijs_i1|anon=false authenticated=false
+execute|public.fn_guard_decision_action_eigenaar|anon=false authenticated=false
+execute|public.fn_guard_decision_insert_status|anon=false authenticated=false
+execute|public.fn_guard_decision_scoped_i1|anon=false authenticated=false
+execute|public.fn_guard_procedure_scoped_i1|anon=false authenticated=false
+execute|public.fn_guard_stap_insert|anon=false authenticated=false
 execute|public.fn_handelingen_retentie_guard|anon=false authenticated=false
 execute|public.fn_handelingen_snoei|anon=false authenticated=false
 execute|public.fn_inbreng_ketengebeurtenis|anon=false authenticated=true
 execute|public.fn_log_append_only|anon=false authenticated=true
+execute|public.fn_log_gebonden_feit_mutatie|anon=false authenticated=false
 execute|public.fn_notulen_segment_audit|anon=false authenticated=true
 execute|public.fn_notulen_segment_bevestig|anon=false authenticated=true
 execute|public.fn_notulen_segment_check|anon=false authenticated=true
@@ -91,19 +108,36 @@ execute|public.fn_platform_event_chain_assert_valid|anon=false authenticated=fal
 execute|public.fn_platform_event_fork_declaration_immutable|anon=false authenticated=false
 execute|public.fn_platform_event_hash|anon=false authenticated=false
 execute|public.fn_platform_event_immutable|anon=false authenticated=true
+execute|public.fn_procedure_beeindigen|anon=false authenticated=true
+execute|public.fn_procedure_heropenen|anon=false authenticated=true
+execute|public.fn_procedure_requirements_versievast|anon=false authenticated=false
 execute|public.fn_profiel_bevries_kolommen|anon=false authenticated=false
+execute|public.fn_publicatie_append_only|anon=false authenticated=false
 execute|public.fn_rate_limit_check|anon=false authenticated=true
 execute|public.fn_schrijf_handeling|anon=false authenticated=true
 execute|public.fn_schrijf_semantische_extractie|anon=false authenticated=false
 execute|public.fn_schrijf_vergelijking|anon=false authenticated=true
 execute|public.fn_snapshot_immutable|anon=false authenticated=true
+execute|public.fn_stap_actief_bij_handeling|anon=false authenticated=false
+execute|public.fn_stap_activeerbaar_maken|anon=false authenticated=true
 execute|public.fn_stap_activeren|anon=false authenticated=true
+execute|public.fn_stap_afronden_met_afwijking|anon=false authenticated=true
 execute|public.fn_stap_afronden|anon=false authenticated=true
 execute|public.fn_stap_heropenen|anon=false authenticated=true
+execute|public.fn_stap_open_per_zwaarte|anon=false authenticated=false
 execute|public.fn_stem_ketengebeurtenis|anon=false authenticated=true
 execute|public.fn_stemming_ketengebeurtenis|anon=false authenticated=true
+execute|public.fn_toets_besluitstatus_feit|anon=false authenticated=false
+execute|public.fn_validate_aivalidation_binding|anon=false authenticated=false
+execute|public.fn_validate_approval_binding|anon=false authenticated=false
+execute|public.fn_validate_assumption_binding|anon=false authenticated=false
 execute|public.fn_validate_bewijs_requirement_binding|anon=false authenticated=false
+execute|public.fn_validate_evaluation_binding|anon=false authenticated=false
+execute|public.fn_validate_kpi_binding|anon=false authenticated=false
 execute|public.fn_validate_requirement_instance_binding_sleutel|anon=false authenticated=false
+execute|public.fn_validate_risk_binding|anon=false authenticated=false
+execute|public.fn_validate_stap_notitie|anon=false authenticated=false
+execute|public.fn_validate_vaststelling_binding|anon=false authenticated=false
 execute|public.fn_vergadering_ketengebeurtenis|anon=false authenticated=true
 execute|public.fn_zelfde_fonds|anon=false authenticated=true
 execute|public.gin_extract_query_trgm|anon=true authenticated=true
@@ -262,7 +296,7 @@ extensie|pgcrypto|versie=1.3
 extensie|plpgsql|versie=1.0
 extensie|supabase_vault|versie=0.3.1
 extensie|uuid-ossp|versie=1.1
-extensie|vector|versie=0.8.0
+extensie|vector|versie=0.8.2
 functie|public.afschriften_claim_jobs|secdef=true searchpath=search_path=public, pg_temp md5=7d627ad02675f5a56b0bacf317c2175a
 functie|public.aqlab_add_run_cost|secdef=true searchpath=search_path=public, pg_temp md5=832aece20a61e944fdd94a6cb4bc28dc
 functie|public.aqlab_assurance_meetwaarden|secdef=true searchpath=search_path=public, pg_temp md5=43c9df1cc0582a19fdb3ae3ba3ef7d18
@@ -307,19 +341,28 @@ functie|public.fn_ai_quota_wijzigen|secdef=true searchpath=search_path=public, p
 functie|public.fn_ai_reserveer_intern|secdef=true searchpath=search_path=public, pg_temp md5=eb5d25daf886431b1fd9ea7f19b9bc24
 functie|public.fn_ai_switch_stoppen|secdef=true searchpath=search_path=public, pg_temp md5=e1e3f1e158145605cf32172d109cec38
 functie|public.fn_app_error_log|secdef=true searchpath=search_path=public, pg_temp md5=47a90cb00c8a9278ef3b31c4e3cfce0d
+functie|public.fn_assert_feit_ontgrendeld|secdef=true searchpath=search_path=public, pg_temp md5=204c388cba5ac44a5f1e1f3fd4514811
+functie|public.fn_assert_gebonden_feit|secdef=true searchpath=search_path=public, pg_temp md5=084abe6c97b878f5d8c9c3ba61b5a339
+functie|public.fn_audit_aivalidation_binding|secdef=true searchpath=search_path=public, pg_temp md5=1b55a1e4b5a5ecd753f6892f3650b07e
+functie|public.fn_audit_approval_binding|secdef=true searchpath=search_path=public, pg_temp md5=ebeb2d4e019c53175e0f88bf2ab26e81
+functie|public.fn_audit_assumption_binding|secdef=true searchpath=search_path=public, pg_temp md5=8fb9b06590d24044a11fa6814917a464
+functie|public.fn_audit_evaluation_binding|secdef=true searchpath=search_path=public, pg_temp md5=4d14df8ac8cb5c7b8a627116eced8bae
+functie|public.fn_audit_kpi_binding|secdef=true searchpath=search_path=public, pg_temp md5=73bfc8f074a966f58f8d2f8614968ffb
 functie|public.fn_audit_procedure_bewijs_mutation|secdef=true searchpath=search_path=pg_temp md5=3dfd3382b681b64bc75a432f1f692528
+functie|public.fn_audit_risk_binding|secdef=true searchpath=search_path=public, pg_temp md5=635175a2dda987ce8ccfa80d1337e885
+functie|public.fn_audit_vaststelling_binding|secdef=true searchpath=search_path=public, pg_temp md5=d2b005bfb071921e261aeeeb13b8dafb
+functie|public.fn_besluit_heropenen_correctie|secdef=true searchpath=search_path=public, extensions, pg_temp md5=4036bbfdb071d254c6df0c4dcba342ee
+functie|public.fn_besluit_status_omslag|secdef=true searchpath=search_path=public, extensions, pg_temp md5=d359f2b2e448a491c8f0f2d4f0127097
 functie|public.fn_bron_whitelist_log_hash|secdef=false searchpath=niet gepind md5=1aa9977b6faa89b2602d8063635d7e78
 functie|public.fn_bron_whitelist_log_immutable|secdef=false searchpath=niet gepind md5=94349a2cbfe96fe81e4377f84fa535c2
-functie|public.fn_build_decision_dossier|secdef=false searchpath=niet gepind md5=9de829fe09d4db328ec955ae51997b28
+functie|public.fn_build_decision_dossier|secdef=false searchpath=niet gepind md5=44874fe3339eeb34052175977a30eb7a
 functie|public.fn_chunk_denorm_before_insert|secdef=false searchpath=search_path=public, pg_temp md5=67c83b5bcab8eb1599f65b56453b2b19
 functie|public.fn_chunk_denorm_refresh|secdef=false searchpath=search_path=public, pg_temp md5=b98c9d83fc5c31caf22d893427411d80
 functie|public.fn_chunk_denorm|secdef=false searchpath=search_path=public, pg_temp md5=7407172179d566288620b6040471d1f9
 functie|public.fn_contact_aanvragen_no_delete|secdef=false searchpath=niet gepind md5=1080388908f45c73657e4acb99ea8f89
 functie|public.fn_decision_code|secdef=false searchpath=niet gepind md5=c3cbda023278c39644055523be469deb
-functie|public.fn_decision_readiness_check|secdef=false searchpath=niet gepind md5=2d45edf37585a9793ad2abf3f302fcb3
-functie|public.fn_decision_readiness_overview|secdef=false searchpath=niet gepind md5=b66240a861a60d6f2cf87374b0732b08
 functie|public.fn_decision_snapshot|secdef=false searchpath=niet gepind md5=bab1eeaeb7ff99bb08f8c6bf573eb24c
-functie|public.fn_decision_status_check|secdef=false searchpath=niet gepind md5=07b816d9343f3bcdfefa2590d3a7337b
+functie|public.fn_decision_status_check|secdef=false searchpath=niet gepind md5=f66ea7b2b721074cc7194aff338a900f
 functie|public.fn_decision_touch|secdef=false searchpath=niet gepind md5=ad400f9606ba5747eedfab918407f5ff
 functie|public.fn_doc_meta_log_hash|secdef=false searchpath=niet gepind md5=0b41e81eb70b16715b09fd4e2b3f35bf
 functie|public.fn_doc_meta_log_immutable|secdef=false searchpath=niet gepind md5=534e3c73a31bac1f4b77fc4c4ac3d673
@@ -331,7 +374,7 @@ functie|public.fn_document_procesinstantie_validatie|secdef=false searchpath=nie
 functie|public.fn_document_status_overgang_check|secdef=false searchpath=niet gepind md5=8a31496af07ca0d4c397fb0d9c9625e3
 functie|public.fn_document_status_transitie|secdef=false searchpath=niet gepind md5=7d857b7ab28163b7c6ccf635358c987a
 functie|public.fn_document_status_zetten|secdef=false searchpath=search_path=public, pg_temp md5=c96d03c4949d01f03af78a03f7fd3c72
-functie|public.fn_dossierstatus_van_decision|secdef=false searchpath=niet gepind md5=fd4edd59525e5f110b8ee8d8285a6c7d
+functie|public.fn_dossierstatus_van_decision|secdef=false searchpath=niet gepind md5=06460d0a4d1358b5d572c299108e0715
 functie|public.fn_export_log_immutable|secdef=false searchpath=niet gepind md5=ef0c3f7e78b73861b4cb4d64ef8a9892
 functie|public.fn_fonds_config_capture|secdef=false searchpath=niet gepind md5=3adcacded2f543f9f4dec31a0bd0fa76
 functie|public.fn_fonds_stuurinfo_capture|secdef=false searchpath=niet gepind md5=7e52d092d5b6096564b2d243dcdbef7f
@@ -341,10 +384,18 @@ functie|public.fn_generiek_transitie|secdef=false searchpath=niet gepind md5=ed9
 functie|public.fn_govevent_fonds|secdef=false searchpath=search_path=public, pg_temp md5=74548cdf0629ab3bf55cc4637fb118ec
 functie|public.fn_govevent_hash|secdef=false searchpath=niet gepind md5=0fd2b8f43ad0a6fc75d6c6d181d2045c
 functie|public.fn_govevent_immutable|secdef=false searchpath=niet gepind md5=1d5c905da3137e3861cd0d71fa4aec89
+functie|public.fn_guard_besluitstatus_feit|secdef=true searchpath=search_path=public, pg_temp md5=538cb72b9b999d2ff77e5dc210db3870
+functie|public.fn_guard_bewijs_i1|secdef=true searchpath=search_path=public, pg_temp md5=db7c7aeb4eebf0047929c6b87ccdbae3
+functie|public.fn_guard_decision_action_eigenaar|secdef=true searchpath=search_path=public, pg_temp md5=36097364ece3a0068c11ec119814aa70
+functie|public.fn_guard_decision_insert_status|secdef=false searchpath=search_path=public, pg_temp md5=7bbdd14d0ad30e74ad4c021cbf24afac
+functie|public.fn_guard_decision_scoped_i1|secdef=true searchpath=search_path=public, pg_temp md5=d8389e4d47411a6de70dc92a3deaf08b
+functie|public.fn_guard_procedure_scoped_i1|secdef=true searchpath=search_path=public, pg_temp md5=3859c8fada833da5b1f7d3849eb6bbec
+functie|public.fn_guard_stap_insert|secdef=false searchpath=search_path=pg_temp md5=e42d1bb07e56eda94e71845dd223e794
 functie|public.fn_handelingen_retentie_guard|secdef=false searchpath=niet gepind md5=aff4ebc09c069dfa8f6823f52125ba51
 functie|public.fn_handelingen_snoei|secdef=true searchpath=search_path=public md5=09038d717d9e3b023389d14d8504e09e
 functie|public.fn_inbreng_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=ba0e5ab1cc8b046007db764aceeedf4d
 functie|public.fn_log_append_only|secdef=false searchpath=niet gepind md5=fed6579db5f69ca5ff4b7d7a685e451f
+functie|public.fn_log_gebonden_feit_mutatie|secdef=true searchpath=search_path=public, pg_temp md5=3c645f4c125a8afc21573cdede11feb3
 functie|public.fn_notulen_segment_audit|secdef=false searchpath=search_path=public, pg_temp md5=2c8a5db4298f143527721e2f7d60324e
 functie|public.fn_notulen_segment_bevestig|secdef=false searchpath=search_path=public, pg_temp md5=46d4361360d15edf309d31fab2c96fc6
 functie|public.fn_notulen_segment_check|secdef=false searchpath=search_path=public, pg_temp md5=00be212fd3ed9ac7200b4ce06123e512
@@ -356,19 +407,36 @@ functie|public.fn_platform_event_chain_assert_valid|secdef=true searchpath=searc
 functie|public.fn_platform_event_fork_declaration_immutable|secdef=true searchpath=search_path=pg_catalog, public, pg_temp md5=06e92f7f318af090d222cbdded3a2dd9
 functie|public.fn_platform_event_hash|secdef=true searchpath=search_path=pg_catalog, public, pg_temp md5=3e654ca6fcb8ef411a8b331ea98f543d
 functie|public.fn_platform_event_immutable|secdef=false searchpath=niet gepind md5=b8fdf1fe9384e836325efa9b9fe9a053
+functie|public.fn_procedure_beeindigen|secdef=true searchpath=search_path=public, extensions, pg_temp md5=562f15c10495e98992d9225468955dc2
+functie|public.fn_procedure_heropenen|secdef=true searchpath=search_path=public, extensions, pg_temp md5=bbf4989c8c5051d2354ff25df11024e5
+functie|public.fn_procedure_requirements_versievast|secdef=false searchpath=search_path=public, pg_temp md5=2dc232a7c6a82df9fe1377333438783e
 functie|public.fn_profiel_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=1cb989181b99371810cd9cb65975b32f
+functie|public.fn_publicatie_append_only|secdef=false searchpath=search_path=public, pg_temp md5=6a6e7aad045637eebc4eb319bbc5e052
 functie|public.fn_rate_limit_check|secdef=true searchpath=search_path=public, pg_temp md5=5161460bc4f0848ab8ae355e0d981bfc
 functie|public.fn_schrijf_handeling|secdef=true searchpath=search_path=public md5=073652d03ed9a7a31685582593ea7f2c
 functie|public.fn_schrijf_semantische_extractie|secdef=false searchpath=search_path=public md5=83862552d2a8ab85475b19145e1edc8b
 functie|public.fn_schrijf_vergelijking|secdef=true searchpath=search_path=public, pg_temp md5=297d2304ee033da1799ad3b222e0cd28
 functie|public.fn_snapshot_immutable|secdef=false searchpath=niet gepind md5=6c6a7a470620f20c18069d54ed39d696
+functie|public.fn_stap_actief_bij_handeling|secdef=true searchpath=search_path=public, pg_temp md5=ffe7ba588f2d75eaefdae4b77cc465df
+functie|public.fn_stap_activeerbaar_maken|secdef=true searchpath=search_path=public, pg_temp md5=85aad9299e4c28452aaf5807ef06bcb5
 functie|public.fn_stap_activeren|secdef=true searchpath=search_path=public, pg_temp md5=3ff7cb1fc6b0e151d033c79271415aea
+functie|public.fn_stap_afronden_met_afwijking|secdef=true searchpath=search_path=public, extensions, pg_temp md5=159080c45a1ba9429460087d9239ba12
 functie|public.fn_stap_afronden|secdef=true searchpath=search_path=public, pg_temp md5=15062e5774a1364789c190b6e3cb03fd
 functie|public.fn_stap_heropenen|secdef=true searchpath=search_path=public, extensions, pg_temp md5=ca70b3dd033e5526da308e00362b0cc7
+functie|public.fn_stap_open_per_zwaarte|secdef=true searchpath=search_path=public, pg_temp md5=4100f976e82ee3e5aabd94826adf2def
 functie|public.fn_stem_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=3fcde43a22efc2269aae118f55f2c1d4
 functie|public.fn_stemming_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=8d81690cc94e8e6ed590b68854b03b05
+functie|public.fn_toets_besluitstatus_feit|secdef=true searchpath=search_path=public, pg_temp md5=f8a00cc5e7da3d51a2abefe73fb6a511
+functie|public.fn_validate_aivalidation_binding|secdef=true searchpath=search_path=public, pg_temp md5=b55cd94071acd36a696f5d786e50f1c4
+functie|public.fn_validate_approval_binding|secdef=true searchpath=search_path=public, pg_temp md5=c2cb4660e8d484a57a1e7b9c1813a6a9
+functie|public.fn_validate_assumption_binding|secdef=true searchpath=search_path=public, pg_temp md5=972d5dd9a0a175ca14fc3be24d173206
 functie|public.fn_validate_bewijs_requirement_binding|secdef=true searchpath=search_path=pg_temp md5=c8819cb58436bb16f005d21db2370a37
+functie|public.fn_validate_evaluation_binding|secdef=true searchpath=search_path=public, pg_temp md5=0ff106775288d622901dfa6028fab998
+functie|public.fn_validate_kpi_binding|secdef=true searchpath=search_path=public, pg_temp md5=68e1464d8f457d1be4687730d0f6cd51
 functie|public.fn_validate_requirement_instance_binding_sleutel|secdef=true searchpath=search_path=pg_temp md5=f7738d2a25c8c76b7c479fa2a3f00b5a
+functie|public.fn_validate_risk_binding|secdef=true searchpath=search_path=public, pg_temp md5=decd30e99e30af08261ed6f8fee80995
+functie|public.fn_validate_stap_notitie|secdef=true searchpath=search_path=public, pg_temp md5=d96cc9697937f39811a52b1a6bed903b
+functie|public.fn_validate_vaststelling_binding|secdef=true searchpath=search_path=public, pg_temp md5=f025622351c186a0a96be421cf08c5c8
 functie|public.fn_vergadering_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=dfe617dcff724756eca3ea87b0fc3afb
 functie|public.fn_zelfde_fonds|secdef=true searchpath=search_path=public, pg_temp md5=fd415f348794638b2fcfa791b8f23421
 functie|public.gin_extract_query_trgm|secdef=false searchpath=niet gepind md5=908112f5743e0dc3307ce7da24a3d095
@@ -528,6 +596,7 @@ policy|public.agendapunt_inbreng.fonds inbreng lezen|cmd=SELECT qual=38c663810ae
 policy|public.agendapunt_log.fonds agendapunt_log insert|cmd=INSERT qual=geen withcheck=8b7ba891a9e7fdf00f6107763522c647
 policy|public.agendapunt_log.fonds agendapunt_log select|cmd=SELECT qual=aeebfd2ddd120c82c40c630eebc393ba withcheck=geen
 policy|public.agendapunten.fonds agendapunten|cmd=ALL qual=785b31eddeb79a556a9e16d965c5f775 withcheck=785b31eddeb79a556a9e16d965c5f775
+policy|public.besluitstatus_vereist_feit.statusfeiten read all|cmd=SELECT qual=dc71e447411e7aaf354179a11ad2e2ae withcheck=geen
 policy|public.bron_whitelist.bron_whitelist lees actief|cmd=SELECT qual=7dd7375db92c944717c84160ea6b2379 withcheck=geen
 policy|public.catalogus_log.lees catalogus_log|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
 policy|public.catalogus_log.schrijf catalogus_log|cmd=INSERT qual=geen withcheck=2f27d8bfa02792e2d07542361269c317
@@ -628,6 +697,7 @@ policy|public.procedure_afschriften.fonds afschriften lezen|cmd=SELECT qual=2f27
 policy|public.procedure_besluiten.fonds proc besluiten|cmd=ALL qual=f518677ef23a57d26f5855fa0e826c7c withcheck=f518677ef23a57d26f5855fa0e826c7c
 policy|public.procedure_bewijs.fonds proc bewijs|cmd=ALL qual=f4beb99a89df626389d1215114fde375 withcheck=f4beb99a89df626389d1215114fde375
 policy|public.procedure_checklist.fonds proc checklist|cmd=ALL qual=f4beb99a89df626389d1215114fde375 withcheck=f4beb99a89df626389d1215114fde375
+policy|public.procedure_definitie_publicatie.pub read all|cmd=SELECT qual=dc71e447411e7aaf354179a11ad2e2ae withcheck=geen
 policy|public.procedure_eigenaars.fonds proc eigenaars|cmd=ALL qual=f518677ef23a57d26f5855fa0e826c7c withcheck=f518677ef23a57d26f5855fa0e826c7c
 policy|public.procedure_fase_beschrijving_override.fase-override eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
 policy|public.procedure_fase_beschrijving_override.fase-override schrijven voorzitter-beheerder|cmd=INSERT qual=geen withcheck=ca0b263f188d2e090df7d13e5973e141
@@ -644,10 +714,15 @@ policy|public.procedure_requirement_uitsluiting.req-uitsluiting toevoegen voorzi
 policy|public.procedure_requirement_uitsluiting.req-uitsluiting wijzigen voorzitter-beheerder|cmd=UPDATE qual=2f27d8bfa02792e2d07542361269c317 withcheck=ca0b263f188d2e090df7d13e5973e141
 policy|public.procedure_requirements.req read all|cmd=SELECT qual=dc71e447411e7aaf354179a11ad2e2ae withcheck=geen
 policy|public.procedure_requirements.req write beheerder|cmd=ALL qual=e85c35d7d903c1d4052d58c64837c2d2 withcheck=e85c35d7d903c1d4052d58c64837c2d2
+policy|public.procedure_stap_notitie.notitie lezen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.procedure_stap_notitie.notitie schrijven auteur|cmd=INSERT qual=geen withcheck=96753ead9ea5586be569717018f9eda4
+policy|public.procedure_stap_notitie.notitie verwijderen auteur|cmd=DELETE qual=9ca354342dd43b4de56c383a11a000dc withcheck=geen
+policy|public.procedure_stap_notitie.notitie wijzigen auteur|cmd=UPDATE qual=9ca354342dd43b4de56c383a11a000dc withcheck=9ca354342dd43b4de56c383a11a000dc
 policy|public.procedure_stappen.fonds proc stappen|cmd=ALL qual=f518677ef23a57d26f5855fa0e826c7c withcheck=f518677ef23a57d26f5855fa0e826c7c
 policy|public.procedure_template_fasen.fasen insert beheerder|cmd=INSERT qual=geen withcheck=e85c35d7d903c1d4052d58c64837c2d2
 policy|public.procedure_template_fasen.fasen read all|cmd=SELECT qual=dc71e447411e7aaf354179a11ad2e2ae withcheck=geen
 policy|public.procedure_template_fasen.fasen update beheerder|cmd=UPDATE qual=e85c35d7d903c1d4052d58c64837c2d2 withcheck=e85c35d7d903c1d4052d58c64837c2d2
+policy|public.procedure_vaststelling.fonds proc vaststelling|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
 policy|public.procedures.fonds procedures|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
 policy|public.procesmodel_expertises.fonds procesmodel_expertises|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
 policy|public.procesmodel_focusgebieden.fonds procesmodel_focusgebieden|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
@@ -712,6 +787,7 @@ rls|aqlab_scores|enabled=true forced=false
 rls|aqlab_test_case_fixtures|enabled=true forced=false
 rls|aqlab_test_cases|enabled=true forced=false
 rls|aqlab_test_sets|enabled=true forced=false
+rls|besluitstatus_vereist_feit|enabled=true forced=false
 rls|bron_whitelist_log|enabled=true forced=false
 rls|bron_whitelist|enabled=true forced=false
 rls|catalogus_log|enabled=true forced=false
@@ -782,6 +858,7 @@ rls|procedure_afschriften|enabled=true forced=false
 rls|procedure_besluiten|enabled=true forced=false
 rls|procedure_bewijs|enabled=true forced=false
 rls|procedure_checklist|enabled=true forced=false
+rls|procedure_definitie_publicatie|enabled=true forced=false
 rls|procedure_eigenaars|enabled=true forced=false
 rls|procedure_fase_beschrijving_override|enabled=true forced=false
 rls|procedure_fase_toelichting|enabled=true forced=false
@@ -789,8 +866,10 @@ rls|procedure_log|enabled=true forced=false
 rls|procedure_requirement_instance|enabled=true forced=false
 rls|procedure_requirement_uitsluiting|enabled=true forced=false
 rls|procedure_requirements|enabled=true forced=false
+rls|procedure_stap_notitie|enabled=true forced=false
 rls|procedure_stappen|enabled=true forced=false
 rls|procedure_template_fasen|enabled=true forced=false
+rls|procedure_vaststelling|enabled=true forced=false
 rls|procedures|enabled=true forced=false
 rls|procesmodel_expertises|enabled=true forced=false
 rls|procesmodel_focusgebieden|enabled=true forced=false

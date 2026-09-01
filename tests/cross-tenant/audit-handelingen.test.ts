@@ -46,12 +46,17 @@ function handelingenUitCode(): Map<string, string[]> {
   for (const pad of routeBestanden(API_DIR)) {
     const rel = relative(ROOT, pad).split("\\").join("/").replace(/^app\/api\//, "").replace(/\/route\.ts$/, "");
     const bron = readFileSync(pad, "utf8");
-    // eenregelige spec: bind aan de regel zodat een GET (audit:"geen") niet de POST leest
-    const re = /export const (GET|POST|PATCH|PUT|DELETE)\s*=\s*withFondsRoute\(\{[^\n]*?audit: \{ handeling: "([^"]*)" \}/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(bron))) {
-      const sleutel = `${m[1]} ${rel}`;
-      (uit.get(m[2]) ?? uit.set(m[2], []).get(m[2])!).push(sleutel);
+    // RouteSpecs mogen geformatteerd zijn over meerdere regels. Splits eerst
+    // per HTTP-export; anders zou een GET de audit van een latere POST lezen.
+    const exports = [...bron.matchAll(/export const (GET|POST|PATCH|PUT|DELETE)\s*=\s*withFondsRoute\(/g)];
+    for (let i = 0; i < exports.length; i++) {
+      const start = exports[i];
+      const einde = exports[i + 1]?.index ?? bron.length;
+      const fragment = bron.slice(start.index, einde);
+      const audit = /audit:\s*\{\s*handeling:\s*"([^"]*)"\s*\}/.exec(fragment);
+      if (!audit) continue;
+      const sleutel = `${start[1]} ${rel}`;
+      (uit.get(audit[1]) ?? uit.set(audit[1], []).get(audit[1])!).push(sleutel);
     }
   }
   return uit;

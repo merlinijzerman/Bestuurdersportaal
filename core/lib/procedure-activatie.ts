@@ -19,9 +19,11 @@
 export type StapStatus =
   | "open" // legacy (sequentieel pad); niet door deze module aangeraakt
   | "geblokkeerd"
+  | "niet_begonnen" // P4 (#169): stap zonder onvervulde afhankelijkheden, nog niet gestart
   | "actief"
   | "afgerond"
-  | "heropend";
+  | "heropend"
+  | "vervallen"; // P4 (#169): terminaal, niet-afgerond (fase telt dit niet als groen)
 
 export interface StapActivatieState {
   volgorde: number;
@@ -44,23 +46,39 @@ export function isActiveerbaar(
 }
 
 /**
- * Initiële stap-statussen bij `procedure_start` (nieuw model): elke stap
+ * Mag de gebruiker de eerste inhoudelijke handeling op deze stap doen?
+ *
+ * `niet_begonnen` is nadrukkelijk geen leesstatus: de eerste checklist-,
+ * bewijs- of besluitmutatie activeert de stap via de database-trigger. De UI
+ * moet die handeling dus toelaten, terwijl geblokkeerde, vervallen en afgeronde
+ * stappen leesbaar blijven.
+ */
+export function isInhoudelijkBewerkbaar(status: string): boolean {
+  return (
+    status === "niet_begonnen" ||
+    status === "actief" ||
+    status === "heropend"
+  );
+}
+
+/**
+ * Initiële stap-statussen bij `procedure_start` (P4-model, #169): elke stap
  * waarvan de afhankelijkheden (nog) niet allemaal afgerond zijn wordt
- * 'geblokkeerd', de rest 'actief'. Bij start is niets afgerond, dus dit
- * komt neer op: geen afhankelijkheden → 'actief'; wél afhankelijkheden →
- * 'geblokkeerd'. Een parallelle procedure (alle deps leeg) start dus met
- * ALLE stappen 'actief'.
+ * 'geblokkeerd'; een activeerbare stap start als **'niet_begonnen'** (niet
+ * 'actief' — 'actief' ontstaat pas bij de eerste inhoudelijke handeling, via
+ * de actief-trigger, §4.1). Een parallelle procedure (alle deps leeg) start dus
+ * met ALLE stappen 'niet_begonnen'.
  */
 export function beginStatussen(
   stappen: { volgorde: number; blokkerende_afhankelijkheden: number[] }[]
-): Map<number, "actief" | "geblokkeerd"> {
+): Map<number, "niet_begonnen" | "geblokkeerd"> {
   const statusByVolgorde = new Map<number, StapStatus>(); // alles nog "niet afgerond"
-  const uit = new Map<number, "actief" | "geblokkeerd">();
+  const uit = new Map<number, "niet_begonnen" | "geblokkeerd">();
   for (const s of stappen) {
     uit.set(
       s.volgorde,
       isActiveerbaar(s.blokkerende_afhankelijkheden ?? [], statusByVolgorde)
-        ? "actief"
+        ? "niet_begonnen"
         : "geblokkeerd"
     );
   }
@@ -70,7 +88,8 @@ export function beginStatussen(
 /**
  * Herbereken activeerbaarheid ná een statuswijziging (typisch: een stap is
  * afgerond). Retourneert de volgordes van stappen die nu van 'geblokkeerd'
- * naar 'actief' mogen. Raakt bewust NIET 'actief'/'afgerond'/'heropend' aan
+ * naar 'niet_begonnen' mogen (P4-model: activeerbaar, nog niet 'actief').
+ * Raakt bewust NIET 'niet_begonnen'/'actief'/'afgerond'/'heropend' aan
  * (geen cascade-terugzetting) en NIET 'open' (legacy). Idempotent: is er
  * niets te activeren, dan is de uitkomst leeg.
  */

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import { requirementSleutel } from "@/core/lib/requirement-sleutel";
+import { zwaarteVanVereiste } from "@/core/lib/requirement-zwaarte";
 import { REQUIREMENT_TYPES } from "@/core/lib/procedure-definitie";
 import { z } from "zod";
 
@@ -91,11 +92,20 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         { status: 400 }
       );
     }
+    // P3 (#168): de onzin-combo verplicht=false/blokkerend=true (§5.1) bestaat niet
+    // als zwaarte. Weiger 'm expliciet i.p.v. 'm stil naar kritiek te promoveren —
+    // parity met de migratie-pre-flight, zodat verplicht=false niet stil omslaat.
+    if (body.verplicht === false && body.blokkerend === true) {
+      return NextResponse.json(
+        { error: "Combinatie niet toegestaan: een niet-verplichte vereiste kan niet blokkerend zijn (kies optioneel, vereist of kritiek)." },
+        { status: 400 }
+      );
+    }
 
     // Fonds_id server-side uit de procedure (RLS begrenst tot eigen fonds).
     const { data: procedure } = await supabase
       .from("procedures")
-      .select("id, fonds_id, template_code")
+      .select("id, fonds_id, template_code, template_versie")
       .eq("id", id)
       .single();
     if (!procedure?.fonds_id) {
@@ -117,13 +127,19 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       nieuweDocumenttype,
       label
     );
+    // P1b (#166): template-arm versie-gefilterd op de gepinde versie; fallback
+    // naar code-only als die (kortstondig) null is.
+    let tplQuery = supabase
+      .from("procedure_requirements")
+      .select("stap_volgorde, requirement_type, documenttype, label")
+      .eq("template_code", procedure.template_code)
+      .eq("stap_volgorde", body.stap_volgorde)
+      .eq("requirement_type", body.requirement_type);
+    if (procedure.template_versie) {
+      tplQuery = tplQuery.eq("template_versie", procedure.template_versie);
+    }
     const [{ data: templateRijen }, { data: instantieRijen }] = await Promise.all([
-      supabase
-        .from("procedure_requirements")
-        .select("stap_volgorde, requirement_type, documenttype, label")
-        .eq("template_code", procedure.template_code)
-        .eq("stap_volgorde", body.stap_volgorde)
-        .eq("requirement_type", body.requirement_type),
+      tplQuery,
       supabase
         .from("procedure_requirement_instance")
         .select("stap_volgorde, requirement_type, documenttype, label")
@@ -161,6 +177,14 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       );
     }
 
+    // P3 (#168): verplicht/blokkerend zijn nu afgeleide (generated) leeskolommen
+    // uit zwaarte — dus zwaarte is de schrijfkant én de te loggen bron van waarheid.
+    // De UI stuurt nog de twee booleans; die leiden we hier af.
+    const zwaarte = zwaarteVanVereiste({
+      verplicht: body.verplicht ?? true,
+      blokkerend: body.blokkerend ?? false,
+    });
+
     // 1. Instantie-requirement invoegen.
     const { data: nieuw, error: insFout } = await supabase
       .from("procedure_requirement_instance")
@@ -171,8 +195,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         label,
         documenttype: nieuweDocumenttype,
         veld_pad: body.veld_pad ?? null,
-        verplicht: body.verplicht ?? true,
-        blokkerend: body.blokkerend ?? false,
+        zwaarte,
         min_aantal: body.min_aantal ?? 1,
         vereist_validatie_domein: body.vereist_validatie_domein ?? null,
         bron: "handmatig",
@@ -207,7 +230,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
           stap_volgorde: body.stap_volgorde,
           requirement_type: body.requirement_type,
           label,
-          blokkerend: body.blokkerend ?? false,
+          zwaarte, // P3: de bron van waarheid, niet de afgeleide boolean
         },
       })
       .select("id")

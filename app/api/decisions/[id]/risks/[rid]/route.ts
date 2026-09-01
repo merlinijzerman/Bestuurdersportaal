@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { zonderLegeRequirementSleutel } from "@/core/lib/publieke-rij";
 import { z } from "zod";
 
 const RISK_CATEGORIE = [
@@ -144,7 +145,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     }
 
     if (Object.keys(wijzigingen).length === 0) {
-      return NextResponse.json({ risk: huidig, gewijzigd: false });
+      return NextResponse.json({ risk: zonderLegeRequirementSleutel(huidig), gewijzigd: false });
     }
 
     const { data: bijgewerkt, error: updFout } = await supabase
@@ -193,7 +194,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
       });
     }
 
-    return NextResponse.json({ risk: bijgewerkt, gewijzigd: true });
+    return NextResponse.json({ risk: zonderLegeRequirementSleutel(bijgewerkt), gewijzigd: true });
   } catch (e) {
     console.error("Fout in PATCH /api/decisions/[id]/risks/[rid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });

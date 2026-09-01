@@ -18,6 +18,7 @@ const SEGMENT_KLEUR: Record<FaseStatus, string> = {
   afgerond: "bg-ok",
   in_behandeling: "bg-accent",
   nog_niet_begonnen: "bg-app-bg border border-line",
+  vervallen: "bg-line opacity-60",
 };
 
 export default function FaseStrip({ fasen }: { fasen: FaseSegment[] }) {

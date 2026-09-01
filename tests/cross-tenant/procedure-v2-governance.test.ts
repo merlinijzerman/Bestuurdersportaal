@@ -29,8 +29,11 @@ const readinessMigratie = lees("supabase", "migrations", "2026_08_13_d7c_readine
 // Bewijsbinding (2026-08-18): de geldende versie van fn_decision_readiness_check.
 const bindingMigratie = lees("supabase", "migrations", "2026_08_18_bewijs_requirement_binding.sql");
 const bindingHardening = lees("supabase", "migrations", "2026_08_22_bewijs_requirement_binding_hardening.sql");
+const p2BewijsindexMigratie = lees("supabase", "migrations", "2026_08_24_p2a_01_bewijsindex_nietuniek.sql");
 const bewijsRoute = lees("app", "api", "procedures", "[id]", "bewijs", "route.ts");
 const bewijsItemRoute = lees("app", "api", "procedures", "[id]", "bewijs", "[bewijsId]", "route.ts");
+const besluitenRoute = lees("app", "api", "procedures", "[id]", "besluiten", "route.ts");
+const stapPaneel = lees("app", "(dashboard)", "procedures", "_components", "StapPaneel.tsx");
 
 const rolGate = /\[\s*"voorzitter"\s*,\s*"beheerder"\s*\]\.includes\(/;
 
@@ -146,6 +149,21 @@ test("bewijsbinding: TS en SQL bouwen dezelfde sleutel", () => {
   assert.doesNotMatch(bindingFunctie, /\|\| v_type \|\|/);
 });
 
+test("P2-indexpreflight: min_aantal correleert exact en versie-vast met de gebonden sleutel", () => {
+  const preflight = p2BewijsindexMigratie.slice(
+    p2BewijsindexMigratie.indexOf("do $$"),
+    p2BewijsindexMigratie.indexOf("-- ── Uniek → niet-uniek")
+  );
+  assert.ok(preflight.length > 0, "P2-indexpreflight niet gevonden");
+  assert.match(preflight, /join public\.procedures p on p\.id = ps\.procedure_id/);
+  assert.match(preflight, /r\.template_versie = p\.template_versie/);
+  assert.match(
+    preflight,
+    /pb\.requirement_sleutel =\s*r\.stap_volgorde::text \|\| '\|' \|\| r\.requirement_type \|\| '\|' \|\|\s*coalesce\(r\.documenttype, r\.label\)/
+  );
+  assert.doesNotMatch(preflight, /split_part\(pb\.requirement_sleutel/);
+});
+
 test("bewijsbinding: grant-herstel na create-or-replace (Gate H)", () => {
   assert.match(bindingMigratie, /revoke all on function public\.fn_decision_readiness_check\(uuid, text\) from public, anon/);
   assert.match(bindingMigratie, /grant execute on function public\.fn_decision_readiness_check\(uuid, text\) to authenticated, service_role/);
@@ -204,11 +222,22 @@ test("bewijsbinding: de database weigert onbekende, ambigue en dubbele claims", 
   assert.match(bindingFunctie, /v_sleutel_count = 1/);
 });
 
-test("bewijsbinding: beslismoment-snapshot bevat bewijs, stappen en readiness", () => {
+test("bewijsbinding: beslismoment-snapshot bevat bewijs en stappen", () => {
   assert.match(bindingHardening, /'steps'/);
   assert.match(bindingHardening, /'bewijs'/);
-  assert.match(bindingHardening, /'readiness', public\.fn_decision_readiness_overview/);
   assert.match(bindingHardening, /to_jsonb\(pb\.\*\)/);
+  // De 2026_08_22-migratie embedde ooit óók 'readiness', maar PR-D (#168, 0187)
+  // haalt die key eruit (2026_08_28_p3d_01_readiness_drop.sql) nu readiness is
+  // ontmanteld. Nieuwe snapshots dragen geen readiness meer; oude (append-only)
+  // houden hem — afschrift-feitenkaart leest die optioneel.
+  const drop = lees("supabase", "migrations", "2026_08_28_p3d_01_readiness_drop.sql");
+  assert.match(drop, /create or replace function public\.fn_build_decision_dossier/);
+  assert.ok(
+    !/'readiness',\s*public\.fn_decision_readiness_overview/.test(drop),
+    "de p3d-herdefinitie van fn_build_decision_dossier mag de readiness-key niet meer dragen"
+  );
+  assert.match(drop, /drop function if exists public\.fn_decision_readiness_overview/);
+  assert.match(drop, /drop function if exists public\.fn_decision_readiness_check/);
 });
 
 test("bewijsbinding: de normale route én DB-trigger blokkeren botsende instantie-vereisten", () => {
@@ -224,6 +253,24 @@ test("bewijsbinding: de normale route én DB-trigger blokkeren botsende instanti
   assert.match(requirementsRoute, /const botst = \[/);
   assert.match(requirementsRoute, /al een vereiste van dit type met dezelfde identiteit/);
   assert.match(bindingHardening, /trg_requirement_instance_validate_binding_sleutel/);
+});
+
+test("#228-familie: besluit bestaat ongebonden, maar exact één approval bindt server-side", () => {
+  // D10: requirement_sleutel is expliciet nullable; de route mag een feit niet
+  // weigeren alleen omdat een oude definitie geen approval modelleerde.
+  assert.match(besluitenRoute, /haalApprovalVereisten\(supabase, id, stap\.volgorde\)/);
+  assert.match(besluitenRoute, /let requirementSleutel: string \| null = null/);
+  assert.match(besluitenRoute, /approvals\.vereisten\.length === 1/);
+  assert.match(besluitenRoute, /requirement_sleutel: requirementSleutel/);
+  assert.doesNotMatch(
+    besluitenRoute,
+    /Een besluit moet aan een approval-vereiste worden gebonden/
+  );
+  // Zichtbaar in het dossier: ongebonden is niet hetzelfde als afwezig.
+  assert.match(stapPaneel, /Ongebonden besluit · vervult geen vereiste/);
+  // Bij meer dan één kiest de interface niet zelf; de vereiste-koppelroute doet
+  // dat na vastlegging van het ongebonden besluit.
+  assert.match(stapPaneel, /koppel het daarna bij de juiste vereiste/);
 });
 
 test("bewijsbinding: de seed-generator weigert een lege of dubbele matchsleutel", () => {

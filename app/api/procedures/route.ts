@@ -46,6 +46,10 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       .insert({
         fonds_id: ctx.fondsId,
         template_code: templateCode,
+        // P1b (#166): pin de definitieversie bij start (snapshot-integriteit).
+        // De rijke definities dragen 'm (uit de JSON); code-templates niet →
+        // '1.0.0' (OB-4). Zo leest het dossier altijd zijn eigen versie.
+        template_versie: template.versie ?? "1.0.0",
         titel,
         beschrijving: body.beschrijving || null,
         deadline: body.deadline || null,
@@ -204,12 +208,12 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         });
       }
     }
-    // Bij het parallelle model kunnen meerdere stappen tegelijk starten;
-    // leg vast welke (i.p.v. alleen stap 1) zodat het logboek de werkelijkheid
-    // dekt.
+    // Bij het parallelle model zijn bij de start meerdere stappen tegelijk
+    // ACTIVEERBAAR ('niet_begonnen', P4-model — nog niet 'actief'); leg vast
+    // welke, zodat het logboek de werkelijkheid dekt.
     const actieveStapNamen = parallelModel
       ? template.stappen
-          .filter((s) => beginStatus!.get(s.volgorde) === "actief")
+          .filter((s) => beginStatus!.get(s.volgorde) === "niet_begonnen")
           .map((s) => s.naam)
       : [template.stappen[0]?.naam ?? ""];
     logEntries.push({

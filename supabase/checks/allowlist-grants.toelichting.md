@@ -179,6 +179,30 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    verwijderbaar door een fondslid. De schrijfpaden lopen via de SECURITY DEFINER-
    RPC's `fn_stap_afronden` / `fn_stap_activeren` / `fn_stap_heropenen`
    (`anon=-`, `authenticated=EXECUTE`, `service_role=-`). Zie `METING-RLS-reikwijdte-214.md`.
+10. **P4 statusmodel (#169, besluiten 0193/0194) — SECURITY DEFINER-schrijf-RPC's.**
+   `fn_procedure_beeindigen`, `fn_procedure_heropenen` en `fn_besluit_heropenen_correctie`
+   (`anon=-`, `authenticated=EXECUTE`, `service_role=-`) — bestuurlijke statusovergangen
+   die als owner draaien: zij doen zelf de rolgate + fondsgrens + verplichte motivering
+   + append-only governance_event (actor-rol als momentopname), zoals de PR-C/PR-D-RPC's.
+   `fn_stap_actief_bij_handeling` en `fn_dossierstatus_van_decision` zijn trigger-/afleid-
+   functies zonder client-grant. Tranche 4 voegt de globale, read-only tabel
+   `besluitstatus_vereist_feit` toe (`authenticated=SELECT`) en twee uitsluitend
+   interne functies zonder client- of service-grant: `fn_toets_besluitstatus_feit`
+   en de constraint-triggerfunctie `fn_guard_besluitstatus_feit`. De composite-FK's
+   (I5, tranche 8) en de nieuwe CHECK-waarden (`beeindigd`/`niet_begonnen`/`vervallen`)
+   zijn declaratief, geen grants.
+11. **Actie-eigenaarprofiel (2026-08-30).** `fn_guard_decision_action_eigenaar()` is
+   uitsluitend een `BEFORE`-trigger: geen client- of service-grant. Hij borgt dat een
+   actie-eigenaar een profiel uit hetzelfde fonds is en laat geen nieuwe vrije-tekstnaam toe.
+12. **P5c-aantekeningen per processtap (§9.3).** `procedure_stap_notitie` is geen
+    verantwoordingsfeit maar bewerkbaar werkverkeer: `anon` heeft niets,
+    `authenticated` krijgt `SELECT, INSERT, UPDATE, DELETE`, en `service_role`
+    volledig beheer. RLS beperkt lezen en schrijven tot het eigen fonds en UPDATE/
+    DELETE aanvullend tot de auteur. `fn_validate_stap_notitie()` is uitsluitend de
+    SECURITY DEFINER-triggerfunctie voor de fonds-/procedure-/stapbinding (I5): geen
+    browser-EXECUTE, alleen `service_role` behoudt die technische grant. De
+    gedragstoets `2026_08_30_p5c_stap_notitie_gedrag.sql` meet precies deze
+    auteurs- en tenantgrens onder `authenticated`.
 
 ## Objecten die NIET in scope zijn
 

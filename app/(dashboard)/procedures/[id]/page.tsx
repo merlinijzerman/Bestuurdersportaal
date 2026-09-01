@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { templateLabel } from "@/core/lib/proces-templates";
 import { isBureauRol } from "@/core/lib/bureau-gate";
+import { rolHeeftCapability } from "@/core/lib/capabilities-map";
 import {
   DOSSIER_STATUS_LABEL,
   dossierStatusKleur,
@@ -20,12 +21,15 @@ import UitklapbaarPaneel from "../_components/UitklapbaarPaneel";
 import DossierSectie from "../_components/DossierSectie";
 import DossierStatusStrip from "../_components/DossierStatusStrip";
 import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
+import ProcedureEindstatusActie from "../_components/ProcedureEindstatusActie";
 import AfschriftenPaneel from "../_components/AfschriftenPaneel";
 import { auditEventLabel } from "@/core/lib/audit-labels";
+import { besluitStaatNog } from "@/core/lib/decision-view";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
 } from "@/core/lib/decision";
+import { BESLUIT_OP_SLOT } from "@/core/lib/vereiste-koppeling";
 import { laadFasen } from "@/core/lib/procedure-fasen";
 import {
   faseStatus,
@@ -34,10 +38,11 @@ import {
 } from "@/core/lib/procedure-fase-status";
 import { haalFondsleden, weergaveNaam, initialen } from "@/core/lib/fondsleden";
 import { kiesWeergave } from "@/core/lib/procedure-detail-weergave";
+import { isInhoudelijkBewerkbaar } from "@/core/lib/procedure-activatie";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de
-// Next.js full-route cache lopen — anders blijven readiness-ladder en
+// Next.js full-route cache lopen — anders blijven de besluitmoment-telling en
 // andere panelen op stale waarden hangen na mutaties via router.refresh().
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -69,7 +74,7 @@ export interface Stap {
   // Engine v2 (D6): parallel-by-default statusmodel. 'open' is de legacy-waarde
   // (bestaande sequentiële procedures); nieuwe procedures gebruiken
   // 'geblokkeerd' voor nog-niet-activeerbare stappen. 'heropend' telt als actief.
-  status: "open" | "geblokkeerd" | "actief" | "afgerond" | "heropend";
+  status: "open" | "niet_begonnen" | "geblokkeerd" | "actief" | "afgerond" | "heropend" | "vervallen";
   eigenaar_naam: string | null;
   deadline: string | null;
   voltooid_op: string | null;
@@ -124,6 +129,8 @@ export interface Besluit {
   datum: string;
   vastgelegd_door_naam: string | null;
   verworpen_alternatieven: string[] | null;
+  uitkomst: "instemmend" | "voorwaardelijk" | "afwijzend" | null;
+  requirement_sleutel: string | null;
 }
 
 export interface KomendeVergadering {
@@ -226,6 +233,29 @@ export default async function ProcedureDetailPage({
     .single();
   const currentUserIsPrivileged =
     profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+  // Bestuurders mogen bewijs opvoeren én aan bestaande vereisten koppelen. Het
+  // is proceswerk (`procedures.manage`), niet het beheren van de vereisteset.
+  const magBewijsKoppelen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.manage"
+  );
+  // P5c (§9.3): aantekeningen zijn bewerkbaar werkverkeer, geen
+  // beheerdershandeling. Een bestuurder heeft procedures.manage en mag op een
+  // actieve stap daarom zelf een aantekening toevoegen en de eigen tekst
+  // beheren. De route en RLS bewaken auteur- en fondsgrens opnieuw.
+  const magAantekeningenWijzigen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.manage"
+  );
+  // P3 (#168, §5.1): afronden met afwijking hangt aan de capability, niet aan de
+  // kanBeheren-hardcode — bestuurder draagt de capability wél maar is geen
+  // kanBeheren. De harde gate zit server-side (route + DB-functie).
+  const magAfwijkingVastleggen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.afwijking.vastleggen"
+  );
+  const magProcesBeeindigen = rolHeeftCapability(profiel?.rol, "procedures.beeindigen");
+  const magProcesHeropenen = rolHeeftCapability(profiel?.rol, "procedures.heropenen");
   // T1 bureau-rol (§5.3): geen dissent vastleggen. UI-cosmetica; de weigering
   // staat in de dissent-routes en in de RLS-schrijfpolicy.
   const currentUserIsBureau = isBureauRol(profiel?.rol);
@@ -263,6 +293,12 @@ export default async function ProcedureDetailPage({
   // Weergavenaam live uit vw_fondsleden waar een account bekend is; anders de
   // bevroren snapshot (co-eigenaar zonder account, of view nog niet gemigreerd).
   const fondsleden = await haalFondsleden(supabase);
+  // Actie-eigenaren zijn altijd echte profielen uit het eigen fonds. Zonder
+  // weergavenaam is een profiel niet zinvol kiesbaar in de interface.
+  const actieEigenaren = Array.from(fondsleden.values()).flatMap((lid) => {
+    const naam = lid.naam?.trim();
+    return naam ? [{ id: lid.id, naam }] : [];
+  });
   const eigenaren = (eigenarenRes.data || []).map(
     (e: { gebruiker_id: string | null; gebruiker_naam: string }) =>
       weergaveNaam(e.gebruiker_id, e.gebruiker_naam, fondsleden)
@@ -355,6 +391,13 @@ export default async function ProcedureDetailPage({
   const afgerondAantal = stappen.filter((s) => s.status === "afgerond").length;
   const totaalStappen = stappen.length;
 
+  // Besluitmoment-stappen (§7): de volgordes van de stappen met `vereist_besluit`.
+  // Hiermee is de status-signalering besluitmoment-scoped i.p.v. dossierbreed (Q1,
+  // besluit 0193) — een nazorgvereiste elders forceert geen motivering.
+  const besluitmomentStappen = stappen
+    .filter((s) => s.vereist_besluit)
+    .map((s) => s.volgorde);
+
   // T6-1A: welke stap staat in het rechterpaneel? Selectie via ?stap=<id>
   // (server-first, past bij het force-dynamic + router.refresh()-patroon).
   // Default = de actieve stap; ontbreekt die, dan de laatst afgeronde; anders
@@ -387,6 +430,41 @@ export default async function ProcedureDetailPage({
   } catch (e) {
     console.error("Dossier laden mislukt:", e);
   }
+
+  const beeindigingEvent = log.find((e) => e.event_type === "procedure_beeindigd") ?? null;
+  const beeindigingPayload = beeindigingEvent?.payload ?? {};
+  const beeindiging = beeindigingEvent
+    ? {
+        motivering: typeof beeindigingPayload.motivering === "string" ? beeindigingPayload.motivering : null,
+        actor: beeindigingEvent.actor_naam,
+        tijdstip: beeindigingEvent.tijdstip,
+      }
+    : null;
+  const beeindigingSnapshot = {
+    stappen: stappen.filter((s) => s.status !== "afgerond" && s.status !== "vervallen").length,
+    kritiek: (dossier?.evidence ?? []).filter((e) => !e.vervuld && e.blokkerend).length,
+    vereist: (dossier?.evidence ?? []).filter((e) => !e.vervuld && e.verplicht && !e.blokkerend).length,
+    optioneel: (dossier?.evidence ?? []).filter((e) => !e.vervuld && !e.verplicht && !e.blokkerend).length,
+  };
+
+  // Signaal 3 (§12, Q2/0193): is dit besluit genomen terwijl er vereisten
+  // openstonden? Afgeleid uit het append-only event (events zijn tijdstip-desc, dus
+  // find = het nieuwste); de actor-rol is de momentopname uit de payload. Alleen
+  // tonen zolang HET BESLUIT NOG STAAT — na heropenen/afwijzen/terugzetten is het een
+  // teruggedraaid feit, geen actief signaal (reviewbevinding). Het event blijft in de
+  // audit-trail; alleen de actieve strip-markering vervalt.
+  const bmoEvent = dossier?.events.find(
+    (e) => e.event_type === "besluit_genomen_met_openstaande_vereisten"
+  );
+  const beslotenMetOpenstaand =
+    bmoEvent && dossier && besluitStaatNog(dossier.decision.status)
+      ? {
+          actorNaam: bmoEvent.actor_naam,
+          actorRol:
+            (bmoEvent.nieuwe_waarde as { actor_rol?: string } | null)
+              ?.actor_rol ?? null,
+        }
+      : null;
 
   // WO-2 (§7 + §7.1): procesfasen-rail. De fasen (D8) komen uit de definitie
   // met een per fonds overschrijfbare beschrijving; de fase-status, aandachts-
@@ -463,13 +541,16 @@ export default async function ProcedureDetailPage({
     );
   }
 
-  // WO-3: rechter-weergavekeuze. ?stap wint > ?fase > default-stap. In fase-
-  // modus staat rechts alléén de fasebeschrijving; in stap-modus het stapscherm.
+  // WO-3: rechter-weergavekeuze. ?stap wint > ?fase > eerste procesfase.
+  // In fase-modus staat rechts alléén de fasebeschrijving; in stap-modus het
+  // stapscherm. Daardoor opent een proces altijd op zijn eerste fase, terwijl
+  // een expliciet gekozen stap intact blijft.
   const weergave = kiesWeergave({
     stapParam,
     faseParam,
     geldigeStapIds: stappen.map((s) => s.id),
     geldigeFaseCodes: faseGroepen.map((f) => f.fase_code),
+    defaultFaseCode: faseGroepen[0]?.fase_code ?? null,
     defaultStapId,
   });
   const geselecteerdeStap =
@@ -481,9 +562,7 @@ export default async function ProcedureDetailPage({
       ? faseGroepen.find((f) => f.fase_code === weergave.faseCode) ?? null
       : null;
   const geselecteerdeIsBewerkbaar =
-    geselecteerdeStap != null &&
-    (geselecteerdeStap.status === "actief" ||
-      geselecteerdeStap.status === "heropend");
+    geselecteerdeStap != null && isInhoudelijkBewerkbaar(geselecteerdeStap.status);
   const geselecteerdeVoltooidDoorNaam = geselecteerdeStap?.voltooid_door
     ? fondsleden.get(geselecteerdeStap.voltooid_door)?.naam ?? null
     : null;
@@ -516,7 +595,7 @@ export default async function ProcedureDetailPage({
   ].sort((a, b) => (a.tijdstip < b.tijdstip ? 1 : -1));
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-5">
       {/* Top-bar: terug-link links, AI-instap rechts (besluit 0151). */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Link
@@ -565,16 +644,26 @@ export default async function ProcedureDetailPage({
           )}
         </div>
         <div className="flex items-start justify-between flex-wrap gap-3">
-          <h1 className="font-serif text-ink text-xl font-bold">
+          <h1 className="font-serif text-ink text-lg font-bold">
             {procedure.titel}
           </h1>
-          <ProcedureMetadataEdit
-            procedureId={procedure.id}
-            titel={procedure.titel}
-            beschrijving={procedure.beschrijving}
-            deadline={procedure.deadline}
-            status={procedure.status}
-          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProcedureMetadataEdit
+              procedureId={procedure.id}
+              titel={procedure.titel}
+              beschrijving={procedure.beschrijving}
+              deadline={procedure.deadline}
+              status={procedure.status}
+            />
+            <ProcedureEindstatusActie
+              procedureId={procedure.id}
+              isBeeindigd={dossierstatus === "beeindigd"}
+              kanBeeindigen={magProcesBeeindigen}
+              kanHeropenen={magProcesHeropenen}
+              snapshot={beeindigingSnapshot}
+              beeindiging={beeindiging}
+            />
+          </div>
         </div>
         {procedure.beschrijving && (
           <p className="text-sm text-muted mt-1.5 max-w-3xl whitespace-pre-line">
@@ -584,7 +673,7 @@ export default async function ProcedureDetailPage({
       </div>
 
       {/* Meta-strook */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-line rounded-xl p-5">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-line rounded-xl p-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Co-eigenaars
@@ -673,12 +762,14 @@ export default async function ProcedureDetailPage({
       </div>
 
       {/* Statusbalk — onder de meta-strook (co-eigenaars), verplaatst op
-          verzoek. Huidige status, eerstvolgende readiness-horde, classificatie
+          verzoek. Huidige status, openstaande vereisten per zwaarte, classificatie
           en de knoppen export/statusovergang. */}
       {dossier && (
         <DossierStatusStrip
           decision={dossier.decision}
-          readiness={dossier.readiness}
+          evidence={dossier.evidence}
+          besluitmomentStappen={besluitmomentStappen}
+          beslotenMetOpenstaand={beslotenMetOpenstaand}
           statusOvergangAnker="status-overgang"
           heeftSnapshot={dossier.snapshots.length > 0}
         />
@@ -689,10 +780,10 @@ export default async function ProcedureDetailPage({
           fase-accordeon hieronder. */}
 
       {/* Body */}
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-12 gap-4">
         {/* Step rail */}
         <div className="col-span-12 lg:col-span-4">
-          <div className="bg-white border border-line rounded-xl p-5 sticky top-4">
+          <div className="bg-white border border-line rounded-xl p-4 sticky top-4">
             <div className="flex items-center justify-between mb-4">
               <div className="text-xs uppercase tracking-wide text-muted font-semibold">
                 Procesfasen
@@ -743,12 +834,34 @@ export default async function ProcedureDetailPage({
             />
           ) : geselecteerdeStap ? (
             <StapPaneel
+              key={`${geselecteerdeStap.id}:${geselecteerdeStap.deadline ?? ""}`}
               procedureId={procedure.id}
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}
               kanBeheren={currentUserIsPrivileged}
+              magBewijsKoppelen={magBewijsKoppelen}
+              magAantekeningenWijzigen={magAantekeningenWijzigen}
+              besluitOpSlot={
+                // #192/I1: staat het besluit op slot? Dan is losmaken vergrendeld
+                // (met reden). Harde gate zit server-side in de koppelroute.
+                dossier ? BESLUIT_OP_SLOT.includes(dossier.decision.status) : false
+              }
+              magAfwijkingVastleggen={magAfwijkingVastleggen}
               currentUserId={user.id}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
+              fase={(() => {
+                // P1a (#165): fasecontext voor het tabblad Overzicht.
+                const g = faseGroepen.find(
+                  (f) => f.fase_code === geselecteerdeStap.fase_code
+                );
+                return g
+                  ? {
+                      code: g.fase_code,
+                      titel: g.titel,
+                      beschrijving: g.toelichting ?? g.beschrijving,
+                    }
+                  : null;
+              })()}
               evidence={dossier?.evidence ?? []}
               checklist={checklist.filter(
                 (c) => c.stap_id === geselecteerdeStap.id && c.actief !== false
@@ -878,6 +991,7 @@ export default async function ProcedureDetailPage({
               risks={dossier.risks}
               conditions={dossier.conditions}
               actions={dossier.actions}
+              actieEigenaren={actieEigenaren}
               dissents={dossier.dissent}
               currentUserId={user.id}
               currentUserIsPrivileged={currentUserIsPrivileged}
@@ -887,12 +1001,12 @@ export default async function ProcedureDetailPage({
             <UitklapbaarPaneel
               titel="Statusovergang"
               ankerId="status-overgang"
-              samenvatting="Door naar volgende fase, met readiness-check + override"
+              samenvatting="Door naar volgende fase; besluit met openstaande vereisten vraagt een motivering"
             >
               <StatusOvergangPaneel
                 decision={dossier.decision}
-                readiness={dossier.readiness}
-                currentUserIsPrivileged={currentUserIsPrivileged}
+                evidence={dossier.evidence}
+                besluitmomentStappen={besluitmomentStappen}
               />
             </UitklapbaarPaneel>
 

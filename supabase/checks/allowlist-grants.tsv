@@ -84,12 +84,18 @@ FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_
 FUNC	public	fn_audit_procedure_bewijs_mutation()	function	anon	-
 FUNC	public	fn_audit_procedure_bewijs_mutation()	function	authenticated	-
 FUNC	public	fn_audit_procedure_bewijs_mutation()	function	service_role	EXECUTE
+FUNC	public	fn_besluit_heropenen_correctie(p_decision_id uuid, p_reden_type text, p_motivering text)	function	anon	-
+FUNC	public	fn_besluit_heropenen_correctie(p_decision_id uuid, p_reden_type text, p_motivering text)	function	authenticated	EXECUTE
+FUNC	public	fn_besluit_heropenen_correctie(p_decision_id uuid, p_reden_type text, p_motivering text)	function	service_role	-
 FUNC	public	fn_bron_whitelist_log_hash()	function	anon	-
 FUNC	public	fn_bron_whitelist_log_hash()	function	authenticated	EXECUTE
 FUNC	public	fn_bron_whitelist_log_hash()	function	service_role	EXECUTE
 FUNC	public	fn_bron_whitelist_log_immutable()	function	anon	-
 FUNC	public	fn_bron_whitelist_log_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_bron_whitelist_log_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_besluit_status_omslag(p_decision_id uuid, p_target text, p_reden text, p_motivering text, p_open_elders jsonb)	function	anon	-
+FUNC	public	fn_besluit_status_omslag(p_decision_id uuid, p_target text, p_reden text, p_motivering text, p_open_elders jsonb)	function	authenticated	EXECUTE
+FUNC	public	fn_besluit_status_omslag(p_decision_id uuid, p_target text, p_reden text, p_motivering text, p_open_elders jsonb)	function	service_role	-
 FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	anon	-
 FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	service_role	EXECUTE
@@ -108,12 +114,6 @@ FUNC	public	fn_contact_aanvragen_no_delete()	function	service_role	EXECUTE
 FUNC	public	fn_decision_code()	function	anon	-
 FUNC	public	fn_decision_code()	function	authenticated	EXECUTE
 FUNC	public	fn_decision_code()	function	service_role	EXECUTE
-FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	anon	-
-FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	authenticated	EXECUTE
-FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	service_role	EXECUTE
-FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	anon	-
-FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	authenticated	EXECUTE
-FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	service_role	EXECUTE
 FUNC	public	fn_decision_snapshot()	function	anon	-
 FUNC	public	fn_decision_snapshot()	function	authenticated	EXECUTE
 FUNC	public	fn_decision_snapshot()	function	service_role	EXECUTE
@@ -174,6 +174,12 @@ FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	service_role
 FUNC	public	fn_guard_stap_insert()	function	anon	-
 FUNC	public	fn_guard_stap_insert()	function	authenticated	-
 FUNC	public	fn_guard_stap_insert()	function	service_role	-
+FUNC	public	fn_guard_besluitstatus_feit()	function	anon	-
+FUNC	public	fn_guard_besluitstatus_feit()	function	authenticated	-
+FUNC	public	fn_guard_besluitstatus_feit()	function	service_role	-
+FUNC	public	fn_guard_decision_action_eigenaar()	function	anon	-
+FUNC	public	fn_guard_decision_action_eigenaar()	function	authenticated	-
+FUNC	public	fn_guard_decision_action_eigenaar()	function	service_role	-
 FUNC	public	fn_handelingen_retentie_guard()	function	anon	-
 FUNC	public	fn_handelingen_retentie_guard()	function	authenticated	-
 FUNC	public	fn_handelingen_retentie_guard()	function	service_role	EXECUTE
@@ -222,9 +228,21 @@ FUNC	public	fn_platform_event_hash()	function	service_role	-
 FUNC	public	fn_platform_event_immutable()	function	anon	-
 FUNC	public	fn_platform_event_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_platform_event_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	anon	-
+FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	authenticated	EXECUTE
+FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	service_role	-
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)	function	anon	-
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)	function	authenticated	EXECUTE
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)	function	service_role	-
+FUNC	public	fn_procedure_requirements_versievast()	function	anon	-
+FUNC	public	fn_procedure_requirements_versievast()	function	authenticated	-
+FUNC	public	fn_procedure_requirements_versievast()	function	service_role	EXECUTE
 FUNC	public	fn_profiel_bevries_kolommen()	function	anon	-
 FUNC	public	fn_profiel_bevries_kolommen()	function	authenticated	-
 FUNC	public	fn_profiel_bevries_kolommen()	function	service_role	EXECUTE
+FUNC	public	fn_publicatie_append_only()	function	anon	-
+FUNC	public	fn_publicatie_append_only()	function	authenticated	-
+FUNC	public	fn_publicatie_append_only()	function	service_role	EXECUTE
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	anon	-
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	authenticated	EXECUTE
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	service_role	EXECUTE
@@ -240,6 +258,15 @@ FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version 
 FUNC	public	fn_snapshot_immutable()	function	anon	-
 FUNC	public	fn_snapshot_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_snapshot_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	anon	-
+FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	service_role	-
+FUNC	public	fn_validate_stap_notitie()	function	anon	-
+FUNC	public	fn_validate_stap_notitie()	function	authenticated	-
+FUNC	public	fn_validate_stap_notitie()	function	service_role	EXECUTE
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	anon	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	authenticated	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	service_role	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	anon	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	authenticated	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	service_role	EXECUTE
@@ -381,12 +408,21 @@ FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	service_role	EXECUTE
 FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
 FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
+FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	anon	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	authenticated	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	service_role	-
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	anon	-
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	service_role	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text)	function	anon	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text)	function	authenticated	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text)	function	service_role	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	anon	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	authenticated	EXECUTE
 FUNC	public	fn_stem_ketengebeurtenis()	function	service_role	EXECUTE
@@ -396,6 +432,69 @@ FUNC	public	fn_stemming_ketengebeurtenis()	function	service_role	EXECUTE
 FUNC	public	fn_vergadering_ketengebeurtenis()	function	anon	-
 FUNC	public	fn_vergadering_ketengebeurtenis()	function	authenticated	EXECUTE
 FUNC	public	fn_vergadering_ketengebeurtenis()	function	service_role	EXECUTE
+FUNC	public	fn_assert_gebonden_feit(p_fonds_id uuid, p_procedure_id uuid, p_sleutel text, p_verwacht_type text)	function	anon	-
+FUNC	public	fn_assert_gebonden_feit(p_fonds_id uuid, p_procedure_id uuid, p_sleutel text, p_verwacht_type text)	function	authenticated	-
+FUNC	public	fn_assert_gebonden_feit(p_fonds_id uuid, p_procedure_id uuid, p_sleutel text, p_verwacht_type text)	function	service_role	EXECUTE
+FUNC	public	fn_log_gebonden_feit_mutatie(p_procedure_id uuid, p_brontabel text, p_bron_id uuid, p_oude_sleutel text, p_nieuwe_sleutel text)	function	anon	-
+FUNC	public	fn_log_gebonden_feit_mutatie(p_procedure_id uuid, p_brontabel text, p_bron_id uuid, p_oude_sleutel text, p_nieuwe_sleutel text)	function	authenticated	-
+FUNC	public	fn_log_gebonden_feit_mutatie(p_procedure_id uuid, p_brontabel text, p_bron_id uuid, p_oude_sleutel text, p_nieuwe_sleutel text)	function	service_role	EXECUTE
+FUNC	public	fn_validate_risk_binding()	function	anon	-
+FUNC	public	fn_validate_risk_binding()	function	authenticated	-
+FUNC	public	fn_validate_risk_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_risk_binding()	function	anon	-
+FUNC	public	fn_audit_risk_binding()	function	authenticated	-
+FUNC	public	fn_audit_risk_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_assumption_binding()	function	anon	-
+FUNC	public	fn_validate_assumption_binding()	function	authenticated	-
+FUNC	public	fn_validate_assumption_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_assumption_binding()	function	anon	-
+FUNC	public	fn_audit_assumption_binding()	function	authenticated	-
+FUNC	public	fn_audit_assumption_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_kpi_binding()	function	anon	-
+FUNC	public	fn_validate_kpi_binding()	function	authenticated	-
+FUNC	public	fn_validate_kpi_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_kpi_binding()	function	anon	-
+FUNC	public	fn_audit_kpi_binding()	function	authenticated	-
+FUNC	public	fn_audit_kpi_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_evaluation_binding()	function	anon	-
+FUNC	public	fn_validate_evaluation_binding()	function	authenticated	-
+FUNC	public	fn_validate_evaluation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_evaluation_binding()	function	anon	-
+FUNC	public	fn_audit_evaluation_binding()	function	authenticated	-
+FUNC	public	fn_audit_evaluation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_aivalidation_binding()	function	anon	-
+FUNC	public	fn_validate_aivalidation_binding()	function	authenticated	-
+FUNC	public	fn_validate_aivalidation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_aivalidation_binding()	function	anon	-
+FUNC	public	fn_audit_aivalidation_binding()	function	authenticated	-
+FUNC	public	fn_audit_aivalidation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_approval_binding()	function	anon	-
+FUNC	public	fn_validate_approval_binding()	function	authenticated	-
+FUNC	public	fn_validate_approval_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_approval_binding()	function	anon	-
+FUNC	public	fn_audit_approval_binding()	function	authenticated	-
+FUNC	public	fn_audit_approval_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_vaststelling_binding()	function	anon	-
+FUNC	public	fn_validate_vaststelling_binding()	function	authenticated	-
+FUNC	public	fn_validate_vaststelling_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_vaststelling_binding()	function	anon	-
+FUNC	public	fn_audit_vaststelling_binding()	function	authenticated	-
+FUNC	public	fn_audit_vaststelling_binding()	function	service_role	EXECUTE
+FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	anon	-
+FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	authenticated	-
+FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_guard_decision_insert_status()	function	anon	-
+FUNC	public	fn_guard_decision_insert_status()	function	authenticated	-
+FUNC	public	fn_guard_decision_insert_status()	function	service_role	EXECUTE
+FUNC	public	fn_guard_decision_scoped_i1()	function	anon	-
+FUNC	public	fn_guard_decision_scoped_i1()	function	authenticated	-
+FUNC	public	fn_guard_decision_scoped_i1()	function	service_role	EXECUTE
+FUNC	public	fn_guard_procedure_scoped_i1()	function	anon	-
+FUNC	public	fn_guard_procedure_scoped_i1()	function	authenticated	-
+FUNC	public	fn_guard_procedure_scoped_i1()	function	service_role	EXECUTE
+FUNC	public	fn_guard_bewijs_i1()	function	anon	-
+FUNC	public	fn_guard_bewijs_i1()	function	authenticated	-
+FUNC	public	fn_guard_bewijs_i1()	function	service_role	EXECUTE
 REL	public	agendapunt_inbreng	table	anon	SELECT
 REL	public	agendapunt_inbreng	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	agendapunt_inbreng	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
@@ -480,6 +579,9 @@ REL	public	aqlab_test_cases	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNC
 REL	public	aqlab_test_sets	table	anon	SELECT
 REL	public	aqlab_test_sets	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	aqlab_test_sets	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	besluitstatus_vereist_feit	table	anon	-
+REL	public	besluitstatus_vereist_feit	table	authenticated	SELECT
+REL	public	besluitstatus_vereist_feit	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	bron_whitelist	table	anon	SELECT
 REL	public	bron_whitelist	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	bron_whitelist	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
@@ -526,7 +628,7 @@ REL	public	decision_evaluations	table	anon	SELECT
 REL	public	decision_evaluations	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	decision_evaluations	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	decision_objects	table	anon	SELECT
-REL	public	decision_objects	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_objects	table	authenticated	SELECT,INSERT,DELETE
 REL	public	decision_objects	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	decision_risks	table	anon	SELECT
 REL	public	decision_risks	table	authenticated	SELECT,INSERT,UPDATE,DELETE
@@ -702,6 +804,15 @@ REL	public	procedure_fase_toelichting	table	service_role	SELECT,INSERT,UPDATE,DE
 REL	public	procedure_log	table	anon	SELECT
 REL	public	procedure_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	procedure_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_stap_notitie	table	anon	-
+REL	public	procedure_stap_notitie	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_stap_notitie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_definitie_publicatie	table	anon	-
+REL	public	procedure_definitie_publicatie	table	authenticated	SELECT
+REL	public	procedure_definitie_publicatie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_vaststelling	table	anon	-
+REL	public	procedure_vaststelling	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_vaststelling	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_requirement_instance	table	anon	-
 REL	public	procedure_requirement_instance	table	authenticated	SELECT,INSERT,UPDATE
 REL	public	procedure_requirement_instance	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN

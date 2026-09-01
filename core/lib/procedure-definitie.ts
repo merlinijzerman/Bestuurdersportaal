@@ -218,6 +218,19 @@ export function valideerDefinitie(def: unknown): string[] {
     if (!Array.isArray(s.requirements)) {
       fouten.push(`${pos}: requirements ontbreekt (mag [] zijn)`);
     } else {
+      // Fase C / OB-E17: `vereist_besluit` zonder approval is geen lege,
+      // geruststellende besluitstap maar een definitiefout. Een besluit mag
+      // nog steeds ongebonden bestaan (D10); deze regel bewaakt uitsluitend
+      // dat een template die zélf een besluitmoment eist ook iets modelleert
+      // waaraan dat besluit kan bijdragen.
+      if (
+        s.vereist_besluit === true &&
+        !s.requirements.some(
+          (r0) => (r0 as Record<string, unknown>).requirement_type === "approval"
+        )
+      ) {
+        fouten.push(`${pos}: vereist_besluit zonder gebonden approval-vereiste`);
+      }
       // Matchsleutel-identiteit coalesce(documenttype, label) moet binnen een
       // stap uniek en niet-leeg zijn. Diezelfde identiteit draagt de unieke
       // index idx_req_uniek, de per-proces uitsluiting én de bewijsbinding
@@ -348,6 +361,7 @@ export function definitieNaarProcessTemplate(def: ProcedureDefinitie): ProcessTe
 
   return {
     code: def.code,
+    versie: def.versie, // P1b (#166): versie meenemen voor snapshot-bij-start.
     naam: def.naam,
     korte_omschrijving: def.korte_omschrijving,
     geschat_aantal_dagen: def.geschat_aantal_dagen,

@@ -157,6 +157,12 @@ export const FIX = {
   procedureChecklist: "00000000-0000-4000-8000-0000000cd102",
   procedureBewijs: "00000000-0000-4000-8000-0000000cd103",
   procedureKindOnbekend: "00000000-0000-4000-8000-0000000cd10f",
+  // P6: eigen, herhaalbare kiezer-fixture. De approval hangt aan een
+  // instantie-vereiste; zo raakt de opname geen onveranderlijke templateversie.
+  procedureKandidatenDecision: "00000000-0000-4000-8000-0000000cd120",
+  procedureKandidatenRequirementDoel: "00000000-0000-4000-8000-0000000cd121",
+  procedureKandidatenRequirementGebonden: "00000000-0000-4000-8000-0000000cd122",
+  procedureKandidaatApproval: "00000000-0000-4000-8000-0000000cd123",
 
   // ── W5 — fixtures voor de acht handwerkroutes ─────────────────────────────
   //  `decisionAuditdossier` is een EIGEN besluit en niet `decision1`. De

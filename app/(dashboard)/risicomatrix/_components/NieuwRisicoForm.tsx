@@ -73,7 +73,7 @@ export default function NieuwRisicoForm() {
   return (
     <form
       onSubmit={indienen}
-      className="bg-white border border-line rounded-xl p-6 space-y-5"
+      className="bg-white border border-line rounded-xl p-5 space-y-4"
     >
       <div>
         <label className="block text-sm font-medium text-ink mb-1.5">

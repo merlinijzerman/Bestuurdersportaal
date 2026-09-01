@@ -73,6 +73,7 @@ function baseProcedure(over: Partial<ProcedureSummary> = {}): ProcedureSummary {
     id: "proc-1",
     fonds_id: "fonds-1",
     template_code: "beleggingsbeleid",
+    template_versie: null,
     titel: "Wijziging beleggingsbeleid 2026",
     beschrijving: null,
     status: "besloten",
@@ -194,7 +195,8 @@ function besluitItem(over: Partial<BesluitItem>): BesluitItem {
     id: "bes", procedure_id: "proc-1", stap_id: null, decision_id: "dec-1",
     formulering: "Akkoord", motivering: null, datum: "2026-04-19T09:00:00.000Z",
     vastgelegd_door_naam: null, verworpen_alternatieven: null,
-    vergadering_id: null, agendapunt_id: null, ...over,
+    vergadering_id: null, agendapunt_id: null, uitkomst: null,
+    requirement_sleutel: null, ...over,
   };
 }
 function govEvent(over: Partial<GovernanceEvent>): GovernanceEvent {
@@ -317,6 +319,43 @@ test("besluiten worden per Decision Object toegewezen (view.besluiten is procesb
   const fk = bouwFeitenkaart(bron([v1, v2]));
   assert.equal(fk.besluiten[0].vastgelegdeBesluiten.totaal, 1);
   assert.equal(fk.besluiten[1].vastgelegdeBesluiten.totaal, 1);
+});
+
+// PR-D (#168, 0187): de nieuwe tak — readiness ontmanteld. Een view ZONDER readiness
+// leidt de blokkerende (kritieke) vereisten uit de evidence af; en een view met noch
+// readiness noch evidence (een bevroren snapshot vóór de normaliseerView-guard) mag
+// NIET crashen.
+test("readiness afwezig → blokkerende vereisten uit de evidence", () => {
+  const blokEvidence = {
+    requirement_type: "document" as const,
+    stap_volgorde: 1,
+    label: "Kritiek stuk",
+    toelichting: null,
+    documenttype: null,
+    verplicht: true,
+    blokkerend: true,
+    vervuld: false,
+    bron_type: null,
+    bron_id: null,
+    bron_titel: null,
+    bron: "template" as const,
+    instance_id: null,
+    besluitmoment_stap: null,
+    gebonden_feiten: [],
+    min_aantal: 1,
+    dissent_open: 0,
+  };
+  const view = maakView({ readiness: undefined, evidence: [blokEvidence] });
+  const fk = bouwFeitenkaart(bron([view]));
+  assert.ok(
+    fk.afwijkingen.some((r: string) => /1 nog niet vervulde, blokkerende vereiste/.test(r)),
+    "de blokkerende vereiste uit de evidence hoort in de feitenkaart-afwijkingen"
+  );
+});
+
+test("readiness én evidence afwezig (bevroren snapshot) → geen crash", () => {
+  const view = maakView({ readiness: undefined, evidence: undefined as unknown as never });
+  assert.doesNotThrow(() => bouwFeitenkaart(bron([view])));
 });
 
 console.log(`\nafschrift-feitenkaart: ${n} tests groen.`);

@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { zonderLegeRequirementSleutel } from "@/core/lib/publieke-rij";
 import { z } from "zod";
 
 const RISK_CATEGORIE = [
@@ -146,7 +147,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       },
     });
 
-    return NextResponse.json({ risk: nieuw }, { status: 201 });
+    return NextResponse.json({ risk: zonderLegeRequirementSleutel(nieuw) }, { status: 201 });
   } catch (e) {
     console.error("Fout in POST /api/decisions/[id]/risks:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });

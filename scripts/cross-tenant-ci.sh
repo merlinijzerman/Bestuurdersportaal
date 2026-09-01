@@ -165,6 +165,23 @@ SQL_V3="supabase/checks/2026_08_20_v3_grants_volledig.sql"
 # #214-a1 (0194) — schrijfpoort: statische gate + gedragstoets (directe PATCH dicht).
 SQL_P214A1="supabase/checks/2026_08_28_p214a1_schrijfpoort.sql"
 SQL_P214A1G="supabase/checks/2026_08_28_p214a1_gedrag.sql"
+# #214-a2 (0194) — epic-only afwijkingskolommen blijven buiten authenticated UPDATE.
+SQL_P214A2="supabase/checks/2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sql"
+# P4 tranche 8 (#169, 0194 F) — I5 composite-FK weigert cross-fonds referenties.
+SQL_P4I5="supabase/checks/2026_08_29_p4_i5_composite_fk.sql"
+# P4 tranche 4 (#169) — I1: statusclaim vereist matrixfeit.
+SQL_P4I1="supabase/checks/2026_08_29_p4_04_status_feitenmatrix.sql"
+# #228-familie / bevinding 2b — een besluit mag ongebonden bestaan; alleen een
+# gebonden approval voldoet aan de P4-status-feitenmatrix.
+SQL_P2C_ONGB="supabase/checks/2026_08_31_p2c_ongebonden_besluit.sql"
+# P5c (§9.3) — werkverkeer per stap: statusneutraal, I5 en auteur-/tenantgrens.
+SQL_P5C_NOTITIE="supabase/checks/2026_08_30_p5c_stap_notitie_gedrag.sql"
+# P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
+SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
+# #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
+# auth-/fonds-/rolslot, of staat als productbreed/trigger expliciet gemotiveerd
+# op de allowlist.
+SQL_SECDEF_SELF="supabase/checks/2026_08_31_secdef_self_gate.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -179,6 +196,15 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 # Bewijs↔vereiste-binding — expliciete één-op-éénbinding, fail-closed bij
 # ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
+# #263 — P2-indexpreflight mag een hoge drempel van een andere requirement op
+# dezelfde stap niet aan een gebonden document toeschrijven.
+SQL_P2_INDEX_PREFLIGHT="supabase/checks/2026_09_01_p2a_01_bewijsindex_preflight_regressie.sql"
+# P2/PR-B (#167): procedure_vaststelling — binding, I1 en tenant-isolatie (0189).
+SQL_VAST="supabase/checks/2026_08_25_vaststelling_binding_cross_tenant.sql"
+# P3/PR-C (#168): afronden met afwijking — snapshot-pin (SQL-helft) + eigen slot (0192).
+SQL_P3C="supabase/checks/2026_08_27_p3c_afwijking.sql"
+# P3/PR-D (#168): atomaire besluitstatus-omslag met vastlegging (0193).
+SQL_P3D="supabase/checks/2026_08_28_p3d_besluit_omslag.sql"
 
 if [ "${XTENANT_FAST_LAGEN:-uitvoeren}" = "overslaan" ]; then
   echo "== [1–2/4] snelle lagen bewust niet herhaald =="
@@ -303,10 +329,52 @@ echo
 echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
 echo
+echo "-- P2-indexpreflight (exacte sleutel + templateversie; geen same-step-vals-positief) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P2_INDEX_PREFLIGHT"
+echo
+echo "-- Vaststelling-binding (type/I5/cross-procedure, I1-slot, tenant-isolatie) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VAST"
+echo
 
 echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1G"
+echo
+
+echo "-- #214-a2 afwijkingskolommen (vier epic-kolommen fail-closed + RPC-recht) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A2"
+echo
+
+echo "-- Afronden met afwijking (snapshot-pin SQL-helft, eigen slot, atomaire kern) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3C"
+echo
+
+echo "-- Besluitstatus-omslag (atomaire vastlegging, I2 DB-afgedwongen, eigen slot) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3D"
+echo
+
+echo "-- P4 I5 (composite-FK weigert cross-fonds referentie) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P4I5"
+echo
+
+echo "-- P4 I1 (statusclaim zonder matrixfeit wordt geweigerd) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P4I1"
+echo
+
+echo "-- #228-familie (ongebonden besluit bestaat; alleen gebonden approval vervult) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P2C_ONGB"
+echo
+
+echo "-- P5c aantekeningen (statusneutraal, I5, auteur- en tenantgrens) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5C_NOTITIE"
+echo
+
+echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5D_BEEINDIGEN"
+echo
+
+echo "-- #212 SECURITY DEFINER zelfsloten (inventaris + auth/fonds/rol-gates) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_SECDEF_SELF"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"

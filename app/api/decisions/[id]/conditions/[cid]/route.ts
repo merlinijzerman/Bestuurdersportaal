@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { zonderLegeRequirementSleutel } from "@/core/lib/publieke-rij";
 import { z } from "zod";
 
 const STATUS = [
@@ -101,7 +102,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     }
 
     if (Object.keys(wijzigingen).length === 0) {
-      return NextResponse.json({ condition: huidig, gewijzigd: false });
+      return NextResponse.json({ condition: zonderLegeRequirementSleutel(huidig), gewijzigd: false });
     }
 
     const { data: bijgewerkt, error: updFout } = await supabase
@@ -145,7 +146,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
       });
     }
 
-    return NextResponse.json({ condition: bijgewerkt, gewijzigd: true });
+    return NextResponse.json({ condition: zonderLegeRequirementSleutel(bijgewerkt), gewijzigd: true });
   } catch (e) {
     console.error("Fout in PATCH /api/decisions/[id]/conditions/[cid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });

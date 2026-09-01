@@ -2,7 +2,7 @@
 //  Sanity-tests voor core/lib/procedure-activatie.ts (D6).
 //
 //  Dekt de testklassen uit PROCEDURE-ENGINE-V2-ONTWERP §8:
-//   • parallelle-start: geen afhankelijkheden → alle stappen 'actief'.
+//   • parallelle-start: geen afhankelijkheden → alle stappen 'niet_begonnen'.
 //   • gate-fixture: een keten activeert alleen de kop; na afronden van de
 //     kop wordt de volgende activeerbaar; idempotent.
 //   • heropen: afhankelijke afgeronde stappen worden gesignaleerd, niet
@@ -17,6 +17,7 @@ import {
   afhankelijkeAfgerondeStappen,
   alleStappenAfgerond,
   isActiveerbaar,
+  isInhoudelijkBewerkbaar,
   type StapActivatieState,
 } from "./procedure-activatie";
 
@@ -28,25 +29,33 @@ function check(naam: string, fn: () => void) {
 }
 
 // ── Parallelle start (invaar-shape: 12 stappen, geen deps) ────────────
-check("parallelle start: alle dep-loze stappen worden actief", () => {
+check("parallelle start: alle dep-loze stappen worden niet_begonnen (P4)", () => {
   const stappen = Array.from({ length: 12 }, (_, i) => ({
     volgorde: i + 1,
     blokkerende_afhankelijkheden: [] as number[],
   }));
   const status = beginStatussen(stappen);
   assert.equal(status.size, 12);
-  for (const [, s] of status) assert.equal(s, "actief");
+  for (const [, s] of status) assert.equal(s, "niet_begonnen");
+});
+
+check("niet_begonnen is bewerkbaar voor de eerste inhoudelijke handeling", () => {
+  assert.equal(isInhoudelijkBewerkbaar("niet_begonnen"), true);
+  assert.equal(isInhoudelijkBewerkbaar("actief"), true);
+  assert.equal(isInhoudelijkBewerkbaar("heropend"), true);
+  assert.equal(isInhoudelijkBewerkbaar("geblokkeerd"), false);
+  assert.equal(isInhoudelijkBewerkbaar("afgerond"), false);
 });
 
 // ── Gate-fixture: keten 1 → 2 → 3 ─────────────────────────────────────
-check("keten: alleen de kop is bij start actief", () => {
+check("keten: alleen de kop is bij start niet_begonnen (P4)", () => {
   const stappen = [
     { volgorde: 1, blokkerende_afhankelijkheden: [] },
     { volgorde: 2, blokkerende_afhankelijkheden: [1] },
     { volgorde: 3, blokkerende_afhankelijkheden: [2] },
   ];
   const status = beginStatussen(stappen);
-  assert.equal(status.get(1), "actief");
+  assert.equal(status.get(1), "niet_begonnen");
   assert.equal(status.get(2), "geblokkeerd");
   assert.equal(status.get(3), "geblokkeerd");
 });

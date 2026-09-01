@@ -1,19 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { notifyUser } from "@/core/lib/notifications";
 import { z } from "zod";
-import {
-  herberekenActiveerbaarheid,
-  alleStappenAfgerond,
-  type StapActivatieState,
-} from "@/core/lib/procedure-activatie";
+import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.wijzigen" }, capability: "procedures.manage", schema: z.object({ "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.wijzigen" }, capability: "procedures.manage", schema: z.object({ "deadline": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;
 
-    const body = (await req.json()) as { status?: "actief" | "afgerond" };
+    const body = (await req.json()) as { status?: "actief" | "afgerond"; deadline?: string | null };
+
+    // §10: deadline betekent uitsluitend "uiterlijk gereed". Hij leidt nooit
+    // een status af en loopt via het bestaande, beheerde stappenpad.
+    if (Object.prototype.hasOwnProperty.call(body, "deadline")) {
+      const deadline = body.deadline === "" ? null : body.deadline;
+      if (deadline !== null && (typeof deadline !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(deadline))) {
+        return NextResponse.json({ error: "Deadline moet een datum zijn" }, { status: 400 });
+      }
+      const { data: stap } = await supabase
+        .from("procedure_stappen")
+        .select("id")
+        .eq("id", stapId)
+        .eq("procedure_id", id)
+        .maybeSingle();
+      if (!stap) return NextResponse.json({ error: "Stap niet gevonden" }, { status: 404 });
+      const { error } = await supabase
+        .from("procedure_stappen")
+        .update({ deadline })
+        .eq("id", stapId)
+        .eq("procedure_id", id);
+      if (error) {
+        console.error("Stapdeadline wijzigen mislukt:", error);
+        return NextResponse.json({ error: "Deadline wijzigen mislukt" }, { status: 500 });
+      }
+      await supabase.from("procedure_log").insert({
+        procedure_id: id,
+        event_type: "stap_deadline_gewijzigd",
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
+        payload: { stap_id: stapId, deadline },
+      });
+      return NextResponse.json({ ok: true, deadline });
+    }
+
     if (body.status !== "afgerond" && body.status !== "actief") {
       return NextResponse.json(
         { error: "Ongeldige status" },
@@ -112,111 +141,19 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
       }
 
       // ── D6: activeerbaarheid herberekenen — of procedure afronden ──
-      // Laad alle stappen ná het afronden van deze stap. `stap` is hierboven
-      // al op 'afgerond' gezet, dus de query reflecteert de nieuwe toestand.
-      const { data: alleStappenRows } = await supabase
-        .from("procedure_stappen")
-        .select("id, volgorde, naam, status, blokkerende_afhankelijkheden")
-        .eq("procedure_id", id);
-      const alleStappen = (alleStappenRows ?? []) as Array<{
-        id: string;
-        volgorde: number;
-        naam: string;
-        status: StapActivatieState["status"];
-        blokkerende_afhankelijkheden: number[] | null;
-      }>;
-      const activatieState: StapActivatieState[] = alleStappen.map((s) => ({
-        volgorde: s.volgorde,
-        status: s.status,
-        blokkerende_afhankelijkheden: s.blokkerende_afhankelijkheden ?? [],
-      }));
-
-      if (alleStappenAfgerond(activatieState)) {
-        // Alle stappen afgerond — procedure is klaar.
-        await supabase
-          .from("procedures")
-          .update({
-            status: "afgerond",
-            afgerond_op: new Date().toISOString(),
-          })
-          .eq("id", id);
-
-        // ── Iteratie 3-A: notificatie naar de procedure-starter ──
-        const { data: proc } = await supabase
-          .from("procedures")
-          .select("titel, gestart_door, fonds_id")
-          .eq("id", id)
-          .maybeSingle();
-        if (proc?.gestart_door && proc.fonds_id) {
-          await notifyUser(
-            supabase,
-            "procedure_afgerond",
-            proc.gestart_door,
-            proc.fonds_id,
-            {
-              type: "procedure_afgerond",
-              procedure_titel: proc.titel ?? "Procedure",
-              afgerond_door_naam: ctx.naam || ctx.email || "Een collega",
-            },
-            {
-              gerelateerd_aan_type: "procedure",
-              gerelateerd_aan_id: id,
-              // BESLUIT (W4): `|| undefined`, waarde-identiek via
-          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
-          actor_naam: ctx.naam || undefined,
-            }
-          );
-        }
-      } else if (activatieState.some((s) => s.status === "geblokkeerd")) {
-        // Parallel model (engine v2): activeer elke stap die door dit afronden
-        // activeerbaar is geworden. Geen "volgende op volgorde" meer.
-        const teActiveren = herberekenActiveerbaarheid(activatieState);
-        for (const volg of teActiveren) {
-          const doel = alleStappen.find((s) => s.volgorde === volg);
-          if (!doel) continue;
-          // #214-a1 (0194): status via RPC. Best-effort (afgeleide toestand):
-          // een fout hier faalt de al-geslaagde afronding niet.
-          const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
-            p_stap_id: doel.id,
-            p_procedure_id: id,
-          });
-          if (actFout) {
-            console.error("Cascade-activering fout:", doel.id, actFout);
-            continue; // geen 'stap_gestart' loggen voor een stap die niet activeerde
-          }
-          await supabase.from("procedure_log").insert({
-            procedure_id: id,
-            event_type: "stap_gestart",
-            actor_id: ctx.gebruikerId,
-            // BESLUIT (W4): `|| undefined`, waarde-identiek via
-          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
-          actor_naam: ctx.naam || undefined,
-            payload: { stap: doel.naam },
-          });
-        }
-      } else {
-        // Legacy sequentieel pad: activeer de eerstvolgende 'open' stap op
-        // volgorde (gedrag van vóór engine v2, voor lopende procedures).
-        const volgende = alleStappen
-          .filter((s) => s.status === "open" && s.volgorde > stap.volgorde)
-          .sort((a, b) => a.volgorde - b.volgorde)[0];
-        if (volgende) {
-          // #214-a1 (0194): status via RPC (best-effort, zie boven).
-          const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
-            p_stap_id: volgende.id,
-            p_procedure_id: id,
-          });
-          if (actFout) console.error("Cascade-activering fout:", volgende.id, actFout);
-          else await supabase.from("procedure_log").insert({
-            procedure_id: id,
-            event_type: "stap_gestart",
-            actor_id: ctx.gebruikerId,
-            // BESLUIT (W4): `|| undefined`, waarde-identiek via
-          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
-          actor_naam: ctx.naam || undefined,
-            payload: { stap: volgende.naam },
-          });
-        }
+      // Gedeelde helper (PR-C, #168): identiek gedrag, nu ook gebruikt door de
+      // afronden-met-afwijking-route. Responscontract BEHOUDEN t.o.v. de oude route:
+      // happy path {ok:true}; een faal in de cascade gaf voorheen (uncaught) een 500
+      // "Serverfout" en doet dat nog steeds — nieuw is alleen de luide
+      // `activatie_achterstand`-logregel die de helper additioneel wegschrijft.
+      const cascade = await pasActivatieCascadeToe(
+        supabase,
+        id,
+        { volgorde: stap.volgorde, naam: stap.naam },
+        { gebruikerId: ctx.gebruikerId, naam: ctx.naam, email: ctx.email }
+      );
+      if (!cascade.ok) {
+        return NextResponse.json({ error: "Serverfout" }, { status: 500 });
       }
 
       return NextResponse.json({ ok: true });

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Type \"ai_validation\" heeft geen vervullingspad en dus geen kandidaten-kiezer (besluit 0195)."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

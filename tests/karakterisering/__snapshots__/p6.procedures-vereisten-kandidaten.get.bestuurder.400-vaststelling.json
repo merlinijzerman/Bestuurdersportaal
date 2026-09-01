@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Type \"dissent_review\" kent geen kandidaten-kiezer (document→uploaden, vaststelling→formulier, field→veld, evaluation/ai_validation→geen vervullingspad)."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

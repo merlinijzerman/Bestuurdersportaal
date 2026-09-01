@@ -52,6 +52,10 @@ const RPC_TRAIL = {
   // procedure_stappen.status (procestoestand, geen spoor) en staat er bewust niet in.
   fn_stap_heropenen: "bewijsketen",
   fn_stap_afronden: "domein",
+  fn_stap_afronden_met_afwijking: "bewijsketen",
+  fn_besluit_status_omslag: "bewijsketen",
+  fn_procedure_beeindigen: "bewijsketen",
+  fn_procedure_heropenen: "bewijsketen",
   fn_schrijf_vergelijking: "domein",
   fn_schrijf_semantische_extractie: "domein",
   log_word_export: "domein",
@@ -61,6 +65,16 @@ const RPC_TRAIL = {
   aqlab_audit_export_bron: "domein",
   aqlab_claim_run_jobs: "domein",
   fn_app_error_log: "geen-audit",
+};
+
+// Dunne lokale testseams die als identifier aan de wrapper worden doorgegeven.
+// De route-analyse begint bij de exportregel en indexeert bewust alleen gedeelde
+// core/platform-functies; leg daarom het aantoonbare DB-spoor van zo'n seam hier
+// expliciet vast. Dit is dezelfde soort DB-kennislaag als RPC_TRAIL/BASE_TRIGGER.
+const LOCAL_HANDLER_TRAIL = {
+  "POST app/api/procedures/[id]/stappen/[stapId]/afwijking/route.ts": [
+    { token: "fn_stap_afronden_met_afwijking", trail: "bewijsketen", soort: "rpc" },
+  ],
 };
 
 // DB-TRIGGER-laag: base-tabellen waarvan een mutatie via een audit-CAPTURE-trigger
@@ -83,6 +97,9 @@ const BASE_TRIGGER = {
   // wist het al: tests/cross-tenant/procedure-v2-governance.test.ts:181. Gemist in
   // v1 → de drie bewijs-handlers stonden ten onrechte op "geen spoor".
   procedure_bewijs: { log: "procedure_log", trail: "domein" },
+  // P2 (#167): iedere bindingsmutatie op een procedure_vaststelling schrijft via
+  // trg_vaststelling_audit_binding → fn_log_gebonden_feit_mutatie naar procedure_log.
+  procedure_vaststelling: { log: "procedure_log", trail: "domein", ops: ["insert", "delete"] },
   // #183b spoor T — brontabel → governance_events (bewijsketen), OPERATIEBEWUST.
   // Elke trigger is smaller dan "alle writes op de tabel"; tabelniveau zou een
   // handler dat buiten de triggerscope schrijft VALS crediteren (0192 §2e-lijn).
@@ -129,11 +146,16 @@ const SPLIT_KLASSE = {
   "DELETE app/api/gesprekken/[id]/route.ts": "operationeel",
   "POST app/api/reflectie/transitie/route.ts": "operationeel",
   "PATCH app/api/profiel/route.ts": "operationeel", // fonds_id/rol-tabel (C-01), goedkope verzekering
-  // C. geen spoor nodig — 7
+  // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
   "POST app/api/agendapunten/[id]/voorbereiding/route.ts": "geen",
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",
   "POST app/api/notificaties/alles-lezen/route.ts": "geen",
+  // P5c/§9.3: bewerkbaar werkverkeer per stap, expliciet geen
+  // verantwoordingsfeit en buiten het afschrift. Auteur/tenantgrens zit in RLS.
+  "POST app/api/procedures/[id]/stappen/[stapId]/notities/route.ts": "geen",
+  "PATCH app/api/procedures/[id]/stappen/[stapId]/notities/[notitieId]/route.ts": "geen",
+  "DELETE app/api/procedures/[id]/stappen/[stapId]/notities/[notitieId]/route.ts": "geen",
   "POST app/api/procedures/[id]/afschrift/concept/route.ts": "geen", // AI-concept, geen state-change
   "POST app/api/procedures/[id]/stappen/[stapId]/besluit-concept/route.ts": "geen",
   "POST app/api/stuurinformatie/beheer/upload/route.ts": "geen", // parse-only preview
@@ -355,8 +377,12 @@ for (const f of apiFiles) {
     const nextExport = code.slice(start + 10).search(/export\s+const\s+(GET|POST|PATCH|PUT|DELETE)\s*=/);
     const end = nextExport === -1 ? code.length : start + 10 + nextExport;
     const blok = code.slice(start, end);
+    const key = `${method} ${rel}`;
 
-    const direct = directeWrites(blok).map((d) => ({ ...d, via: "direct" }));
+    const direct = [
+      ...directeWrites(blok).map((d) => ({ ...d, via: "direct" })),
+      ...(LOCAL_HANDLER_TRAIL[key] ?? []).map((d) => ({ ...d, via: "lokale-handler" })),
+    ];
     const viaFn = [];
     for (const [naam, w] of fnWrites) {
       if (w.length && new RegExp(`\\b${naam}\\s*\\(`).test(blok)) {
@@ -368,7 +394,6 @@ for (const f of apiFiles) {
     const domein = alle.filter((x) => x.trail === "domein");
     const platform = alle.filter((x) => x.trail === "platform");
     const heeftSpoor = bewijsketen.length + domein.length + platform.length > 0;
-    const key = `${method} ${rel}`;
     // Gedeclareerde audit-waarde (W11): parse hem uit het RouteSpec-object in het blok.
     // Nog géén route declareert `audit:` — dit is voorbereid op #183, zodat de
     // assertie fail-closed is vanaf de dag dat de eerste declaratie landt.

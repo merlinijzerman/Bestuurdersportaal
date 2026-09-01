@@ -5,7 +5,7 @@
 //  (glob core/lib/*.sanity.ts). Uitvoeren: npx tsx core/lib/procedure-definitie.sanity.ts
 //
 //  Kernbewijs:
-//   1. De canonieke invaardefinitie (pf_wtp_invaarbesluit@2.0.0) is geldig
+//   1. De canonieke invaardefinitie (pf_wtp_invaarbesluit@2.0.1) is geldig
 //      volgens de eigen lichte validator (schema + fase-refs + DAG).
 //   2. De invaardefinitie heeft — bewust — GEEN blokkerende afhankelijkheden
 //      (parallel-by-default; zie PROCEDURE-ENGINE-V2-ONTWERP §3).
@@ -17,7 +17,7 @@
 // ============================================================
 
 import assert from "node:assert/strict";
-import invaarJson from "../../definities/pensioenfondsen/pf_wtp_invaarbesluit@2.0.0.json";
+import invaarJson from "../../definities/pensioenfondsen/pf_wtp_invaarbesluit@2.0.1.json";
 import {
   valideerDefinitie,
   valideerDAG,
@@ -153,6 +153,18 @@ check("field zonder veld_pad wordt gedetecteerd", () => {
   });
   const fouten = valideerDefinitie(d);
   assert.ok(fouten.some((f) => f.includes("veld_pad")));
+});
+
+check("vereist_besluit zonder approval is een niet-wegklikbare importfout", () => {
+  const d = kloon();
+  d.stappen[0].requirements = d.stappen[0].requirements.filter(
+    (r) => r.requirement_type !== "approval"
+  );
+  const fouten = valideerDefinitie(d);
+  assert.ok(
+    fouten.some((f) => f.includes("vereist_besluit zonder gebonden approval-vereiste")),
+    `verwachtte een approval-fout, kreeg:\n${fouten.join("\n")}`
+  );
 });
 
 // 4. Mapping naar ProcessTemplate.

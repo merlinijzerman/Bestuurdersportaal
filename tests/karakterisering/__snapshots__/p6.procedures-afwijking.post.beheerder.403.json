@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Alleen voorzitter of bestuurder kan een afwijking vastleggen"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

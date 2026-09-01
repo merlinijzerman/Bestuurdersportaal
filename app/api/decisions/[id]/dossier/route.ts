@@ -2,7 +2,7 @@
 //
 // Levert de volledige `DecisionDossierView` voor een Decision Object.
 // RLS in Supabase doet de tenant-/rolfiltering; deze route bouwt de
-// samengestelde view en voegt readiness, evidence en snapshots-meta toe.
+// samengestelde view en voegt evidence en snapshots-meta toe.
 //
 // Voor toegang via procedure-id (met lazy auto-upgrade) zie de
 // parallele route `/api/procedures/[id]/dossier`.

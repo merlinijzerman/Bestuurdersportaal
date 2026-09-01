@@ -35,7 +35,8 @@ export type DecisionStatus =
   | "in_evaluatie"
   | "afgesloten"
   | "heropend"
-  | "geannuleerd";
+  | "geannuleerd"
+  | "beeindigd";
 
 export type ProcedureStatus = "in_uitvoering" | "wacht_op_besluit" | "afgerond";
 
@@ -43,9 +44,11 @@ export type ProcedureStatus = "in_uitvoering" | "wacht_op_besluit" | "afgerond";
 export type StapStatus =
   | "open"
   | "geblokkeerd"
+  | "niet_begonnen"
   | "actief"
   | "afgerond"
-  | "heropend";
+  | "heropend"
+  | "vervallen";
 
 export type Vertrouwelijkheid =
   | "publiek"
@@ -95,6 +98,11 @@ export interface ProcedureSummary {
   id: string;
   fonds_id: string;
   template_code: string;
+  /** P1b (#166): versie waarop dit dossier is gepind (snapshot-bij-start).
+      Nullable: bestaande dossiers zijn gebackfilld, nieuwe worden bij start
+      gevuld; in het korte deploy-venster kan hij null zijn (lezer valt dan
+      terug op code-only). */
+  template_versie: string | null;
   titel: string;
   beschrijving: string | null;
   status: DossierStatus;
@@ -183,14 +191,40 @@ export interface EvidenceItem {
   // Ondersteunende verwijzing — voor 'document' is dit het bewijsstuk,
   // voor andere types is het de eerste matchende kindrij (bijv. een
   // gevalideerde aanname of een AI-output).
-  bron_type: "procedure_bewijs" | "ai_output" | "assumption" | "risk" | "condition" | "evaluation" | "governance_event" | null;
+  bron_type: EvidenceBronType;
   bron_id: string | null;
   bron_titel: string | null;
+  // #192: het volledige gebonden-feit-spoor (herkomst) — elk feit met datum en
+  // persoon, voor de zichtbare herkomst én per-feit losmaken. bron_id/bron_titel
+  // blijven de representant (eerste) voor bestaande lezers.
+  gebonden_feiten: GebondenFeitRef[];
+  // #192: min_aantal en (afgeleid) de teller "nog N nodig"; dissent_open telt de
+  // openstaande formele dissent-rijen (alleen zinvol voor dissent_review) voor de
+  // harde tegenstrijdigheidsguard in het vaststellingsformulier.
+  min_aantal: number;
+  dissent_open: number;
   // WO-3-vervolg: herkomst van de vereiste — 'template' (generieke set,
   // per-proces uit te sluiten via de overlay) of 'instance' (zelf toegevoegd,
   // te deactiveren). `instance_id` is de rij-id bij een instantie-vereiste.
   bron: "template" | "instance";
   instance_id: string | null;
+  // P3/PR-D (#168, §7): het besluitmoment (stap-volgorde) waarvoor deze vereiste
+  // óók meetelt, naast haar eigen stap. Leeg = alleen de eigen stap. Voedt de
+  // besluitmoment-telling die de readiness-weergave vervangt.
+  besluitmoment_stap: number | null;
+}
+
+export type EvidenceBronType =
+  | "procedure_bewijs" | "ai_output" | "assumption" | "risk" | "condition"
+  | "evaluation" | "procedure_besluit" | "procedure_vaststelling"
+  | "governance_event" | null;
+
+export interface GebondenFeitRef {
+  id: string;
+  bron_type: EvidenceBronType;
+  titel: string | null;
+  datum: string | null;
+  actor: string | null;
 }
 
 // ── Decision-children ─────────────────────────────────────────────────
@@ -311,6 +345,9 @@ export interface ActionItem {
   decision_id: string;
   voorwaarde_id: string | null;
   actie: string;
+  /** Gekozen profiel binnen hetzelfde fonds; null voor oude/niet-toegewezen acties. */
+  eigenaar_id: string | null;
+  /** Historische naam-snapshot; live profielnaam wint in de weergave. */
   eigenaar_naam: string | null;
   deadline: string | null;
   status: ActionStatus;
@@ -481,6 +518,10 @@ export interface BesluitItem {
   verworpen_alternatieven: string[] | null;
   vergadering_id: string | null;
   agendapunt_id: string | null;
+  /** P4-feitvelden: alleen beschikbaar voor lezers die ze expliciet ophalen;
+      de bestaande dossierresponse blijft hiervoor byte-stabiel. */
+  uitkomst?: "instemmend" | "voorwaardelijk" | "afwijzend" | null;
+  requirement_sleutel?: string | null;
 }
 
 /**
@@ -528,7 +569,10 @@ export interface DecisionDossierView {
   procedure: ProcedureSummary;
   currentStep: ProcedureStep | null;
   steps: ProcedureStep[];
-  readiness: ReadinessOverview;
+  // P3/PR-D (#168, 0187): readiness is ontmanteld — nieuwe views dragen het niet
+  // meer. Blijft OPTIONEEL zodat een OUD, append-only afschrift-snapshot dat het
+  // nog draagt, leesbaar blijft (afschrift-feitenkaart valt terug op de evidence).
+  readiness?: ReadinessOverview;
   evidence: EvidenceItem[];
   /** Stemverslagen (gesloten/ingetrokken) gekoppeld aan dit besluit. */
   stemverslagen: StemverslagSummary[];
@@ -574,25 +618,13 @@ export const DECISION_STATUS_LABEL: Record<DecisionStatus, string> = {
   afgesloten: "Afgesloten",
   heropend: "Heropend",
   geannuleerd: "Geannuleerd",
+  beeindigd: "Beëindigd",
 };
 
-export const READINESS_LABEL: Record<ReadinessTarget, string> = {
-  onderbouwing_compleet: "Onderbouwing compleet",
-  reviewrijp: "Reviewrijp",
-  bespreekrijp: "Bespreekrijp",
-  besluitrijp: "Besluitrijp",
-  verantwoordingsrijp: "Verantwoordingsrijp",
-  evaluatierijp: "Evaluatierijp",
-};
-
-export const READINESS_VOLGORDE: ReadinessTarget[] = [
-  "onderbouwing_compleet",
-  "reviewrijp",
-  "bespreekrijp",
-  "besluitrijp",
-  "verantwoordingsrijp",
-  "evaluatierijp",
-];
+// READINESS_LABEL/READINESS_VOLGORDE (de ladder-presentatie) zijn met de
+// readiness-ontmanteling verdwenen (0187). De data-typen ReadinessOverview/
+// ReadinessResult/ReadinessTarget blijven bestaan: ze typeren de `readiness`-sleutel
+// in OUDE, append-only afschrift-snapshots die de feitenkaart nog moet kunnen lezen.
 
 export const COMPLEXITEIT_LABEL: Record<Complexiteit, string> = {
   routine: "Routine",
@@ -716,6 +748,23 @@ export function mapLegacyStatus(legacy: string): DecisionStatus {
  * migratie 2026_06_18_dossier_procesinstantie). Sublabel is hier niet
  * relevant — alleen de status wordt naar de kolom gesynct.
  */
+/**
+ * Staat een genomen besluit "nog"? Na deze statussen is het besluit uitgevoerd of
+ * afgesloten (niet teruggedraaid). Bepaalt of het "besloten met openstaande
+ * vereisten"-signaal (§12 signaal 3, besluit 0193) nog een ACTIEF aandachtspunt is:
+ * na heropenen/afwijzen/terugzetten vervalt de actieve markering — het append-only
+ * event blijft in de audit-trail, maar het is dan een historisch, teruggedraaid feit.
+ */
+export function besluitStaatNog(status: DecisionStatus): boolean {
+  return (
+    status === "besloten" ||
+    status === "voorwaardelijk_besloten" ||
+    status === "in_uitvoering" ||
+    status === "in_evaluatie" ||
+    status === "afgesloten"
+  );
+}
+
 export function mapDecisionToProcedureStatus(
   status: DecisionStatus
 ): DossierStatus {
