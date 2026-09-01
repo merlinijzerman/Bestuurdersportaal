@@ -29,6 +29,7 @@ const readinessMigratie = lees("supabase", "migrations", "2026_08_13_d7c_readine
 // Bewijsbinding (2026-08-18): de geldende versie van fn_decision_readiness_check.
 const bindingMigratie = lees("supabase", "migrations", "2026_08_18_bewijs_requirement_binding.sql");
 const bindingHardening = lees("supabase", "migrations", "2026_08_22_bewijs_requirement_binding_hardening.sql");
+const p2BewijsindexMigratie = lees("supabase", "migrations", "2026_08_24_p2a_01_bewijsindex_nietuniek.sql");
 const bewijsRoute = lees("app", "api", "procedures", "[id]", "bewijs", "route.ts");
 const bewijsItemRoute = lees("app", "api", "procedures", "[id]", "bewijs", "[bewijsId]", "route.ts");
 const besluitenRoute = lees("app", "api", "procedures", "[id]", "besluiten", "route.ts");
@@ -146,6 +147,21 @@ test("bewijsbinding: TS en SQL bouwen dezelfde sleutel", () => {
   );
   // Het oorspronkelijke requirement_type, niet de v_type-mapping naar 'document'.
   assert.doesNotMatch(bindingFunctie, /\|\| v_type \|\|/);
+});
+
+test("P2-indexpreflight: min_aantal correleert exact en versie-vast met de gebonden sleutel", () => {
+  const preflight = p2BewijsindexMigratie.slice(
+    p2BewijsindexMigratie.indexOf("do $$"),
+    p2BewijsindexMigratie.indexOf("-- ── Uniek → niet-uniek")
+  );
+  assert.ok(preflight.length > 0, "P2-indexpreflight niet gevonden");
+  assert.match(preflight, /join public\.procedures p on p\.id = ps\.procedure_id/);
+  assert.match(preflight, /r\.template_versie = p\.template_versie/);
+  assert.match(
+    preflight,
+    /pb\.requirement_sleutel =\s*r\.stap_volgorde::text \|\| '\|' \|\| r\.requirement_type \|\| '\|' \|\|\s*coalesce\(r\.documenttype, r\.label\)/
+  );
+  assert.doesNotMatch(preflight, /split_part\(pb\.requirement_sleutel/);
 });
 
 test("bewijsbinding: grant-herstel na create-or-replace (Gate H)", () => {

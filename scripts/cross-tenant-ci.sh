@@ -196,6 +196,9 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 # Bewijs↔vereiste-binding — expliciete één-op-éénbinding, fail-closed bij
 # ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
+# #263 — P2-indexpreflight mag een hoge drempel van een andere requirement op
+# dezelfde stap niet aan een gebonden document toeschrijven.
+SQL_P2_INDEX_PREFLIGHT="supabase/checks/2026_09_01_p2a_01_bewijsindex_preflight_regressie.sql"
 # P2/PR-B (#167): procedure_vaststelling — binding, I1 en tenant-isolatie (0189).
 SQL_VAST="supabase/checks/2026_08_25_vaststelling_binding_cross_tenant.sql"
 # P3/PR-C (#168): afronden met afwijking — snapshot-pin (SQL-helft) + eigen slot (0192).
@@ -325,6 +328,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
 echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
+echo
+echo "-- P2-indexpreflight (exacte sleutel + templateversie; geen same-step-vals-positief) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P2_INDEX_PREFLIGHT"
 echo
 echo "-- Vaststelling-binding (type/I5/cross-procedure, I1-slot, tenant-isolatie) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VAST"

@@ -18,24 +18,31 @@
 begin;
 
 -- ── Pre-flight: bevestig dat de wijziging geen bestaand gedrag raakt. Er mag
---   vandaag geen vereiste met min_aantal > 1 zijn die al gebonden bewijs draagt
---   (dan zou de unieke index nu al onmogelijk maken wat we straks toestaan, en
---   moet een mens ernaar kijken). Verwacht: nul.
+--   vandaag geen vereiste met min_aantal > 1 zijn die ZELF al gebonden bewijs
+--   draagt (dan zou de unieke index nu al onmogelijk maken wat we straks
+--   toestaan, en moet een mens ernaar kijken). Verwacht: nul.
+--
+--   #263 (productie, 2026-09-01): de oorspronkelijke query correleerde alleen
+--   template + stapnummer. Daardoor liet een gebonden document met min_aantal=1
+--   de guard afgaan zodra op dezelfde stap een ANDERE requirement min_aantal>1
+--   had. De toets hieronder bindt daarom op de volledige, versievaste sleutel:
+--   stap_volgorde|requirement_type|coalesce(documenttype,label).
 do $$
 declare v_aantal int;
 begin
   select count(*) into v_aantal
     from public.procedure_bewijs pb
     join public.procedure_stappen ps on ps.id = pb.stap_id
-    where pb.requirement_sleutel is not null
-      and exists (
-        select 1 from public.procedure_requirements r
-         where r.template_code = (
-                 select template_code from public.procedures p where p.id = ps.procedure_id)
-           and r.stap_volgorde = ps.volgorde
-           and coalesce(r.min_aantal, 1) > 1
-           and split_part(pb.requirement_sleutel, '|', 1) = ps.volgorde::text
-      );
+    join public.procedures p on p.id = ps.procedure_id
+    join public.procedure_requirements r
+      on r.template_code = p.template_code
+     and r.template_versie = p.template_versie
+     and r.stap_volgorde = ps.volgorde
+     and pb.requirement_sleutel =
+           r.stap_volgorde::text || '|' || r.requirement_type || '|' ||
+           coalesce(r.documenttype, r.label)
+   where pb.requirement_sleutel is not null
+     and coalesce(r.min_aantal, 1) > 1;
   if v_aantal > 0 then
     raise exception
       'P2-preflight: % gebonden bewijsstuk(ken) op een vereiste met min_aantal > 1 — de index-omzetting raakt bestaand gedrag; handmatig beoordelen (0189).', v_aantal;
