@@ -68,7 +68,7 @@ select count(*) as gepinde_dossiers
 |---:|---|---|---|---|
 | 1 | Geen SQL: `2026_05_08_phase_1b_template_requirements.sql` | Historische seed blijft ongewijzigd en wordt niet opnieuw toegepast. | Geen. | n.v.t. |
 | 2 | `2026_08_24_p1b_versievastheid.sql` | Bevroren publicatie- en requirementversies. | DB vóór code. | `2026_08_24_p1b_versievastheid_ROLLBACK.sql` |
-| 3 | `2026_08_24_p2a_01_bewijsindex_nietuniek.sql` | Bewijsindex voor expliciete requirementbinding. | DB vóór code. | `2026_08_24_p2a_01_bewijsindex_nietuniek_ROLLBACK.sql` |
+| 3 | `2026_08_24_p2a_01_bewijsindex_nietuniek.sql` | Bewijsindex voor expliciete requirementbinding. De #263-preflight matcht versie-vast op de volledige requirementsleutel; een hoge drempel van een andere requirement op dezelfde stap telt niet mee. | DB vóór code. | `2026_08_24_p2a_01_bewijsindex_nietuniek_ROLLBACK.sql` |
 | 4 | `2026_08_24_p2a_02_gedeelde_bindingsmachinerie.sql` | Gedeelde fail-closed bindingstoets en auditspoor. | DB vóór code. | `2026_08_24_p2a_02_gedeelde_bindingsmachinerie_ROLLBACK.sql` |
 | 5 | `2026_08_24_p2a_03_risk_binding.sql` | Risicofeitbinding. | DB vóór code. | `2026_08_24_p2a_03_risk_binding_ROLLBACK.sql` |
 | 6 | `2026_08_24_p2a_04_assumption_binding.sql` | Aannemefeitbinding. | DB vóór code. | `2026_08_24_p2a_04_assumption_binding_ROLLBACK.sql` |
@@ -103,6 +103,25 @@ select count(*) as gepinde_dossiers
 | 35 | `2026_08_31_zz_pf_wtp_invaarbesluit_201_approval.sql` | Publiceert I7-conform `pf_wtp_invaarbesluit@2.0.1`: kopieert de bevroren 63 requirements van 2.0.0, voegt op stap 1 exact één approval toe en publiceert pas als laatste. | **DB vóór code.** Pas na de groene controlequery mag `preview` naar `main`. | Geen database-rollback na commit: het publicatieregister is append-only. Bij een deployprobleem code terug naar de vorige release; 2.0.1 blijft ongebruikt gepubliceerd. Bij iedere fout vóór commit rolt de transactie volledig terug en stopt de uitrol. |
 
 ## Verplichte tussenijkpunten
+
+**Na stap 2, vóór stap 3:** de exacte, versievaste toets moet `0` geven. Een
+andere uitkomst is een stop; corrigeer geen dossier en schakel de guard niet uit.
+
+```sql
+select count(*) as exact_gebonden_op_hoge_drempel
+  from public.procedure_bewijs pb
+  join public.procedure_stappen ps on ps.id = pb.stap_id
+  join public.procedures p on p.id = ps.procedure_id
+  join public.procedure_requirements r
+    on r.template_code = p.template_code
+   and r.template_versie = p.template_versie
+   and r.stap_volgorde = ps.volgorde
+   and pb.requirement_sleutel =
+         r.stap_volgorde::text || '|' || r.requirement_type || '|' ||
+         coalesce(r.documenttype, r.label)
+ where pb.requirement_sleutel is not null
+   and coalesce(r.min_aantal, 1) > 1;
+```
 
 **Na stap 12:** alle drie waarden moeten `true` zijn.
 
