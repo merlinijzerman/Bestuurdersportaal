@@ -296,7 +296,7 @@ extensie|pgcrypto|versie=1.3
 extensie|plpgsql|versie=1.0
 extensie|supabase_vault|versie=0.3.1
 extensie|uuid-ossp|versie=1.1
-extensie|vector|versie=0.8.2
+extensie|vector|versie=0.8.0
 functie|public.afschriften_claim_jobs|secdef=true searchpath=search_path=public, pg_temp md5=7d627ad02675f5a56b0bacf317c2175a
 functie|public.aqlab_add_run_cost|secdef=true searchpath=search_path=public, pg_temp md5=832aece20a61e944fdd94a6cb4bc28dc
 functie|public.aqlab_assurance_meetwaarden|secdef=true searchpath=search_path=public, pg_temp md5=43c9df1cc0582a19fdb3ae3ba3ef7d18
