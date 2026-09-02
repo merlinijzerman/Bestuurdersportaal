@@ -63,6 +63,12 @@ function mockCapturingChatFetch(antwoord: string, sink: { body?: Record<string, 
   }) as unknown as typeof fetch;
 }
 
+/** De bronafbakening draagt per generatie bewust een willekeurige sentinel.
+ * Voor providerpariteit vergelijken we de structuur, niet die requestnonce. */
+function normaliseerBronSentinel(context: string): string {
+  return context.replace(/s="[0-9a-f]{12}"/g, 's="<sentinel>"');
+}
+
 /** Judge-stub: geeft een vaste (adviserende) uitkomst per criterium. */
 function mockJudge(pass: boolean) {
   return async (c: JudgeCriterium, _inp: JudgeInput): Promise<JudgeResultaat> => ({
@@ -188,9 +194,10 @@ async function main() {
       fetchImpl: mockChatFetch(schoonAntwoord),
     });
 
+    const anthropicContext = normaliseerBronSentinel(viaAnthropic.contextTekst);
     const contextIdentiek =
-      viaAnthropic.contextTekst === viaOpenAI.contextTekst &&
-      viaAnthropic.contextTekst === viaMistral.contextTekst;
+      anthropicContext === normaliseerBronSentinel(viaOpenAI.contextTekst) &&
+      anthropicContext === normaliseerBronSentinel(viaMistral.contextTekst);
     const bronnenIdentiek =
       JSON.stringify(viaAnthropic.bronnen) === JSON.stringify(viaOpenAI.bronnen) &&
       JSON.stringify(viaAnthropic.bronnen) === JSON.stringify(viaMistral.bronnen);

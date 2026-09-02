@@ -61,7 +61,9 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "nog-niet
 
     const { data: signed, error: signErr } = await supabase.storage
       .from("afschriften")
-      .createSignedUrl(afschrift.opslag_pad as string, SIGNED_URL_TTL_SECONDS, { download: true });
+      .createSignedUrl(afschrift.opslag_pad as string, SIGNED_URL_TTL_SECONDS, {
+        download: `afschrift-${afschriftId}.zip`,
+      });
     if (signErr || !signed?.signedUrl) {
       console.error("Signed URL mislukt:", signErr);
       return NextResponse.json({ error: "Kon de download niet voorbereiden." }, { status: 500 });
