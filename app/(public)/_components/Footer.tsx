@@ -17,7 +17,7 @@ export default function Footer({
           <a href="/contact">Contact</a>
           <a href="/login">Inloggen</a>
           <a href="/privacy">Privacy</a>
-          <a href="https://the-paradox.com" target="_blank" rel="noopener">
+          <a href="https://the-paradox.com" target="_blank" rel="noreferrer">
             The Paradox
           </a>
         </div>
@@ -37,7 +37,7 @@ export default function Footer({
           <a href="/sectoren">Sectoren</a>
           <a href="/governance-ai">Governance &amp; AI</a>
           <a href="/over-ons">Over</a>
-          <a href="https://the-paradox.com" target="_blank" rel="noopener">
+          <a href="https://the-paradox.com" target="_blank" rel="noreferrer">
             The Paradox
           </a>
           <a href="/contact">Contact</a>

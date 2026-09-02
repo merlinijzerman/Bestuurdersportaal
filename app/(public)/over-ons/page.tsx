@@ -204,7 +204,7 @@ export default function OverOnsPage() {
             <a
               href="https://the-paradox.com"
               target="_blank"
-              rel="noopener"
+              rel="noreferrer"
               className="textlink"
             >
               Ontdek The Paradox →

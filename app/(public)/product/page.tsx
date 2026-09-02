@@ -132,11 +132,11 @@ export default function ProductPage() {
             <li>Een gestructureerd besluitdossier per vraagstuk.</li>
             <li>
               AI-ondersteuning op uw eigen documentatie, dossiers en historie —
-              samenvatten, toetsen, risico's signaleren en alternatieven ordenen,
+              samenvatten, toetsen, risico’s signaleren en alternatieven ordenen,
               met verwijzing naar de bron.
             </li>
             <li>
-              Vastlegging van aannames, risico's, overwegingen, voorwaarden en
+              Vastlegging van aannames, risico’s, overwegingen, voorwaarden en
               acties.
             </li>
             <li>Een reconstrueerbare audittrail of export voor verantwoording.</li>

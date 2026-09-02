@@ -136,7 +136,7 @@ export default function GovernanceAiPage() {
                 </li>
                 <li>
                   <span className="ck">+</span>
-                  <span>Maakt aannames, risico's en afwegingen zichtbaar.</span>
+                  <span>Maakt aannames, risico’s en afwegingen zichtbaar.</span>
                 </li>
                 <li>
                   <span className="ck">+</span>

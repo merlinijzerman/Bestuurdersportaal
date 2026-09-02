@@ -81,6 +81,18 @@ wel gelijk, zodat latere branch protection daarop kan aansluiten.
 - De 42 lintbevindingen worden per inhoudelijke categorie opgelost; iedere
   baselineverlaging wordt meegecommit zodat de ratel niet kan teruggroeien.
 
+## Vervolg 2 september 2026 — onderhoudstranche 1
+
+De eerste kleine onderhoudstranche verwijdert alle acht actuele waarschuwingen
+uit de openbare-sitecategorieën `react/jsx-no-target-blank` en
+`react/no-unescaped-entities`: vier externe links gebruiken nu het strengere
+`rel="noreferrer"`-contract en vier zichtbare apostroffen zijn typografisch
+correct. De opnieuw gegenereerde baseline neemt daarnaast één reeds op
+`preview` opgeloste `react-hooks/purity`-bevinding mee. Daardoor daalt de ratel
+van **42 naar 33 waarschuwingen**, van 9 naar 7 regels en van 28 naar 22
+bestanden. Er is geen database-, sessie-, procedure- of routeringsgedrag
+gewijzigd.
+
 ## Rollback
 
 De wijziging is terug te draaien door de workflowtriggers en opdrachten terug te
