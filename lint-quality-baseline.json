@@ -7,14 +7,13 @@
     "fondsen"
   ],
   "uitleg": "Bestaande React/Hooks/Next-bevindingen. De gate blokkeert alleen toenames per bestand en regel.",
-  "totaal": 27,
+  "totaal": 26,
   "perRegel": {
     "react-hooks/error-boundaries": 2,
     "react-hooks/exhaustive-deps": 1,
     "react-hooks/immutability": 3,
     "react-hooks/set-state-in-effect": 15,
-    "react-hooks/static-components": 5,
-    "react/no-unescaped-entities": 1
+    "react-hooks/static-components": 5
   },
   "bestanden": {
     "app/(dashboard)/ai/_components/AntwoordWeergave.tsx": {
@@ -49,9 +48,6 @@
     },
     "app/(platform)/platform/(beveiligd)/ai-begrenzing/page.tsx": {
       "react-hooks/error-boundaries": 2
-    },
-    "app/(platform)/platform/(beveiligd)/aqlab/run-samenstellen-form.tsx": {
-      "react/no-unescaped-entities": 1
     },
     "app/(platform)/platform/login/page.tsx": {
       "react-hooks/immutability": 1,

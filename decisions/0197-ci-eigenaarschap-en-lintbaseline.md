@@ -103,6 +103,15 @@ ratel van **33 naar 27 waarschuwingen**, van 7 naar 6 regels en van 22 naar 17
 bestanden. Er is geen database-, sessie-, procedurestatus- of routeringscontract
 gewijzigd.
 
+## Vervolg 2 september 2026 — onderhoudstranche 3
+
+De derde onderhoudstranche corrigeert de laatste rechte apostrof in zichtbare
+JSX-copy naar een typografische apostrof. Daarmee verdwijnt de volledige
+resterende categorie `react/no-unescaped-entities` en bevat de ratel uitsluitend
+nog React Hooks-bevindingen. Na regeneratie daalt de baseline van **27 naar 26
+waarschuwingen**, van 6 naar 5 regels en van 17 naar 16 bestanden. Er is geen
+functioneel, data-, sessie- of routeringsgedrag gewijzigd.
+
 ## Rollback
 
 De wijziging is terug te draaien door de workflowtriggers en opdrachten terug te

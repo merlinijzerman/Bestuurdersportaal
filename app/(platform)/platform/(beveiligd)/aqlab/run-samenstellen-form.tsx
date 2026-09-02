@@ -243,7 +243,7 @@ export default function RunSamenstellenForm({
       <form action={toonAdHoc ? adhocFormAction : startRunActie} className="mt-3 space-y-5">
         {/* Run-naam */}
         <label className="block text-sm">
-          <span className="mb-1 block text-ink/70">Naam / label voor deze run <span className="text-ink/40">(optioneel — om 'm later makkelijk terug te vinden)</span></span>
+          <span className="mb-1 block text-ink/70">Naam / label voor deze run <span className="text-ink/40">(optioneel — om ’m later makkelijk terug te vinden)</span></span>
           <input
             name="naam"
             type="text"
