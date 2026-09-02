@@ -93,6 +93,16 @@ van **42 naar 33 waarschuwingen**, van 9 naar 7 regels en van 28 naar 22
 bestanden. Er is geen database-, sessie-, procedure- of routeringsgedrag
 gewijzigd.
 
+## Vervolg 2 september 2026 — onderhoudstranche 2
+
+De tweede kleine onderhoudstranche verwijdert de volledige actuele categorie
+`@next/next/no-html-link-for-pages`: vier publieke home-links en twee
+annuleerlinks in dashboardformulieren gebruiken nu `next/link`. De doelen,
+labels, styling en formulierafhandeling blijven gelijk. Na regeneratie daalt de
+ratel van **33 naar 27 waarschuwingen**, van 7 naar 6 regels en van 22 naar 17
+bestanden. Er is geen database-, sessie-, procedurestatus- of routeringscontract
+gewijzigd.
+
 ## Rollback
 
 De wijziging is terug te draaien door de workflowtriggers en opdrachten terug te

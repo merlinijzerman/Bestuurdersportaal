@@ -7,9 +7,8 @@
     "fondsen"
   ],
   "uitleg": "Bestaande React/Hooks/Next-bevindingen. De gate blokkeert alleen toenames per bestand en regel.",
-  "totaal": 33,
+  "totaal": 27,
   "perRegel": {
-    "@next/next/no-html-link-for-pages": 6,
     "react-hooks/error-boundaries": 2,
     "react-hooks/exhaustive-deps": 1,
     "react-hooks/immutability": 3,
@@ -42,14 +41,8 @@
     "app/(dashboard)/procedures/_components/AfschriftenPaneel.tsx": {
       "react-hooks/immutability": 1
     },
-    "app/(dashboard)/procedures/_components/NieuweProcedureForm.tsx": {
-      "@next/next/no-html-link-for-pages": 1
-    },
     "app/(dashboard)/procedures/_components/StapPaneel.tsx": {
       "react-hooks/set-state-in-effect": 3
-    },
-    "app/(dashboard)/risicomatrix/_components/NieuwRisicoForm.tsx": {
-      "@next/next/no-html-link-for-pages": 1
     },
     "app/(dashboard)/vergaderingen/_components/VoorbereidingsBlok.tsx": {
       "react-hooks/set-state-in-effect": 1
@@ -63,15 +56,6 @@
     "app/(platform)/platform/login/page.tsx": {
       "react-hooks/immutability": 1,
       "react-hooks/set-state-in-effect": 1
-    },
-    "app/(public)/_components/Crumb.tsx": {
-      "@next/next/no-html-link-for-pages": 1
-    },
-    "app/(public)/_components/Footer.tsx": {
-      "@next/next/no-html-link-for-pages": 1
-    },
-    "app/(public)/_components/Header.tsx": {
-      "@next/next/no-html-link-for-pages": 2
     },
     "app/(public)/contact/_components/ContactForm.tsx": {
       "react-hooks/static-components": 5

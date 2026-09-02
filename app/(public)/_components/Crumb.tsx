@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 // Breadcrumb (server component). Start altijd op Home; het laatste item is de
 // huidige pagina (aria-current, geen link). Puur navigatie/oriëntatie.
 export default function Crumb({
@@ -7,7 +9,7 @@ export default function Crumb({
 }) {
   return (
     <nav className="crumb" aria-label="Kruimelpad">
-      <a href="/">Home</a>
+      <Link href="/">Home</Link>
       {items.map((it) => (
         <span key={it.label} style={{ display: "contents" }}>
           <span className="sep" aria-hidden="true">

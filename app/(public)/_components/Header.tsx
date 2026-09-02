@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import MobileMenu from "./MobileMenu";
 
@@ -45,9 +46,9 @@ export default function Header({
     return (
       <header>
         <div className="wrap wide nav">
-          <a href="/" className="brand">
+          <Link href="/" className="brand">
             <span className="mark">B</span>Bestuurdersportaal
-          </a>
+          </Link>
           <span style={{ marginLeft: "auto" }} />
           <a href="/contact" className="btn">
             Neem contact op
@@ -62,9 +63,9 @@ export default function Header({
     <>
       <header>
         <div className="wrap nav">
-          <a href="/" className="brand">
+          <Link href="/" className="brand">
             <span className="mark">B</span>Bestuurdersportaal
-          </a>
+          </Link>
           <nav className="links">
             {NAV.map((item) => (
               <a

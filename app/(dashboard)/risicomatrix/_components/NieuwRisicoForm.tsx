@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   CATEGORIEEN,
@@ -283,12 +284,12 @@ export default function NieuwRisicoForm() {
       )}
 
       <div className="flex justify-end gap-2 pt-3 border-t border-line">
-        <a
+        <Link
           href="/risicomatrix"
           className="px-4 py-2 text-sm border border-line rounded-lg hover:border-accent text-ink"
         >
           Annuleren
-        </a>
+        </Link>
         <button
           type="submit"
           disabled={bezig}
