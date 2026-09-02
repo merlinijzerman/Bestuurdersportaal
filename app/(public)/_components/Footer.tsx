@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 // Marketing-footer (server component). variant "full" = volledige footer met
 // route-links (incl. The Paradox, dat sinds besluit 0103 niet meer in de
 // hoofdnav staat maar hier wél zichtbaar blijft als herkomst);
@@ -11,7 +13,7 @@ export default function Footer({
     return (
       <footer>
         <div className="wrap wide foot-links">
-          <a href="/">Home</a>
+          <Link href="/">Home</Link>
           <a href="/product">Product</a>
           <a href="/over-ons">Over</a>
           <a href="/contact">Contact</a>

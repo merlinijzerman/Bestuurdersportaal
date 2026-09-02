@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ProcessTemplate } from "@/core/lib/proces-templates";
 
@@ -202,12 +203,12 @@ export default function NieuweProcedureForm({ templates, leden }: Props) {
       )}
 
       <div className="flex justify-end gap-2 pt-3 border-t border-line">
-        <a
+        <Link
           href="/procedures"
           className="px-4 py-2 text-sm border border-line rounded-lg hover:border-accent text-ink"
         >
           Annuleren
-        </a>
+        </Link>
         <button
           type="submit"
           disabled={bezig}
