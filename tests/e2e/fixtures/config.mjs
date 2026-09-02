@@ -1,4 +1,8 @@
 export const E2E_WACHTWOORD = "WP3-E2E-Aa1!";
+export const E2E_AI_EERSTE_DELTA =
+  "Eerste gestreamde deel: de synthetische uitvoeringsafspraak staat in [Bron 1]. ";
+export const E2E_AI_TWEEDE_DELTA = "De tweede controlewaarde staat in [Bron 2].";
+export const E2E_AI_PROVIDER_FOUT_MARKER = "WP4_PROVIDER_FOUT";
 export const E2E_ROLLEN = Object.freeze([
   "bestuurder",
   "voorzitter",
@@ -35,6 +39,24 @@ export const E2E_PLATFORM_ACCOUNTS = Object.freeze({
   granter: Object.freeze({
     email: "wp3-platform-granter@e2e.invalid",
     naam: "Synthetisch platform fixture-granter",
+  }),
+});
+
+export const E2E_AI_BRONNEN = Object.freeze({
+  fondsAUitvoering: Object.freeze({
+    id: "00000000-0000-4000-8000-00000000e401",
+    chunkId: "00000000-0000-4000-8000-00000000e411",
+    titel: "WP4 synthetische uitvoeringsafspraak",
+  }),
+  fondsAControle: Object.freeze({
+    id: "00000000-0000-4000-8000-00000000e402",
+    chunkId: "00000000-0000-4000-8000-00000000e412",
+    titel: "WP4 synthetisch controleprotocol",
+  }),
+  fondsBIsolatie: Object.freeze({
+    id: "00000000-0000-4000-8000-00000000e403",
+    chunkId: "00000000-0000-4000-8000-00000000e413",
+    titel: "WP4 verboden ander-fondsdocument",
   }),
 });
 

@@ -1949,7 +1949,18 @@ export default function AssistentClient({
     idx: number
   ) {
     if (laden) return;
-    const basis = berichten.slice(0, idx); // laat de verduidelijkingsbubbel vallen
+    const voorTerugvraag = berichten.slice(0, idx); // laat de verduidelijkingsbubbel vallen
+    // Een deterministische terugvraag kan in dezelfde renderbatch landen als de
+    // oorspronkelijke gebruikersbubbel. In dat snelle pad bevat de closure van
+    // de chip nog niet altijd die bubbel, waardoor `messages` leeg bij de API
+    // aankwam. Borg de oorspronkelijke vraag expliciet in de basis; als hij er
+    // al staat, blijft de bestaande geschiedenis ongewijzigd.
+    const heeftOrigineleVraag = voorTerugvraag.some(
+      (b) => b.rol === "gebruiker" && b.tekst === origineleVraag
+    );
+    const basis = heeftOrigineleVraag
+      ? voorTerugvraag
+      : [...voorTerugvraag, { rol: "gebruiker" as const, tekst: origineleVraag }];
     stuurBericht(origineleVraag, {
       bronIntentOverride: intent,
       bronIntentBron: "chip",
