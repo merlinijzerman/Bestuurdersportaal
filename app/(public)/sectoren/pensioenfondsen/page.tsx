@@ -105,7 +105,7 @@ export default function PensioenfondsenPage() {
             verantwoordingsdruk. Bestuurdersportaal is ontwikkeld vanuit die
             context en ingericht rond de documenten, besluitdossiers en
             governancekaders van het fonds. Het helpt om afwegingen, bronnen,
-            risico's, aannames, besluiten en acties herleidbaar vast te leggen.
+            risico’s, aannames, besluiten en acties herleidbaar vast te leggen.
           </p>
           <div className="cta">
             <a href="/contact?type=pilot" className="btn btn-primary">
