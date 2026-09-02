@@ -39,8 +39,9 @@ export default async function AiBegrenzingPagina() {
     );
   }
 
+  let overzicht: Awaited<ReturnType<typeof haalAiBegrenzingOverzicht>>;
   try {
-    const overzicht = await withPlatformRead(
+    overzicht = await withPlatformRead(
       { capability: CAP_LEZEN, handeling: "ai.begrenzing.inzien" },
       async (svc) => {
         const o = await haalAiBegrenzingOverzicht(svc);
@@ -57,17 +58,6 @@ export default async function AiBegrenzingPagina() {
         };
       }
     );
-
-    return (
-      <Omhulsel>
-        <AiBegrenzingClient
-          overzicht={overzicht}
-          ikId={identiteit?.id ?? null}
-          magBedienen={caps.includes(CAP_BEDIENEN)}
-          magConfigureren={caps.includes(CAP_CONFIG)}
-        />
-      </Omhulsel>
-    );
   } catch (e) {
     if (!(e instanceof PlatformError)) throw e;
     return (
@@ -79,6 +69,17 @@ export default async function AiBegrenzingPagina() {
       </Omhulsel>
     );
   }
+
+  return (
+    <Omhulsel>
+      <AiBegrenzingClient
+        overzicht={overzicht}
+        ikId={identiteit?.id ?? null}
+        magBedienen={caps.includes(CAP_BEDIENEN)}
+        magConfigureren={caps.includes(CAP_CONFIG)}
+      />
+    </Omhulsel>
+  );
 }
 
 function Omhulsel({ children }: { children: React.ReactNode }) {
