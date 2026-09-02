@@ -445,12 +445,15 @@ export default function AssistentClient({
   // brede documentanalyse draagt de analyse-fase batch/totaal. null zodra het
   // antwoord begint te streamen (eerste delta) of bij een schone start.
   const [voortgang, setVoortgang] = useState<VoortgangUI | null>(null);
-  const supabase = createClient();
+  // De browserclient hoort bij deze gemounte assistent. Een lazy initializer
+  // voorkomt dat een gewone rerender een nieuwe client (en daarmee een nieuw
+  // initialisatie-effect) oplevert.
+  const [supabase] = useState(createClient);
 
   // Haalt de eigen, niet-gearchiveerde gesprekken op voor het overzicht.
   // RLS beperkt dit al tot de eigen gesprekken; de gebruiker_id-filter maakt het
   // expliciet. Best-effort.
-  async function laadGesprekken() {
+  const laadGesprekken = useCallback(async () => {
     try {
       const uid = userIdRef.current;
       if (!uid) return;
@@ -465,7 +468,7 @@ export default function AssistentClient({
     } catch (e) {
       console.error("Gesprekken laden mislukt:", e);
     }
-  }
+  }, [supabase]);
 
   // Auto-restore-begrenzing (besluit 0086): markeer/wis het actieve gesprek in
   // sessionStorage (per tab). Zo herstelt /ai bij mount alleen een gesprek dat
@@ -1095,7 +1098,7 @@ export default function AssistentClient({
         laadGesprekken();
       }
     });
-  }, []);
+  }, [laadGesprekken, supabase]);
 
   useEffect(() => {
     // T5 C2 — een zojuist geopend bestaand gesprek start onderaan bij het laatste

@@ -112,6 +112,18 @@ nog React Hooks-bevindingen. Na regeneratie daalt de baseline van **27 naar 26
 waarschuwingen**, van 6 naar 5 regels en van 17 naar 16 bestanden. Er is geen
 functioneel, data-, sessie- of routeringsgedrag gewijzigd.
 
+## Vervolg 2 september 2026 — onderhoudstranche 4
+
+De vierde onderhoudstranche verwijdert de laatste
+`react-hooks/exhaustive-deps`-waarschuwing. De AI-assistent maakt zijn
+Supabase-browserclient nu eenmaal per componentmount aan en houdt de functie
+voor het laden van gesprekken stabiel. De effectafhankelijkheden zijn daardoor
+volledig zonder dat een gewone rerender de authenticatie- en herstelinitialisatie
+opnieuw start. Een gerichte componenttest bewaakt dat gedrag. Na regeneratie
+daalt de baseline van **26 naar 25 waarschuwingen**, van 5 naar 4 regels en van
+16 naar 15 bestanden. Er is geen database-, autorisatie-, sessie- of
+routeringscontract gewijzigd.
+
 ## Rollback
 
 De wijziging is terug te draaien door de workflowtriggers en opdrachten terug te
