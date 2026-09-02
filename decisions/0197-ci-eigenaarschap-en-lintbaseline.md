@@ -124,6 +124,18 @@ daalt de baseline van **26 naar 25 waarschuwingen**, van 5 naar 4 regels en van
 16 naar 15 bestanden. Er is geen database-, autorisatie-, sessie- of
 routeringscontract gewijzigd.
 
+## Vervolg 2 september 2026 — onderhoudstranche 5
+
+De vijfde onderhoudstranche verwijdert de twee resterende
+`react-hooks/error-boundaries`-waarschuwingen. Op de pagina voor
+AI-begrenzing staat alleen het geaudite dataverzoek nog in het `try`-blok; de
+succesweergave wordt daarna opgebouwd. Daarmee suggereert het laad-vangnet niet
+langer dat het ook React-renderfouten opvangt. Twee gerichte componenttests
+bewaken het succespad en de bestaande herstelmelding bij een `PlatformError`.
+Na regeneratie daalt de baseline van **25 naar 23 waarschuwingen**, van 4 naar
+3 regels en van 15 naar 14 bestanden. Er is geen database-, autorisatie-,
+sessie- of routeringscontract gewijzigd.
+
 ## Rollback
 
 De wijziging is terug te draaien door de workflowtriggers en opdrachten terug te

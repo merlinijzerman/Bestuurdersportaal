@@ -7,9 +7,8 @@
     "fondsen"
   ],
   "uitleg": "Bestaande React/Hooks/Next-bevindingen. De gate blokkeert alleen toenames per bestand en regel.",
-  "totaal": 25,
+  "totaal": 23,
   "perRegel": {
-    "react-hooks/error-boundaries": 2,
     "react-hooks/immutability": 3,
     "react-hooks/set-state-in-effect": 15,
     "react-hooks/static-components": 5
@@ -41,9 +40,6 @@
     },
     "app/(dashboard)/vergaderingen/_components/VoorbereidingsBlok.tsx": {
       "react-hooks/set-state-in-effect": 1
-    },
-    "app/(platform)/platform/(beveiligd)/ai-begrenzing/page.tsx": {
-      "react-hooks/error-boundaries": 2
     },
     "app/(platform)/platform/login/page.tsx": {
       "react-hooks/immutability": 1,
