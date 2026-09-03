@@ -2,6 +2,7 @@
 
 > Besluit `0201`. Ontwerp: `ONTWERP-EEN-GENERIEKE-ASSISTENT-2026-09-03.md` §4.
 > Deze map is L1 en L2; L3 is vandaag `app/(dashboard)/ai/_components/AssistentClient.tsx`.
+> Het ontwerpdoc staat **buiten de repo**, één niveau hoger in de projectmap.
 
 ```
 ┌─ L3  PRESENTATIE ────────────────────────────────────────────────┐
@@ -25,10 +26,14 @@ dan is dat een keuze in L1 — zichtbaar in de contextchip — en geen stilzwijg
 verschil in wat er naar de server gaat.
 
 Waarom die regel bestaat: `AgendapuntChat.tsx` is ooit als kopie van een oudere
-aanroep ontstaan en niet meegegroeid. Zij stuurt **9 van de 24** payloadvelden.
+aanroep ontstaan en niet meegegroeid. Haar object-literal draagt **13 van de 24**
+payloadsleutels; elf ontbreken. (Het ontwerpdoc noemt 9 — dat is het geserialiseerde
+minimum, waarbij conditionele velden als `undefined` wegvallen.)
 Dezelfde vraag geeft daar dus een ander antwoord dan op `/ai`, en niets in de
 interface legt dat uit. Dat is geen bug maar een verschil dat niemand heeft
-ontworpen. `core/lib/assistent-payload.sanity.ts` maakt herhaling ervan onmogelijk.
+ontworpen. `core/lib/assistent-payload.sanity.ts` sluit herhaling uit voor elke surface die
+de bouwer gebruikt — vandaag alleen `/ai`; `AgendapuntChat` volgt in P2b, en er is geen
+CI-poort die een derde handgebouwd lichaam tegenhoudt.
 
 ## Bestanden
 
@@ -41,6 +46,12 @@ ontworpen. `core/lib/assistent-payload.sanity.ts` maakt herhaling ervan onmogeli
 | `core/lib/assistent-payload.ts` | L2 | **de enige** bouwer van het `/api/chat`-verzoek |
 | `core/lib/assistent-stream.ts` | L2 | de SSE-stroom als pure reducer |
 | `core/lib/assistent-types.ts` | — | gedeelde typen |
+| `core/lib/vraagtype.ts` | — | kreeg `leesAntwoordmodus` erbij (verhuisd uit `AntwoordWeergave.tsx`) |
+| `core/lib/voortgang.ts` | — | kreeg `pasVoortgangToe` + types erbij (verhuisd uit `Voortgang.tsx`) |
+
+De laatste twee zijn bestaande modules: `core/` mag niet uit `app/` importeren (boundary T9),
+dus die twee pure helpers moesten mee. Beide oude plekken re-exporteren, zodat geen enkele
+bestaande importregel wijzigt.
 
 ---
 
@@ -50,16 +61,17 @@ ontworpen. `core/lib/assistent-payload.sanity.ts` maakt herhaling ervan onmogeli
 het paneel; er komt géén tweede knop naast. De enige generieke ingang is de knop
 rechtsonder.
 
-*Geverifieerd tegen de code op `origin/preview` (8f74663), 3-9-2026.*
+*Bestandspad én regelnummer geverifieerd tegen `origin/preview` (8f74663), 3-9-2026.
+Alle zeven bestanden zijn in P1a onaangeraakt, dus deze nummers gelden ook op HEAD.*
 
 | Bestaande ingang | Nu | Straks (P1b) |
 |---|---|---|
-| `procedures/[id]/page.tsx:564` — "Bespreek dit proces met de AI" | `→ /ai?proces=` | opent paneel, context = dossier |
+| `procedures/[id]/page.tsx:608` — "Bespreek dit proces met de AI" | `→ /ai?proces=` | opent paneel, context = dossier |
 | `risicomatrix/page.tsx:77` — "Bespreek met de AI" | `→ /ai?risicomatrix=1` | opent paneel, context = risicomatrix; een risicorij zoomt in op één risico |
 | `bibliotheek/page.tsx:756` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | opent paneel, context = document |
-| `procedures/_components/StapPaneel.tsx:1989` — bronverwijzing | `→ /ai?doc=` | opent paneel, context = document |
+| `procedures/_components/StapPaneel.tsx:2203` — "Vraag de AI over dit stuk" bij een bronverwijzing | `→ /ai?doc=` | opent paneel, context = document |
 | `vergaderingen/_components/AgendapuntChat.tsx:1087` — "Openen in volledige assistent" | `→ /ai?agendapunt=` | vervalt: de paneelknop "volledig scherm" doet dit zonder navigatie |
-| `(dashboard)/page.tsx:407` — recente vraag op de home | `→ /ai` | opent paneel op dat gesprek |
+| `(dashboard)/page.tsx:441` — recente vraag op de home | `→ /ai` | opent paneel op dat gesprek |
 | **`core/lib/module-registry.ts:82` — het nav-item "AI Assistent"** | `→ /ai` | **nog te besluiten in P1b** |
 | Agendapuntkaart | inline chat + startchip | **één** knop "Bereid dit punt voor"; is het punt voorbereid, dan alleen "Doorvragen" in het resultaatblok |
 
@@ -110,5 +122,9 @@ rechtsonder.
 - **De URL-afhandeling is client-side** en dus niet via HTTP te roken. Wijzig je
   een deeplink, breid dan `assistent-url-ingang.sanity.ts` uit — daar zit de enige
   dekking.
-- **`contextChipLabel()` heeft nog geen consument.** De chip zelf wordt in P1b
-  gebouwd; de functie legt vast hoe hij hoort te luiden en is op de letter getest.
+- **`contextChipLabels()` heeft nog geen consument.** De chip wordt in P1b gebouwd;
+  de functie legt op de letter vast hoe de chips vandaag luiden. Let op wat zij
+  blootlegt: bij een module-scope náást een documentscope toont `/ai` vandaag **twee**
+  chips — de module-chip heeft geen `!agendapuntContext`-guard, de documentchip wel.
+  Bestaand gedrag, geen ontwerpkeuze. Beslis in P1b of het paneel indikt (en wát dan
+  wegvalt) of beide toont; een enkel label zou een actieve documentscope verzwijgen.

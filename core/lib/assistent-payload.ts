@@ -9,8 +9,13 @@
 //  bewust heeft ontworpen, en dat je aan de interface niet ziet (ontwerpdoc
 //  "Eén generieke assistent" §2). Zolang elke surface zijn eigen object-literal
 //  bouwt, ontstaat die divergentie opnieuw zodra iemand één veld toevoegt.
-//  Eén bouwer + één contracttest (`assistent-payload.sanity.ts`) maakt dat
-//  structureel onmogelijk: een nieuw veld komt hier binnen en geldt overal.
+//  Eén bouwer + één contracttest (`assistent-payload.sanity.ts`) sluit dat uit
+//  voor elke surface die hem gebruikt: een nieuw veld komt hier binnen en geldt
+//  daar overal. LET OP — dat is vandaag nog niet iedereen. `AgendapuntChat.tsx`
+//  roept /api/chat nog met een eigen, 9-velds literal aan; die surface verdwijnt
+//  in P2b (geregistreerd als OP-AS2, besluit 0201). Er is bovendien geen CI-poort
+//  die een derde handgebouwd verzoeklichaam tegenhoudt. De belofte geldt dus
+//  vanaf P2b, niet nu.
 //
 //  GEDRAGSNEUTRAAL. De inhoud hieronder is een letterlijke transcriptie van het
 //  object-literal dat in `AssistentClient.tsx` stond. De contracttest bevat een

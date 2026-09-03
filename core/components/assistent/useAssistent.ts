@@ -747,6 +747,13 @@ export function useAssistent(opties: UseAssistentOpties) {
         // eigen effect zou daarmee een race introduceren en bij een deeplink de
         // generieke begroeting kunnen tonen.
         const urlVerzoek = leesAssistentContextUitUrl(window.location.search);
+        // Ingreep 2 — de bevestigde bron-intentie geldt voor dit gesprek en staat
+        // NAAST een eventuele scope; "Nieuw gesprek" wist hem. Bewust VÓÓR het
+        // opzoeken gezet: hij komt uit de URL en heeft geen database nodig. Zou
+        // hij erna staan, dan hing een auditveld af van het welslagen van een
+        // RLS-lookup — een koppeling die je niet wilt, ook al vangt de resolver
+        // vandaag alles zelf af.
+        if (urlVerzoek.herkomst) zetHerkomst(urlVerzoek.herkomst);
         // De resolver vraagt om een MINIMALE leesinterface (select/eq/order),
         // niet om de supabase-client zelf: zo is hij te testen met een stub en is
         // aan zijn signatuur te zien dat hij nooit schrijft. De generieke typen
@@ -772,9 +779,6 @@ export function useAssistent(opties: UseAssistentOpties) {
           zetAgendapuntContext(patch.agendapuntContext);
         if (patch.moduleScope !== undefined) zetModuleScope(patch.moduleScope);
         if (patch.risicoLijst !== undefined) zetRisicoLijst(patch.risicoLijst);
-        // Ingreep 2 — de bevestigde bron-intentie geldt voor dit gesprek en
-        // staat NAAST een eventuele scope; "Nieuw gesprek" wist hem.
-        if (urlVerzoek.herkomst) zetHerkomst(urlVerzoek.herkomst);
 
 
         // Vul het gesprekken-overzicht.

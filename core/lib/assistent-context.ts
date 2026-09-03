@@ -112,45 +112,59 @@ export function leesAgendapuntContext(ruw: unknown): AgendapuntContext | null {
 }
 
 /**
- * De tekst van de contextchip: "waar gaat dit gesprek over?".
+ * De contextchips zoals `/ai` ze vandaag toont — een LIJST, geen enkel label.
  *
- * Vandaag bouwt de weergavelaag deze zinnen nog inline op, elk in zijn eigen
- * JSX-tak met eigen kleuren en een eigen wisknop. Die opbouw is hier ONGEWIJZIGD
- * overgenomen en met `assistent-context.sanity.ts` op de letter vastgelegd, maar
- * bewust nog niet in `/ai` ingeschakeld: P1a mag geen letter aan de weergave
- * veranderen, en P1b bouwt de chip toch opnieuw als paneelonderdeel.
+ * Dit was eerst één functie die één label gaf, afgeleid via `bepaalContextSoort`.
+ * Dat was fout, en op een manier die pas in P1b pijn had gedaan: de
+ * module-chip in de weergave heeft géén `!agendapuntContext`-guard, terwijl de
+ * documentchip die wél heeft. Bij een module-scope naast een documentscope
+ * staan er dus vandaag TWEE chips, en een enkel label had de actieve
+ * documentscope stilzwijgend verzwegen — precies de chip die de bestuurder moet
+ * vertellen waarop geantwoord wordt.
  *
- * Deze functie is dus het CONTRACT dat P1b erft: één plek waar staat hoe een
- * context zich benoemt, in plaats van drie takken die uiteen kunnen lopen.
- * Zonder consument tot P1b — dat is een bewuste keuze, geen vergeten draad.
+ * De volgorde is die van de weergave: module, agendapunt, document.
+ *
+ * OPEN VOOR P1b: dat er twee chips náást elkaar kunnen staan is bestaand gedrag,
+ * geen ontwerpkeuze. Het paneel toont één contextchip; beslis daar bewust wat er
+ * gebeurt bij een samengestelde context — indikken (en wát dan wegvalt) of beide
+ * tonen. Niet impliciet laten.
+ *
+ * Nog geen consument: P1a verandert geen letter aan het scherm en P1b bouwt de
+ * chip toch opnieuw. Deze functie is het contract dat P1b erft.
  */
-export function contextChipLabel(velden: {
+export function contextChipLabels(velden: {
   documentScope: DocumentScope | null;
   agendapuntContext: AgendapuntContext | null;
   moduleScope: ModuleScope | null;
-}): string | null {
+}): string[] {
   const { documentScope, agendapuntContext, moduleScope } = velden;
-  switch (bepaalContextSoort(velden)) {
-    case "agendapunt": {
-      const aantal = documentScope?.document_ids.length ?? 0;
-      const stukken =
-        aantal > 0 ? `${aantal} ${aantal === 1 ? "stuk" : "stukken"}` : "geen stukken";
-      return `Agendapunt: «${agendapuntContext!.titel}» · ${stukken}`;
-    }
-    case "proces":
-      return `Proces: «${moduleScope!.label}»`;
-    case "risico":
-      return `Risico: «${moduleScope!.label}»`;
-    case "risicomatrix":
-      return "Risicomatrix";
-    case "document": {
-      const extra = documentScope!.document_ids.length - 1;
-      return `Onderwerp: «${documentScope!.titels[0] || "dit document"}»${
-        extra > 0 ? ` +${extra}` : ""
-      }`;
-    }
-    default:
-      // Fondsbreed draagt geen chip: er is niets ingeperkt om te tonen.
-      return null;
+  const chips: string[] = [];
+
+  if (moduleScope) {
+    chips.push(
+      moduleScope.soort === "proces"
+        ? `Proces: «${moduleScope.label}»`
+        : moduleScope.soort === "risico"
+          ? `Risico: «${moduleScope.label}»`
+          : "Risicomatrix"
+    );
   }
+
+  if (agendapuntContext) {
+    const aantal = documentScope?.document_ids.length ?? 0;
+    const stukken =
+      aantal > 0 ? `${aantal} ${aantal === 1 ? "stuk" : "stukken"}` : "geen stukken";
+    chips.push(`Agendapunt: «${agendapuntContext.titel}» · ${stukken}`);
+  } else if (documentScope) {
+    // De documentchip wijkt: hij verschijnt NIET naast een agendapunt, want dat
+    // agendapunt draagt zijn stukken al in zijn eigen chip.
+    const extra = documentScope.document_ids.length - 1;
+    chips.push(
+      `Onderwerp: «${documentScope.titels[0] || "dit document"}»${
+        extra > 0 ? ` +${extra}` : ""
+      }`
+    );
+  }
+
+  return chips;
 }

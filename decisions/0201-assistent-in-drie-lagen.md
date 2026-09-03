@@ -16,12 +16,19 @@ bezwaar maar de directe oorzaak van drie concrete problemen, vastgesteld tegen d
    kan geen paneel naast een module staan.
 
 2. **De aanroep is verschraald op de tweede plek.** `AgendapuntChat.tsx` is ooit als kopie
-   van een oudere aanroep ontstaan en niet meegegroeid: zij stuurt **9 van de 24**
-   payloadvelden. Geen bronrestrictie, geen module-scope, geen niet-vastgestelde stukken,
-   geen `doorgrond`/`stukvoorbereiding`, een armer auditspoor (`bron_intent_bron`,
-   `bron_intent_herkomst` ontbreken) en — tot deze week — geen idempotency-header. Gevolg:
-   dezelfde vraag geeft daar een ánder antwoord dan op `/ai`, zonder dat iets in de
-   interface dat uitlegt. Dat is geen bug in de zin van "het werkt niet"; het is een
+   van een oudere aanroep ontstaan en niet meegegroeid: haar object-literal draagt **13 van
+   de 24** payloadsleutels; **elf ontbreken**. (Het ontwerpdoc noemt 9 — dat is het
+   *geserialiseerde* minimum, waarbij de conditionele velden als `undefined` wegvallen. Het
+   literal zelf telt er 13; geteld op `origin/preview`.) Wat ontbreekt: bronrestrictie,
+   module-scope, niet-vastgestelde stukken, `doorgrond`/`stukvoorbereiding`,
+   `startvraag_bron`, `algemeen_perspectief`, `bronkeuze_vorige_log_id` en een deel van het
+   auditspoor (`bron_intent_bron`, `bron_intent_herkomst`). Daarbovenop ontbrak de
+   idempotency-header — die is in een **aparte branch** hersteld (`fix/agendapunt-idempotency`)
+   en zit dus **niet** in deze wijziging; wordt alleen deze branch gemerged, dan blijft de
+   agendapuntchat kapot.
+
+   Gevolg van de verschraling: dezelfde vraag geeft daar een ánder antwoord dan op `/ai`,
+   zonder dat iets in de interface dat uitlegt. Dat is geen bug in de zin van "het werkt niet"; het is een
    verschil dat niemand bewust heeft ontworpen.
 
 3. **Het brosste pad was onverifieerbaar.** De SSE-verwerking (acht eventsoorten, dertien
@@ -80,10 +87,14 @@ er naar de server gaat.
 
 ## Gevolgen
 
-**Structuur.** `AssistentClient.tsx` 3.298 → 1.437 regels. Nieuw: `useAssistent.ts` (L2) en
-zes `core/lib/assistent-*`-modules. `AgendapuntChat.tsx` is **niet** aangeraakt (op de
-idempotency-fix na, die als eigen PR ging): het verdwijnt in P2b en elke oude importregel
-blijft werken doordat de verhuisde typen op hun oude plek worden ge-re-exporteerd.
+**Structuur.** `AssistentClient.tsx` 3.298 → 1.437 regels. Nieuw: twee React-modules in
+`core/components/assistent/` (de provider en de hook) en **vijf** `core/lib/assistent-*`-
+modules (`context`, `payload`, `stream`, `types`, `url-ingang`). Daarnaast zijn twee
+bestaande modules uitgebreid met verhuisde code: `core/lib/vraagtype.ts` kreeg
+`leesAntwoordmodus` en `core/lib/voortgang.ts` de UI-reducer `pasVoortgangToe` + haar types.
+Beide waren nodig omdat `core/` niet uit `app/` mag importeren (boundary T9); beide oude
+plekken re-exporteren, dus geen importregel wijzigt. `AgendapuntChat.tsx` is in deze branch
+**byte-identiek** aan `origin/preview`: het verdwijnt in P2b.
 
 **RLS en tenant-isolatie.** Ongewijzigd. Er is geen query toegevoegd, verwijderd of
 verbreed; de deeplink-reads staan nu in `resolveerAssistentContext` met dezelfde `select`,
@@ -96,20 +107,29 @@ inhoudszegel-koppeling gaan één-op-één mee, en `CHAT_PAYLOAD_VELDEN` maakt h
 
 **Datamodel/migraties.** Geen.
 
-**Testdekking.** +47 tests: payloadcontract (13), streamreducer (15), URL-ingang (19) en de
-contextlaag (7), plus zes componenttests op de SSE-verwerking. `npm test` blijft exit 0 met
+**Testdekking.** **+54** sanity-tests — payloadcontract 13, streamreducer 15, URL-ingang 19,
+contextlaag 7 — **plus zes** componenttests op de SSE-verwerking, dus zestig in totaal.
+`core/lib/ai-begroeting-copy.sanity.ts` is bijgesteld omdat de begroeting naar de
+gesprekslaag verhuisde en de badge-tooltip in de presentatielaag bleef; de check leest nu
+beide bestanden en is niet verzwakt. `npm test` blijft exit 0 met
 dezelfde tellingen als de baseline op `origin/preview`.
 
 **Bewust geaccepteerd.**
 
-- `contextChipLabel()` heeft nog geen consument: de chip wordt in P1b gebouwd. De functie
-  legt op de letter vast hoe hij hoort te luiden.
+- `contextChipLabels()` heeft nog geen consument: de chip wordt in P1b gebouwd. De functie
+  legt op de letter vast hoe de chips vandaag luiden — inclusief het gegeven dat er bij een
+  samengestelde context (module + document) vandaag **twee** chips naast elkaar staan. Dat is
+  bestaand gedrag, geen ontwerpkeuze; P1b moet expliciet beslissen wat het paneel daarmee
+  doet. Deze fout zat er eerst wél in: één enkel label had de actieve documentscope
+  stilzwijgend verzwegen — precies de chip die moet zeggen waarop geantwoord wordt.
 - De payloaddivergentie van `AgendapuntChat` blijft bestaan tot P2b (geregistreerd).
 - Vier wijzigingen die verder gaan dan verplaatsen, afgedwongen door de blokkerende
-  `lint:quality`-gate (React Compiler): geen refs over de laaggrens, het actieve gesprek-id
-  ook als waarde, de highlight-timer als effect, en het initialisatie-effect aan de losse
-  stabiele setters. Geverifieerd dat alle vijf bevindingen nieuw waren — de preview-versie
-  levert er nul — dus opgelost in plaats van de baseline opgerekt.
+  `lint:quality`-gate (React Compiler). Die gate meldde **vijf** bevindingen, opgelost met
+  **vier** ingrepen (de vier `preserve-manual-memoization`-meldingen kwamen uit één
+  dependency-lijst): geen refs over de laaggrens, het actieve gesprek-id ook als waarde, de
+  highlight-timer als effect, en het initialisatie-effect aan de losse stabiele setters.
+  Geverifieerd dat alle vijf nieuw waren — de preview-versie levert er nul door dezelfde
+  config — dus opgelost in plaats van de baseline opgerekt.
 
 **Eén regressie, in dit werk ontstaan en hersteld.** Bij het verhuizen van de gesprekslaag
 hernoemde een zoek-en-vervang de closure-variabele `herkomst` óók binnen de stringliteral
@@ -120,10 +140,26 @@ in het portaal zet die parameter**. Dat laatste is nu apart geregistreerd. De le
 "beter opletten" maar dat een deeplink een pure functie hoort te zijn die je kunt uitrekenen;
 `assistent-url-ingang.sanity.ts` doet dat.
 
+## Waar oudere besluiten naar `AssistentClient` verwijzen
+
+Besluitregisters worden niet herschreven; deze tabel is de brug. Verwijst een eerder besluit
+naar `AssistentClient.tsx` voor iets dat gespreksstaat, streaming of de payload betreft, lees
+dan de rechterkolom.
+
+| Besluit / document | Verwees naar | Staat sinds 0201 in |
+|---|---|---|
+| 0086 (auto-restore), 0092 (`bewaarGesprek`), 0120 (`gesprekBestaatInDb`), 0089 (scherpstel) | `AssistentClient.tsx` | `core/components/assistent/useAssistent.ts` |
+| 0158 (`stukContextUitBerichten` + Word-export) | `AssistentClient.tsx` | `core/components/assistent/useAssistent.ts` |
+| 0090 (meta-veld doormappen) | `AssistentClient.tsx` | `core/lib/assistent-stream.ts` |
+| 0088, 0138 (`pasVoortgangToe`) | `Voortgang.tsx` | `core/lib/voortgang.ts` (re-export blijft) |
+| `T5-VERGELIJKMODUS-ONTWERP.md` (consumptie van de vergelijk-events) | `AssistentClient.tsx` | `core/lib/assistent-stream.ts`; alleen de rendering bleef |
+| `AI-PRIMAIRE-DOCUMENTMODUS-ONTWERP.md` (werkstand-staat) | `AssistentClient.tsx` | `useAssistent.ts`; het chiplabel bleef in de weergave |
+| `WERKOPDRACHT-*`-documenten met regelnummers in `AssistentClient.tsx` | — | vervallen door de krimp 3.298 → 1.437; uitgevoerde opdrachten, historisch |
+
 ## Referenties
 
 - `ONTWERP-EEN-GENERIEKE-ASSISTENT-2026-09-03.md` §2 (divergentieanalyse), §4 (doelbeeld),
-  §6 (plateaus)
+  §6 (plateaus) — staat **buiten de repo**, één niveau hoger in de projectmap
 - `core/components/assistent/README.md` — de drie lagen + het ingangenregister (bindend P1b)
 - Besluit 0079 (één weergave, twee ingangen), 0098 §4 (alleen een afgeronde generatie is
   kopieerbaar), 0110 + FR-67 (reflectiestatus is server-controlled), 0151 (module-scope),

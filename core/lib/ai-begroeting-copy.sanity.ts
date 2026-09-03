@@ -55,7 +55,11 @@ check("de begroetingsregels dragen niet langer de Governance-Log-zin", () => {
   // Elke regel die de begroeting opbouwt bevat "Ik help u graag met vragen rondom"
   // of de statische welkomsttekst; geen daarvan mag nog naar de Governance Log
   // verwijzen (die transparantie is naar de badge-tooltip verplaatst).
-  const begroetingsRegels = GESPREKSLAAG.split("\n").filter(
+  // Beide lagen, niet alleen de gesprekslaag: verschijnt er ooit weer een
+  // begroetingsregel in de presentatielaag, dan moet die óók vrij blijven van de
+  // Governance-Log-zin. Een negatieve assertie die maar één bestand leest, is
+  // precies zo sterk als de aanname dat de tekst nooit terugverhuist.
+  const begroetingsRegels = `${GESPREKSLAAG}\n${WEERGAVE}`.split("\n").filter(
     (r) =>
       r.includes("Ik help u graag met vragen rondom") ||
       r.includes("Welkom terug. Ik ben uw AI-assistent")

@@ -1,5 +1,9 @@
 # AI-assistent — primaire-documentmodus en vindbaarheid van conceptstukken
 
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts` of `core/lib/assistent-stream.ts`. Zie besluit 0201 §"Waar oudere besluiten naar AssistentClient verwijzen".
+> Concreet voor dit document: de werkstand-STAAT (`voorbereidingsstand`, serverveld `neem_niet_vastgestelde_mee`) zit sinds 0201 in `useAssistent.ts`; het chiplabel en de schakelaar bleven in `AssistentClient.tsx`.
+
+
 > **Status:** gebouwd 12-08-2026, nog niet gedeployed. Besluit: [`decisions/0172`](./decisions/0172-primaire-documentmodus-en-vindbaarheid-conceptstukken.md).
 > Vervangt het strict-document gedrag uit increment 1/2 (`03 Functioneel ontwerp/Bestuurdersportaal - AI-vragen over een specifiek document ontwerp v0.2.md`, §6 + AC-148/158 — die criteria zijn hiermee vervallen).
 
