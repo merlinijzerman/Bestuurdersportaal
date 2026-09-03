@@ -1,8 +1,6 @@
 # AI-antwoordweergave — Ontwerpdocument
 
-> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`. Verwijzingen hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
->
-> **Sinds T1 (03-09-2026, besluit 0204) is er één component, niet twee.** De presentatielaag heet `app/(dashboard)/ai/_components/AssistentOppervlak.tsx` en is de INHOUD van het assistentpaneel; dat paneel hangt in `core/components/DashboardShell.tsx` en kent vier standen (dicht → 400 px → 740 px → volledig scherm). `/ai` rendert de assistent niet meer zelf: die route ís de volledig-schermstand en `AssistentClient.tsx` is er nog uitsluitend de brug naartoe. Waar hieronder "de pagina /ai" staat, lees: het oppervlak in zijn volledig-schermstand.
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
 
 
 - **Versie:** 0.3 · 31 juli 2026
@@ -18,7 +16,7 @@ Het portaal toont AI-antwoorden op twee plekken:
 
 | Surface | Bestand | Container |
 |---|---|---|
-| Het assistentpaneel (en `/ai` = volledig scherm) | `app/(dashboard)/ai/_components/AssistentOppervlak.tsx` (L3-presentatie sinds 0201; inhoud van het paneel sinds 0204) | kolom `max-w-[1020px]`; het paneel zelf 400 / 740 px of de hele contentkolom |
+| Volledige assistent `/ai` | `app/(dashboard)/ai/_components/AssistentClient.tsx` (L3-presentatie sinds besluit 0201) | kolom `max-w-[1020px]` |
 | Inline agendavoorbereiding | `app/(dashboard)/vergaderingen/_components/AgendapuntChat.tsx` | smal paneel, `max-h-96` |
 
 Sinds besluit [`0079`](./decisions/0079-agenda-assistent-gedeelde-weergave.md) delen die

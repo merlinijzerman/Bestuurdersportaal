@@ -182,12 +182,7 @@ export default async function GovernancePage() {
               <div key={log.id} className="bg-white border border-line rounded-xl p-4">
                 {/* Header */}
                 <div className="flex items-center gap-2.5 mb-3">
-                  {/* Wit op --accent = 8,77:1. Stond hier op `text-ink`: donkere
-                      inkt op een navy vlak, 1,80:1 — ruim onder WCAG 1.4.3.
-                      Bestaande fout, geen gevolg van T3 (beide tokens zijn
-                      ongewijzigd); gevonden door de contrastscan van die
-                      opdracht en daarom meteen meegenomen. */}
-                  <div className="w-7 h-7 bg-accent rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                  <div className="w-7 h-7 bg-accent rounded-full flex items-center justify-center text-xs font-bold text-ink flex-shrink-0">
                     {initials}
                   </div>
                   <span className="font-semibold text-sm text-ink">

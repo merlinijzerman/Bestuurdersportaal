@@ -1,21 +1,13 @@
 "use client";
 
 // Procesfasen-accordeon (WO-3) — schone, neutrale fase-accordeon in het
-// linkerpaneel, in de neutrale app-tokens (muted/line/accent).
-//
-// T3 (besluit 0202): dit paneel gebruikte de NAV-tokens omdat het "de kleuren
-// van het hoofdmenu" wilde. Dat was al fout vóór de donkere chrome: nav-rgb,
-// nav-line-rgb, nav-text-rgb, nav-text-active-rgb en nav-accent-rgb staan alle
-// vijf in THEMABARE_TOKENS, dus een fonds dat zijn navigatie donker brandde,
-// kreeg hier lichte navtekst op een licht vlak — onleesbaar, zonder dat iets
-// het meldde. De chrome-tokens horen bij de chrome; dit paneel staat op een
-// licht oppervlak en gebruikt daarom de neutrale tokens.
+// linkerpaneel, in de kleuren van het hoofdmenu (nav-tokens).
 //
 // Bewust rustig: geen statuskleur op elke stap en géén aandacht-indicator op de
 // fasen (bewust weggehaald om de rail rustig te houden; de aandacht-afleiding
 // blijft in de data bestaan voor het portfolio-overzicht). De accordeon is
 // neutraal; alléén de GESELECTEERDE stap (of fase) wordt gehighlight met de
-// selectie-highlight (bg-accent-tint + navy cirkel).
+// hoofdmenu-highlight (bg-nav-active + navy cirkel).
 // GEEN beschrijvings-/toelichtingsblokken in het linkerpaneel; die staan in de
 // fase-weergave rechts. Klik op een fasekop → fase-weergave (`?fase=`); klik op
 // een stap → het stapscherm (`?stap=`). Parallel-by-default.
@@ -44,18 +36,18 @@ export interface FaseGroep {
   stappen: Stap[];
 }
 
-// Neutrale status-pill; alleen 'afgerond' krijgt een subtiele
+// Neutrale status-pill in hoofdmenu-stijl; alleen 'afgerond' krijgt een subtiele
 // tint zodat de afgeronde staat leesbaar blijft (status = woord + subtiele vorm).
 const STATUS_PILL: Record<FaseStatus, string> = {
   afgerond: "bg-ok-tint text-ok-ink border border-ok/20",
-  in_behandeling: "bg-app-bg text-muted border border-line",
-  nog_niet_begonnen: "bg-app-bg text-muted border border-line",
-  vervallen: "bg-app-bg text-muted border border-line opacity-60",
+  in_behandeling: "bg-app-bg text-nav-text border border-nav-line",
+  nog_niet_begonnen: "bg-app-bg text-nav-text border border-nav-line",
+  vervallen: "bg-app-bg text-nav-text border border-nav-line opacity-60",
 };
 
-// Neutrale romeins-badge; de status leest af aan de afgerond-
+// Neutrale romeins-badge (hoofdmenu-stijl); de status leest af aan de afgerond-
 // pill, niet aan de badgekleur.
-const BADGE = "bg-app-bg text-muted border border-line";
+const BADGE = "bg-app-bg text-nav-text border border-nav-line";
 
 function isActiefAchtig(s: Stap): boolean {
   return s.status === "actief" || s.status === "heropend";
@@ -90,30 +82,30 @@ function StapItem({
         replace
         aria-current={geselecteerd ? "step" : undefined}
         className={`relative block -mx-3 px-3 pl-9 py-2 rounded-lg transition-colors ${
-          geselecteerd ? "bg-accent-tint" : "hover:bg-app-line/50"
+          geselecteerd ? "bg-nav-active" : "hover:bg-nav-line/50"
         }`}
       >
         {/* Neutrale cirkel; alleen de geselecteerde stap krijgt de navy vulling. */}
         <div
           className={`absolute left-3 top-2.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
             geselecteerd
-              ? "bg-accent text-white"
-              : "bg-app-bg border border-line text-muted"
+              ? "bg-nav-accent text-white"
+              : "bg-app-bg border border-nav-line text-nav-text"
           }`}
         >
           {isAfgerond ? "✓" : s.volgorde}
         </div>
         {!isLaatste && (
-          <div className="absolute left-6 top-8 bottom-0 w-px bg-app-line" />
+          <div className="absolute left-6 top-8 bottom-0 w-px bg-nav-line" />
         )}
         <div className="ml-6">
           <div
             className={`text-sm ${
               geselecteerd
-                ? "font-semibold text-ink"
+                ? "font-semibold text-nav-text-active"
                 : isAfgerond || isActief
                   ? "text-ink"
-                  : "text-muted"
+                  : "text-nav-text"
             }`}
           >
             {s.naam}
@@ -126,28 +118,28 @@ function StapItem({
           )}
 
           {isAfgerond && (
-            <div className="text-xs text-muted mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               {s.voltooid_op
                 ? `Afgerond ${formatDatumKort(s.voltooid_op)}`
                 : "Afgerond"}
             </div>
           )}
           {isActief && (
-            <div className="text-xs text-muted mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               {isHeropend ? "Heropend" : "Actief"}
               {s.deadline ? ` — deadline ${formatDatumKort(s.deadline)}` : ""}
             </div>
           )}
           {isGeblokkeerd && (
-            <div className="text-xs text-muted mt-0.5">Wacht op eerdere stap</div>
+            <div className="text-xs text-nav-text mt-0.5">Wacht op eerdere stap</div>
           )}
           {s.status === "open" && s.vereist_besluit && (
-            <div className="text-xs text-muted mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               Vereist formeel besluit
             </div>
           )}
           {s.status === "open" && !s.vereist_besluit && s.geschatte_dagen && (
-            <div className="text-xs text-muted mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               Geschat {s.geschatte_dagen} dagen
             </div>
           )}
@@ -206,7 +198,7 @@ export default function FaseRail({
               onClick={() => openFase(f.fase_code)}
               aria-expanded={isOpen}
               className={`w-full text-left px-2.5 py-2.5 flex items-center gap-2.5 transition-colors ${
-                isGeselecteerd ? "bg-accent-tint" : "hover:bg-app-line/50"
+                isGeselecteerd ? "bg-nav-active" : "hover:bg-nav-line/50"
               }`}
             >
               <span
@@ -215,10 +207,10 @@ export default function FaseRail({
                 {f.fase_code}
               </span>
               <span className="flex-1 min-w-0">
-                <span className="block text-sm font-semibold text-ink leading-tight">
+                <span className="block text-sm font-semibold text-nav-text-active leading-tight">
                   {f.titel}
                 </span>
-                <span className="block text-[11px] text-muted mt-0.5">
+                <span className="block text-[11px] text-nav-text mt-0.5">
                   {f.stappen.length} stap{f.stappen.length === 1 ? "" : "pen"}
                 </span>
               </span>
@@ -236,7 +228,7 @@ export default function FaseRail({
               )}
               <span
                 aria-hidden
-                className={`text-muted text-xs shrink-0 transition-transform ${
+                className={`text-nav-text text-xs shrink-0 transition-transform ${
                   isOpen ? "rotate-180" : ""
                 }`}
               >

@@ -22,7 +22,6 @@ import {
 } from "@/core/lib/document-bijzonderheden";
 import { BRONSTATUS_LABEL } from "@/core/lib/document-status-transities";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
-import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 
 interface Document {
   id: string;
@@ -753,15 +752,14 @@ export default function BibliotheekPage() {
                           </button>
                         )}
                         {!inactief && doc.geindexeerd && (
-                          <AssistentIngang
-                            ingangen={[{ soort: "document", documentId: doc.id }]}
-                            module="bibliotheek"
+                          <a
+                            href={`/ai?doc=${doc.id}`}
                             onClick={() => setOpenMenuId(null)}
                             className="block px-4 py-2 text-sm font-medium text-ink hover:bg-warn-tint"
-                            title="Open de assistent met de vraag beperkt tot dit stuk"
+                            title="Open de AI-assistent met de vraag beperkt tot dit document"
                           >
                             Vraag de AI over dit stuk
-                          </AssistentIngang>
+                          </a>
                         )}
                         {kanInzien && !inactief && (
                           <a

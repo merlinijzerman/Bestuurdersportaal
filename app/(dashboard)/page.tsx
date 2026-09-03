@@ -9,7 +9,6 @@ import Link from "next/link";
 import NotificatiesBlok from "./_components/NotificatiesBlok";
 import WerkbakBlok from "./_components/WerkbakBlok";
 import type { NotificatieType } from "@/core/lib/notifications";
-import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 
 const ROL_LABEL: Record<string, string> = {
   bestuurder: "bestuurslid",
@@ -439,7 +438,7 @@ export default async function HomePage() {
                       key={v.id}
                       tekst={v.vraag}
                       tijd={formatRelatief(v.aangemaakt)}
-                      opentAssistent
+                      href="/ai"
                     />
                   ))}
                 </RecentBlok>
@@ -502,21 +501,10 @@ function RecentRij({
   tekst,
   tijd,
   href,
-  opentAssistent,
 }: {
   tekst: string;
   tijd: string;
   href?: string;
-  /**
-   * T1 — de rij opent het assistentpaneel in plaats van naar /ai te navigeren.
-   *
-   * NIET "op dat gesprek", en dat is een correctie op het ingangenregister: de
-   * recente vragen komen uit een logtabel (zie `LogItem` hierboven) en dragen
-   * géén gespreks-id; het oude `href="/ai"` was dan ook een constante. Het
-   * paneel opent dus fondsbreed — het gedrag van vandaag, minus de navigatie.
-   * Het terughalen van dát gesprek staat als openstaand punt genoteerd.
-   */
-  opentAssistent?: boolean;
 }) {
   const inhoud = (
     <div className="flex justify-between items-baseline gap-3">
@@ -526,17 +514,6 @@ function RecentRij({
       <span className="text-[11px] text-muted whitespace-nowrap flex-shrink-0">{tijd}</span>
     </div>
   );
-  if (opentAssistent) {
-    return (
-      <AssistentIngang
-        ingangen={[]}
-        module="home"
-        className="block hover:text-accent transition-colors"
-      >
-        {inhoud}
-      </AssistentIngang>
-    );
-  }
   return href ? (
     <Link href={href} className="block hover:text-accent transition-colors">
       {inhoud}

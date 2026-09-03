@@ -32,7 +32,6 @@ import {
   bewijsstukkenSamenvatting,
   vergaderingenSamenvatting,
 } from "@/core/lib/procedure-detail-weergave";
-import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 
 // WO-3: de Bewijsstukken-sectie is vereist-gedreven (evidence-unie template +
 // instantie) i.p.v. een losse lijst opgevoerde stukken; het vroegere
@@ -2198,17 +2197,15 @@ export default function StapPaneel({
                           als de documentbibliotheek (/ai?doc=…). Alleen bij een
                           gekoppeld document; een titel-only stuk (document_id
                           null) heeft niets om over te vragen. Een <a> blijft ook
-                          in de leesmodus-fieldset klikbaar — T1 houdt dat anker
-                          daarom aan en onderschept alleen de klik. */}
+                          in de leesmodus-fieldset klikbaar. */}
                       {b.document_id && (
-                        <AssistentIngang
-                          ingangen={[{ soort: "document", documentId: b.document_id }]}
-                          module="procedures"
+                        <a
+                          href={`/ai?doc=${b.document_id}`}
                           className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-1"
-                          title="Open de assistent met de vraag beperkt tot dit stuk"
+                          title="Open de AI-assistent met de vraag beperkt tot dit document"
                         >
                           ✦ Vraag de AI over dit stuk
-                        </AssistentIngang>
+                        </a>
                       )}
                       {/* Bewijsbinding: welke vereiste vervult dit stuk?
                           Ongebonden stukken tellen niet mee — dat is zichtbaar

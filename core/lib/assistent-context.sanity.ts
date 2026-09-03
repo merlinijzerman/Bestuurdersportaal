@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import {
   bepaalContextSoort,
-  contextChip,
   contextChipLabels,
   leesScope,
   leesAgendapuntContext,
@@ -172,64 +171,5 @@ check("leesAgendapuntContext vereist een id en valt terug op een nette titel", (
     { id: "a1", titel: "Rondvraag" }
   );
 });
-
-// ── De ENE contextchip van het paneel (T1, besluit 0204) ────────────────────
-
-check("fondsbreed is geen scope en heeft dus niets om los te laten", () => {
-  const chip = contextChip(LEEG);
-  assert.equal(chip.label, "Fondsbreed");
-  assert.equal(chip.losTeLaten, false);
-});
-
-check("het label volgt dezelfde precedentie als bepaalContextSoort", () => {
-  const alles = {
-    documentScope: DOC,
-    agendapuntContext: { id: "a1", titel: "Jaarrekening" },
-    moduleScope: { soort: "proces" as const, procedure_id: "p1", label: "Invaren" },
-  };
-  assert.equal(contextChip(alles).label, "Agendapunt · «Jaarrekening»");
-  assert.equal(
-    contextChip({ ...alles, agendapuntContext: null }).label,
-    "Proces · «Invaren»"
-  );
-  assert.equal(
-    contextChip({ ...alles, agendapuntContext: null, moduleScope: null }).label,
-    "Document · «ABTN»"
-  );
-});
-
-check("een tweede scope wordt NIET verzwegen maar staat in het bronbereik", () => {
-  // Dit is het hele punt van de indikking tot één chip: het label toont de
-  // meest specifieke context, maar een documentscope die óók meegaat blijft
-  // zichtbaar. Anders leest de bestuurder één scope en krijgt hij een antwoord
-  // uit twee.
-  const chip = contextChip({
-    documentScope: { document_ids: ["d1", "d2"], titels: ["ABTN", "Jaarplan"] },
-    agendapuntContext: null,
-    moduleScope: { soort: "risicomatrix", label: "de risicomatrix" },
-  });
-  assert.equal(chip.label, "Risicomatrix");
-  assert.match(chip.bronbereik, /daarnaast 2 stukken/);
-});
-
-check("een agendapunt zonder stukken zegt dát ook", () => {
-  const chip = contextChip({
-    documentScope: null,
-    agendapuntContext: { id: "a1", titel: "Rondvraag" },
-    moduleScope: null,
-  });
-  assert.match(chip.bronbereik, /geen gekoppelde stukken/);
-});
-
-check("de documentchip telt de rest mee in het label", () => {
-  const chip = contextChip({
-    documentScope: { document_ids: ["d1", "d2", "d3"], titels: ["ABTN"] },
-    agendapuntContext: null,
-    moduleScope: null,
-  });
-  assert.match(chip.label, /\+2$/);
-  assert.equal(chip.bronbereik, "alleen 3 stukken");
-});
-
 
 console.log(`\n${n} sanity-tests geslaagd.`);
