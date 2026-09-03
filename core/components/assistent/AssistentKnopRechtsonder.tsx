@@ -30,7 +30,11 @@ export default function AssistentKnopRechtsonder() {
       aria-expanded={open}
       aria-controls="assistent-paneel"
       aria-label={open ? "Assistent sluiten" : "Assistent openen"}
-      className="fixed bottom-4 right-4 z-30 inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-accent-ink"
+      // Het assistent-accent uit besluit 0202, dat T3 juist voor deze knop en de
+      // contextchip heeft gemaakt: teal voor AI, navy voor bestuurlijke acties.
+      // Wit op `--ai` haalt 5,62:1. De hover verdonkert met een filter en niet
+      // met `--ai-500`: dat token is grafisch (3,85:1) en mag geen tekst dragen.
+      className="fixed bottom-4 right-4 z-30 inline-flex items-center gap-2 rounded-full bg-ai px-4 py-2.5 text-sm font-medium text-white shadow-card transition-[filter] hover:brightness-90"
     >
       <span aria-hidden>{open ? "✕" : "✦"}</span>
       <span className="max-sm:hidden">{open ? "Sluiten" : "Assistent"}</span>

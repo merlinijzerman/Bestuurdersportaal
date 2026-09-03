@@ -128,7 +128,9 @@ export default function AssistentPaneel({
     >
       <div className="border-b border-line px-3 py-2.5">
         <div className="flex items-start justify-between gap-2">
-          <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-accent/40 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent">
+          {/* Assistent-accent (0202): `--ai` op `--ai-tint` haalt 4,95:1, en
+              `--ai-line` is de decoratieve rand waar hij voor bedoeld is. */}
+          <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-ai-line bg-ai-tint px-2.5 py-1 text-xs font-medium text-ai">
             <span className="truncate">{chip.label}</span>
             {chip.losTeLaten && (
               <button
@@ -136,7 +138,7 @@ export default function AssistentPaneel({
                 onClick={laatLos}
                 title="Laat deze context los en vraag fondsbreed verder"
                 aria-label={`Context loslaten: ${chip.label}`}
-                className="-mr-1 shrink-0 rounded-full px-1 text-accent hover:bg-accent/10"
+                className="-mr-1 shrink-0 rounded-full px-1 text-ai hover:bg-ai/10"
               >
                 <span aria-hidden>✕</span>
               </button>
