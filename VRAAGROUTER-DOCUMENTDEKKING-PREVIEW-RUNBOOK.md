@@ -30,10 +30,11 @@ routerflags blijven uit totdat het bijbehorende acceptatiepunt groen is.
 
 1. Laat bevestigen dat de security-/pentestsmoke op de vier Previewdomeinen klaar
    is en wie tijdens de routeracceptatie rollbackverantwoordelijke is.
-2. Selecteer in GitHub Desktop de worktree
-   `mvp-vraagrouter-documentdekking` en commit de vraagrouterwijzigingen op
-   `codex/vraagrouter-documentdekking`. Gebruik geen terminalcommit.
-3. Fetch `origin` en werk de featurebranch in GitHub Desktop bij vanaf `main`.
+2. Commit de vraagrouterwijzigingen in de worktree
+   `mvp-vraagrouter-documentdekking` op `codex/vraagrouter-documentdekking`.
+   De client is vrij (`gh` of GitHub Desktop) — besluit 0207.
+3. Fetch `origin` en werk de featurebranch bij vanaf `preview` (niet `main`:
+   `preview` is de integratiebranch, `main` bevat alleen de merge-commits).
    De huidige extra main-commit raakt alleen backup-/restore-scripts; verifieer
    desalniettemin opnieuw de volledige testset.
 4. Breng daarna de vaste branch `preview` afzonderlijk als fast-forward naar
