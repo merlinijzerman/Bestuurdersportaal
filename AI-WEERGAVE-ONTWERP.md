@@ -1,5 +1,8 @@
 # AI-antwoordweergave — Ontwerpdocument
 
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
+
+
 - **Versie:** 0.3 · 31 juli 2026
 - **Status:** Vastgelegd voor tranche 1 (parser-regressienet, tabel- en leesopmaak, kopiëren),
   tranche 2A (bronverificatie in de renderlaag — §8) en tranche 2B (documentvraag als
@@ -13,7 +16,7 @@ Het portaal toont AI-antwoorden op twee plekken:
 
 | Surface | Bestand | Container |
 |---|---|---|
-| Volledige assistent `/ai` | `app/(dashboard)/ai/_components/AssistentClient.tsx` | kolom `max-w-[1020px]` |
+| Volledige assistent `/ai` | `app/(dashboard)/ai/_components/AssistentClient.tsx` (L3-presentatie sinds besluit 0201) | kolom `max-w-[1020px]` |
 | Inline agendavoorbereiding | `app/(dashboard)/vergaderingen/_components/AgendapuntChat.tsx` | smal paneel, `max-h-96` |
 
 Sinds besluit [`0079`](./decisions/0079-agenda-assistent-gedeelde-weergave.md) delen die
@@ -448,7 +451,8 @@ tweede plek waar iets over de modus wordt besloten. `ANTWOORDMODUS_PATRONEN`,
 
 De lezer `leesAntwoordmodus()` staat sinds deze tranche in de gedeelde renderer en is
 gebouwd op de bestaande constante `ANTWOORDMODI`. Hij stond eerder als kopie in
-`AssistentClient` mét een hard gecodeerde lijst modusnamen; de agendapuntchat heeft hem
+`AssistentClient` mét een hard gecodeerde lijst modusnamen (sinds besluit 0201 in
+`core/lib/vraagtype.ts`); de agendapuntchat heeft hem
 nu ook nodig, en twee lijsten zouden vroeg of laat uiteenlopen.
 
 ### 9.2 Anti-dubbeling

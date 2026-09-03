@@ -1,5 +1,9 @@
 # T5 — Symmetrische vergelijkmodus (chat-only, als service) — ONTWERP
 
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts` of `core/lib/assistent-stream.ts`. Zie besluit 0201 §"Waar oudere besluiten naar AssistentClient verwijzen".
+> Concreet voor dit document: de events `vergelijking` en `vergelijking_verduidelijking` worden sinds 0201 CONSUMEERD in `core/lib/assistent-stream.ts`; alleen de rendering (`VergelijkResultaatWeergave`) staat nog in `AssistentClient.tsx`.
+
+
 > Design-laag ("wat en waarom"). Bron van waarheid = de code + migraties (CLAUDE.md).
 > Epic Bestuurlijke documentvergelijking · Fase 1. Volgt op T1 (selectie), T7 (semantische
 > laag), T8 (extractie). Koppelt aan T9 (duiding) en T10 (oordeel).
