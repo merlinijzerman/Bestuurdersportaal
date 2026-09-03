@@ -764,8 +764,8 @@ export default function AssistentOppervlak() {
               <div
                 className={
                   b.rol === "gebruiker"
-                    ? "assistent-gebruikersvraag px-4 py-3 text-sm leading-relaxed"
-                    : "assistent-antwoord text-sm leading-relaxed"
+                    ? "assistent-gebruikersvraag px-4 py-3"
+                    : "assistent-antwoord"
                 }
               >
                 {b.rol === "ai"
