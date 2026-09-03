@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 import {
   CATEGORIEEN,
   CategorieSlug,
@@ -73,13 +74,14 @@ export default async function RisicomatrixPage() {
         <div className="flex items-center gap-2">
           {/* Besluit 0151 — instap naar de AI in de context van de hele risicomatrix
               (de enige risico-ingang). In de chat kan op één risico worden ingezoomd. */}
-          <Link
-            href="/ai?risicomatrix=1"
+          <AssistentIngang
+            ingangen={[{ soort: "risicomatrix" }]}
+            module="risicomatrix"
             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-accent bg-accent/5 rounded-lg hover:bg-accent/10 text-accent font-semibold"
           >
             <span aria-hidden>✨</span>
             Bespreek met de AI
-          </Link>
+          </AssistentIngang>
           <Link
             href="/risicomatrix/archief"
             className="px-3 py-2 text-sm border border-line rounded-lg hover:border-accent text-ink"

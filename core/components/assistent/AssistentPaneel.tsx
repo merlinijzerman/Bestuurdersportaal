@@ -1,0 +1,216 @@
+"use client";
+// ============================================================================
+//  Assistent — de PANEELSCHIL (T1, besluit 0204).
+// ----------------------------------------------------------------------------
+//  De schil: vier standen, de contextchip, en de knoppen om te wisselen. De
+//  inhoud komt als `children` binnen — dat is de presentatielaag uit `app/`.
+//  Dat is geen omweg maar de T9-grens: `core/` mag niet uit `app/` importeren,
+//  dus `app/(dashboard)/layout.tsx` geeft het oppervlak door aan de schil in
+//  plaats van dat de schil het ophaalt.
+//
+//  NIET MODAAL. Het paneel schuift de contentkolom opzij (margin, geen overlap)
+//  en die kolom blijft bedienbaar. Dus géén `aria-modal`, géén focus-sentinels,
+//  géén scroll-lock — dat zou de bestuurder opsluiten in een paneel dat naast
+//  zijn stuk hoort te staan. Wat wél moet, en hier staat: de focus verplaatst
+//  bij openen naar het paneel en keert bij sluiten terug naar de knop die het
+//  opende, Escape sluit, en `aria-expanded` staat op elke opener.
+//
+//  ESCAPE SLUIT ALLEEN VANUIT HET PANEEL, en zonder `stopPropagation` — het
+//  patroon uit `AntwoordWeergave.tsx` (WCAG 1.4.13 "dismissible"). Het
+//  @-noemenpopover binnen het gesprek heeft een eigen Escape-afhandeling; die
+//  mag deze niet inslikken en andersom.
+// ============================================================================
+
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { contextChip } from "@/core/lib/assistent-context";
+import { useAssistentContext } from "./AssistentContextProvider";
+import { useAssistentPaneel, type PaneelStand } from "./AssistentPaneelProvider";
+
+/** De standknoppen delen één vorm; los uitschrijven zou vier keer driften. */
+const KNOP =
+  "rounded-md px-1.5 py-1 text-sm hover:bg-app-zebra hover:text-ink transition-colors";
+
+/** Het label achter "geopend vanuit" — een slug is geen zin. */
+const MODULE_LABEL: Record<string, string> = {
+  bibliotheek: "de bibliotheek",
+  procedures: "een procesdossier",
+  risicomatrix: "de risicomatrix",
+  vergaderingen: "een agendapunt",
+  home: "het startscherm",
+};
+
+export default function AssistentPaneel({
+  navBreedte,
+  children,
+}: {
+  /** Breedte van de zijbalk, zodat volledig scherm links precies aansluit. */
+  navBreedte: string;
+  children: ReactNode;
+}) {
+  const { stand, ingangModule, zetStand, sluit, vorigPad, zetVorigPad } =
+    useAssistentPaneel();
+  const context = useAssistentContext();
+  const router = useRouter();
+  const pad = usePathname();
+  const paneelRef = useRef<HTMLElement | null>(null);
+  const vorigeStand = useRef<PaneelStand>("dicht");
+
+  const open = stand !== "dicht";
+
+  // Focus verplaatst bij openen naar het paneel — maar alleen op de OVERGANG
+  // dicht → open. Bij elke standwissel opnieuw focussen zou de cursor uit het
+  // invoerveld trekken terwijl de bestuurder aan het typen is.
+  useEffect(() => {
+    const wasDicht = vorigeStand.current === "dicht";
+    vorigeStand.current = stand;
+    if (open && wasDicht) paneelRef.current?.focus();
+  }, [stand, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function bijToets(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const binnen = paneelRef.current?.contains(document.activeElement);
+      if (!binnen) return;
+      sluit();
+    }
+    document.addEventListener("keydown", bijToets);
+    return () => document.removeEventListener("keydown", bijToets);
+  }, [open, sluit]);
+
+  /**
+   * Volledig scherm is de route `/ai`. Een zachte navigatie binnen dezelfde
+   * layout: het oppervlak blijft gemount, dus het gesprek loopt door — precies
+   * wat de vervallen link "Openen in volledige assistent" niet kon. Winst
+   * bovendien: de stand is deelbaar en bookmarkbaar, en `/ai` houdt zijn
+   * startpunt (besluit 0085/0088).
+   */
+  const naarVolledig = useCallback(() => {
+    if (pad !== "/ai") {
+      zetVorigPad(pad);
+      router.push("/ai");
+    }
+    zetStand("volledig");
+  }, [pad, router, zetStand, zetVorigPad]);
+
+  const uitVolledig = useCallback(
+    (volgende: PaneelStand) => {
+      zetStand(volgende);
+      if (pad === "/ai") router.push(vorigPad || "/");
+    },
+    [pad, router, vorigPad, zetStand]
+  );
+
+  const chip = contextChip({
+    documentScope: context.documentScope,
+    agendapuntContext: context.agendapuntContext,
+    moduleScope: context.moduleScope,
+  });
+
+  function laatLos() {
+    context.zetDocumentScope(null);
+    context.zetAgendapuntContext(null);
+    context.zetModuleScope(null);
+    context.zetRisicoLijst([]);
+  }
+
+  return (
+    <aside
+      id="assistent-paneel"
+      ref={paneelRef}
+      tabIndex={-1}
+      hidden={!open}
+      data-stand={stand}
+      aria-label="Assistent"
+      className="assistent-paneel"
+      style={{ "--nav-breedte": navBreedte } as React.CSSProperties}
+    >
+      <div className="border-b border-line px-3 py-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-accent/40 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent">
+            <span className="truncate">{chip.label}</span>
+            {chip.losTeLaten && (
+              <button
+                type="button"
+                onClick={laatLos}
+                title="Laat deze context los en vraag fondsbreed verder"
+                aria-label={`Context loslaten: ${chip.label}`}
+                className="-mr-1 shrink-0 rounded-full px-1 text-accent hover:bg-accent/10"
+              >
+                <span aria-hidden>✕</span>
+              </button>
+            )}
+          </span>
+
+          <div className="flex shrink-0 items-center gap-0.5 text-muted">
+            {stand === "paneel" && (
+              <button
+                type="button"
+                onClick={() => zetStand("vergroot")}
+                aria-label="Paneel vergroten"
+                title="Vergroten"
+                className={KNOP}
+              >
+                <span aria-hidden>⟨</span>
+              </button>
+            )}
+            {stand === "vergroot" && (
+              <button
+                type="button"
+                onClick={() => zetStand("paneel")}
+                aria-label="Paneel verkleinen"
+                title="Verkleinen"
+                className={KNOP}
+              >
+                <span aria-hidden>⟩</span>
+              </button>
+            )}
+            {stand !== "volledig" ? (
+              <button
+                type="button"
+                onClick={naarVolledig}
+                aria-label="Volledig scherm"
+                title="Volledig scherm"
+                className={KNOP}
+              >
+                <span aria-hidden>⛶</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => uitVolledig("vergroot")}
+                aria-label="Terug naar het paneel"
+                title="Terug naar het paneel"
+                className={KNOP}
+              >
+                <span aria-hidden>⤡</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (stand === "volledig" && pad === "/ai") router.push(vorigPad || "/");
+                sluit();
+              }}
+              aria-label="Assistent sluiten"
+              title="Sluiten"
+              className={KNOP}
+            >
+              <span aria-hidden>✕</span>
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-1 text-[11px] leading-relaxed text-muted">
+          {chip.bronbereik}
+          {ingangModule && MODULE_LABEL[ingangModule]
+            ? ` · geopend vanuit ${MODULE_LABEL[ingangModule]}`
+            : null}
+        </p>
+      </div>
+
+      <div className="assistent-paneel-inhoud">{children}</div>
+    </aside>
+  );
+}

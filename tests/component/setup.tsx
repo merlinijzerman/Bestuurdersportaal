@@ -6,6 +6,7 @@ import { krijgNextNavigationMocks } from "./next-mocks";
 beforeEach(() => {
   const nextNavigationMocks = krijgNextNavigationMocks();
   nextNavigationMocks.pathname = "/";
+  nextNavigationMocks.zoekstring = "";
   vi.clearAllMocks();
   HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as typeof HTMLCanvasElement.prototype.getContext;
   vi.stubGlobal(
