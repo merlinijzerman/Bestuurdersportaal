@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 import { templateLabel } from "@/core/lib/proces-templates";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { rolHeeftCapability } from "@/core/lib/capabilities-map";
@@ -604,13 +605,17 @@ export default async function ProcedureDetailPage({
         >
           ← Terug naar procedures
         </Link>
-        <Link
-          href={`/ai?proces=${procedure.id}`}
+        {/* T1 — opent het assistentpaneel met dit dossier als context; geen
+            navigatie meer weg van het proces. De href blijft staan als
+            val-terug en voor midden-klik. */}
+        <AssistentIngang
+          ingangen={[{ soort: "proces", procedureId: procedure.id }]}
+          module="procedures"
           className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/5 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/10 transition-colors"
         >
           <span aria-hidden>✨</span>
           Bespreek dit proces met de AI
-        </Link>
+        </AssistentIngang>
       </div>
 
       {/* Header */}

@@ -16,28 +16,14 @@
 
 import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import AssistentClient from "@/app/(dashboard)/ai/_components/AssistentClient";
-import type { PortaalContext } from "@/core/lib/portaalcontext-afleiding";
+import AssistentOppervlak from "@/app/(dashboard)/ai/_components/AssistentOppervlak";
+import { AssistentHarnas } from "./assistent-harnas";
 import { verwachtChatStream } from "./fetch-mock";
 import { renderMetProviders } from "./render-met-providers";
 import { maakSupabaseStub } from "./supabase-mock";
 
 const { createClient } = vi.hoisted(() => ({ createClient: vi.fn() }));
 vi.mock("@/core/lib/supabase", () => ({ createClient }));
-
-const legeContext: PortaalContext = {
-  volgendeVergadering: null,
-  agendapunten: {
-    maatstaf: "eigen_inbreng",
-    totaal: 0,
-    zonderEigenInbreng: 0,
-    eersteZonderInbreng: null,
-    zonderGekoppeldStuk: 0,
-    eersteZonderStuk: null,
-  },
-  openStappen: [],
-  recentDocument: null,
-};
 
 // jsdom kent `scrollIntoView` niet; de assistent scrolt na elke beurt naar de
 // gestelde vraag. Puur een omgevingsgat, geen gedrag dat deze test toetst.
@@ -61,7 +47,11 @@ function monteer() {
       },
     }),
   );
-  return renderMetProviders(<AssistentClient startpuntContext={legeContext} />);
+  return renderMetProviders(
+    <AssistentHarnas>
+      <AssistentOppervlak />
+    </AssistentHarnas>,
+  );
 }
 
 /** Stelt een vraag via de invoerbalk en wacht tot de stream is verwerkt. */
