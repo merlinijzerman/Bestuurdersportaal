@@ -4,7 +4,7 @@
 // ============================================================
 // Eén renderer + bronkaart voor ALLE plekken waar een AI-antwoord met
 // citatiemarkers en herleidbare bronnen wordt getoond: de volledige assistent
-// (/ai) én de agendavoorbereiding (AgendapuntChat). Eerder had /ai een eigen,
+// (/ai) én de agendavoorbereiding (VoorbereidingKaart). Eerder had /ai een eigen,
 // rijke renderer (pills → scroll+highlight, klikbare bronkaart naar het
 // origineel) en gebruikte AgendapuntChat een versimpelde variant zonder
 // doorklikbare bronnen. Die divergentie is hiermee opgeheven (vervolg op ADR

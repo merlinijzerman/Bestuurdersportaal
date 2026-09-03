@@ -139,7 +139,7 @@ export default function Heatmap({ risicos }: { risicos: HeatmapRisico[] }) {
           </div>
         ))}
       </div>
-      <div className="mt-3 text-center text-[10px] font-semibold uppercase tracking-widest text-muted">
+      <div className="mt-3 text-center overline text-muted">
         Kans →
       </div>
 

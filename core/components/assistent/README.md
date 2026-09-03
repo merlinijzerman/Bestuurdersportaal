@@ -1,12 +1,13 @@
 # De assistent in drie lagen
 
 > Besluit `0201`. Ontwerp: `ONTWERP-EEN-GENERIEKE-ASSISTENT-2026-09-03.md` §4.
-> Deze map is L1 en L2; L3 is vandaag `app/(dashboard)/ai/_components/AssistentClient.tsx`.
+> Deze map is L1, L2 en — sinds T1 — de PANEELSCHIL. L3 (het oppervlak) is
+> `app/(dashboard)/ai/_components/AssistentOppervlak.tsx`, dat als slot binnenkomt.
 > Het ontwerpdoc staat **buiten de repo**, één niveau hoger in de projectmap.
 
 ```
 ┌─ L3  PRESENTATIE ────────────────────────────────────────────────┐
-│  /ai (AssistentClient) — straks óók het paneel (P1b)             │
+│  AssistentOppervlak — inhoud van het paneel; /ai = volledig scherm │
 │  kijkstaat, opmaak, gedeelde weergavecomponenten                 │
 └──────────────────────────────────────────────────────────────────┘
 ┌─ L2  GESPREK — useAssistent() ───────────────────────────────────┐
@@ -64,33 +65,54 @@ rechtsonder.
 *Bestandspad én regelnummer geverifieerd tegen `origin/preview` (8f74663), 3-9-2026.
 Alle zeven bestanden zijn in P1a onaangeraakt, dus deze nummers gelden ook op HEAD.*
 
-| Bestaande ingang | Nu | Straks (P1b) |
-|---|---|---|
-| `procedures/[id]/page.tsx:608` — "Bespreek dit proces met de AI" | `→ /ai?proces=` | opent paneel, context = dossier |
-| `risicomatrix/page.tsx:77` — "Bespreek met de AI" | `→ /ai?risicomatrix=1` | opent paneel, context = risicomatrix; een risicorij zoomt in op één risico |
-| `bibliotheek/page.tsx:756` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | opent paneel, context = document |
-| `procedures/_components/StapPaneel.tsx:2203` — "Vraag de AI over dit stuk" bij een bronverwijzing | `→ /ai?doc=` | opent paneel, context = document |
-| `vergaderingen/_components/AgendapuntChat.tsx:1087` — "Openen in volledige assistent" | `→ /ai?agendapunt=` | vervalt: de paneelknop "volledig scherm" doet dit zonder navigatie |
-| `(dashboard)/page.tsx:441` — recente vraag op de home | `→ /ai` | opent paneel op dat gesprek |
-| **`core/lib/module-registry.ts:82` — het nav-item "AI Assistent"** | `→ /ai` | **nog te besluiten in P1b** |
-| Agendapuntkaart | inline chat + startchip | **één** knop "Bereid dit punt voor"; is het punt voorbereid, dan alleen "Doorvragen" in het resultaatblok |
+| Ingang | Was | Is nu (T1, besluit 0204) | ✓ |
+|---|---|---|---|
+| `procedures/[id]/page.tsx` — "Bespreek dit proces met de AI" | `→ /ai?proces=` | `AssistentIngang`, module-scope proces | ✓ |
+| `risicomatrix/page.tsx` — "Bespreek met de AI" | `→ /ai?risicomatrix=1` | `AssistentIngang`, risicomatrix; een rij zoomt in de chat in op één risico | ✓ |
+| `bibliotheek/page.tsx` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | `AssistentIngang`, documentscope | ✓ |
+| `procedures/_components/StapPaneel.tsx` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | `AssistentIngang`, documentscope (anker blijft: `fieldset disabled`) | ✓ |
+| `(dashboard)/page.tsx` — recente vraag op de home | `→ /ai` | `AssistentIngang`, **fondsbreed** — zie de correctie hieronder | ✓ |
+| ~~`AgendapuntChat.tsx` — "Openen in volledige assistent"~~ | `→ /ai?agendapunt=` | **vervallen**: het bestand bestaat niet meer | ✓ |
+| `core/lib/module-registry.ts` — nav-item "AI Assistent" | `→ /ai` | **ongewijzigd**: `/ai` ís de volledig-schermstand, en dit is de enige manifest-schakelbare ingang | ✓ |
+| Knop rechtsonder (`AssistentKnopRechtsonder`) | bestond niet | de enige generieke ingang; toggle met `aria-expanded` | ✓ |
+| Agendapuntkaart (`VoorbereidingKaart.tsx`) | inline chat + startchip | **één** knop "Bereid dit punt voor"; daarna alleen "Doorvragen" (`AssistentIngang`) in het resultaatblok "Mijn voorbereiding" | ✓ |
 
-### Twee aantekeningen bij dit register (P1a)
+**De regel.** Elke ingang loopt door `AssistentIngang`. Een knop die dat niet doet, is een
+fout — het register is alleen aftoetsbaar als er één component is om tegen af te toetsen.
+Staat module `ai` uit, dan rendert `AssistentIngang` niets; die vlag dekt daarmee alle
+ingangen tegelijk, plus het paneel en de knop rechtsonder.
+
+### Correctie op dit register (T1)
+
+De rij voor de home beloofde "opent paneel op dat gesprek". Dat kan niet: de recente vragen
+komen uit een **logtabel** (`LogItem` in `app/(dashboard)/page.tsx`) en dragen geen
+gespreks-id — het oude `href="/ai"` was dan ook een constante zonder id. Het paneel opent
+fondsbreed: het gedrag van vandaag, minus de navigatie. Het terughalen van dát gesprek staat
+als openstaand punt in besluit 0204.
+
+### Twee aantekeningen bij dit register (P1a) — beide afgehandeld in T1
 
 1. **Het nav-item stond niet in de oorspronkelijke lijst.** `module-registry.ts:82`
    zet "AI Assistent" in de zijbalk onder *Kennisbase*. Dat is een zevende ingang,
    en de vraag die bij het topbalk-besluit hoort geldt er onverkort: is de knop
    rechtsonder de enige generieke ingang, dan concurreert dit nav-item ermee.
-   Blijft hij, dan opent hij het paneel of de volledig-schermstand — beslis dat in
-   P1b, niet impliciet.
+   **Besloten (0204):** hij blijft en gaat naar `/ai` — dat ís de
+   volledig-schermstand. Hij concurreert niet met de knop rechtsonder maar vult
+   hem aan: het is de enige ingang die naar een deelbare, bookmarkbare stand
+   gaat, én de enige die het manifest per fonds kan uitzetten.
 
 2. **`?intent=` / `?herkomst=` is een levend codepad met een dode ingang.** Geen
    enkele knop in het portaal zet deze parameters; ze zijn alleen bereikbaar door
    de URL met de hand te typen. De code eromheen leeft wél: de herkomst-chip, de
    precedentie boven een verduidelijkingskeuze, en het auditveld
    `bron_intent_bron: "herkomst"`. Geregistreerd in
-   `00 Overzicht en status/openstaande-punten-en-risicos.md`; beslissing in P1b —
-   knop erbij of pad eruit.
+   **Besloten (0204): in T1 ongemoeid gelaten, aansluiten verhuist naar T2.**
+   `/api/chat` logt `bron_intent_bron`/`bron_intent_herkomst` alleen als er óók
+   een `bron_intent_override` is (route.ts r. 3184-3187 en r. 3814-3826). Een
+   ingang die alleen de module meestuurt levert dus niets in de log; een die
+   óók `intent` zet, verandert het gedrag van het gesprek. Beide breken een
+   guardrail van T1, dus landt het in T2 — route en ingangen in één keer, één
+   auditreview. Het label "geopend vanuit …" in de paneelkop is clientstaat.
 
    Dat dit pad ongebruikt is, is niet onschuldig gebleken: tijdens P1a hernoemde
    een zoek-en-vervang de variabele `herkomst` óók binnen `params.get("herkomst")`.
@@ -124,9 +146,13 @@ Alle zeven bestanden zijn in P1a onaangeraakt, dus deze nummers gelden ook op HE
   `assistent-url-ingang.sanity.ts` (pure parse/resolver) als
   `tests/e2e/specs/assistent-context-deeplinks.spec.ts` (echte React/Supabase-route)
   uit.
-- **`contextChipLabels()` heeft nog geen consument.** De chip wordt in P1b gebouwd;
+- **`contextChipLabels()` heeft nog geen consument** — het paneel gebruikt
+  `contextChip()` ernaast (T1). Deze functie blijft staan als geverifieerde
+  weergave van wat `/ai` vóór T1 toonde;
   de functie legt op de letter vast hoe de chips vandaag luiden. Let op wat zij
   blootlegt: bij een module-scope náást een documentscope toont `/ai` vandaag **twee**
   chips — de module-chip heeft geen `!agendapuntContext`-guard, de documentchip wel.
-  Bestaand gedrag, geen ontwerpkeuze. Beslis in P1b of het paneel indikt (en wát dan
-  wegvalt) of beide toont; een enkel label zou een actieve documentscope verzwijgen.
+  Bestaand gedrag, geen ontwerpkeuze. **Besloten (0204):** het paneel dikt in tot
+  één chip, maar de tweede scope valt niet weg — die staat op de bronbereikregel
+  eronder. Een enkel label zonder die regel zou een actieve documentscope
+  verzwijgen.

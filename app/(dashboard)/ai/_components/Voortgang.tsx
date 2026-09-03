@@ -1,7 +1,8 @@
 // ============================================================================
 //  Voortgang — gedeelde statusweergave tijdens het wachten op een AI-antwoord
 //  (besluit 0087). Gebruikt door de volledige assistent (/ai, AssistentClient)
-//  én de agenda-voorbereiding (AgendapuntChat), zodat de statussen niet opnieuw
+//  én de agenda-voorbereiding (sinds T1: VoorbereidingKaart, die alleen de
+//  meta/delta/done-stroom van de voorbereidingsroute consumeert), zodat de statussen niet opnieuw
 //  uiteenlopen: één afgeronde regel per bereikte serverfase (met uitkomst) + de
 //  actieve fase als lopende regel; bij brede documentanalyse een batch-teller.
 // ============================================================================

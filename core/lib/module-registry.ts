@@ -15,6 +15,11 @@
 //  per route. Een module "aan" in het manifest opent nooit een capability-gate.
 // ============================================================================
 
+// Alléén het TYPE — geen runtime-import, dus deze pure/isomorfe registry blijft
+// vrij van component-code. Het levert wel de winst dat TypeScript meldt wanneer
+// een module een icoonsleutel gebruikt die niet in de set bestaat (T3/0202).
+import type { IcoonSleutel } from "@/core/components/icons/Icoon";
+
 /** Alle door het portaal gekende modules. Uitbreiden = hier een key toevoegen. */
 export const MODULE_KEYS = [
   "home",
@@ -50,7 +55,11 @@ export type ModuleDef = {
    *  samenvallen met die van de dragende module zonder de nav te dupliceren of
    *  moduleVanPad() dubbelzinnig te maken. Zie besluit VEN-2 (stemmingen). */
   navigeerbaar?: boolean;
-  icon: string;
+  /** Sleutel in de lijn-iconenset (core/components/icons/Icoon.tsx). Was tot T3
+   *  een los Unicode-teken; zie besluit 0202. */
+  icon: IcoonSleutel;
+  /** Optioneel raster-/SVG-bestand dat het set-icoon vervangt. Bedoeld voor
+   *  FONDSSPECIFIEKE iconen; de kernmodules gebruiken de set. */
   iconSrc?: string;
   badge?: string;
   /** UI-cosmetisch rolfilter (GEEN autorisatie). */
@@ -68,32 +77,32 @@ export type ModuleDef = {
 export const MODULE_REGISTRY: Record<ModuleKey, ModuleDef> = {
   home: {
     key: "home", label: "Home", href: "/", section: "Overzicht",
-    icon: "⌂", defaultActief: true, manifestBeheerbaar: false,
+    icon: "huis", defaultActief: true, manifestBeheerbaar: false,
   },
   stuurinformatie: {
     key: "stuurinformatie", label: "Stuurinformatie", href: "/dashboard", section: "Overzicht",
-    icon: "◐", defaultActief: true, manifestBeheerbaar: true,
+    icon: "staafgrafiek", defaultActief: true, manifestBeheerbaar: true,
   },
   klantbeeld: {
     key: "klantbeeld", label: "Klantbeeld", href: "/klantbeeld", section: "Overzicht",
-    icon: "◍", defaultActief: true, manifestBeheerbaar: true,
+    icon: "personen", defaultActief: true, manifestBeheerbaar: true,
   },
   ai: {
     key: "ai", label: "AI Assistent", href: "/ai", section: "Kennisbase",
-    icon: "✦", iconSrc: "/ai-assistent.png", badge: "AI",
+    icon: "sprankel", badge: "AI",
     defaultActief: true, manifestBeheerbaar: true,
   },
   bibliotheek: {
     key: "bibliotheek", label: "Documentbibliotheek", href: "/bibliotheek", section: "Kennisbase",
-    icon: "▤", defaultActief: true, manifestBeheerbaar: true,
+    icon: "boeken", defaultActief: true, manifestBeheerbaar: true,
   },
   vergaderingen: {
     key: "vergaderingen", label: "Vergaderingen", href: "/vergaderingen", section: "Bestuur",
-    icon: "▦", defaultActief: true, manifestBeheerbaar: true,
+    icon: "agenda", defaultActief: true, manifestBeheerbaar: true,
   },
   notulen: {
     key: "notulen", label: "Besluiten & Notulen", href: "/notulen", section: "Bestuur",
-    icon: "✓", defaultActief: true, manifestBeheerbaar: true,
+    icon: "document", defaultActief: true, manifestBeheerbaar: true,
   },
   // VEN-2 (besluit opdrachtgever 23-08-2026): stemmen is niet toegezegd aan
   // fonds 1 en hoort bestuurlijk separaat te worden ingevoerd. De functie blijft
@@ -119,23 +128,23 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleDef> = {
   // onvoorwaardelijk beschikbaar te maken. Zie de toelichting daar.
   stemmingen: {
     key: "stemmingen", label: "Stemmen", href: "/vergaderingen", section: "Bestuur",
-    icon: "▦", defaultActief: false, manifestBeheerbaar: false, navigeerbaar: false,
+    icon: "stembiljet", defaultActief: false, manifestBeheerbaar: false, navigeerbaar: false,
   },
   procedures: {
     key: "procedures", label: "Processen", href: "/procedures", section: "Bestuur",
-    icon: "◧", defaultActief: true, manifestBeheerbaar: true,
+    icon: "stroomschema", defaultActief: true, manifestBeheerbaar: true,
   },
   risicomatrix: {
     key: "risicomatrix", label: "Risicomatrix", href: "/risicomatrix", section: "Bestuur",
-    icon: "◇", defaultActief: true, manifestBeheerbaar: true,
+    icon: "waarschuwing", defaultActief: true, manifestBeheerbaar: true,
   },
   beheer: {
     key: "beheer", label: "Catalogus & organen", href: "/beheer", section: "Beheer",
-    icon: "⚙", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
+    icon: "tandwiel", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
   },
   governance: {
     key: "governance", label: "Governance Log", href: "/governance", section: "Beheer",
-    icon: "◎", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
+    icon: "logboek", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
   },
   // AQL-4 scherm 9 — read-only assurance-view (kwaliteitsborging AI). In het NAV
   // alleen voor de beheerder getoond (rolVereist='beheerder'): in de MVP voegt de
@@ -146,7 +155,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleDef> = {
   // NB langste-pad-match maakt /governance/assurance deze module (niet 'governance').
   assurance: {
     key: "assurance", label: "Kwaliteitsborging AI", href: "/governance/assurance", section: "Beheer",
-    icon: "◇", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
+    icon: "schild-vink", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
   },
 };
 
