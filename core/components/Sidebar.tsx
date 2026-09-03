@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/core/lib/supabase";
 import { alleModules, isModuleKey, type ModuleKey } from "@/core/lib/module-registry";
 import { ACTIEF_GESPREK_SLEUTEL } from "@/core/lib/ai-sessie";
+import Icoon from "@/core/components/icons/Icoon";
 
 interface SidebarProps {
   gebruikerNaam?: string;
@@ -98,7 +99,7 @@ export default function Sidebar({
     <nav
       className={`w-64 ${
         ingeklapt ? "md:w-14" : "md:w-64"
-      } h-screen bg-nav border-r border-nav-line flex flex-col fixed top-0 left-0 z-50 transition-[transform,width] duration-200 ease-out md:translate-x-0 ${
+      } h-screen bg-nav border-r border-nav-line chrome-focus flex flex-col fixed top-0 left-0 z-50 transition-[transform,width] duration-200 ease-out md:translate-x-0 ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
@@ -109,17 +110,33 @@ export default function Sidebar({
           06-08-2026: fondslogo's zijn in de praktijk WOORDMERKEN met een brede
           verhouding (gemeten 1,8:1 tot 3,8:1) en overwegend donkere kleuren.
           In de vierkante tegel van 40x40 px met achtergrond --nav-accent werden
-          ze onleesbaar; één fonds had bovendien vrijwel dezelfde navy als de
-          tegel, waardoor het logo volledig wegviel. Daarom rendert een logo
-          uitgeklapt nu in een BREDE, TRANSPARANTE STROOK: het logo staat
-          direct op het nav-vlak en lijnt uit met de fondsnaam eronder.
+          ze onleesbaar; daarom rendert een logo uitgeklapt in een BREDE strook
+          die uitlijnt met de fondsnaam eronder.
+
+          T3 (besluit 0202): die strook was TRANSPARANT, wat kon zolang de nav
+          licht was. Op de donkere chrome valt een donker woordmerk weg — dat
+          was geen risico maar een zekerheid. De strook heeft nu een lichte
+          ondergrond terug, zodat een donker fondslogo leesbaar blijft zonder
+          dat fondsen eerst een lichte logovariant hoeven aan te leveren.
+
+          BEIDE GEVALLEN GETOETST, en de uitkomst is asymmetrisch: een donker
+          woordmerk is op deze strook goed leesbaar, een WIT woordmerk is er
+          onzichtbaar. Eén ondergrond kan die twee niet allebei bedienen. De
+          keuze valt op de lichte strook omdat fondslogo's in de praktijk
+          overwegend donker zijn, en omdat vandaag geen enkel fonds een
+          `logo-url` zet (het blok in 2026_08_06_demo_fondsen_bootstrap.sql
+          staat uitgecommentarieerd). Levert een fonds straks een licht logo,
+          dan is de nette oplossing een themabaar `logo-variant`-token
+          (licht|donker) dat deze strook uitzet — dat vraagt een extra prop via
+          DashboardShell.tsx, en dat bestand is deze sprint van T1 (#281). Zie
+          de openstaande-puntenlijst.
 
           De vierkante tegel blijft bestaan voor twee gevallen: geen logo (dan
           de letter — Horizon ongewijzigd) en de INGEKLAPTE zijbalk, waar een
           brede strook simpelweg niet past. */}
       <div
         className={`border-b border-nav-line ${
-          ingeklapt ? "px-5 py-6 md:px-0 md:py-4" : "px-5 py-6"
+          ingeklapt ? "px-4 py-5 md:px-0 md:py-4" : "px-4 py-5"
         }`}
       >
         {/* Logo + inklap-hamburger op één regel. Uitgeklapt: logo links, hamburger
@@ -133,22 +150,14 @@ export default function Sidebar({
         >
           {logoUrl ? (
             <>
-              {/* Uitgeklapt: brede strook, TRANSPARANT — het logo staat direct
-                  op het nav-vlak. Een eigen witte achtergrond met randje leverde
-                  op de lichte nav van het basispalet een zichtbaar kader in een
-                  kader op; zonder achtergrond lijnt het logo bovendien uit met
-                  de fondsnaam eronder.
-
-                  LET OP bij een donker nav-thema: fondslogo's zijn overwegend
-                  donker, dus zonder lichte ondergrond vallen ze dan weg. Wie
-                  `nav-rgb` overschrijft naar een donkere waarde, levert een
-                  lichte logovariant aan of zet hier een ondergrond terug.
+              {/* Uitgeklapt: brede strook met lichte ondergrond (zie de noot
+                  hierboven).
 
                   `alt=""` + aria-hidden: de fondsnaam staat er als tekst onder,
                   dus het logo is decoratief en zou anders dubbel worden
                   voorgelezen. */}
               <div
-                className={`h-11 flex-1 min-w-0 mr-2 flex items-center ${
+                className={`h-11 flex-1 min-w-0 mr-2 flex items-center rounded-lg bg-white/95 px-2.5 ${
                   ingeklapt ? "md:hidden" : ""
                 }`}
               >
@@ -166,13 +175,13 @@ export default function Sidebar({
                   staan; vandaar `hidden md:flex` (zelfde regel als
                   bijInklapVerborgen elders in dit bestand). */}
               {ingeklapt && (
-                <div className="hidden md:flex w-10 h-10 bg-nav-accent rounded-xl items-center justify-center font-black text-lg text-white overflow-hidden flex-shrink-0">
+                <div className="hidden md:flex w-9 h-9 bg-nav-accent rounded-lg items-center justify-center font-bold text-sm text-white overflow-hidden flex-shrink-0">
                   {logoLetter || "P"}
                 </div>
               )}
             </>
           ) : (
-            <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white overflow-hidden flex-shrink-0">
+            <div className="w-9 h-9 bg-nav-accent rounded-lg flex items-center justify-center font-bold text-sm text-white overflow-hidden flex-shrink-0">
               {logoLetter || "P"}
             </div>
           )}
@@ -183,49 +192,24 @@ export default function Sidebar({
             aria-expanded={!ingeklapt}
             className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-nav-text hover:bg-nav-line hover:text-nav-text-active transition-colors flex-shrink-0"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M3 6h18M3 12h18M3 18h18"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
+            <Icoon sleutel="menu" grootte={18} streek={1.9} />
           </button>
         </div>
-        <div className={`text-nav-text-active font-bold text-sm leading-snug ${bijInklapVerborgen}`}>
+        <div
+          className={`text-nav-text-active font-serif text-[15px] font-medium leading-snug ${bijInklapVerborgen}`}
+        >
           {fondsNaam || process.env.NEXT_PUBLIC_FONDS_NAAM || "Bestuurdersportaal"}
         </div>
-        <div className={`text-nav-text text-xs mt-0.5 ${bijInklapVerborgen}`}>Demo omgeving</div>
+        {/* Rolneutrale ondertitel. Stond hier tot T3 als hardcoded "Demo
+            omgeving" — een tekst die in een productieomgeving feitelijk onjuist
+            is en die niets zegt over waar de gebruiker zich bevindt. */}
+        <div className={`text-nav-text/80 text-[11px] mt-0.5 ${bijInklapVerborgen}`}>
+          Bestuursomgeving
+        </div>
       </div>
 
-      {/* Gebruiker — klik opent het eigen profiel (geen los nav-item meer) */}
-      <Link
-        href="/profiel"
-        title={ingeklapt ? "Mijn profiel" : "Mijn profiel openen"}
-        onClick={onNavigate}
-        className={`border-b border-nav-line flex items-center gap-2.5 transition-colors ${
-          ingeklapt ? "px-5 py-3 md:px-0 md:py-3 md:justify-center" : "px-5 py-3"
-        } ${pathname === "/profiel" ? "bg-nav-active" : "hover:bg-nav-line"}`}
-      >
-        <div className="w-8 h-8 bg-nav-accent rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0">
-          {initials}
-        </div>
-        <div className={`flex-1 min-w-0 ${bijInklapVerborgen}`}>
-          <div className="text-xs font-semibold truncate text-nav-text-active">
-            {gebruikerNaam || "Bestuurslid"}
-          </div>
-          <div className="text-nav-text text-xs">
-            {rolLabel[gebruikerRol || "bestuurder"] || "Bestuurslid"}
-          </div>
-        </div>
-        <span aria-hidden className={`text-nav-text/60 text-xs flex-shrink-0 ${bijInklapVerborgen}`}>
-          ›
-        </span>
-      </Link>
-
       {/* Navigatie */}
-      <div className="flex-1 py-3 overflow-y-auto">
+      <div className="flex-1 py-2 overflow-y-auto nav-scroll">
         {navItems
           .filter((item) => !item.rolVereist || item.rolVereist === gebruikerRol)
           .map((item) => {
@@ -241,7 +225,7 @@ export default function Sidebar({
             <div key={item.href}>
               {showSection && (
                 <div
-                  className={`px-5 pt-3 pb-1 text-nav-text/70 text-xs font-bold uppercase tracking-widest ${bijInklapVerborgen}`}
+                  className={`overline px-4 pt-4 pb-1.5 text-nav-text/80 ${bijInklapVerborgen}`}
                 >
                   {item.section}
                 </div>
@@ -251,12 +235,17 @@ export default function Sidebar({
                 onClick={onNavigate}
                 // Tooltip toont de moduletitel in ingeklapte stand (label is dan verborgen).
                 title={ingeklapt ? item.label : undefined}
-                className={`flex items-center gap-2.5 text-sm border-l-[3px] transition-all ${
-                  ingeklapt ? "px-5 py-2.5 md:px-0 md:justify-center md:gap-0" : "px-5 py-2.5"
+                // De actieve staat wordt door VIER dragers gemeld, niet door de
+                // teal rail alleen (besluit 0097 — kleur is nooit de enige
+                // drager): aria-current voor de schermlezer, witte tekst,
+                // een zwaarder gewicht en het gradiëntvlak.
+                aria-current={actief ? "page" : undefined}
+                className={`flex items-center gap-2.5 mx-2 rounded-lg text-[13.5px] transition-colors ${
+                  ingeklapt ? "px-3 py-2 md:px-0 md:mx-1 md:justify-center md:gap-0" : "px-3 py-2"
                 } ${
                   actief
-                    ? "bg-nav-active text-nav-text-active border-nav-accent font-medium"
-                    : "text-nav-text border-transparent hover:bg-nav-line hover:text-nav-text-active"
+                    ? "bg-gradient-to-r from-nav-active to-transparent text-nav-text-active font-medium shadow-[inset_3px_0_0_var(--nav-rail)]"
+                    : "text-nav-text hover:bg-nav-line hover:text-nav-text-active"
                 }`}
               >
                 {item.iconSrc ? (
@@ -265,15 +254,19 @@ export default function Sidebar({
                     src={item.iconSrc}
                     alt=""
                     aria-hidden="true"
-                    className="w-5 h-5 object-contain"
+                    className="w-[18px] h-[18px] object-contain flex-shrink-0"
                   />
                 ) : (
-                  <span className="text-base w-5 text-center flex-shrink-0">{item.icon}</span>
+                  <Icoon sleutel={item.icon} grootte={18} className="flex-shrink-0" />
                 )}
                 <span className={`flex-1 ${bijInklapVerborgen}`}>{item.label}</span>
+                {/* Badge — draagt vandaag "AI", maar is ook geschikt voor een
+                    telling. Wit op een wit-vlak (11,15:1); NIET het
+                    assistent-accent: --ai haalt op de donkere chrome maar
+                    3,04:1. Zie besluit 0202. */}
                 {item.badge && (
                   <span
-                    className={`bg-nav-accent text-white text-xs font-bold px-2 py-0.5 rounded-full ${bijInklapVerborgen}`}
+                    className={`bg-white/15 text-nav-text-active text-[10.5px] font-semibold leading-none min-w-[19px] h-[19px] px-1.5 rounded-full inline-flex items-center justify-center flex-shrink-0 ${bijInklapVerborgen}`}
                   >
                     {item.badge}
                   </span>
@@ -284,21 +277,72 @@ export default function Sidebar({
         })}
       </div>
 
-      {/* Footer */}
-      <div className={`border-t border-nav-line space-y-2 ${ingeklapt ? "px-5 py-4 md:px-0" : "px-5 py-4"}`}>
-        <div className={`flex items-center gap-2 ${ingeklapt ? "md:justify-center" : ""}`}>
-          <span className="w-2 h-2 bg-ok rounded-full pulse-dot flex-shrink-0"></span>
-          <span className={`text-nav-text text-xs ${bijInklapVerborgen}`}>Beheerde AI-omgeving actief</span>
+      {/* Voet — sinds T3 draagt deze het gebruikersblok. Dat stond direct onder
+          het merkblok, waardoor de navigatie pas als derde blok begon; nu begint
+          ze meteen onder het merk en staat "wie ben ik" waar je het zoekt.
+          Volgorde: bronrecht → beheerde omgeving → profiel → uitloggen. */}
+      <div
+        className={`border-t border-nav-line space-y-2 ${
+          ingeklapt ? "px-3 py-3 md:px-1" : "px-3 py-3"
+        }`}
+      >
+        <div
+          className={`flex items-center gap-2 px-1 text-nav-text/80 text-[11px] ${
+            ingeklapt ? "md:justify-center" : ""
+          }`}
+        >
+          <Icoon sleutel="schild" grootte={14} streek={1.8} className="flex-shrink-0" />
+          <span className={bijInklapVerborgen}>Alleen bronnen waar u recht op heeft</span>
         </div>
+        <div className={`flex items-center gap-2 px-1 ${ingeklapt ? "md:justify-center" : ""}`}>
+          <span className="w-2 h-2 bg-ok rounded-full pulse-dot flex-shrink-0"></span>
+          <span className={`text-nav-text/80 text-[11px] ${bijInklapVerborgen}`}>
+            Beheerde AI-omgeving actief
+          </span>
+        </div>
+
+        {/* Gebruiker — klik opent het eigen profiel (geen los nav-item meer) */}
+        <Link
+          href="/profiel"
+          title={ingeklapt ? "Mijn profiel" : "Mijn profiel openen"}
+          onClick={onNavigate}
+          aria-current={pathname === "/profiel" ? "page" : undefined}
+          className={`flex items-center gap-2.5 rounded-lg transition-colors ${
+            ingeklapt ? "px-2 py-2 md:px-0 md:justify-center" : "px-2 py-2"
+          } ${
+            pathname === "/profiel"
+              ? "bg-nav-line text-nav-text-active"
+              : "bg-white/5 hover:bg-nav-line"
+          }`}
+        >
+          <div className="w-8 h-8 bg-nav-accent rounded-lg flex items-center justify-center font-semibold text-[11.5px] text-white flex-shrink-0">
+            {initials}
+          </div>
+          <div className={`flex-1 min-w-0 ${bijInklapVerborgen}`}>
+            <div className="text-[12.5px] font-semibold truncate text-nav-text-active">
+              {gebruikerNaam || "Bestuurslid"}
+            </div>
+            <div className="text-nav-text text-[11px]">
+              {rolLabel[gebruikerRol || "bestuurder"] || "Bestuurslid"}
+            </div>
+          </div>
+          <span className={`text-nav-text flex-shrink-0 ${bijInklapVerborgen}`}>
+            <Icoon sleutel="chevron-rechts" grootte={15} streek={1.9} />
+          </span>
+        </Link>
+
         <button
           onClick={uitloggen}
           title={ingeklapt ? "Uitloggen" : undefined}
-          className={`text-nav-text text-xs hover:text-nav-text-active transition-colors ${
-            ingeklapt ? "md:w-full md:text-center" : ""
+          // Expliciete naam: in de ingeklapte stand is het label visueel weg en
+          // draagt het icoon niets (het is `aria-hidden`, guardrail 5).
+          aria-label="Uitloggen"
+          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-nav-text text-[11.5px] hover:bg-nav-line hover:text-nav-text-active transition-colors ${
+            ingeklapt ? "md:w-full md:justify-center md:px-0" : ""
           }`}
         >
-          <span className={bijInklapVerborgen}>Uitloggen </span>
-          <span aria-hidden>→</span>
+          <Icoon sleutel="uitloggen" grootte={15} streek={1.8} className="flex-shrink-0" />
+          <span className={bijInklapVerborgen}>Uitloggen</span>
         </button>
       </div>
     </nav>

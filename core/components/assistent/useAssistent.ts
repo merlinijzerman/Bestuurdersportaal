@@ -61,6 +61,7 @@ import {
 import {
   leesAssistentContextUitUrl,
   resolveerAssistentContext,
+  type AssistentUrlIngang,
   type ContextLezer,
 } from "@/core/lib/assistent-url-ingang";
 import { type VoortgangUI } from "@/core/lib/voortgang";
@@ -642,6 +643,53 @@ export function useAssistent(opties: UseAssistentOpties) {
     }
   }
 
+  /**
+   * Past een context-ingang toe: opzoeken onder RLS en de contextvelden zetten.
+   *
+   * ÉÉN pad voor twee aanroepers — de deeplink (`/ai?doc=…`) en de knop in een
+   * module (T1). Zou de knop zijn eigen scope zetten, dan hadden we binnen een
+   * week twee ingangen die net iets anders doen; dat is precies de fout die dit
+   * ticket opruimt. De resolver is bovendien de enige plek die weet dát een
+   * gedeactiveerd document geen scope oplevert.
+   */
+  const pasIngangToe = useCallback(
+    async (ingangen: AssistentUrlIngang[]) => {
+      if (ingangen.length === 0) return;
+      // De resolver vraagt om een MINIMALE leesinterface (select/eq/order),
+      // niet om de supabase-client zelf: zo is hij te testen met een stub en is
+      // aan zijn signatuur te zien dat hij nooit schrijft. De generieke typen
+      // van de echte client matchen daar niet structureel op (tsc loopt vast op
+      // de diepte), vandaar deze ene, bewuste versmalling.
+      const urlContext = await resolveerAssistentContext(
+        supabase as unknown as ContextLezer,
+        ingangen
+      );
+      if (urlContext.startSchoonGesprek) {
+        // Een schoon gesprek, zodat de scope niet over een bestaand gesprek
+        // heen valt.
+        gesprekId.current = null;
+        setActiefGesprekId(null);
+        gesprekBestaatInDb.current = false;
+        setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
+      }
+      // Alleen de velden die deze ingang ZET; een ontbrekende sleutel laat het
+      // veld met rust (zie AssistentContextPatch).
+      const { patch } = urlContext;
+      if (patch.documentScope !== undefined) zetDocumentScope(patch.documentScope);
+      if (patch.agendapuntContext !== undefined)
+        zetAgendapuntContext(patch.agendapuntContext);
+      if (patch.moduleScope !== undefined) zetModuleScope(patch.moduleScope);
+      if (patch.risicoLijst !== undefined) zetRisicoLijst(patch.risicoLijst);
+    },
+    [
+      supabase,
+      zetDocumentScope,
+      zetAgendapuntContext,
+      zetModuleScope,
+      zetRisicoLijst,
+    ]
+  );
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
@@ -753,31 +801,10 @@ export function useAssistent(opties: UseAssistentOpties) {
         // eigen effect zou daarmee een race introduceren en bij een deeplink de
         // generieke begroeting kunnen tonen.
         const urlVerzoek = leesAssistentContextUitUrl(window.location.search);
-        // De resolver vraagt om een MINIMALE leesinterface (select/eq/order),
-        // niet om de supabase-client zelf: zo is hij te testen met een stub en is
-        // aan zijn signatuur te zien dat hij nooit schrijft. De generieke typen
-        // van de echte client matchen daar niet structureel op (tsc loopt vast op
-        // de diepte), vandaar deze ene, bewuste versmalling.
-        const urlContext = await resolveerAssistentContext(
-          supabase as unknown as ContextLezer,
-          urlVerzoek.ingangen
-        );
-        if (urlContext.startSchoonGesprek) {
-          // Een schoon gesprek, zodat de scope niet over een bestaand gesprek
-          // heen valt.
-          gesprekId.current = null;
-          setActiefGesprekId(null);
-          gesprekBestaatInDb.current = false;
-          setBerichten([{ rol: "ai", tekst: personalTekst }]);
-        }
-        // Alleen de velden die deze ingang ZET; een ontbrekende sleutel laat het
-        // veld met rust (zie AssistentContextPatch).
-        const { patch } = urlContext;
-        if (patch.documentScope !== undefined) zetDocumentScope(patch.documentScope);
-        if (patch.agendapuntContext !== undefined)
-          zetAgendapuntContext(patch.agendapuntContext);
-        if (patch.moduleScope !== undefined) zetModuleScope(patch.moduleScope);
-        if (patch.risicoLijst !== undefined) zetRisicoLijst(patch.risicoLijst);
+        // Zelfde afhandeling als een module-knop (T1): één resolutiepad.
+        // `welkomstRef.current` is hierboven (r. 684) op exact dezelfde
+        // `personalTekst` gezet, dus het schone gesprek blijft gepersonaliseerd.
+        await pasIngangToe(urlVerzoek.ingangen);
         // Ingreep 2 — de bevestigde bron-intentie geldt voor dit gesprek en staat
         // NAAST een eventuele scope; "Nieuw gesprek" wist hem. Bewust hier, ná
         // het opzoeken: in het origineel stond deze tak als laatste, en de
@@ -793,6 +820,7 @@ export function useAssistent(opties: UseAssistentOpties) {
   }, [
     laadGesprekken,
     supabase,
+    pasIngangToe,
     zetDocumentScope,
     zetAgendapuntContext,
     zetModuleScope,
@@ -1364,6 +1392,10 @@ export function useAssistent(opties: UseAssistentOpties) {
 
 
   return {
+    // ── de contextlaag aansturen (T1) ────────────────────────────────────
+    /** Past een ingang toe (deeplink óf module-knop) — zie pasIngangToe. */
+    pasIngangToe,
+
     // ── het gesprek ──────────────────────────────────────────────────────
     berichten,
     invoer,

@@ -168,3 +168,95 @@ export function contextChipLabels(velden: {
 
   return chips;
 }
+
+/**
+ * De ENE contextchip van het paneel: waar kijkt de assistent naar, en wat valt
+ * daar qua bronnen onder? (T1, besluit 0204.)
+ *
+ * Hiermee is het openstaande punt uit `contextChipLabels` beslecht. Dat de
+ * weergave op `/ai` bij een samengestelde context TWEE chips kan tonen is
+ * bestaand gedrag, geen ontwerpkeuze — maar indikken tot één label mag de
+ * tweede scope niet verzwijgen. Een bestuurder die "Proces · «Invaren»" leest
+ * terwijl er óók een documentscope actief is, krijgt een antwoord dat hij niet
+ * kan plaatsen.
+ *
+ * De oplossing: het LABEL toont de meest specifieke context (dezelfde
+ * precedentie als `bepaalContextSoort` en als de server), en de tweede scope
+ * verdwijnt niet maar staat op de regel `bronbereik` eronder. Eén chip, niets
+ * verzwegen.
+ *
+ * `losTeLaten` is false bij fondsbreed: er is dan niets om los te laten, en een
+ * kruisje dat niets doet is erger dan geen kruisje.
+ */
+export interface ContextChip {
+  label: string;
+  bronbereik: string;
+  losTeLaten: boolean;
+}
+
+export function contextChip(velden: {
+  documentScope: DocumentScope | null;
+  agendapuntContext: AgendapuntContext | null;
+  moduleScope: ModuleScope | null;
+}): ContextChip {
+  const { documentScope, agendapuntContext, moduleScope } = velden;
+  const aantalStukken = documentScope?.document_ids.length ?? 0;
+  const stukken = `${aantalStukken} ${aantalStukken === 1 ? "stuk" : "stukken"}`;
+
+  if (agendapuntContext) {
+    return {
+      label: `Agendapunt · «${agendapuntContext.titel}»`,
+      bronbereik:
+        aantalStukken > 0
+          ? `${stukken} bij dit agendapunt`
+          : "geen gekoppelde stukken — de assistent zoekt fondsbreed",
+      losTeLaten: true,
+    };
+  }
+
+  if (moduleScope) {
+    // Een documentscope náást een module-scope is zeldzaam maar mogelijk (een
+    // stuk openen zet hem, de module-ingang wist hem niet). Hij hoort dus in
+    // het bronbereik, anders verdwijnt hij uit beeld terwijl hij wél meegaat.
+    const ernaast = aantalStukken > 0 ? ` · daarnaast ${stukken}` : "";
+    if (moduleScope.soort === "proces") {
+      return {
+        label: `Proces · «${moduleScope.label}»`,
+        bronbereik: `het procesdossier en de stukken die eraan hangen${ernaast}`,
+        losTeLaten: true,
+      };
+    }
+    if (moduleScope.soort === "risico") {
+      return {
+        label: `Risico · «${moduleScope.label}»`,
+        bronbereik: `dit risico en wat eraan gekoppeld is${ernaast}`,
+        losTeLaten: true,
+      };
+    }
+    return {
+      label: "Risicomatrix",
+      bronbereik: `alle open risico's van het fonds${ernaast}`,
+      losTeLaten: true,
+    };
+  }
+
+  if (documentScope) {
+    const extra = documentScope.document_ids.length - 1;
+    return {
+      label: `Document · «${documentScope.titels[0] || "dit document"}»${
+        extra > 0 ? ` +${extra}` : ""
+      }`,
+      bronbereik:
+        documentScope.algemene_kennis === true
+          ? `${stukken} plus algemene kennis`
+          : `alleen ${stukken}`,
+      losTeLaten: true,
+    };
+  }
+
+  return {
+    label: "Fondsbreed",
+    bronbereik: "alle vastgestelde stukken van het fonds",
+    losTeLaten: false,
+  };
+}
