@@ -54,33 +54,13 @@ import {
   type Documentfilter,
   type Documentregel,
 } from "@/core/lib/documentlijst";
-import { ANTWOORDMODI, type Antwoordmodus } from "@/core/lib/vraagtype";
 import { pillLabelVoor } from "@/core/lib/bronsamenvatting";
 
-export interface Bron {
-  document_id: string;
-  titel: string;
-  bron: string;
-  pagina: number | null;
-  paragraaf: string | null;
-  fragment: string;
-  heeft_origineel: boolean;
-  // Increment G — bronkaartvelden (status/bronstatus/datum/bronsoort).
-  documentstatus?: string | null;
-  bronstatus?: string | null;
-  documentdatum?: string | null;
-  geldig_tot?: string | null;
-  bibliotheek?: string | null;
-  bronorganisatie?: string | null;
-  normgewicht?: string | null;
-  extern_url?: string | null;
-  // Tranche 2B — soort stuk en bestandsformaat, voor de documentlijst bij
-  // antwoordmodus `bronoverzicht`. Beide optioneel: `documenttype` is nullable en
-  // niet gebackfilld (metadata-review-queue), en oude, opgeslagen gesprekken
-  // kennen de velden helemaal niet.
-  documenttype?: string | null;
-  bestandstype?: string | null;
-}
+// P1a — `Bron` woont sinds de laagsplitsing in `core/lib/assistent-types.ts`,
+// zodat de gesprekslaag (L2) hem kan gebruiken zonder uit `app/` te importeren.
+// Hier ongewijzigd doorgegeven: elke bestaande importregel blijft werken.
+export type { Bron } from "@/core/lib/assistent-types";
+import type { Bron } from "@/core/lib/assistent-types";
 
 // De bronorganisatie draagt nog één kleursignaal: het nummerbolletje. De
 // vlak- en tekstkleuren per organisatie zijn vervallen met de neutrale
@@ -1059,22 +1039,11 @@ export function LichteReflectieBron({
 //    client-scope en zet de cursor in het invoerveld; de gebruiker formuleert
 //    zelf de vraag en de server-side validatie blijft onverkort leidend.
 
-/**
- * Leest een (mogelijk onbekende) antwoordmodus-waarde terug naar het type of
- * null. De waarde komt uit het `meta`-event of, na herladen, uit
- * `gesprekken.berichten` (jsonb) — dus ongecontroleerd.
- *
- * Staat hier en niet in `core/lib/vraagtype.ts`: die module bevat de DETECTIE
- * (`ANTWOORDMODUS_PATRONEN`, `bepaalAntwoordmodus`) en blijft in deze tranche
- * ongemoeid. Dit is uitsluitend een lezer, gebouwd op de bestaande constante
- * `ANTWOORDMODI`, zodat er geen tweede lijst met modusnamen ontstaat die kan
- * gaan afwijken. Beide surfaces gebruiken deze ene implementatie.
- */
-export function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
-  return typeof ruw === "string" && (ANTWOORDMODI as string[]).includes(ruw)
-    ? (ruw as Antwoordmodus)
-    : null;
-}
+// P1a — `leesAntwoordmodus` woont sinds de laagsplitsing in
+// `core/lib/vraagtype.ts`, naast `ANTWOORDMODI` waar de modusnamen zelf staan.
+// De toelichting is met de functie meeverhuisd. Hier ongewijzigd doorgegeven,
+// zodat de importregel van elke bestaande consument blijft werken.
+export { leesAntwoordmodus } from "@/core/lib/vraagtype";
 
 /** Bestandstype-badge. Ontbreekt het type, dan verschijnt er niets — geen lege badge. */
 function BestandstypeBadge({ type }: { type?: string | null }) {

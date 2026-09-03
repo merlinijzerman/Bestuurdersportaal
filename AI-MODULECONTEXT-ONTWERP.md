@@ -1,5 +1,8 @@
 # AI-modulecontext — Ontwerpdocument
 
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
+
+
 > **Status**: Ontwerp — vastgesteld 2026-08-09, in bouw. Besluiten §7 belegd; uitvoering
 > volgt [`WERKOPDRACHT-AI-MODULECONTEXT.md`](./WERKOPDRACHT-AI-MODULECONTEXT.md) en
 > [`decisions/0151`](./decisions/0151-ai-modulecontext-module-scope.md).
@@ -151,7 +154,8 @@ stille terugval naar de hele bibliotheek.
 
 ## 6. Instap en placement
 
-De instap volgt het precedent van `/ai?doc=…` / `/ai?agendapunt=…` (`AssistentClient.tsx`
+De instap volgt het precedent van `/ai?doc=…` / `/ai?agendapunt=…` (sinds besluit 0201
+gebundeld in `core/lib/assistent-url-ingang.ts`; voorheen `AssistentClient.tsx`
 leest de URL-parameter bij mount en zet de scope-state, die per beurt in de body meereist):
 
 - **Proces** — knop op het niveau van een **geopend proces** (`procedures/[id]/page.tsx`), als
@@ -231,7 +235,8 @@ een tabel. N=15 (historie) is de eerste begrenzingsknop als de meting tegenvalt.
 - API: `app/api/risicos/[id]/route.ts` en `.../sluiten/route.ts` (schrijven naar `risico_log`).
 - UI: `app/(dashboard)/procedures/[id]/` (o.a. `DecisionObjectHeader`, `DossierStatusStrip`);
   `app/(dashboard)/risicomatrix/` (`page.tsx`, `Heatmap.tsx`, `[id]/page.tsx`, `archief/`);
-  `app/(dashboard)/ai/_components/AssistentClient.tsx` + `DocumentDoorgronden.tsx` (instap-precedent).
+  `core/lib/assistent-url-ingang.ts` (de instap, sinds besluit 0201) +
+  `app/(dashboard)/ai/_components/DocumentDoorgronden.tsx`.
 - Ontwerp/besluiten: `AI-STARTPUNT-ONTWERP.md`, `WERKOPDRACHT-AI-CONTEXTBESEF.md`; besluit 0071
   (bronherkenbaarheid), besluit 0145 (risico-logboek), **besluit 0151** (de `module_scope`-soort).
 - Uitvoering: `WERKOPDRACHT-AI-MODULECONTEXT.md`.

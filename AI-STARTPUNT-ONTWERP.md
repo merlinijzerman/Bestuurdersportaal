@@ -1,5 +1,8 @@
 # AI-startpunt — Ontwerpdocument
 
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
+
+
 > **Status**: Revisie 1.1 — P1 gebouwd (2026-07-28); AI-taken "P2" voorbeeldvragen + document doorgronden gebouwd (2026-07-29, besluit 0089)
 > **Datum**: 2026-07-28
 > **Scope**: het startscherm van `/ai` en de doorgroei naar een taakgerichte assistent, opgedeeld in vijf los uitleverbare plateaus (P1–P5).
@@ -35,7 +38,7 @@ Elk plateau is los uitleverbaar en bouwt op het vorige. De grens tussen "routere
 
 Zodra er een bericht, een documentscope of een agendapunt-scope is, verdwijnt het startscherm en gedraagt `/ai` zich exact zoals voorheen (modi, bronselectie, @-mentions, verduidelijkingsvragen, onderbouwingspaneel).
 
-**Architectuur**: `app/(dashboard)/ai/page.tsx` is een server-component (route A) die de sessie server-side afleidt, de gedeelde context ophaalt (`core/lib/portaalcontext.ts`, `React.cache()`-gededupliceerd, gedeeld met de homepage) en de mechanisch verhuisde client-component `_components/AssistentClient.tsx` rendert met een `_components/Startpunt.tsx`. Een `loading.tsx`-skelet dekt de eerste weergave. Geen migratie, geen RLS-/API-contractwijziging.
+**Architectuur**: `app/(dashboard)/ai/page.tsx` is een server-component (route A) die de sessie server-side afleidt, de gedeelde context ophaalt (`core/lib/portaalcontext.ts`, `React.cache()`-gededupliceerd, gedeeld met de homepage) en de client-component `_components/AssistentClient.tsx` rendert met een `_components/Startpunt.tsx`. **Sinds P1a (besluit 0201)** mount `AssistentClient` de `AssistentContextProvider` (L1) en consumeert hij `useAssistent()` (L2); het startpunt zelf en zijn taakknoppen zijn ongewijzigd — de taken (`startVrijeVraag`, `startDoorgronden`, `startStukVoorbereiden`) komen nu uit de gesprekslaag. Een `loading.tsx`-skelet dekt de eerste weergave. Geen migratie, geen RLS-/API-contractwijziging.
 
 **Bewust buiten P1**: geen taakconfiguratie, geen bewaren/koppelen, geen voortgangsstappen, geen nieuwe/heropende antwoordmodi (`besluitrijpheid`/`persoonlijke_voorbereiding` blijven zonder knop — besluit 0068), geen tweede implementatie van de voorbereiding (besluiten 0036/0079).
 
