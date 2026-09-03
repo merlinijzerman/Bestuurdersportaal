@@ -74,6 +74,10 @@ import {
   VoortgangWeergave,
   type VoortgangUI,
 } from "../../ai/_components/Voortgang";
+// Idempotentie op de kostendragende beurt, gelijk aan /ai (AssistentClient).
+// Zonder deze sleutel kan een dubbelklik of een transportretry hier een tweede
+// generatie starten — met een tweede auditregel en dubbel verbruik.
+import { maakIdempotentVerzoek } from "@/core/lib/idempotency-key";
 
 interface Verduidelijking {
   vraag: string;
@@ -614,10 +618,15 @@ export default function AgendapuntChat({
         content: b.tekst,
       }));
 
+    // Eén sleutel per logische gebruikersactie. Wordt dezelfde fetch door de
+    // transportlaag opnieuw aangeboden, dan blijven request en header gelijk;
+    // een volgende beurt krijgt een nieuwe sleutel.
+    const idempotentVerzoek = maakIdempotentVerzoek();
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: idempotentVerzoek.headers({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           messages,
           fonds_id: fondsIdRef.current,
