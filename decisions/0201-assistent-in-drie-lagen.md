@@ -77,6 +77,14 @@ er naar de server gaat.
   de gepersonaliseerde welkomsttekst. Een eigen effect introduceert een race waarin een
   deeplink de generieke begroeting toont. "Eén ingang" is daarom één **functie**, aangeroepen
   op dezelfde plek in dezelfde volgorde.
+- **De URL-takken tot één keuze maken** (`else if`) — verworpen, ná een fout. De eerste versie
+  deed dit wél, met een modulekop die "precedentie gelijk aan het origineel" claimde. Het
+  origineel had helemaal geen precedentie: drie ONAFHANKELIJKE `try`-blokken die allemaal
+  draaiden, waarbij een latere tak een eerdere overschreef. `?doc=X&agendapunt=A` eindigde
+  dus op de agendapunt-framing, niet op de documentscope — de keten draaide dat om.
+  Onbereikbaar via de UI (elke knop zet één parameter) en door geen enkele test gedekt; de
+  code-review vond het. De parse levert nu een LIJST in bronvolgorde. Alleen `proces` en
+  `risicomatrix` sluiten elkaar uit, want die stonden in het origineel in één blok.
 - **De streamverwerking ongewijzigd meeverhuizen** — verworpen. Dan blijft het enige pad dat
   je niet zonder browser kunt verifiëren precies zo onverifieerbaar, terwijl de grootste
   verhuizing eroverheen gaat. Het is nu een pure reducer met twee testlagen.

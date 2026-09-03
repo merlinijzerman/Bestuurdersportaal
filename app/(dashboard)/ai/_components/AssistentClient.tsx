@@ -319,10 +319,9 @@ function AssistentOppervlak({
     });
   }
 
-  // Increment I-1 (FO §13) — voer een contextbewuste vervolgactie uit. Reformat-
-  // acties hergebruiken strikt dezelfde bronselectie als het oorspronkelijke
-  // antwoord; verbredende acties (besluitvorming, tijdlijn) niet.
-
+  // ── @-mention-typeahead op documenttitels ──────────────────────────────────
+  // Detecteert een `@…`-fragment aan het eind van de invoer en opent een
+  // typeahead. RLS beperkt de zoekresultaten tot het eigen fonds (+ generiek).
   function verwerkInvoer(waarde: string) {
     setInvoer(waarde);
     const m = waarde.match(/@([^\s@]*)$/);
@@ -352,9 +351,10 @@ function AssistentOppervlak({
     sluitMention();
   }
 
-  // Gedeelde documentzoek-suggestiebron (ILIKE op titel, eigen fonds via RLS).
-  // Eén implementatie voor zowel de @-mention-typeahead als de documentkiezer in
-  // "een document doorgronden" (P2 Deel B, criterium 8 — geen tweede zoekcode).
+  // Zoek documenten zodra het @-fragment wijzigt. De suggestiebron zelf
+  // (`zoekDocumenten`) komt uit de gesprekslaag: één implementatie voor zowel
+  // deze typeahead als de documentkiezer in "een document doorgronden"
+  // (P2 Deel B, criterium 8 — geen tweede zoekcode).
 
   useEffect(() => {
     if (!mentionOpen) return;

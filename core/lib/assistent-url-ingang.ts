@@ -22,11 +22,24 @@
 //  knop in het portaal zet die parameter (zie het ingangenregister). De pure
 //  parse hieronder maakt dat wél zichtbaar.
 //
-//  PRECEDENTIE — gelijk aan het origineel, en niet willekeurig:
-//    doc → agendapunt → proces/risicomatrix, en `intent`/`herkomst` ALTIJD als
-//    laatste en náást de rest. Reden: de eerste drie zetten een scope, en bij een
-//    actieve scope negeert de route de bron-intentie toch (scopeActief ⇒
-//    bronIntentResultaat = null).
+//  GEEN PRECEDENTIE — dat was een fout in de eerste versie hiervan, gevonden bij
+//  de code-review. Het origineel had DRIE ONAFHANKELIJKE try-blokken die
+//  allemaal draaiden: `?doc=X&agendapunt=A` zette eerst de documentscope en
+//  overschreef die daarna met de stukken van het agendapunt, plus de framing.
+//  Een `else if`-keten koos er één en draaide de uitkomst zelfs om. Onbereikbaar
+//  via de UI (elke knop zet één parameter), maar wel een gedragswijziging in een
+//  refactor die neutraliteit belooft — en de test legde de afwijking vast alsof
+//  het het oude gedrag was.
+//
+//  Daarom levert de parse een LIJST in bronvolgorde (doc, agendapunt,
+//  proces|risicomatrix) en worden de patches in die volgorde samengevoegd; een
+//  latere ingang overschrijft een eerdere, precies zoals de blokken deden.
+//  `proces` en `risicomatrix` sluiten elkaar wél uit: die stonden in het
+//  origineel in één blok als `if/else if`.
+//
+//  `intent`/`herkomst` staat los en náást de rest: de scope-takken zetten een
+//  scope, en bij een actieve scope negeert de route de bron-intentie toch
+//  (scopeActief ⇒ bronIntentResultaat = null).
 //
 //  De parse is puur; de resolver krijgt zijn databaseclient geïnjecteerd.
 // ============================================================================
@@ -46,8 +59,11 @@ export type AssistentUrlIngang =
   | { soort: "risicomatrix" };
 
 export interface AssistentUrlVerzoek {
-  /** De scope-ingang, of null als de URL er geen aanwijst. */
-  ingang: AssistentUrlIngang | null;
+  /**
+   * De scope-ingangen in bronvolgorde. Meerdere tegelijk is mogelijk — het
+   * origineel liet de blokken allemaal draaien. Leeg als de URL er geen aanwijst.
+   */
+  ingangen: AssistentUrlIngang[];
   /** De bevestigde bron-intentie uit `?intent=` (+ `?herkomst=`), of null. */
   herkomst: Herkomst | null;
 }
@@ -97,11 +113,12 @@ export function leesAssistentContextUitUrl(zoekstring: string): AssistentUrlVerz
   const proces = params.get("proces");
   const risicomatrix = params.get("risicomatrix");
 
-  let ingang: AssistentUrlIngang | null = null;
-  if (doc) ingang = { soort: "document", documentId: doc };
-  else if (agendapunt) ingang = { soort: "agendapunt", agendapuntId: agendapunt };
-  else if (proces) ingang = { soort: "proces", procedureId: proces };
-  else if (risicomatrix) ingang = { soort: "risicomatrix" };
+  const ingangen: AssistentUrlIngang[] = [];
+  if (doc) ingangen.push({ soort: "document", documentId: doc });
+  if (agendapunt) ingangen.push({ soort: "agendapunt", agendapuntId: agendapunt });
+  // Deze twee stonden in het origineel in één blok als if/else if.
+  if (proces) ingangen.push({ soort: "proces", procedureId: proces });
+  else if (risicomatrix) ingangen.push({ soort: "risicomatrix" });
 
   // De parameter is een GEBRUIKERSACTIE (er is in die module op een knop
   // geklikt), geen heuristiek — daarom mag hij het vertrouwen op "zeker" zetten.
@@ -117,7 +134,7 @@ export function leesAssistentContextUitUrl(zoekstring: string): AssistentUrlVerz
         }
       : null;
 
-  return { ingang, herkomst };
+  return { ingangen, herkomst };
 }
 
 /**
@@ -148,10 +165,22 @@ const LEEG: AssistentUrlContext = { patch: {}, startSchoonGesprek: false };
  */
 export async function resolveerAssistentContext(
   lezer: ContextLezer,
-  ingang: AssistentUrlIngang | null
+  ingangen: AssistentUrlIngang[]
 ): Promise<AssistentUrlContext> {
-  if (!ingang) return LEEG;
+  const samen: AssistentUrlContext = { patch: {}, startSchoonGesprek: false };
+  for (const ingang of ingangen) {
+    const uit = await resolveerEen(lezer, ingang);
+    // Een latere ingang overschrijft een eerdere, zoals de losse blokken deden.
+    samen.patch = { ...samen.patch, ...uit.patch };
+    samen.startSchoonGesprek = samen.startSchoonGesprek || uit.startSchoonGesprek;
+  }
+  return samen;
+}
 
+async function resolveerEen(
+  lezer: ContextLezer,
+  ingang: AssistentUrlIngang
+): Promise<AssistentUrlContext> {
   try {
     if (ingang.soort === "document") {
       const { data } = await lezer
@@ -233,16 +262,27 @@ export async function resolveerAssistentContext(
 
     // risicomatrix — de enige risico-ingang; `risico` ontstaat pas door in de
     // chat in te zoomen met een verdiep-chip.
-    const { data: risicosRuw } = await lezer
-      .from("risicos")
-      .select("id, titel")
-      .eq("status", "actief")
-      .order("niveau", { ascending: false });
-    const risicoLijst = Array.isArray(risicosRuw)
-      ? (risicosRuw as { id?: unknown; titel?: unknown }[])
-          .filter((r): r is { id: string; titel: string } => typeof r?.id === "string")
-          .map((r) => ({ id: r.id, titel: r.titel || "risico" }))
-      : [];
+    //
+    // De risicolijst heeft een EIGEN try. In het origineel stonden de scope en
+    // het schone gesprek vóór de risicos-query, dus wierp die, dan bleef de
+    // module-scope staan en zag de bestuurder nog steeds de juiste chip — alleen
+    // de verdiep-chips ontbraken. Alles in één try zou van een deelfout een
+    // volledige stille mislukking maken.
+    let risicoLijst: { id: string; titel: string }[] = [];
+    try {
+      const { data: risicosRuw } = await lezer
+        .from("risicos")
+        .select("id, titel")
+        .eq("status", "actief")
+        .order("niveau", { ascending: false });
+      risicoLijst = Array.isArray(risicosRuw)
+        ? (risicosRuw as { id?: unknown; titel?: unknown }[])
+            .filter((r): r is { id: string; titel: string } => typeof r?.id === "string")
+            .map((r) => ({ id: r.id, titel: r.titel || "risico" }))
+        : [];
+    } catch (e) {
+      console.error("Risicolijst voor de verdiep-chips ophalen mislukt:", e);
+    }
     return {
       patch: {
         moduleScope: { soort: "risicomatrix", label: "de risicomatrix" },

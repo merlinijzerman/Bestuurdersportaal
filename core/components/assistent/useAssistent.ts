@@ -97,16 +97,22 @@ export interface UseAssistentOpties {
   zetScrollDoel: (berichtIndex: number | null) => void;
   /** Toon een zojuist geopend/hersteld gesprek onderaan (T5 C2). */
   markeerScrollNaarOnder: (aan: boolean) => void;
+  //  Deze drie zijn VERPLICHT, ook al is de implementatie soms een lege functie.
+  //  Reden: vergeet een tweede surface (P1b) er één, dan doet de bijbehorende
+  //  handeling geruisloos niets — precies de stille verschraling die deze
+  //  laagsplitsing moet uitsluiten. De typechecker dwingt nu een bewuste keuze
+  //  af in plaats van stilte.
+
   /** De weergavelaag sluit haar eigen panelen bij een nieuw gesprek. */
-  bijNieuwGesprek?: () => void;
+  bijNieuwGesprek: () => void;
   /** …en bij het openen van een bestaand gesprek. */
-  bijGesprekGeopend?: () => void;
+  bijGesprekGeopend: () => void;
   /**
    * De vervolgactie "toon gebruikte bronnen" klapt het onderbouwingspaneel van
    * één bericht open. Welke panelen open staan is kijkstaat en hoort in de
    * weergavelaag; de gesprekslaag geeft alleen door dát het moet.
    */
-  toonBronnen?: (berichtIndex: number) => void;
+  toonBronnen: (berichtIndex: number) => void;
 }
 
 // Voortgang tijdens het wachten (besluit 0087): types, reducer en weergave leven
@@ -338,7 +344,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     // B2-vervolg: herstel de stuk-context, zodat de Word-export beschikbaar is op
     // een heropend stuk-gesprek (en cleart hem voor een niet-stuk-gesprek).
     setStukContext(stukContextUitBerichten(item.berichten));
-    opties.bijGesprekGeopend?.();
+    opties.bijGesprekGeopend();
     // Plateau B / AC-23 — de flowstatus hoort bij dít gesprek, niet bij het
     // vorige. Zonder deze reset zou een reflectie uit gesprek A doorlopen in
     // gesprek B en zouden G1-G4 daar ten onrechte gelden.
@@ -747,13 +753,6 @@ export function useAssistent(opties: UseAssistentOpties) {
         // eigen effect zou daarmee een race introduceren en bij een deeplink de
         // generieke begroeting kunnen tonen.
         const urlVerzoek = leesAssistentContextUitUrl(window.location.search);
-        // Ingreep 2 — de bevestigde bron-intentie geldt voor dit gesprek en staat
-        // NAAST een eventuele scope; "Nieuw gesprek" wist hem. Bewust VÓÓR het
-        // opzoeken gezet: hij komt uit de URL en heeft geen database nodig. Zou
-        // hij erna staan, dan hing een auditveld af van het welslagen van een
-        // RLS-lookup — een koppeling die je niet wilt, ook al vangt de resolver
-        // vandaag alles zelf af.
-        if (urlVerzoek.herkomst) zetHerkomst(urlVerzoek.herkomst);
         // De resolver vraagt om een MINIMALE leesinterface (select/eq/order),
         // niet om de supabase-client zelf: zo is hij te testen met een stub en is
         // aan zijn signatuur te zien dat hij nooit schrijft. De generieke typen
@@ -761,7 +760,7 @@ export function useAssistent(opties: UseAssistentOpties) {
         // de diepte), vandaar deze ene, bewuste versmalling.
         const urlContext = await resolveerAssistentContext(
           supabase as unknown as ContextLezer,
-          urlVerzoek.ingang
+          urlVerzoek.ingangen
         );
         if (urlContext.startSchoonGesprek) {
           // Een schoon gesprek, zodat de scope niet over een bestaand gesprek
@@ -779,6 +778,12 @@ export function useAssistent(opties: UseAssistentOpties) {
           zetAgendapuntContext(patch.agendapuntContext);
         if (patch.moduleScope !== undefined) zetModuleScope(patch.moduleScope);
         if (patch.risicoLijst !== undefined) zetRisicoLijst(patch.risicoLijst);
+        // Ingreep 2 — de bevestigde bron-intentie geldt voor dit gesprek en staat
+        // NAAST een eventuele scope; "Nieuw gesprek" wist hem. Bewust hier, ná
+        // het opzoeken: in het origineel stond deze tak als laatste, en de
+        // resolver vangt zijn eigen fouten af — er is dus geen koppeling om te
+        // verbreken, alleen een rendervolgorde om te bewaren.
+        if (urlVerzoek.herkomst) zetHerkomst(urlVerzoek.herkomst);
 
 
         // Vul het gesprekken-overzicht.
@@ -1252,7 +1257,7 @@ export function useAssistent(opties: UseAssistentOpties) {
   // Die staat bezit de gesprekslaag niet, dus daarvoor is er een callback.
   function stuurVervolgactie(actie: Vervolgactie, bron: Bericht, idx: number) {
     if (actie.type === "toon_bronnen") {
-      opties.toonBronnen?.(idx);
+      opties.toonBronnen(idx);
       return;
     }
     const docIds = [...new Set((bron.bronnen ?? []).map((b) => b.document_id))];
@@ -1289,7 +1294,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     setVrijeVraagOpen(false);
     // De weergavelaag sluit haar eigen panelen (typeahead, gesprekkenlade):
     // die staat hoort niet in de gesprekslaag.
-    opties.bijNieuwGesprek?.();
+    opties.bijNieuwGesprek();
     // Plateau B — een schone chat begint zonder reflectie en zonder kaart.
     setReflectieStatus("niet_actief");
     setReflectieBeurt(0);

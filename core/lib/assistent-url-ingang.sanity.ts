@@ -46,40 +46,46 @@ console.log("assistent-url-ingang sanity-tests:");
 // ── De pure parse ───────────────────────────────────────────────────────────
 
 check("zonder parameters is er geen ingang en geen herkomst", () => {
-  assert.deepEqual(leesAssistentContextUitUrl(""), { ingang: null, herkomst: null });
-  assert.deepEqual(leesAssistentContextUitUrl("?x=1"), { ingang: null, herkomst: null });
+  assert.deepEqual(leesAssistentContextUitUrl(""), { ingangen: [], herkomst: null });
+  assert.deepEqual(leesAssistentContextUitUrl("?x=1"), { ingangen: [], herkomst: null });
 });
 
 check("de vier scope-ingangen worden herkend", () => {
-  assert.deepEqual(leesAssistentContextUitUrl("?doc=d1").ingang, {
+  assert.deepEqual(leesAssistentContextUitUrl("?doc=d1").ingangen[0], {
     soort: "document",
     documentId: "d1",
   });
-  assert.deepEqual(leesAssistentContextUitUrl("?agendapunt=a1").ingang, {
+  assert.deepEqual(leesAssistentContextUitUrl("?agendapunt=a1").ingangen[0], {
     soort: "agendapunt",
     agendapuntId: "a1",
   });
-  assert.deepEqual(leesAssistentContextUitUrl("?proces=p1").ingang, {
+  assert.deepEqual(leesAssistentContextUitUrl("?proces=p1").ingangen[0], {
     soort: "proces",
     procedureId: "p1",
   });
-  assert.deepEqual(leesAssistentContextUitUrl("?risicomatrix=1").ingang, {
+  assert.deepEqual(leesAssistentContextUitUrl("?risicomatrix=1").ingangen[0], {
     soort: "risicomatrix",
   });
 });
 
-check("de precedentie is doc → agendapunt → proces → risicomatrix", () => {
-  // Gelijk aan het origineel: de takken stonden in deze volgorde en de eerste
-  // die raak was, won.
-  const alles = "?doc=d1&agendapunt=a1&proces=p1&risicomatrix=1";
-  assert.equal(leesAssistentContextUitUrl(alles).ingang?.soort, "document");
-  assert.equal(
-    leesAssistentContextUitUrl("?agendapunt=a1&proces=p1&risicomatrix=1").ingang?.soort,
-    "agendapunt"
+check("meerdere parameters leveren MEERDERE ingangen, in bronvolgorde", () => {
+  // Er is geen precedentie, en dat is niet vrijblijvend: het origineel had drie
+  // ONAFHANKELIJKE try-blokken die allemaal draaiden. Een `else if`-keten koos er
+  // één en draaide de uitkomst zelfs om — `?doc=&agendapunt=` eindigde vroeger
+  // op de agendapunt-framing, niet op de documentscope. Onbereikbaar via de UI,
+  // maar wel een gedragswijziging; hier vastgelegd zodat hij niet terugkeert.
+  assert.deepEqual(
+    leesAssistentContextUitUrl("?doc=d1&agendapunt=a1&proces=p1").ingangen.map((i) => i.soort),
+    ["document", "agendapunt", "proces"]
   );
-  assert.equal(
-    leesAssistentContextUitUrl("?proces=p1&risicomatrix=1").ingang?.soort,
-    "proces"
+  // proces en risicomatrix sluiten elkaar wél uit: één blok, if/else if.
+  assert.deepEqual(
+    leesAssistentContextUitUrl("?proces=p1&risicomatrix=1").ingangen.map((i) => i.soort),
+    ["proces"]
+  );
+  assert.deepEqual(
+    leesAssistentContextUitUrl("?risicomatrix=1").ingangen.map((i) => i.soort),
+    ["risicomatrix"]
   );
 });
 
@@ -87,7 +93,7 @@ check("de precedentie is doc → agendapunt → proces → risicomatrix", () => 
 
 check("?intent= + ?herkomst= levert de intentie ÉN de module", () => {
   assert.deepEqual(leesAssistentContextUitUrl("?intent=fonds&herkomst=risicomatrix"), {
-    ingang: null,
+    ingangen: [],
     herkomst: { intent: "fonds", module: "risicomatrix" },
   });
   assert.deepEqual(
@@ -132,7 +138,7 @@ check("herkomst staat NAAST een scope-ingang, niet in plaats daarvan", () => {
   // niet uit. De route negeert de intentie bij een actieve scope, maar het
   // auditspoor draagt hem wel.
   const uit = leesAssistentContextUitUrl("?doc=d1&intent=fonds&herkomst=bibliotheek");
-  assert.equal(uit.ingang?.soort, "document");
+  assert.equal(uit.ingangen[0]?.soort, "document");
   assert.deepEqual(uit.herkomst, { intent: "fonds", module: "bibliotheek" });
 });
 
@@ -160,7 +166,7 @@ function maakLezer(perTabel: Record<string, unknown>) {
 
 checkAsync("zonder ingang wordt er niets opgezocht", async () => {
   const { lezer, gelezen } = maakLezer({});
-  const uit = await resolveerAssistentContext(lezer, null);
+  const uit = await resolveerAssistentContext(lezer, []);
   assert.deepEqual(gelezen, []);
   assert.equal(uit.startSchoonGesprek, false);
   assert.deepEqual(uit.patch, {}, "zonder ingang wordt geen enkel veld aangeraakt");
@@ -168,30 +174,30 @@ checkAsync("zonder ingang wordt er niets opgezocht", async () => {
 
 checkAsync("?doc= zet de documentscope en start een schoon gesprek", async () => {
   const { lezer } = maakLezer({ documenten: { id: "d1", titel: "ABTN", actief: true } });
-  const uit = await resolveerAssistentContext(lezer, {
+  const uit = await resolveerAssistentContext(lezer, [{
     soort: "document",
     documentId: "d1",
-  });
+  }]);
   assert.deepEqual(uit.patch.documentScope, { document_ids: ["d1"], titels: ["ABTN"] });
   assert.equal(uit.startSchoonGesprek, true);
 });
 
 checkAsync("een INACTIEF document levert geen scope", async () => {
   const { lezer } = maakLezer({ documenten: { id: "d1", titel: "Oud", actief: false } });
-  const uit = await resolveerAssistentContext(lezer, {
+  const uit = await resolveerAssistentContext(lezer, [{
     soort: "document",
     documentId: "d1",
-  });
+  }]);
   assert.deepEqual(uit.patch, {}, "een inactief document raakt geen veld aan");
   assert.equal(uit.startSchoonGesprek, false);
 });
 
 checkAsync("een document zonder titel krijgt de terugvaltekst", async () => {
   const { lezer } = maakLezer({ documenten: { id: "d1" } });
-  const uit = await resolveerAssistentContext(lezer, {
+  const uit = await resolveerAssistentContext(lezer, [{
     soort: "document",
     documentId: "d1",
-  });
+  }]);
   assert.deepEqual(uit.patch.documentScope?.titels, ["dit document"]);
 });
 
@@ -204,10 +210,10 @@ checkAsync("?agendapunt= zet de framing én de gekoppelde stukken", async () => 
       { id: null, titel: "kapot" },
     ],
   });
-  const uit = await resolveerAssistentContext(lezer, {
+  const uit = await resolveerAssistentContext(lezer, [{
     soort: "agendapunt",
     agendapuntId: "a1",
-  });
+  }]);
   assert.deepEqual(uit.patch.agendapuntContext, {
     id: "a1",
     titel: "Vaststellen jaarrekening",
@@ -221,10 +227,10 @@ checkAsync("?agendapunt= zet de framing én de gekoppelde stukken", async () => 
 
 checkAsync("een agendapunt zonder stukken houdt de framing, zonder scope", async () => {
   const { lezer } = maakLezer({ agendapunten: { id: "a1", titel: "Rondvraag" }, documenten: [] });
-  const uit = await resolveerAssistentContext(lezer, {
+  const uit = await resolveerAssistentContext(lezer, [{
     soort: "agendapunt",
     agendapuntId: "a1",
-  });
+  }]);
   assert.equal(uit.patch.agendapuntContext?.titel, "Rondvraag");
   assert.equal(uit.patch.documentScope, null);
   assert.equal(uit.startSchoonGesprek, true);
@@ -232,10 +238,10 @@ checkAsync("een agendapunt zonder stukken houdt de framing, zonder scope", async
 
 checkAsync("?proces= draagt alleen de sleutel + een chip-label", async () => {
   const { lezer } = maakLezer({ procedures: { id: "p1", titel: "Invaren" } });
-  const uit = await resolveerAssistentContext(lezer, {
+  const uit = await resolveerAssistentContext(lezer, [{
     soort: "proces",
     procedureId: "p1",
-  });
+  }]);
   assert.deepEqual(uit.patch.moduleScope, {
     soort: "proces",
     procedure_id: "p1",
@@ -251,7 +257,7 @@ checkAsync("?risicomatrix=1 laadt de verdieplijst", async () => {
       { titel: "zonder id" },
     ],
   });
-  const uit = await resolveerAssistentContext(lezer, { soort: "risicomatrix" });
+  const uit = await resolveerAssistentContext(lezer, [{ soort: "risicomatrix" }]);
   assert.deepEqual(uit.patch.moduleScope, { soort: "risicomatrix", label: "de risicomatrix" });
   assert.deepEqual(uit.patch.risicoLijst, [
     { id: "r1", titel: "Renterisico" },
@@ -261,10 +267,10 @@ checkAsync("?risicomatrix=1 laadt de verdieplijst", async () => {
 
 checkAsync("een onbekend id levert de lege context, geen fout", async () => {
   const { lezer } = maakLezer({ procedures: null });
-  const uit = await resolveerAssistentContext(lezer, {
+  const uit = await resolveerAssistentContext(lezer, [{
     soort: "proces",
     procedureId: "bestaat-niet",
-  });
+  }]);
   assert.deepEqual(uit.patch, {});
   assert.equal(uit.startSchoonGesprek, false);
 });
@@ -275,9 +281,25 @@ checkAsync("?doc= laat een agendapunt-framing uit een hersteld gesprek STAAN", a
   // aangeraakt. Zou hier een volledige context staan, dan wiste ?doc= de framing
   // van een net herstelde agendapunt-chat — zonder dat iemand het zou merken.
   const { lezer } = maakLezer({ documenten: { id: "d1", titel: "ABTN", actief: true } });
-  const uit = await resolveerAssistentContext(lezer, { soort: "document", documentId: "d1" });
+  const uit = await resolveerAssistentContext(lezer, [{ soort: "document", documentId: "d1" }]);
   assert.ok(!("agendapuntContext" in uit.patch));
   assert.ok(!("moduleScope" in uit.patch));
+});
+
+checkAsync("twee ingangen worden samengevoegd; de latere overschrijft", async () => {
+  // Zoals de losse blokken deden: ?doc= zet de documentscope, en de
+  // agendapunt-tak overschrijft die daarna met de stukken van het agendapunt.
+  const { lezer } = maakLezer({
+    documenten: [{ id: "s1", titel: "Stuk van het agendapunt" }],
+    agendapunten: { id: "a1", titel: "Jaarrekening" },
+  });
+  const uit = await resolveerAssistentContext(lezer, [
+    { soort: "document", documentId: "d1" },
+    { soort: "agendapunt", agendapuntId: "a1" },
+  ]);
+  assert.equal(uit.patch.agendapuntContext?.id, "a1");
+  assert.deepEqual(uit.patch.documentScope?.document_ids, ["s1"]);
+  assert.equal(uit.startSchoonGesprek, true);
 });
 
 checkAsync("een kapotte deeplink maakt de assistent niet onbruikbaar", async () => {
@@ -286,7 +308,7 @@ checkAsync("een kapotte deeplink maakt de assistent niet onbruikbaar", async () 
       throw new Error("RLS weigerde de query");
     },
   };
-  const uit = await resolveerAssistentContext(stuk, { soort: "document", documentId: "d1" });
+  const uit = await resolveerAssistentContext(stuk, [{ soort: "document", documentId: "d1" }]);
   assert.deepEqual(uit.patch, {});
   assert.equal(uit.startSchoonGesprek, false);
 });
