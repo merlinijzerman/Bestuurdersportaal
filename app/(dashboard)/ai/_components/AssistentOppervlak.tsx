@@ -596,7 +596,7 @@ export default function AssistentOppervlak() {
         <span className="text-xs text-muted font-semibold uppercase tracking-wide">
           Antwoordmodus
         </span>
-        <div className="flex gap-0.5 bg-app-bg rounded-lg p-1">
+        <div className="assistent-modi flex gap-0.5 bg-app-bg rounded-lg p-1">
           <button
             onClick={() => setAntwoordmodus(null)}
             title="Automatisch de passende antwoordvorm bepalen op basis van uw vraag"
