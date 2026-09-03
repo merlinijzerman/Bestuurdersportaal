@@ -511,6 +511,12 @@ body {
     box-shadow: var(--shadow-card);
     outline: none;
   }
+  /* De components-laag zet hierboven expliciet `display: flex`. Zonder deze
+     specifiekere regel wint dat van de globale `[hidden]`-reset en blijft een
+     gesloten paneel als 400px-kolom zichtbaar. */
+  .assistent-paneel[hidden] {
+    display: none;
+  }
   .assistent-paneel[data-stand="paneel"] {
     --assistent-paneel-breedte: 400px;
   }
