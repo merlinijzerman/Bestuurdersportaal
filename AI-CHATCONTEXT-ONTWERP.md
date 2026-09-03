@@ -1,5 +1,8 @@
 # AI-chatcontext — contextvaste vervolgvragen (plateau 1)
 
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
+
+
 > Ontwerp-laag ("wat en waarom"). Bron van waarheid is de code: `core/lib/vraag-context.ts`,
 > `app/api/chat/route.ts`, `core/lib/audit-meta.ts`. Zie ook `decisions/0200`.
 
