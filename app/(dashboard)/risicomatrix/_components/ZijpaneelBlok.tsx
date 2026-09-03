@@ -34,7 +34,7 @@ export default function ZijpaneelBlok({
   const [open, setOpen] = useState(standaardOpen);
 
   return (
-    <div className="rounded-xl border border-line bg-app-surface">
+    <div className="portal-card overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

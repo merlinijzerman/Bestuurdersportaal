@@ -346,8 +346,8 @@ export default function AgendapuntKaart({
   return (
     <div
       id={`agendapunt-${punt.id}`}
-      className={`bg-white border rounded-xl ${
-        isVerwijderd ? "border-err/30 bg-err-tint" : "border-line"
+      className={`bg-app-surface ${
+        isVerwijderd ? "bg-err-tint" : ""
       }`}
     >
       {/* Hele kop klikbaar om uit/in te klappen (niet alleen het pijltje). De
@@ -359,10 +359,12 @@ export default function AgendapuntKaart({
         }`}
         onClick={isVerwijderd ? undefined : () => setOpen((o) => !o)}
       >
-        <span className="text-xs text-muted tabular-nums w-5 pt-1">{nummer}.</span>
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-app-line-strong bg-app-zebra font-serif text-sm font-semibold tabular-nums text-accent-ink">
+          {nummer}
+        </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${badge.bg} ${badge.text}`}>
+            <span className={`portal-status-pill ${badge.bg} ${badge.text}`}>
               {badge.label}
             </span>
             <span
@@ -503,7 +505,7 @@ export default function AgendapuntKaart({
       )}
 
       {open && !isVerwijderd && (
-        <div className="px-4 pb-4 pl-12 space-y-4 border-t border-line pt-4">
+        <div className="px-4 pb-4 pl-[4.25rem] space-y-4 border-t border-line pt-4">
           {punt.beschrijving && (
             <p className="text-sm text-ink leading-relaxed">{punt.beschrijving}</p>
           )}

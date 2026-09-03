@@ -331,6 +331,101 @@ body {
     letter-spacing: -0.012em;
     font-weight: 500;
   }
+  /* Gedeelde modulegrammatica. Deze classes leggen alleen presentatie vast:
+     routes, handelingen en informatiedichtheid blijven eigendom van de module. */
+  .portal-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0.9rem 1.125rem;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--app-surface), var(--app-zebra));
+  }
+  .portal-card-overline {
+    color: var(--muted);
+    font-size: 0.65625rem;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .portal-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--app-surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+  }
+  .portal-row {
+    position: relative;
+    padding: 0.9rem 1.125rem;
+    background: var(--app-surface);
+  }
+  .portal-row-interactive {
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+  }
+  .portal-row-interactive:hover {
+    background: var(--app-zebra);
+    box-shadow: inset 3px 0 0 var(--phase);
+  }
+  .portal-empty {
+    padding: 2rem 1.25rem;
+    border: 1px dashed var(--app-line-strong);
+    border-radius: 12px;
+    color: var(--muted);
+    background: rgb(var(--app-surface-rgb) / 0.72);
+    text-align: center;
+    font-size: 0.8125rem;
+  }
+  .portal-status-pill {
+    display: inline-flex;
+    min-height: 1.5rem;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.6875rem;
+    line-height: 1.15;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .portal-date-tile {
+    display: inline-flex;
+    width: 2.875rem;
+    height: 2.875rem;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--app-line-strong);
+    border-radius: 10px;
+    color: var(--accent-ink);
+    background: var(--accent-tint);
+  }
+  .portal-ai-action {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--app-line-control);
+    border-radius: 9px;
+    color: var(--ai);
+    background: var(--ai-tint);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    transition: filter 160ms ease, box-shadow 160ms ease;
+  }
+  .portal-ai-action:hover {
+    filter: brightness(0.97);
+    box-shadow: 0 3px 10px rgb(var(--ai-rgb) / 0.12);
+  }
   .portal-hero {
     position: relative;
     overflow: hidden;

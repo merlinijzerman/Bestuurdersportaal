@@ -77,7 +77,7 @@ export default function FaseWeergave({
   }
 
   return (
-    <div className="bg-white border border-line rounded-xl p-4 text-[13px]">
+    <div className="portal-card p-4 text-[13px]">
       <div className="flex items-center gap-2">
         <span className="text-[11px] uppercase tracking-wide text-muted font-semibold">
           Fase {faseCode}
