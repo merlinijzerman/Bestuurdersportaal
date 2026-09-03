@@ -116,7 +116,12 @@ inhoudszegel-koppeling gaan één-op-één mee, en `CHAT_PAYLOAD_VELDEN` maakt h
 **Datamodel/migraties.** Geen.
 
 **Testdekking.** **+54** sanity-tests — payloadcontract 13, streamreducer 15, URL-ingang 19,
-contextlaag 7 — **plus zes** componenttests op de SSE-verwerking, dus zestig in totaal.
+contextlaag 7 — **plus zes** componenttests op de SSE-verwerking en één echte
+Chromiumflow op de client-side deeplinks. Die e2e-flow loopt via de fail-closed lokale
+doelomgevinggrendel, seedt alleen synthetische contextobjecten en bewijst `?doc=`,
+`?agendapunt=`, `?proces=`, `?risicomatrix=1`, `?intent=`/`?herkomst=` én de originele
+`doc → agendapunt`-samenvoegvolgorde. De volledige suite is 19/19 groen tegen een production
+build en een ephemere Supabase (baseline + 69 post-baseline-migraties).
 `core/lib/ai-begroeting-copy.sanity.ts` is bijgesteld omdat de begroeting naar de
 gesprekslaag verhuisde en de badge-tooltip in de presentatielaag bleef; de check leest nu
 beide bestanden en is niet verzwakt. `npm test` blijft exit 0 met
@@ -142,9 +147,11 @@ dezelfde tellingen als de baseline op `origin/preview`.
 **Eén regressie, in dit werk ontstaan en hersteld.** Bij het verhuizen van de gesprekslaag
 hernoemde een zoek-en-vervang de closure-variabele `herkomst` óók binnen de stringliteral
 `params.get("herkomst")`. Elke `/ai?intent=fonds&herkomst=<module>` viel daardoor stil terug
-op `"portaal"`. Niets ving dat: `tsc` niet (het blijft een geldige string), de componenttests
-niet, en een rooktest evenmin — de URL-afhandeling draait client-side, en **geen enkele knop
-in het portaal zet die parameter**. Dat laatste is nu apart geregistreerd. De les is niet
+op `"portaal"`. Niets ving dat tijdens de eerste implementatie: `tsc` niet (het blijft een
+geldige string), de componenttests niet, en de toenmalige rooktests evenmin — de
+URL-afhandeling draait client-side, en **geen enkele knop in het portaal zet die parameter**.
+Dat laatste is nu apart geregistreerd. De nieuwe Chromiumflow roept de URL wel rechtstreeks
+aan en controleert de zichtbare herkomstchip. De les is niet
 "beter opletten" maar dat een deeplink een pure functie hoort te zijn die je kunt uitrekenen;
 `assistent-url-ingang.sanity.ts` doet dat.
 

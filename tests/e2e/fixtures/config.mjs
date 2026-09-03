@@ -60,6 +60,25 @@ export const E2E_AI_BRONNEN = Object.freeze({
   }),
 });
 
+export const E2E_ASSISTENT_CONTEXT = Object.freeze({
+  procedure: Object.freeze({
+    id: "00000000-0000-4000-8000-00000000e501",
+    titel: "WP4 synthetisch contextproces",
+  }),
+  vergadering: Object.freeze({
+    id: "00000000-0000-4000-8000-00000000e502",
+    titel: "WP4 synthetische contextvergadering",
+  }),
+  agendapunt: Object.freeze({
+    id: "00000000-0000-4000-8000-00000000e503",
+    titel: "WP4 synthetisch contextagendapunt",
+  }),
+  risico: Object.freeze({
+    id: "00000000-0000-4000-8000-00000000e504",
+    titel: "WP4 synthetisch context-risico",
+  }),
+});
+
 export function e2eEmail(fondsSleutel, rol) {
   return `wp3-${fondsSleutel}-${rol}@e2e.invalid`;
 }

@@ -119,9 +119,11 @@ Alle zeven bestanden zijn in P1a onaangeraakt, dus deze nummers gelden ook op HE
   contracttest faalt als een surface een veld laat vallen. Dat is het punt.
 - **De reflectiestatus komt uitsluitend uit het `done`-event** (FR-67, besluit
   0110). De client leidt hem nooit af uit wat hij verstuurde.
-- **De URL-afhandeling is client-side** en dus niet via HTTP te roken. Wijzig je
-  een deeplink, breid dan `assistent-url-ingang.sanity.ts` uit — daar zit de enige
-  dekking.
+- **De URL-afhandeling is client-side** en dus niet via een kale HTTP-rooktest te
+  bewijzen. Wijzig je een deeplink, breid dan zowel
+  `assistent-url-ingang.sanity.ts` (pure parse/resolver) als
+  `tests/e2e/specs/assistent-context-deeplinks.spec.ts` (echte React/Supabase-route)
+  uit.
 - **`contextChipLabels()` heeft nog geen consument.** De chip wordt in P1b gebouwd;
   de functie legt op de letter vast hoe de chips vandaag luiden. Let op wat zij
   blootlegt: bij een module-scope náást een documentscope toont `/ai` vandaag **twee**
