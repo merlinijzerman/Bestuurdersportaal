@@ -17,17 +17,11 @@ import {
   AntwoordKopieerKnop,
   Documentenlijst,
   leesAntwoordmodus,
-  type Bron,
 } from "./AntwoordWeergave";
 import { isDocumentbron } from "@/core/lib/documentlijst";
-import {
-  pasVoortgangToe,
-  VoortgangWeergave,
-  type VoortgangUI,
-} from "./Voortgang";
+import { VoortgangWeergave, type VoortgangUI } from "./Voortgang";
 import Startpunt from "./Startpunt";
 import VergelijkResultaatWeergave from "./VergelijkResultaatWeergave";
-import type { VergelijkResultaat } from "@/core/lib/vergelijk-types";
 import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
 import StukVoorbereiden from "./StukVoorbereiden";
 import { rolHeeftCapability } from "@/core/lib/capabilities-map";
@@ -58,6 +52,12 @@ import { GENERIEKE_STARTVRAGEN, type Startvraag } from "@/core/lib/startvragen";
 import { bouwDoorgrondZin, type DoorgrondSectieId } from "@/core/lib/doorgrond";
 import { maakIdempotentVerzoek } from "@/core/lib/idempotency-key";
 import { bouwChatPayload } from "@/core/lib/assistent-payload";
+import {
+  leegeStreamStand,
+  leesStreamRegel,
+  pasStreamEventToe,
+  splitsStreamBuffer,
+} from "@/core/lib/assistent-stream";
 // P1a — de gespreks- en contexttypen wonen sinds de laagsplitsing in `core/`,
 // zodat de payload-bouwer en de gesprekshook ze kunnen gebruiken zonder uit
 // `app/` te importeren (boundary T9). Ongewijzigd verhuisd uit dit bestand.
@@ -1129,369 +1129,45 @@ export default function AssistentClient({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let aiToegevoegd = false;
-      // Is de generatie NETJES afgerond ('done' ontvangen)? Alleen dan mag er
-      // gekopieerd worden (besluit 0098 §4). `!laden` is daarvoor niet genoeg:
-      // bij een verbindingsfout zet het finally-blok `laden` ook op false, en
-      // dan zou een half gestreamd antwoord een kopieerknop krijgen met een
-      // volledige herkomstregel eronder.
-      let voltooid = false;
-      let volledig = "";
-      let bronnenData: Bron[] | undefined;
-      let modusData: Modus = "combineren";
-      // Increment I-2 — bij een twijfelgeval stuurt de server één verduidelijkings-
-      // event i.p.v. een antwoord; dan slaan we het 'done'-overschrijven over.
-      let verduidelijkingActief = false;
-      // Increment I-1 — rustige weergave: per-antwoord controle-informatie en
-      // conditionele inline-meldingen (FO §11c).
-      let onderbouwingData: OnderbouwingMeta | undefined;
-      let inlineMeldingenData: InlineMelding[] | undefined;
-      // 30-07-2026 — verbredings-aanbod (niet-vastgestelde stukken meenemen).
-      let verbredingData: Bericht["verbreding"] | undefined;
-      // Besluit 0137 — niet-blokkerend bronkeuze-aanbod (chips ónder het antwoord).
-      let bronkeuzeAanbodData: Bericht["bronkeuzeAanbod"] | undefined;
-      let volledigeAnalyseAanbodData: Bericht["volledigeAnalyseAanbod"] | undefined;
-      // Plateau B — het id van de auditregel van dit antwoord (uit 'done').
-      let logIdData: string | undefined;
-      // Besluit 0092 — de verduidelijkingsbeurt als bewaarbaar bericht. Zonder dit
-      // bleef een vraag die in de terugvraag eindigde nergens staan: `bewaarGesprek`
-      // liep alleen bij gestreamde antwoordtekst, en de server sloeg de logregel over.
-      let verduidelijkingBericht: Bericht | undefined;
-
-      // Werkt het laatste (AI-)bericht bij, of voegt het toe als het nog niet
-      // bestaat. Bronnen worden meegegeven zodra die binnen zijn.
-      const schrijfAi = () => {
-        setBerichten((prev) => {
-          if (!aiToegevoegd) return prev; // veiligheid
-          const kopie = [...prev];
-          kopie[kopie.length - 1] = {
-            rol: "ai",
-            tekst: volledig,
-            bronnen: bronnenData,
-            modus: modusData,
-            onderbouwing: onderbouwingData,
-            inlineMeldingen: inlineMeldingenData,
-            verbreding: verbredingData,
-            bronkeuzeAanbod: bronkeuzeAanbodData,
-            volledigeAnalyseAanbod: volledigeAnalyseAanbodData,
-            voltooid,
-            logId: logIdData,
-          };
-          return kopie;
-        });
-      };
+      // ── P1a — de stroomverwerking is een PURE reducer ────────────────────
+      // `core/lib/assistent-stream.ts` bepaalt de nieuwe stand én zegt wat er
+      // met de berichtenlijst moet gebeuren; hier blijft alleen het lezen van
+      // de stroom en het toepassen daarvan op de React-staat. Reden: dit was
+      // het enige pad van de assistent dat je niet kon verifiëren zonder te
+      // klikken — dertien mutabele lokalen verweven met setState. Nu ligt elk
+      // gedragsdetail vast in `assistent-stream.sanity.ts` en in
+      // `tests/component/AssistentStream.component.test.tsx`.
+      let stand = leegeStreamStand();
 
       const verwerkEvent = (raw: string) => {
-        const regel = raw.replace(/^data: ?/, "").trim();
-        if (!regel) return;
-        let evt: {
-          type: string;
-          text?: string;
-          bronnen?: Bron[];
-          modus?: Modus;
-          error?: string;
-          fase?: string;
-          status?: string;
-          label?: string;
-          uitkomst?: string;
-          batch?: number;
-          totaal?: number;
-          antwoordmodus?: string;
-          antwoordmodus_label?: string;
-          peildatum?: string | null;
-          bronbasis?: string | null;
-          retrieval_modus?: string | null;
-          // Besluit 0139 (M-R4) — de zoekvraag waarop daadwerkelijk is gezocht en
-          // of die is herschreven (voor het onderbouwingspaneel).
-          zoekvraag?: string | null;
-          gereformuleerd?: boolean;
-          inline_meldingen?: InlineMelding[];
-          // Increment I-2 — verduidelijkingsevent (vraag + chips).
-          vraag?: string;
-          opties?: { intent: "fonds" | "algemeen"; label: string }[];
-          // Increment I-2 — automatische bronkeuze (meta-event).
-          bron_intent?: "fonds" | "algemeen" | "gecombineerd" | null;
-          bron_vertrouwen?: "zeker" | "onzeker" | null;
-          bron_modus_auto?: "documenten" | "combineren" | "algemeen" | null;
-          alleen_fondsdocumenten?: boolean;
-          bron_intent_override?: boolean;
-          // Contextbesef (besluit 0090) — of de portaalstand is meegewogen.
-          portaalstand_gebruikt?: boolean;
-          // Besluit 0151 — de actieve module-scope (proces/risicomatrix/risico) voor
-          // het onderbouwingspaneel, onderscheiden van documentbronnen.
-          module_scope?: {
-            soort: "proces" | "risicomatrix" | "risico";
-            procedure_id?: string;
-            risico_id?: string;
-            bron_ids?: string[];
-          } | null;
-          // 30-07-2026 — de actualiteitsfilter nam alle treffers weg terwijl er wél
-          // niet-vastgestelde fondsstukken zijn: aanbod om ze mee te nemen.
-          verbreding?: {
-            type: "niet_vastgesteld";
-            aantal: number;
-            titels: string[];
-            label: string;
-          } | null;
-          // Besluit 0137 (antwoord-eerst) — niet-blokkerend bronkeuze-aanbod: de
-          // twee keuzes als chips ónder het fondsgerichte antwoord. null = n.v.t.
-          bronkeuze_aanbod?: {
-            opties: { intent: "fonds" | "algemeen"; label: string }[];
-          } | null;
-          // Increment I-3 — uniforme bronvermelding-transparantie.
-          web_retrieval_actief?: boolean;
-          model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
-          // Scenario A (besluit 0072) — geverifieerde webbronnen (done-event).
-          web_bronnen?: {
-            url: string;
-            titel: string;
-            domein: string;
-            datum?: string | null;
-            normgewicht?: string | null;
-            ophaaldatum?: string | null;
-          }[];
-          // Increment F (FO §14) — profielsturing-status (paneel "Onderbouwing en bronnen").
-          profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
-          // OP-4 (FO §8) — organisatieprofiel-status + geïnjecteerde veldgroepen
-          // voor het paneel "Onderbouwing en bronnen".
-          organisatieprofiel?: "actief" | "geen-profiel" | null;
-          organisatieprofiel_aspecten?: {
-            organisatietype: boolean;
-            uitvoerende_partijen: boolean;
-            omvang: boolean;
-            kernfeiten: boolean;
-            missie: boolean;
-            visie: boolean;
-            strategische_speerpunten: boolean;
-            risicohouding: boolean;
-            peildatum: string | null;
-          } | null;
-          // B1 / scope-split — documentgericht (meta) + vervolgvragen (done).
-          document_gericht?: boolean;
-          vervolgvragen?: string[];
-          documentdekking?: OnderbouwingMeta["documentdekking"];
-          vraagrouter?: OnderbouwingMeta["vraagrouter"];
-          volledige_analyse_aanbod?: VolledigeAnalyseAanbod | null;
-          // Plateau B — het id van de auditregel van deze beurt, en de
-          // server-controlled reflectiestatus. Beide komen in het 'done'-event.
-          log_id?: string | null;
-          reflectie?: { status?: string; beurt?: number; heeft_bronset?: boolean };
-          // T5 — vergelijkmodus-events.
-          resultaat?: VergelijkResultaat;
-          bronHint?: string | null;
-          doelHint?: string | null;
-          bronKandidaten?: { id: string; titel: string }[];
-          doelKandidaten?: { id: string; titel: string }[];
-        };
-        try {
-          evt = JSON.parse(regel);
-        } catch {
-          return;
+        const evt = leesStreamRegel(raw);
+        if (!evt) return;
+        const vorige = stand;
+        const { stand: nu, uitwerking } = pasStreamEventToe(vorige, evt, tekst);
+        stand = nu;
+
+        // Alleen zetten wat écht wijzigde, zodat de volgorde en het aantal
+        // renders gelijk blijven aan de oude implementatie.
+        if (nu.voortgang !== vorige.voortgang) setVoortgang(nu.voortgang);
+        if (nu.antwoordGestart && !vorige.antwoordGestart) setAntwoordGestart(true);
+
+        // De flowstatus komt van de SERVER en nergens anders: de client leidt
+        // hem niet af uit wat hij zojuist verstuurde (FR-67, besluit 0110).
+        // Loopt er een reflectie, dan is de uitnodiging niet aan de orde.
+        if (nu.reflectie && nu.reflectie !== vorige.reflectie) {
+          setReflectieStatus(nu.reflectie.status);
+          if (typeof nu.reflectie.beurt === "number") setReflectieBeurt(nu.reflectie.beurt);
+          if (nu.reflectie.status !== "niet_actief") setUitnodigingZichtbaar(false);
         }
 
-        if (evt.type === "verduidelijking") {
-          // Twijfelgeval: toon de verduidelijkingsvraag met twee chips, géén
-          // antwoord. aiToegevoegd voorkomt dat het vangnet "geen antwoord" slaat;
-          // verduidelijkingActief voorkomt dat 'done' de bubbel overschrijft.
-          verduidelijkingActief = true;
-          aiToegevoegd = true;
-          setVoortgang(null);
-          verduidelijkingBericht = {
-            rol: "ai",
-            tekst:
-              evt.vraag ||
-              "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?",
-            verduidelijking: {
-              vraag: evt.vraag || "",
-              opties: evt.opties ?? [],
-              origineleVraag: tekst,
-            },
-          };
-          setBerichten((prev) => [...prev, verduidelijkingBericht!]);
-        } else if (evt.type === "vergelijking") {
-          // T5 — vergelijkresultaat: geen antwoordbubbel maar de side-by-side
-          // component. Hergebruikt het verduidelijking-spoor (geen 'done'-
-          // overschrijving + dezelfde persistentie van de beurt).
-          verduidelijkingActief = true;
-          aiToegevoegd = true;
-          setVoortgang(null);
-          if (evt.resultaat) {
-            verduidelijkingBericht = {
-              rol: "ai",
-              tekst: "Vergelijking",
-              vergelijking: evt.resultaat,
-              voltooid: true,
-            };
-            setBerichten((prev) => [...prev, verduidelijkingBericht!]);
-          }
-        } else if (evt.type === "vergelijking_verduidelijking") {
-          // T5 — twee mogelijke doelbronnen: een gerichte verduidelijking i.p.v. gokken.
-          verduidelijkingActief = true;
-          aiToegevoegd = true;
-          setVoortgang(null);
-          verduidelijkingBericht = {
-            rol: "ai",
-            tekst: "Welke documenten wilt u vergelijken?",
-            vergelijkingVerduidelijking: {
-              bronHint: evt.bronHint ?? null,
-              doelHint: evt.doelHint ?? null,
-              bronKandidaten: evt.bronKandidaten ?? [],
-              doelKandidaten: evt.doelKandidaten ?? [],
-            },
-          };
-          setBerichten((prev) => [...prev, verduidelijkingBericht!]);
-        } else if (evt.type === "meta") {
-          bronnenData = evt.bronnen;
-          modusData = evt.modus || "combineren";
-          // Increment I-1 — controle-informatie naar het paneel "Onderbouwing en
-          // bronnen" (per antwoord, standaard ingeklapt) i.p.v. een globale balk.
-          const aantal = evt.bronnen?.length ?? 0;
-          onderbouwingData = {
-            bronbasis: evt.bronbasis ?? null,
-            antwoordmodusLabel: evt.antwoordmodus_label ?? evt.antwoordmodus ?? null,
-            antwoordmodus: evt.antwoordmodus ?? null,
-            retrievalModus: evt.retrieval_modus ?? null,
-            // Besluit 0139 (M-R4) — gebruikte zoekvraag; alleen getoond bij reformulatie.
-            zoekvraag: evt.zoekvraag ?? null,
-            gereformuleerd: evt.gereformuleerd ?? false,
-            peildatum: evt.peildatum ?? null,
-            algemeneKennis: evt.bronbasis
-              ? /algemene kennis/i.test(evt.bronbasis)
-              : undefined,
-            aantalBronnen: aantal,
-            // Increment I-2 — automatische bronkeuze (alleen in het controlevlak).
-            bronIntent: evt.bron_intent ?? null,
-            bronVertrouwen: evt.bron_vertrouwen ?? null,
-            alleenFondsdocumenten: evt.alleen_fondsdocumenten ?? null,
-            bronIntentOverride: evt.bron_intent_override ?? null,
-            // Contextbesef (besluit 0090) — portaalstand als aparte aanduiding.
-            portaalstandGebruikt: evt.portaalstand_gebruikt ?? null,
-            // Besluit 0151 — de gebruikte module-scope, apart van documentbronnen.
-            moduleScope: evt.module_scope
-              ? {
-                  soort: evt.module_scope.soort,
-                  bronnen: evt.module_scope.bron_ids?.length ?? 0,
-                }
-              : null,
-            // Increment I-3 — web-retrieval is (nog) niet actief (Scenario B); de
-            // model_knowledge-bronnen volgen in het 'done'-event (content-afhankelijk).
-            webRetrievalActief: evt.web_retrieval_actief ?? false,
-            modelKennis: [],
-            // Increment F (FO §14) — transparantie profielsturing in het controlevlak.
-            profielsturing: evt.profielsturing ?? null,
-            // OP-4 (FO §8) — organisatieprofiel in het controlevlak (status + veldgroepen).
-            organisatieprofiel: evt.organisatieprofiel ?? null,
-            organisatieprofielAspecten: evt.organisatieprofiel_aspecten ?? null,
-            // B1 / scope-split — documentgericht bepaalt in de render welke
-            // vervolgacties (duiding/kritische vragen) blijven staan.
-            documentGericht: evt.document_gericht ?? null,
-            vervolgvragen: [],
-            documentdekking: evt.documentdekking ?? null,
-            vraagrouter: evt.vraagrouter ?? null,
-          };
-          // Deterministische inline-meldingen (pre-stream); de #4-melding kan in
-          // het 'done'-event nog worden aangevuld.
-          inlineMeldingenData = evt.inline_meldingen ?? [];
-          // 30-07-2026 — nam de actualiteitsfilter alle treffers weg? Dan biedt de
-          // server één verbredings-chip aan; de vraag bewaren we mee zodat de chip
-          // exact dezelfde vraag opnieuw kan stellen.
-          verbredingData = evt.verbreding
-            ? { ...evt.verbreding, vraag: tekst }
-            : undefined;
-          // Besluit 0137 — bood de server (bij modus antwoord_eerst) een
-          // niet-blokkerend bronkeuze-aanbod aan? De originele vraag bewaren we mee
-          // zodat een chipklik dezelfde vraag letterlijk hergenereert.
-          bronkeuzeAanbodData = evt.bronkeuze_aanbod
-            ? { opties: evt.bronkeuze_aanbod.opties, origineleVraag: tekst }
-            : undefined;
-        } else if (evt.type === "progress") {
-          // Voortgang per bereikte serverfase (besluit 0087) — gedeelde reducer.
-          setVoortgang((v) => pasVoortgangToe(v, evt));
-        } else if (evt.type === "delta") {
-          volledig += evt.text || "";
-          if (!aiToegevoegd) {
-            aiToegevoegd = true;
-            setVoortgang(null); // analyse klaar, antwoord begint
-            setAntwoordGestart(true);
-            setBerichten((prev) => [
-              ...prev,
-              {
-                rol: "ai",
-                tekst: volledig,
-                bronnen: bronnenData,
-                modus: modusData,
-                onderbouwing: onderbouwingData,
-                inlineMeldingen: inlineMeldingenData,
-                verbreding: verbredingData,
-                bronkeuzeAanbod: bronkeuzeAanbodData,
-                volledigeAnalyseAanbod: volledigeAnalyseAanbodData,
-              },
-            ]);
-          } else {
-            schrijfAi();
-          }
-        } else if (evt.type === "done") {
-          // Bij een verduidelijking is er geen antwoordbubbel om bij te werken.
-          if (verduidelijkingActief) return;
-          // Vanaf hier is de generatie netjes afgerond; pas nu mag er gekopieerd.
-          voltooid = true;
-          // Definitieve (content-afhankelijke) inline-meldingen, incl. #4.
-          if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
-          // Increment I-3 — de afgeleide model_knowledge-bronnen (algemene kennis
-          // met genoemde instantie) komen in het 'done'-event en horen in het paneel.
-          if (evt.model_kennis && onderbouwingData) {
-            onderbouwingData = { ...onderbouwingData, modelKennis: evt.model_kennis };
-          }
-          // Scenario A (besluit 0072) — de geverifieerde webbronnen + vlag komen in
-          // het 'done'-event (content-afhankelijk) en horen in het paneel.
-          if (onderbouwingData) {
-            onderbouwingData = {
-              ...onderbouwingData,
-              webRetrievalActief: evt.web_retrieval_actief ?? onderbouwingData.webRetrievalActief ?? false,
-              webBronnen: evt.web_bronnen ?? onderbouwingData.webBronnen ?? [],
-            };
-          }
-          // B1 — inhoudelijke vervolgvragen (kunnen leeg zijn) naar het bericht.
-          if (onderbouwingData) {
-            onderbouwingData = {
-              ...onderbouwingData,
-              vervolgvragen: evt.vervolgvragen ?? [],
-              documentdekking:
-                evt.documentdekking ?? onderbouwingData.documentdekking ?? null,
-              vraagrouter: evt.vraagrouter ?? onderbouwingData.vraagrouter ?? null,
-            };
-          }
-          volledigeAnalyseAanbodData =
-            evt.volledige_analyse_aanbod ?? undefined;
-          // 30-07-2026 — definitieve verbredings-aanbieding (kan in 'done' pas
-          // definitief zijn; blijft anders staan zoals in 'meta' gezet).
-          if (evt.verbreding !== undefined) {
-            verbredingData = evt.verbreding
-              ? { ...evt.verbreding, vraag: tekst }
-              : undefined;
-          }
-          // ── Plateau B ────────────────────────────────────────────────────
-          // Het id van de auditregel, zodat een latere reflectie op dít antwoord
-          // de juiste bronset kan bevriezen.
-          if (typeof evt.log_id === "string") logIdData = evt.log_id;
-          // De server-controlled flowstatus. Hij komt hiervandaan en nergens
-          // anders: de client leidt hem niet af uit wat hij zojuist verstuurde.
-          if (evt.reflectie?.status) {
-            const nieuweStatus = evt.reflectie.status as ReflectieStatus;
-            setReflectieStatus(nieuweStatus);
-            if (typeof evt.reflectie.beurt === "number") setReflectieBeurt(evt.reflectie.beurt);
-            // Loopt er een reflectie, dan is de uitnodiging niet aan de orde.
-            if (nieuweStatus !== "niet_actief") setUitnodigingZichtbaar(false);
-          }
-          schrijfAi();
-        } else if (evt.type === "error") {
-          if (!aiToegevoegd) {
-            setBerichten((prev) => [
-              ...prev,
-              { rol: "ai", tekst: evt.error || "Er is een fout opgetreden." },
-            ]);
-            aiToegevoegd = true;
-          }
+        if (uitwerking.soort === "voegToe") {
+          setBerichten((prev) => [...prev, uitwerking.bericht]);
+        } else if (uitwerking.soort === "herschrijf") {
+          setBerichten((prev) => {
+            const kopie = [...prev];
+            kopie[kopie.length - 1] = uitwerking.bericht;
+            return kopie;
+          });
         }
       };
 
@@ -1500,31 +1176,33 @@ export default function AssistentClient({
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const delen = buffer.split("\n\n");
-        buffer = delen.pop() || "";
+        const { delen, rest } = splitsStreamBuffer(buffer);
+        buffer = rest;
         for (const deel of delen) verwerkEvent(deel);
       }
       if (buffer.trim()) verwerkEvent(buffer);
 
       // Vangnet: stream eindigde zonder enige tekst.
-      if (!aiToegevoegd) {
+      if (!stand.aiToegevoegd) {
         setBerichten((prev) => [
           ...prev,
           { rol: "ai", tekst: "Er is geen antwoord ontvangen. Probeer het opnieuw." },
         ]);
-      } else if (volledig.trim()) {
-        // Persisteer het gesprek (Fase B2) na een geslaagd antwoord.
+      } else if (stand.volledig.trim()) {
+        // Persisteer het gesprek (Fase B2) na een geslaagd antwoord. Bewust
+        // NIET alle velden van de bubbel: `verbreding` en `bronkeuzeAanbod`
+        // zijn live-only chips en horen niet in de opgeslagen historie.
         const finale: Bericht[] = [
           ...conversatie,
           {
             rol: "ai",
-            tekst: volledig,
-            bronnen: bronnenData,
-            modus: modusData,
-            onderbouwing: onderbouwingData,
-            inlineMeldingen: inlineMeldingenData,
-            volledigeAnalyseAanbod: volledigeAnalyseAanbodData,
-            logId: logIdData,
+            tekst: stand.volledig,
+            bronnen: stand.bronnen,
+            modus: stand.modus,
+            onderbouwing: stand.onderbouwing,
+            inlineMeldingen: stand.inlineMeldingen,
+            volledigeAnalyseAanbod: stand.volledigeAnalyseAanbod,
+            logId: stand.logId,
           },
         ];
         await bewaarGesprek(finale, scopeVoorOpslag);
@@ -1532,14 +1210,17 @@ export default function AssistentClient({
         // ── Plateau B / B-2 — de proactieve uitnodiging ────────────────────
         // Nadrukkelijk PAS hier: het antwoord is af en bewaard. De uitnodiging
         // onderbreekt niets en blokkeert niets; wie hem negeert mist niets.
-        overweegUitnodiging(onderbouwingData, opties);
-      } else if (verduidelijkingBericht) {
+        overweegUitnodiging(stand.onderbouwing, opties);
+      } else if (stand.verduidelijkingBericht) {
         // Besluit 0092 — ook een TERUGVRAAG is een beurt: bewaren zodat de vraag een
         // refresh overleeft en in de lade "Gesprekken" terugkomt. Klikt de bestuurder
         // daarna op een chip, dan overschrijft die beurt dezelfde gespreksrij
         // (`gesprekId` is dan gezet) met de vraag + het echte antwoord — de
         // verduidelijkingsbubbel verdwijnt dus netjes, geen dubbele beurt.
-        await bewaarGesprek([...conversatie, verduidelijkingBericht], scopeVoorOpslag);
+        await bewaarGesprek(
+          [...conversatie, stand.verduidelijkingBericht],
+          scopeVoorOpslag
+        );
       }
     } catch {
       setBerichten((prev) => [
