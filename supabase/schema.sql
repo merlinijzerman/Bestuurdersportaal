@@ -710,6 +710,13 @@ create table if not exists public.gesprekken (
   gearchiveerd  boolean not null default false,
   -- Actieve documentscope (increment 1): {type, document_ids[], titels[], gezet_op}.
   -- NULL = hele bibliotheek. Zie migratie 2026_06_10_document_scope.sql.
+  --
+  -- T1 (besluit 0204) — SMALLERE BETEKENIS. Een gesprek kan sinds het
+  -- assistentpaneel van context wisselen; deze kolom draagt daarom niet "de
+  -- scope van dit gesprek" maar de scope waarmee het gesprek het LAATST actief
+  -- was. De scope per beurt staat in `berichten` (jsonb) en, gezaghebbend voor
+  -- de audit, in governance_log.retrieval_meta. Het DB-kolomcommentaar
+  -- (`comment on column`) wordt met de migratie van T2 bijgetrokken.
   document_scope jsonb,
   -- Actieve antwoordmodus (Increment G): feitelijk|bronoverzicht|historisch|
   -- duiding|besluitrijpheid|sparring|persoonlijke_voorbereiding. NULL =
