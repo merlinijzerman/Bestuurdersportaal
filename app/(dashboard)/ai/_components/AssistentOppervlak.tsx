@@ -442,7 +442,7 @@ export default function AssistentOppervlak() {
     <div className="assistent-oppervlak flex h-full min-h-0 flex-col">
       {/* Gesprekken-overzicht (drawer) */}
       {historieOpen && (
-        <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
+        <div className="absolute inset-0 z-[60]" role="dialog" aria-modal="true">
           <div
             className="absolute inset-0 bg-black/30"
             onClick={() => setHistorieOpen(false)}
