@@ -43,6 +43,7 @@ export type IcoonSleutel =
   | "sluiten"
   | "geschiedenis"
   | "plus"
+  | "pijl-rechts"
   | "versturen"
   | "prullenbak"
   | "gebruikers"
@@ -180,6 +181,12 @@ const PADEN: Record<IcoonSleutel, ReactNode> = {
     <>
       <path d="M5 12h14" />
       <path d="M12 5v14" />
+    </>
+  ),
+  "pijl-rechts": (
+    <>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
     </>
   ),
   versturen: (

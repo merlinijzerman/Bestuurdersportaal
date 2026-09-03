@@ -110,6 +110,7 @@ const HERKOMST_LABEL: Record<string, string> = {
 export default function AssistentOppervlak() {
   // ── Kijkstaat: alles wat alleen over de WEERGAVE gaat ────────────────────
   const [aanpassenOpen, setAanpassenOpen] = useState(false);
+  const [instellingenOpen, setInstellingenOpen] = useState(false);
   const [historieOpen, setHistorieOpen] = useState(false);
   // Welke onderbouwingspanelen open staan (per bericht-index). Default dicht.
   const [openPanelen, setOpenPanelen] = useState<Set<number>>(new Set());
@@ -141,6 +142,12 @@ export default function AssistentOppervlak() {
   // ── De paneelstaat: stand, openstaande ingang-aanvraag, startpuntgegevens ──
   const paneel = useAssistentPaneel();
   const { startpuntContext } = paneel;
+  const { registreerBediening } = paneel;
+  const paneelBedieningRef = useRef({
+    nieuwGesprek: () => {},
+    nieuwGesprekBeschikbaar: false,
+    openInstellingen: () => {},
+  });
 
   // ── L1: waar kijkt de bestuurder naar? ────────────────────────────────────
   const context = useAssistentContext();
@@ -396,6 +403,32 @@ export default function AssistentOppervlak() {
     };
   }, [aanvraag, pasIngangToe, meldAanvraagVerwerkt]);
 
+  // De knoppen leven visueel in de vaste paneelkop, terwijl hun gedrag bij de
+  // gespreklaag hoort. Registratie houdt die architectuurgrens intact en maakt
+  // de kop gelijk aan het mockup: nieuw gesprek en instellingen bovenin.
+  useEffect(() => {
+    paneelBedieningRef.current = {
+      nieuwGesprek: startNieuwGesprek,
+      nieuwGesprekBeschikbaar: !laden && berichten.length > 1,
+      openInstellingen: () => setInstellingenOpen(true),
+    };
+  }, [startNieuwGesprek, laden, berichten.length]);
+  useEffect(() => {
+    registreerBediening({
+      nieuwGesprek: () => {
+        if (paneelBedieningRef.current.nieuwGesprekBeschikbaar) {
+          paneelBedieningRef.current.nieuwGesprek();
+        }
+      },
+      // De knop mag altijd focusbaar blijven; de actuele callback beslist of
+      // er iets te resetten is. Zo hoeft de schil niet bij ieder bericht opnieuw
+      // geregistreerd te worden.
+      nieuwGesprekBeschikbaar: true,
+      openInstellingen: () => paneelBedieningRef.current.openInstellingen(),
+    });
+    return () => registreerBediening(null);
+  }, [registreerBediening]);
+
   // T1 — de hoogte komt van het PANEEL, niet meer van dit oppervlak. Hier stond
   // `h-[calc(100vh-3.5rem)] md:h-screen`, een compensatie voor de mobiele
   // topbalk van de shell. Het paneel is nu de vaste container (top/bottom in
@@ -482,14 +515,31 @@ export default function AssistentOppervlak() {
         </div>
       )}
 
-      {/* Werkbalk onder de paneelkop: governance, brongebruik als compacte chip
-          mét zichtbare stand (i.p.v. de volzin), antwoordmodus als segmented
-          control, en rechts de gespreksacties.
-          Brongebruik én antwoordmodus blijven volledig afleesbaar (transparantie,
-          besluit 0068/0071); alleen de brongebruik-VOLZIN is een chip-met-stand
-          geworden — de volledige uitleg staat in de tooltip. Dit vervangt de drie
-          losse kopbalken (topbar h-14 + brongebruik + antwoordmodus, ~200px chrome). */}
-      <div className="assistent-werkbalk">
+      {/* De mockup laat de chat direct onder de context beginnen. De verplichte
+          bron-, governance- en modusinformatie blijft beschikbaar, maar woont
+          achter één instellingentoets in de paneelkop in plaats van permanent
+          circa 100px leesruimte op te eisen. */}
+      {instellingenOpen && (
+        <section
+          className="assistent-instellingenpaneel"
+          role="dialog"
+          aria-label="Gespreksinstellingen"
+        >
+          <div className="assistent-instellingenkop">
+            <div>
+              <h3>Gespreksinstellingen</h3>
+              <p>Brongebruik, antwoordvorm en governance</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setInstellingenOpen(false)}
+              aria-label="Gespreksinstellingen sluiten"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-app-bg hover:text-ink"
+            >
+              <Icoon sleutel="sluiten" grootte={16} />
+            </button>
+          </div>
+          <div className="assistent-werkbalk">
         <div className="assistent-werkbalk-instellingen">
           <span
             className="assistent-governance cursor-help"
@@ -625,10 +675,14 @@ export default function AssistentOppervlak() {
         </div>
         </div>
 
-        {/* Gespreksacties — rechts uitgelijnd. */}
+        {/* Gespreksgeschiedenis blijft hier beschikbaar; een nieuw gesprek staat
+            volgens het mockup als plus in de vaste paneelkop. */}
         <div className="assistent-werkbalk-acties">
           <button
-            onClick={() => setHistorieOpen(true)}
+            onClick={() => {
+              setInstellingenOpen(false);
+              setHistorieOpen(true);
+            }}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs text-muted transition-colors hover:border-ai hover:text-ink"
             title="Gespreksgeschiedenis"
           >
@@ -637,17 +691,27 @@ export default function AssistentOppervlak() {
               Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
             </span>
           </button>
-          <button
-            onClick={startNieuwGesprek}
-            disabled={laden || berichten.length <= 1}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs text-muted transition-colors hover:border-ai hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
-            title="Nieuw gesprek"
-          >
-            <Icoon sleutel="plus" grootte={14} />
-            <span className="assistent-actielabel">Nieuw gesprek</span>
-          </button>
         </div>
-      </div>
+
+          <label
+            className="assistent-voorbereidingsstand"
+            title="Aan: stukken die nog niet zijn vastgesteld worden meegenomen en herkenbaar gelabeld."
+          >
+            <input
+              type="checkbox"
+              checked={voorbereidingsstand}
+              onChange={(e) => setVoorbereidingsstand(e.target.checked)}
+              className="accent-accent"
+              disabled={laden}
+            />
+            <span>
+              <strong>Stukken in voorbereiding meenemen</strong>
+              <small>Concepten blijven herkenbaar aan hun statuslabel.</small>
+            </span>
+          </label>
+          </div>
+        </section>
+      )}
 
       {/* Chat — gedeelde kolom: één centrerende wrapper (max-w-[1020px], mockup
           .wrap) omvat zowel de berichten als het startpunt, zodat de bubbels en de
@@ -665,12 +729,26 @@ export default function AssistentOppervlak() {
       <div className="assistent-gesprek relative flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1020px] space-y-5">
         {!toonStartpunt && !scherpstelActief &&
-          berichten.map((b, i) => (
+          berichten
+            .map((b, i) => ({ b, i }))
+            // Zodra een echt gesprek begint verdwijnt de lange welkomsttekst.
+            // Het mockup opent dan direct met de vraag en het antwoord; de
+            // begroeting blijft alleen de lege staat begeleiden.
+            .filter(
+              ({ b, i }) => berichten.length <= 1 || i > 0 || b.rol !== "ai"
+            )
+            .map(({ b, i }) => (
           <div key={i} id={`bericht-${i}`} className={b.rol === "gebruiker" ? "flex justify-end" : "flex"}>
             {/* `min-w-0` op de AI-kolom: een flex-item krimpt standaard niet onder
                 zijn min-content-breedte. Zonder dit duwt een brede bronkaart (of
                 een lange documenttitel) de hele kolom voorbij de 1020px-maat. */}
             <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1 min-w-0"}>
+              {b.rol === "ai" && (
+                <div className="assistent-antwoordrol">
+                  <Icoon sleutel="sprankel" grootte={13} streek={1.9} />
+                  Assistent
+                </div>
+              )}
               {/* Inline-meldingen (FO §11c) — alleen bij de zes uitzonderingen,
                   direct boven het antwoord. */}
               {b.rol === "ai" &&
@@ -686,11 +764,8 @@ export default function AssistentOppervlak() {
               <div
                 className={
                   b.rol === "gebruiker"
-                    ? // De eigen vraag is een rustig blok, geen gekleurd vlak: massief
-                      // violet trok in een lang gesprek meer aandacht dan het antwoord
-                      // eronder. Zebra + hairline houdt de nadruk waar hij hoort.
-                      "bg-app-zebra text-ink border border-app-line px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
-                    : "text-sm leading-relaxed text-ink"
+                    ? "assistent-gebruikersvraag px-4 py-3 text-sm leading-relaxed"
+                    : "assistent-antwoord text-sm leading-relaxed text-ink"
                 }
               >
                 {b.rol === "ai"
@@ -1406,30 +1481,6 @@ export default function AssistentOppervlak() {
           </div>
         )}
 
-        {/* Werkstand "stukken in voorbereiding" — zie de state hierboven. Bewust
-            hier, direct boven het invoerveld: het is een stand die geldt voor de
-            volgende vraag, geen instelling die je in een menu zoekt. */}
-        <div className="mb-2 flex items-center gap-2">
-          <label
-            className="inline-flex items-center gap-1.5 text-xs text-muted cursor-pointer"
-            title="Aan: stukken die nog niet zijn vastgesteld (concepten, vergaderstukken, stukken die ter besluitvorming voorliggen) worden meegenomen in het antwoord. Ze blijven herkenbaar aan hun statuslabel."
-          >
-            <input
-              type="checkbox"
-              checked={voorbereidingsstand}
-              onChange={(e) => setVoorbereidingsstand(e.target.checked)}
-              className="accent-accent"
-              disabled={laden}
-            />
-            Stukken in voorbereiding meenemen
-          </label>
-          {voorbereidingsstand && (
-            <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 rounded-full px-2 py-0.5">
-              concepten worden meegenomen
-            </span>
-          )}
-        </div>
-
         <div className="assistent-composer">
           <textarea
             ref={invoerRef}
@@ -1460,9 +1511,13 @@ export default function AssistentOppervlak() {
             className="assistent-verstuurknop"
             aria-label="Vraag versturen"
           >
-            <Icoon sleutel="versturen" grootte={17} streek={1.8} />
+            <Icoon sleutel="pijl-rechts" grootte={18} streek={2} />
           </button>
         </div>
+        <p className="assistent-disclaimer">
+          AI-hulpmiddel ter voorbereiding — geen bestuurlijk advies. Vraag en
+          bronkeuze worden vastgelegd in de governance log.
+        </p>
       </div>
     </div>
   );
