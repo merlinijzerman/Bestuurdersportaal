@@ -158,6 +158,12 @@
   --ai-tint-rgb: 231 243 242; --ai-tint: rgb(var(--ai-tint-rgb));
   --ai-line-rgb: 191 220 220; --ai-line: rgb(var(--ai-line-rgb));
 
+  /* De assistent heeft een vaste productidentiteit binnen ieder fondsthema.
+     Anders kleuren de kop, vraagballon en verzendactie mee met het fonds en
+     valt de rustige navy/teal-hiërarchie uit het vastgestelde mockup uiteen. */
+  --assistant-chrome-rgb: 15 43 65; --assistant-chrome: rgb(var(--assistant-chrome-rgb));
+  --assistant-action-rgb: 35 78 112; --assistant-action: rgb(var(--assistant-action-rgb));
+
   /* Kaart-elevatie (stuurinformatie-opmaak, T17): subtiele dubbele schaduw —
      ink-getint zodat hij op de lichte achtergrond rustig blijft. */
   --shadow-card: 0 1px 2px rgb(var(--ink-rgb) / 0.04), 0 10px 26px -18px rgb(var(--ink-rgb) / 0.35);
@@ -656,7 +662,7 @@ body {
     color: rgb(var(--nav-text-active-rgb));
     background:
       radial-gradient(circle at 15% -35%, rgb(var(--nav-rail-rgb) / 0.22), transparent 52%),
-      var(--nav);
+      var(--assistant-chrome);
     border-bottom: 1px solid rgb(var(--nav-text-active-rgb) / 0.08);
   }
   .assistent-identiteit {
@@ -791,7 +797,7 @@ body {
   }
   .assistent-gebruikersvraag {
     color: white;
-    background: var(--accent);
+    background: var(--assistant-action);
     border-radius: 14px 14px 4px 14px;
   }
   .assistent-antwoord {
@@ -872,7 +878,7 @@ body {
     justify-content: center;
     border-radius: 10px;
     color: white;
-    background: var(--accent);
+    background: var(--assistant-action);
     transition: transform 150ms ease, opacity 150ms ease;
   }
   .assistent-verstuurknop:hover:not(:disabled) {
