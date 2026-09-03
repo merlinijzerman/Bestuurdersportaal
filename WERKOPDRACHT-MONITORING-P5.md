@@ -145,11 +145,11 @@ Eén pagina achter `platform.observability.read` met stoplichten per signaal en 
 
 ### Handmatige stappen bij oplevering (geen codetaak)
 
-Er is geen migratierunner: migraties worden handmatig in de Supabase SQL-editor geplakt, en deployen loopt via GitHub Desktop (commit → push `main` → Vercel auto-deploy), **niet** via terminal-git. Bij deze tranche betekent dat concreet drie handelingen buiten Claude Code om, in deze volgorde:
+Er is geen migratierunner: migraties worden handmatig in de Supabase SQL-editor geplakt, en deployen loopt via een PR naar `preview` en daarna een promotie naar `main` (client vrij: `gh` of GitHub Desktop — besluit 0207). Bij deze tranche betekent dat concreet drie handelingen buiten Claude Code om, in deze volgorde:
 
 1. De twee migraties in de SQL-editor draaien (**eerst de migratie, dán de code-deploy** — anders breken inserts op een tabel die nog niet bestaat).
 2. De gates A–H in dezelfde editor draaien en de uitkomst controleren.
-3. Deployen via GitHub Desktop.
+3. Deployen: PR naar `preview`, en na een waargenomen preview-deploy de promotie naar `main` met expliciet akkoord (`CLAUDE.md` r. 53, `decisions/0207`).
 
 Claude Code levert de migraties en het gate-commando aan; het uitvoeren is een handeling van de initiatiefnemer. Benoem dit expliciet in de terugkoppeling, zodat het niet als "gedaan" wordt afgevinkt.
 

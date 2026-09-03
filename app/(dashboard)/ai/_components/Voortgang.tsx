@@ -6,70 +6,16 @@
 //  actieve fase als lopende regel; bij brede documentanalyse een batch-teller.
 // ============================================================================
 
-export interface VoortgangKlaarRegel {
-  fase: string;
-  label: string;
-  uitkomst?: string;
-}
-
-export interface VoortgangUI {
-  actieveFase: string | null;
-  actiefLabel: string | null;
-  analyse: { batch: number; totaal: number } | null;
-  klaar: VoortgangKlaarRegel[];
-}
-
-// Een progress-event zoals /api/chat het stuurt (subset; extra velden op het
-// event worden genegeerd).
-export interface VoortgangEvent {
-  fase?: string;
-  status?: string;
-  label?: string;
-  uitkomst?: string;
-  batch?: number;
-  totaal?: number;
-}
-
-// Pure reducer: verwerkt één progress-event tot de nieuwe voortgangsstaat. Zelfde
-// logica die de assistent (/ai) sinds besluit 0087 hanteert, nu gedeeld.
-export function pasVoortgangToe(
-  v: VoortgangUI | null,
-  evt: VoortgangEvent,
-): VoortgangUI | null {
-  const fase = evt.fase;
-  if (!fase) return v; // onbekende progress zonder fase → ongewijzigd
-  if (fase === "analyse") {
-    const batch = typeof evt.batch === "number" ? evt.batch : 0;
-    const totaal = typeof evt.totaal === "number" ? evt.totaal : 0;
-    return {
-      actieveFase: "analyse",
-      actiefLabel: evt.label || "Document wordt geanalyseerd",
-      analyse: { batch, totaal },
-      klaar: v?.klaar ?? [],
-    };
-  }
-  if (evt.status === "klaar") {
-    const klaar = [
-      ...(v?.klaar ?? []),
-      { fase, label: evt.label || fase, uitkomst: evt.uitkomst },
-    ];
-    // De actieve regel wist als deze fase 'm bezette (bv. retrieval).
-    const actiefWeg = v?.actieveFase === fase;
-    return {
-      actieveFase: actiefWeg ? null : v?.actieveFase ?? null,
-      actiefLabel: actiefWeg ? null : v?.actiefLabel ?? null,
-      analyse: v?.analyse ?? null,
-      klaar,
-    };
-  }
-  // status "bezig" (of onbekend) → lopende regel.
-  return {
-    actieveFase: fase,
-    actiefLabel: evt.label || fase,
-    analyse: null,
-    klaar: v?.klaar ?? [],
-  };
-}
+// P1a — de types en de pure reducer wonen sinds de laagsplitsing in
+// `core/lib/voortgang.ts`, naast de fase-labels waar ze bij horen (besluit
+// 0087). Hier ongewijzigd doorgegeven; deze module houdt de wéérgave.
+export {
+  pasVoortgangToe,
+  type VoortgangKlaarRegel,
+  type VoortgangUI,
+  type VoortgangEvent,
+} from "@/core/lib/voortgang";
+import type { VoortgangUI } from "@/core/lib/voortgang";
 
 // Weergave: afgeronde fasen (✓ + uitkomst) + de actieve fase als lopende regel;
 // valt terug op de typ-indicator zolang er nog geen fase-informatie is.

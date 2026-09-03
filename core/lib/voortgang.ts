@@ -109,3 +109,77 @@ export function webUitkomst(aantalToegestaan: number): string {
     aantalToegestaan === 1 ? "bron" : "bronnen"
   } toegestaan`;
 }
+
+// ── UI-staat tijdens het wachten (P1a, besluit 0201) ────────────────────────
+//  Verhuisd uit `app/(dashboard)/ai/_components/Voortgang.tsx`, ONGEWIJZIGD.
+//  Reden: de gesprekslaag (L2) verwerkt de progress-events en woont in `core/`,
+//  dus mag zij niet uit `app/` importeren. De weergavecomponent
+//  (`VoortgangWeergave`) blijft waar hij stond en re-exporteert deze namen, zodat
+//  `AssistentClient` én `AgendapuntChat` hun importregel houden.
+//
+//  React-vrij, net als de rest van deze module: `app/api/chat/route.ts`
+//  importeert hieruit en de serverbundel mag hier niet door veranderen.
+export interface VoortgangKlaarRegel {
+  fase: string;
+  label: string;
+  uitkomst?: string;
+}
+
+export interface VoortgangUI {
+  actieveFase: string | null;
+  actiefLabel: string | null;
+  analyse: { batch: number; totaal: number } | null;
+  klaar: VoortgangKlaarRegel[];
+}
+
+// Een progress-event zoals /api/chat het stuurt (subset; extra velden op het
+// event worden genegeerd).
+export interface VoortgangEvent {
+  fase?: string;
+  status?: string;
+  label?: string;
+  uitkomst?: string;
+  batch?: number;
+  totaal?: number;
+}
+
+// Pure reducer: verwerkt één progress-event tot de nieuwe voortgangsstaat. Zelfde
+// logica die de assistent (/ai) sinds besluit 0087 hanteert, nu gedeeld.
+export function pasVoortgangToe(
+  v: VoortgangUI | null,
+  evt: VoortgangEvent,
+): VoortgangUI | null {
+  const fase = evt.fase;
+  if (!fase) return v; // onbekende progress zonder fase → ongewijzigd
+  if (fase === "analyse") {
+    const batch = typeof evt.batch === "number" ? evt.batch : 0;
+    const totaal = typeof evt.totaal === "number" ? evt.totaal : 0;
+    return {
+      actieveFase: "analyse",
+      actiefLabel: evt.label || "Document wordt geanalyseerd",
+      analyse: { batch, totaal },
+      klaar: v?.klaar ?? [],
+    };
+  }
+  if (evt.status === "klaar") {
+    const klaar = [
+      ...(v?.klaar ?? []),
+      { fase, label: evt.label || fase, uitkomst: evt.uitkomst },
+    ];
+    // De actieve regel wist als deze fase 'm bezette (bv. retrieval).
+    const actiefWeg = v?.actieveFase === fase;
+    return {
+      actieveFase: actiefWeg ? null : v?.actieveFase ?? null,
+      actiefLabel: actiefWeg ? null : v?.actiefLabel ?? null,
+      analyse: v?.analyse ?? null,
+      klaar,
+    };
+  }
+  // status "bezig" (of onbekend) → lopende regel.
+  return {
+    actieveFase: fase,
+    actiefLabel: evt.label || fase,
+    analyse: null,
+    klaar: v?.klaar ?? [],
+  };
+}

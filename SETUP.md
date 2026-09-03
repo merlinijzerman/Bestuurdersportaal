@@ -155,7 +155,7 @@ SUPABASE_SERVICE_ROLE_KEY=<service_role-key uit Supabase> # Project Settings →
 
 **C. Deploy + verifiëren**
 
-- [ ] Code is via GitHub Desktop gepusht → Vercel deployt automatisch.
+- [ ] Code is via een PR naar `preview` gegaan (client vrij: `gh` of GitHub Desktop) → Vercel deployt de Preview-omgeving; promotie naar `main` volgt met expliciet akkoord. Zie `CLAUDE.md` r. 53 en `decisions/0207`.
 - [ ] Lokaal smoke-testen: `npm run dev`, ga naar `http://localhost:3000/contact`, vul het formulier in en verstuur.
 - [ ] Controleer dat er een rij verschijnt in Supabase → tabel `contact_aanvragen` (kolom `notificatie_verzonden` = `true` als de mail lukte).
 - [ ] Controleer dat Merlin **én** Robert de notificatiemail ontvangen (kijk ook in spam).

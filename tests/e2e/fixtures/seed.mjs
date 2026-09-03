@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { bevestigVeiligeE2eDoelomgeving } from "./omgeving.mjs";
 import {
+  E2E_ASSISTENT_CONTEXT,
   E2E_AI_BRONNEN,
   E2E_FONDSEN,
   E2E_PLATFORM_ACCOUNTS,
@@ -66,6 +67,68 @@ async function seedAiBron(admin, fonds, bron, suffix, tekst) {
     { onConflict: "id" },
   );
   if (chunkFout) throw new Error(`E2E AI-chunk(${suffix}): ${chunkFout.message}`);
+}
+
+async function seedAssistentContext(admin, fonds) {
+  const context = E2E_ASSISTENT_CONTEXT;
+  const inserts = [
+    admin.from("procedures").upsert(
+      {
+        id: context.procedure.id,
+        fonds_id: fonds.id,
+        template_code: "wp4_e2e_context",
+        titel: context.procedure.titel,
+        beschrijving: "Uitsluitend synthetische context voor de URL-ingangstest.",
+        status: "lopend",
+      },
+      { onConflict: "id" },
+    ),
+    admin.from("vergaderingen").upsert(
+      {
+        id: context.vergadering.id,
+        fonds_id: fonds.id,
+        titel: context.vergadering.titel,
+        datum: "2026-09-03T09:00:00.000Z",
+        status: "gepland",
+      },
+      { onConflict: "id" },
+    ),
+    admin.from("risicos").upsert(
+      {
+        id: context.risico.id,
+        fonds_id: fonds.id,
+        categorie: "operationeel_datakwaliteit",
+        titel: context.risico.titel,
+        toelichting: "Uitsluitend synthetische context voor de URL-ingangstest.",
+        kans: 2,
+        impact: 3,
+        niveau: "middel",
+        status: "actief",
+      },
+      { onConflict: "id" },
+    ),
+  ];
+  const resultaten = await Promise.all(inserts);
+  for (const [index, resultaat] of resultaten.entries()) {
+    if (resultaat.error) {
+      throw new Error(`E2E assistentcontext(${index}): ${resultaat.error.message}`);
+    }
+  }
+
+  const { error: agendapuntFout } = await admin.from("agendapunten").upsert(
+    {
+      id: context.agendapunt.id,
+      vergadering_id: context.vergadering.id,
+      volgorde: 1,
+      titel: context.agendapunt.titel,
+      beschrijving: "Uitsluitend synthetische context voor de URL-ingangstest.",
+      categorie: "informatie",
+    },
+    { onConflict: "id" },
+  );
+  if (agendapuntFout) {
+    throw new Error(`E2E assistentcontext(agendapunt): ${agendapuntFout.message}`);
+  }
 }
 
 async function vindGebruiker(admin, email) {
@@ -200,6 +263,7 @@ export async function seedE2e(env = process.env) {
     "b-isolatie",
     AI_ZOEKTEKST.isolatie,
   );
+  await seedAssistentContext(admin, E2E_FONDSEN.a);
 
   // Een upload-init telt als echte productieactie in de in-stack rate limiter.
   // Wis uitsluitend tellers van de zojuist begrensde synthetische accounts,

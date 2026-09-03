@@ -235,7 +235,7 @@ Elke wijziging aan tenant-tabellen of policies volgt:
    RLS-/audit-/retrieval-/storage-pad; één rood/groen. Voor de DB-laag: zet `TEST_DATABASE_URL`
    naar een wegwerpbare test-DB (of draai lokaal een `supabase start`). Werk `schema.sql`
    (documentatie) en `HANDOVER.md` bij.
-6. **Deploy** via GitHub Desktop (commit → push `main` → Vercel). Geen terminal-git commits.
+6. **Deploy** via een PR naar `preview` en daarna promotie naar `main`; de releaseweg staat in `CLAUDE.md` r. 53 (besluit 0207: client vrij — `gh` of GitHub Desktop; PR verplicht; promotie naar `main` alleen met expliciet akkoord).
 
 ---
 

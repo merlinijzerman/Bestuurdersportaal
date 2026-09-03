@@ -1123,3 +1123,25 @@ export const VERDUIDELIJKING_OPTIES: Verduidelijkingsoptie[] = [
   { intent: "fonds", label: "Voor mijn fonds" },
   { intent: "algemeen", label: "In algemene zin" },
 ];
+
+// ── Veilige lezing van een opgeslagen/ontvangen antwoordmodus (P1a) ─────────
+//  Verhuisd uit `AntwoordWeergave.tsx`, ONGEWIJZIGD. De oude toelichting
+//  motiveerde waarom hij dáár stond ("vraagtype bevat de detectie en blijft in
+//  deze tranche ongemoeid"); die reden is met de laagsplitsing vervallen. De
+//  gesprekslaag (L2) heeft hem nodig bij het herstellen van een gesprek en bij
+//  de reflectie-uitnodiging, en mag daarvoor niet uit `app/` importeren.
+//  `AntwoordWeergave.tsx` re-exporteert hem, dus alle bestaande imports werken.
+/**
+ * Leest een (mogelijk onbekende) antwoordmodus-waarde terug naar het type of
+ * null. De waarde komt uit het `meta`-event of, na herladen, uit
+ * `gesprekken.berichten` (jsonb) — dus ongecontroleerd.
+ *
+ * Gebouwd op de bestaande constante `ANTWOORDMODI` hierboven, zodat er geen
+ * tweede lijst met modusnamen ontstaat die kan gaan afwijken. Alle surfaces
+ * gebruiken deze ene implementatie.
+ */
+export function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
+  return typeof ruw === "string" && (ANTWOORDMODI as string[]).includes(ruw)
+    ? (ruw as Antwoordmodus)
+    : null;
+}
