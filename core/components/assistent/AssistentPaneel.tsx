@@ -154,14 +154,14 @@ export default function AssistentPaneel({
             <h2 className="truncate font-serif text-[17px] font-medium leading-tight text-white">
               Assistent
             </h2>
-            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-nav-text">
+            <p className="assistent-kopstatus mt-0.5 flex items-center gap-1.5 text-[11px]">
               <span className="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden />
               <span className="truncate">Context · {getoondeContext.label}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-0.5 text-nav-text">
+        <div className="flex shrink-0 items-center gap-0.5">
           <button
             type="button"
             onClick={bediening?.nieuwGesprek}
