@@ -32,13 +32,17 @@ import { useAssistentPaneel, type PaneelStand } from "./AssistentPaneelProvider"
 const KNOP =
   "assistent-kopknop inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors";
 
-/** Het label achter "geopend vanuit" — een slug is geen zin. */
-const MODULE_LABEL: Record<string, string> = {
-  bibliotheek: "de bibliotheek",
-  procedures: "een procesdossier",
-  risicomatrix: "de risicomatrix",
-  vergaderingen: "een agendapunt",
-  home: "het startscherm",
+/** Een generieke opening heeft geen inhoudelijke scope, maar mag wel benoemen
+ * in welke module de bestuurder werkt. Dat is context, geen bronclaim. */
+const MODULE_CONTEXT: Record<string, { label: string; bronbereik: string }> = {
+  bibliotheek: { label: "Fondsbibliotheek", bronbereik: "binnen uw rechten" },
+  procedures: { label: "Processen", bronbereik: "dossier en gekoppelde stukken" },
+  risicomatrix: { label: "Risicomatrix", bronbereik: "risico's en gekoppelde stukken" },
+  vergaderingen: { label: "Vergaderingen", bronbereik: "agenda en gekoppelde stukken" },
+  notulen: { label: "Besluiten & notulen", bronbereik: "binnen uw rechten" },
+  dashboard: { label: "Stuurinformatie", bronbereik: "binnen uw rechten" },
+  klantbeeld: { label: "Klantbeeld", bronbereik: "binnen uw rechten" },
+  home: { label: "Fondsbreed", bronbereik: "binnen uw rechten" },
 };
 
 export default function AssistentPaneel({
@@ -49,8 +53,16 @@ export default function AssistentPaneel({
   navBreedte: string;
   children: ReactNode;
 }) {
-  const { stand, ingangModule, zetStand, sluit, vorigPad, zetVorigPad } =
-    useAssistentPaneel();
+  const {
+    stand,
+    ingangModule,
+    wisIngangModule,
+    bediening,
+    zetStand,
+    sluit,
+    vorigPad,
+    zetVorigPad,
+  } = useAssistentPaneel();
   const context = useAssistentContext();
   const router = useRouter();
   const pad = usePathname();
@@ -108,12 +120,18 @@ export default function AssistentPaneel({
     agendapuntContext: context.agendapuntContext,
     moduleScope: context.moduleScope,
   });
+  const moduleContext = ingangModule ? MODULE_CONTEXT[ingangModule] : null;
+  const getoondeContext =
+    chip.label === "Fondsbreed" && moduleContext
+      ? { ...moduleContext, losTeLaten: ingangModule !== "home" }
+      : chip;
 
   function laatLos() {
     context.zetDocumentScope(null);
     context.zetAgendapuntContext(null);
     context.zetModuleScope(null);
     context.zetRisicoLijst([]);
+    wisIngangModule();
   }
 
   return (
@@ -134,16 +152,36 @@ export default function AssistentPaneel({
           </span>
           <div className="min-w-0">
             <h2 className="truncate font-serif text-[17px] font-medium leading-tight text-white">
-              Bestuurdersportaal-assistent
+              Assistent
             </h2>
             <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-nav-text">
-              <span className="h-1.5 w-1.5 rounded-full bg-white" aria-hidden />
-              Beheerde AI-omgeving actief
+              <span className="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden />
+              <span className="truncate">Context · {getoondeContext.label}</span>
             </p>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5 text-nav-text">
+          <button
+            type="button"
+            onClick={bediening?.nieuwGesprek}
+            disabled={!bediening?.nieuwGesprekBeschikbaar}
+            aria-label="Nieuw gesprek"
+            title="Nieuw gesprek"
+            className={`${KNOP} disabled:cursor-not-allowed disabled:opacity-35`}
+          >
+            <Icoon sleutel="plus" grootte={18} />
+          </button>
+          <button
+            type="button"
+            onClick={bediening?.openInstellingen}
+            disabled={!bediening}
+            aria-label="Gespreksinstellingen"
+            title="Gespreksinstellingen"
+            className={`${KNOP} disabled:opacity-35`}
+          >
+            <Icoon sleutel="tandwiel" grootte={17} />
+          </button>
           {stand === "paneel" && (
             <button
               type="button"
@@ -205,14 +243,15 @@ export default function AssistentPaneel({
       <div className="assistent-contextbalk">
         {/* Assistent-accent (0202): `--ai` op `--ai-tint` haalt 4,95:1, en
             `--ai-line` is de decoratieve rand waar hij voor bedoeld is. */}
-        <span className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-ai-line bg-ai-tint px-2.5 py-1 text-xs font-medium text-ai">
-          <span className="truncate">{chip.label}</span>
-          {chip.losTeLaten && (
+        <span className="assistent-contextchip inline-flex min-w-0 shrink-0 items-center gap-2 border border-ai-line bg-ai-tint px-3 py-1.5 text-xs font-semibold text-ai">
+          <Icoon sleutel="menu" grootte={14} streek={1.9} />
+          <span className="truncate">{getoondeContext.label}</span>
+          {getoondeContext.losTeLaten && (
             <button
               type="button"
               onClick={laatLos}
               title="Laat deze context los en vraag fondsbreed verder"
-              aria-label={`Context loslaten: ${chip.label}`}
+              aria-label={`Context loslaten: ${getoondeContext.label}`}
               className="-mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ai hover:bg-ai/10"
             >
               <Icoon sleutel="sluiten" grootte={12} streek={2} />
@@ -220,13 +259,10 @@ export default function AssistentPaneel({
           )}
         </span>
         <p
-          className="min-w-0 truncate text-[11px] leading-relaxed text-muted"
-          title={chip.bronbereik}
+          className="ml-auto min-w-0 truncate text-[11px] leading-relaxed text-muted"
+          title={getoondeContext.bronbereik}
         >
-          {chip.bronbereik}
-          {ingangModule && MODULE_LABEL[ingangModule]
-            ? ` · geopend vanuit ${MODULE_LABEL[ingangModule]}`
-            : null}
+          {getoondeContext.bronbereik}
         </p>
       </div>
 

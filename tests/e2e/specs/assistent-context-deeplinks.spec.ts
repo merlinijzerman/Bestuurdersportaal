@@ -43,6 +43,10 @@ test.describe("Assistent — client-side context-deeplinks", () => {
     await expect(page.getByRole("button", { name: context.risico.titel })).toBeVisible();
 
     await page.goto(`${FONDS_A}/ai?intent=fonds&herkomst=bibliotheek`);
+    // De mockup-conforme chat begint direct onder de contextbalk. De uitgebreide
+    // bron- en modusinformatie staat daarom achter de instellingentoets in de
+    // paneelkop, maar blijft volledig afleesbaar en bedienbaar.
+    await page.getByRole("button", { name: "Gespreksinstellingen" }).click();
     const herkomstChip = page
       .getByRole("button", { name: "Herkomst wissen en terug naar automatische bronkeuze" })
       .locator("..");
