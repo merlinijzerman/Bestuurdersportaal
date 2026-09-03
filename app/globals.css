@@ -863,13 +863,8 @@ body {
     padding-inline: 0.65rem;
   }
   .assistent-werkbalk-instellingen {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-  }
-  .assistent-werkbalk-instellingen::-webkit-scrollbar {
-    display: none;
+    overflow: visible;
+    flex-wrap: wrap;
   }
   .assistent-werkbalk-instellingen > .assistent-governance,
   .assistent-werkbalk-instellingen > span.text-xs,
@@ -878,6 +873,13 @@ body {
   }
   .assistent-werkbalk-instellingen > span.font-semibold {
     display: none;
+  }
+  .assistent-modi {
+    order: 10;
+    flex: 0 0 100%;
+  }
+  .assistent-modi button {
+    flex: 1 1 0;
   }
   .assistent-actielabel {
     position: absolute;
