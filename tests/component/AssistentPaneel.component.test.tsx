@@ -12,7 +12,7 @@
 //  schil; de aanvraag zelf is het contract dat `openMet` vastlegt.
 // ============================================================================
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DashboardShell from "@/core/components/DashboardShell";
@@ -90,6 +90,18 @@ describe("Assistentpaneel", () => {
     expect(paneel()).not.toBeVisible();
     // Terug naar de knop die het opende — niet naar <body>.
     expect(opener()).toHaveFocus();
+  });
+
+  it("sluit via het kruisje en maakt de ingang opnieuw beschikbaar", async () => {
+    const { user } = monteer();
+    await user.click(opener());
+
+    await user.click(
+      within(paneel()).getByRole("button", { name: "Assistent sluiten" }),
+    );
+
+    expect(paneel()).not.toBeVisible();
+    expect(opener()).toHaveAttribute("aria-expanded", "false");
   });
 
   it("wisselt tussen paneel en vergroot", async () => {
