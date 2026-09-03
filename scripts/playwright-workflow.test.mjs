@@ -21,7 +21,20 @@ test("CI bouwt één app op één ephemere stack en draait de lokale doelgrendel
   assert.match(workflow, /tests\/e2e\/fixtures\/scanner-stub\.mjs/);
   assert.match(workflow, /WP3_E2E_SCANNER:\s*["']local["']/);
   assert.match(workflow, /WP3_E2E_STOP_NA_SCAN:\s*["']true["']/);
+  assert.match(workflow, /tests\/e2e\/fixtures\/ai-provider-stub\.mjs/);
+  assert.match(workflow, /WP4_E2E_AI_PROVIDER:\s*["']local["']/);
+  assert.match(workflow, /WP4_E2E_AI_PROVIDER_URL:\s*["']http:\/\/127\.0\.0\.1:8790["']/);
   assert.doesNotMatch(workflow, /supabase\.co/);
+});
+
+test("lokale AI-providerseam is dubbel gegrendeld en kan niet extern routeren", async () => {
+  const endpoint = await readFile("core/lib/ai-provider-endpoint.mjs", "utf8");
+  const poort = await readFile("core/lib/ai-poort.ts", "utf8");
+  assert.match(endpoint, /SEED_DOELOMGEVING !== ["']local["']/);
+  assert.match(endpoint, /NEXT_PUBLIC_SUPABASE_URL !== LOKALE_SUPABASE_URL/);
+  assert.match(endpoint, /\["127\.0\.0\.1", "localhost"\]/);
+  assert.match(poort, /resolveAnthropicBaseUrl/);
+  assert.doesNotMatch(workflow, /api\.anthropic\.com/);
 });
 
 test("alleen de expliciete lokale seedmodus verruimt CSP voor lokale Supabase", () => {

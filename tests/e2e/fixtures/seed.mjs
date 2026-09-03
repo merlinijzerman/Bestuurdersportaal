@@ -1,12 +1,72 @@
 import { createClient } from "@supabase/supabase-js";
 import { bevestigVeiligeE2eDoelomgeving } from "./omgeving.mjs";
 import {
+  E2E_AI_BRONNEN,
   E2E_FONDSEN,
   E2E_PLATFORM_ACCOUNTS,
   E2E_ROLLEN,
   E2E_WACHTWOORD,
   e2eEmail,
 } from "./config.mjs";
+
+const AI_ZOEKTEKST = Object.freeze({
+  uitvoering:
+    "Synthetische uitvoeringsafspraak controlewaarde voor de bestuurlijke WP4 test. " +
+    "De fictieve werkstroom noemt een eigenaar, een besluitmoment en een herstelpad voor de uitvoering.",
+  controle:
+    "Synthetische uitvoeringsafspraak controlewaarde voor de bestuurlijke WP4 test. " +
+    "Het denkbeeldige controleprotocol beschrijft onafhankelijke review, een vierogencontrole en een auditnotitie.",
+  isolatie:
+    "Synthetische uitvoeringsafspraak controlewaarde voor de bestuurlijke WP4 test. " +
+    "Deze andersoortige tekst hoort uitsluitend bij het tweede fictieve fonds en mag nooit bij fonds A verschijnen.",
+});
+
+async function seedAiBron(admin, fonds, bron, suffix, tekst) {
+  const opslagPad = `${fonds.id}/wp4-synthetische-bron-${suffix}.pdf`;
+  const upload = await admin.storage.from("documenten").upload(
+    opslagPad,
+    new TextEncoder().encode(`%PDF-1.4\n% WP4 synthetische bron ${suffix}\n%%EOF\n`),
+    { contentType: "application/pdf", upsert: true },
+  );
+  if (upload.error) throw new Error(`E2E AI-storage(${suffix}): ${upload.error.message}`);
+  const { error: documentFout } = await admin.from("documenten").upsert(
+    {
+      id: bron.id,
+      fonds_id: fonds.id,
+      bibliotheek: "fonds",
+      bron: "Intern",
+      titel: bron.titel,
+      bestandsnaam: `wp4-synthetische-bron-${suffix}.pdf`,
+      bestandstype: "pdf",
+      opslag_pad: opslagPad,
+      context: "algemeen",
+      documenttype: "beleid",
+      status: "van_kracht",
+      bronstatus: "actief",
+      documentdatum: "2026-01-15",
+      verwerkingsstatus: "beschikbaar",
+      geindexeerd: true,
+      actief: true,
+    },
+    { onConflict: "id" },
+  );
+  if (documentFout) throw new Error(`E2E AI-document(${suffix}): ${documentFout.message}`);
+
+  const { error: chunkFout } = await admin.from("document_chunks").upsert(
+    {
+      id: bron.chunkId,
+      document_id: bron.id,
+      chunk_index: 0,
+      tekst,
+      pagina: 1,
+      structuur_type: "tekst",
+      structuur_label: "WP4 fixture",
+      indexering_versie: "wp4-e2e-v1",
+    },
+    { onConflict: "id" },
+  );
+  if (chunkFout) throw new Error(`E2E AI-chunk(${suffix}): ${chunkFout.message}`);
+}
 
 async function vindGebruiker(admin, email) {
   for (let page = 1; page <= 20; page += 1) {
@@ -107,6 +167,39 @@ export async function seedE2e(env = process.env) {
       };
     }
   }
+
+  // De productiepreflight is fail-closed en de migratie seedt bewust geen
+  // quota. Alleen in deze al gegrendelde lokale E2E-seed zetten we ruime,
+  // synthetische limieten en vaste RAG-bronnen klaar.
+  const { error: quotaFout } = await admin.from("ai_quota_config").upsert(
+    ["gebruiker_maand", "fonds_maand", "globaal_maand", "ocr_fonds_maand"].map(
+      (sleutel) => ({ sleutel, waarde: 10000 }),
+    ),
+    { onConflict: "sleutel" },
+  );
+  if (quotaFout) throw new Error(`E2E AI-quota: ${quotaFout.message}`);
+
+  await seedAiBron(
+    admin,
+    E2E_FONDSEN.a,
+    E2E_AI_BRONNEN.fondsAUitvoering,
+    "a-uitvoering",
+    AI_ZOEKTEKST.uitvoering,
+  );
+  await seedAiBron(
+    admin,
+    E2E_FONDSEN.a,
+    E2E_AI_BRONNEN.fondsAControle,
+    "a-controle",
+    AI_ZOEKTEKST.controle,
+  );
+  await seedAiBron(
+    admin,
+    E2E_FONDSEN.b,
+    E2E_AI_BRONNEN.fondsBIsolatie,
+    "b-isolatie",
+    AI_ZOEKTEKST.isolatie,
+  );
 
   // Een upload-init telt als echte productieactie in de in-stack rate limiter.
   // Wis uitsluitend tellers van de zojuist begrensde synthetische accounts,

@@ -7,24 +7,15 @@
     "fondsen"
   ],
   "uitleg": "Bestaande React/Hooks/Next-bevindingen. De gate blokkeert alleen toenames per bestand en regel.",
-  "totaal": 42,
+  "totaal": 23,
   "perRegel": {
-    "@next/next/no-html-link-for-pages": 6,
-    "react-hooks/error-boundaries": 2,
-    "react-hooks/exhaustive-deps": 1,
     "react-hooks/immutability": 3,
-    "react-hooks/purity": 1,
     "react-hooks/set-state-in-effect": 15,
-    "react-hooks/static-components": 5,
-    "react/jsx-no-target-blank": 4,
-    "react/no-unescaped-entities": 5
+    "react-hooks/static-components": 5
   },
   "bestanden": {
     "app/(dashboard)/ai/_components/AntwoordWeergave.tsx": {
       "react-hooks/set-state-in-effect": 1
-    },
-    "app/(dashboard)/ai/_components/AssistentClient.tsx": {
-      "react-hooks/exhaustive-deps": 1
     },
     "app/(dashboard)/beheer/_components/BeheerClient.tsx": {
       "react-hooks/set-state-in-effect": 3
@@ -41,61 +32,21 @@
     "app/(dashboard)/bibliotheek/page.tsx": {
       "react-hooks/set-state-in-effect": 1
     },
-    "app/(dashboard)/page.tsx": {
-      "react-hooks/purity": 1
-    },
     "app/(dashboard)/procedures/_components/AfschriftenPaneel.tsx": {
       "react-hooks/immutability": 1
-    },
-    "app/(dashboard)/procedures/_components/NieuweProcedureForm.tsx": {
-      "@next/next/no-html-link-for-pages": 1
     },
     "app/(dashboard)/procedures/_components/StapPaneel.tsx": {
       "react-hooks/set-state-in-effect": 3
     },
-    "app/(dashboard)/risicomatrix/_components/NieuwRisicoForm.tsx": {
-      "@next/next/no-html-link-for-pages": 1
-    },
     "app/(dashboard)/vergaderingen/_components/VoorbereidingsBlok.tsx": {
       "react-hooks/set-state-in-effect": 1
-    },
-    "app/(platform)/platform/(beveiligd)/ai-begrenzing/page.tsx": {
-      "react-hooks/error-boundaries": 2
-    },
-    "app/(platform)/platform/(beveiligd)/aqlab/run-samenstellen-form.tsx": {
-      "react/no-unescaped-entities": 1
     },
     "app/(platform)/platform/login/page.tsx": {
       "react-hooks/immutability": 1,
       "react-hooks/set-state-in-effect": 1
     },
-    "app/(public)/_components/Crumb.tsx": {
-      "@next/next/no-html-link-for-pages": 1
-    },
-    "app/(public)/_components/Footer.tsx": {
-      "@next/next/no-html-link-for-pages": 1,
-      "react/jsx-no-target-blank": 2
-    },
-    "app/(public)/_components/Header.tsx": {
-      "@next/next/no-html-link-for-pages": 2
-    },
     "app/(public)/contact/_components/ContactForm.tsx": {
       "react-hooks/static-components": 5
-    },
-    "app/(public)/governance-ai/page.tsx": {
-      "react/no-unescaped-entities": 1
-    },
-    "app/(public)/home/page.tsx": {
-      "react/jsx-no-target-blank": 1
-    },
-    "app/(public)/over-ons/page.tsx": {
-      "react/jsx-no-target-blank": 1
-    },
-    "app/(public)/product/page.tsx": {
-      "react/no-unescaped-entities": 2
-    },
-    "app/(public)/sectoren/pensioenfondsen/page.tsx": {
-      "react/no-unescaped-entities": 1
     },
     "core/components/DashboardShell.tsx": {
       "react-hooks/set-state-in-effect": 1

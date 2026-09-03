@@ -6,6 +6,7 @@
 // De bureau-rol ziet de rijen wél, maar zonder downloadknop (met reden).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { maakIdempotentVerzoek } from "@/core/lib/idempotency-key";
 
 interface Afschrift {
   id: string;
@@ -104,7 +105,11 @@ export default function AfschriftenPaneel({
     setConceptBezig(true);
     setFout(null);
     try {
-      const res = await fetch(`/api/procedures/${procedureId}/afschrift/concept`, { method: "POST" });
+      const verzoek = maakIdempotentVerzoek();
+      const res = await fetch(`/api/procedures/${procedureId}/afschrift/concept`, {
+        method: "POST",
+        headers: verzoek.headers(),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Concept opstellen mislukt.");

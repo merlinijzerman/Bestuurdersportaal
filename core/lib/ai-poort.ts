@@ -28,6 +28,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Provider } from "./ai-preflight";
+import { resolveAnthropicBaseUrl } from "./ai-provider-endpoint.mjs";
 
 export type { Provider };
 
@@ -118,10 +119,12 @@ let _anthropic: Anthropic | null = null;
  */
 function client(): Anthropic {
   if (!_anthropic) {
+    const baseURL = resolveAnthropicBaseUrl();
     _anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
       timeout: 60_000,
       maxRetries: 1,
+      ...(baseURL ? { baseURL } : {}),
     });
   }
   return _anthropic;

@@ -81,6 +81,61 @@ wel gelijk, zodat latere branch protection daarop kan aansluiten.
 - De 42 lintbevindingen worden per inhoudelijke categorie opgelost; iedere
   baselineverlaging wordt meegecommit zodat de ratel niet kan teruggroeien.
 
+## Vervolg 2 september 2026 — onderhoudstranche 1
+
+De eerste kleine onderhoudstranche verwijdert alle acht actuele waarschuwingen
+uit de openbare-sitecategorieën `react/jsx-no-target-blank` en
+`react/no-unescaped-entities`: vier externe links gebruiken nu het strengere
+`rel="noreferrer"`-contract en vier zichtbare apostroffen zijn typografisch
+correct. De opnieuw gegenereerde baseline neemt daarnaast één reeds op
+`preview` opgeloste `react-hooks/purity`-bevinding mee. Daardoor daalt de ratel
+van **42 naar 33 waarschuwingen**, van 9 naar 7 regels en van 28 naar 22
+bestanden. Er is geen database-, sessie-, procedure- of routeringsgedrag
+gewijzigd.
+
+## Vervolg 2 september 2026 — onderhoudstranche 2
+
+De tweede kleine onderhoudstranche verwijdert de volledige actuele categorie
+`@next/next/no-html-link-for-pages`: vier publieke home-links en twee
+annuleerlinks in dashboardformulieren gebruiken nu `next/link`. De doelen,
+labels, styling en formulierafhandeling blijven gelijk. Na regeneratie daalt de
+ratel van **33 naar 27 waarschuwingen**, van 7 naar 6 regels en van 22 naar 17
+bestanden. Er is geen database-, sessie-, procedurestatus- of routeringscontract
+gewijzigd.
+
+## Vervolg 2 september 2026 — onderhoudstranche 3
+
+De derde onderhoudstranche corrigeert de laatste rechte apostrof in zichtbare
+JSX-copy naar een typografische apostrof. Daarmee verdwijnt de volledige
+resterende categorie `react/no-unescaped-entities` en bevat de ratel uitsluitend
+nog React Hooks-bevindingen. Na regeneratie daalt de baseline van **27 naar 26
+waarschuwingen**, van 6 naar 5 regels en van 17 naar 16 bestanden. Er is geen
+functioneel, data-, sessie- of routeringsgedrag gewijzigd.
+
+## Vervolg 2 september 2026 — onderhoudstranche 4
+
+De vierde onderhoudstranche verwijdert de laatste
+`react-hooks/exhaustive-deps`-waarschuwing. De AI-assistent maakt zijn
+Supabase-browserclient nu eenmaal per componentmount aan en houdt de functie
+voor het laden van gesprekken stabiel. De effectafhankelijkheden zijn daardoor
+volledig zonder dat een gewone rerender de authenticatie- en herstelinitialisatie
+opnieuw start. Een gerichte componenttest bewaakt dat gedrag. Na regeneratie
+daalt de baseline van **26 naar 25 waarschuwingen**, van 5 naar 4 regels en van
+16 naar 15 bestanden. Er is geen database-, autorisatie-, sessie- of
+routeringscontract gewijzigd.
+
+## Vervolg 2 september 2026 — onderhoudstranche 5
+
+De vijfde onderhoudstranche verwijdert de twee resterende
+`react-hooks/error-boundaries`-waarschuwingen. Op de pagina voor
+AI-begrenzing staat alleen het geaudite dataverzoek nog in het `try`-blok; de
+succesweergave wordt daarna opgebouwd. Daarmee suggereert het laad-vangnet niet
+langer dat het ook React-renderfouten opvangt. Twee gerichte componenttests
+bewaken het succespad en de bestaande herstelmelding bij een `PlatformError`.
+Na regeneratie daalt de baseline van **25 naar 23 waarschuwingen**, van 4 naar
+3 regels en van 15 naar 14 bestanden. Er is geen database-, autorisatie-,
+sessie- of routeringscontract gewijzigd.
+
 ## Rollback
 
 De wijziging is terug te draaien door de workflowtriggers en opdrachten terug te

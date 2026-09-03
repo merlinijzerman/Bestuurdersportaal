@@ -9,10 +9,20 @@
 //  De beslissing "is reformulatie nodig?" is een PURE functie (geen SDK-imports,
 //  deterministisch testbaar, zelfde discipline als lib/rag-select.ts). De
 //  reformulatie zelf doet een lichte modelcall op het sterke rewrite-model
-//  (REWRITE_MODEL in app/api/chat/route.ts); de Anthropic-client wordt als
-//  parameter meegegeven (dependency injection) zodat deze module zelf niets
-//  instantieert. De call draait op temperature:0 (reproduceerbare retrieval,
-//  besluit 0139): dezelfde vraag + historie levert dezelfde zoekvraag.
+//  (REWRITE_MODEL in app/api/chat/route.ts, thans claude-sonnet-4-6); de
+//  Anthropic-client wordt als parameter meegegeven (dependency injection) zodat
+//  deze module zelf niets instantieert. De call draait op temperature:0
+//  (reproduceerbare retrieval, besluit 0139): dezelfde vraag + historie levert
+//  dezelfde zoekvraag.
+//
+//  PLATEAU 1 (contextvaste vervolgvragen): in de chatroute is de MODELCALL van
+//  deze module op het hot path VERVANGEN door de vroege contextresolver
+//  (core/lib/vraag-context.ts) zodra CHATCONTEXT_RESOLVER=enforce. Die resolver
+//  levert één `effectieveVraag` die niet alleen de retrieval maar de hele
+//  beslisketen stuurt, en subsumeert daarmee deze reformulatie. Bij off/observe
+//  blijft `reformuleerVraag` het hot path. De PURE `heeftReformulatieNodig`
+//  blijft hoe dan ook in gebruik (off/observe-hotpath + gelogd signaal); haar
+//  gepinde meetset in query-reformulatie.sanity.ts verandert niet.
 // ============================================================
 
 import type Anthropic from "@anthropic-ai/sdk";
