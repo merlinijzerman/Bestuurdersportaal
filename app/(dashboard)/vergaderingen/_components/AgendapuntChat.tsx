@@ -338,9 +338,14 @@ export default function AgendapuntChat({
     setAntwoordGestart(false);
     // Vers antwoord volgt vanaf de start mee, tot de gebruiker omhoog scrollt.
     volgtBodemRef.current = true;
+    // Ook deze beurt is kostendragend, en de route eist de sleutel (400 zonder).
+    // Eén context per gebruikersactie; een transportretry hergebruikt hem.
+    const idempotentVerzoek = maakIdempotentVerzoek();
+
     try {
       const res = await fetch(`/api/agendapunten/${agendapuntId}/voorbereiding`, {
         method: "POST",
+        headers: idempotentVerzoek.headers(),
       });
       if (!res.ok || !res.body) {
         const fout = await res.json().catch(() => null);
