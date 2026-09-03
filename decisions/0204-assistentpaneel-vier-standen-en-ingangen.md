@@ -143,6 +143,32 @@ paneelkop is clientstaat in de paneelprovider; daar is geen payloadveld voor nod
 meesturen. Eén auditreview — cross-tenant en audit-inventaris één keer langs in plaats van
 twee — en T2 raakt de route toch al.
 
+### 10. De agendapuntkaart houdt de uitkomst, niet het gesprek (PR 2)
+
+`AgendapuntChat.tsx` (1.459 regels) vervalt. De kaart heeft **één knop per toestand**: "Bereid
+dit punt voor" zolang het punt niet voorbereid is, daarna alleen "Doorvragen", dat het paneel
+opent met dit agendapunt als context. Er komt bewust géén "opnieuw opstellen" naast — dat zou
+de dubbeling terugbrengen die dit ticket opheft, en doorvragen ís de weg om verder te komen.
+Wie de voorbereiding echt opnieuw wil, vraagt er in het paneel om; dat pad is bovendien wél
+gelogd.
+
+**Waar de uitkomst landt.** In `gesprekken`, met `agendapunt_context` — zoals de chat het
+deed. `voorbereidingen.ai_output` zou de nettere plek zijn, maar dat veld wordt vandaag door
+niets geschreven en het vullen ervan is een serverwijziging (T2). De huidige plek houdt twee
+dingen intact die anders stilletjes zouden sneuvelen: de voorbereiding overleeft een
+herlaadbeurt, en ze staat in de gesprekkenlade van het paneel.
+
+**Terugleesregel.** "Al voorbereid?" is het AI-antwoord dat direct op de vaste
+voorbereidingsvraag volgt — niet "het laatste AI-bericht". Rijen van vóór T1 kunnen een heel
+chatgesprek dragen; daarvan de laatste beurt tonen onder de kop "Mijn voorbereiding" zou de
+bestuurder iets anders voorspiegelen dan hij leest. Zo'n oude rij toont dus gewoon weer de
+knop.
+
+**Openstaand, met eigenaar T2:** `/api/agendapunten/[id]/voorbereiding` schrijft géén regel in
+de governance log, terwijl elke gewone chatvraag dat wél doet — voor precies de zwaarste
+AI-output die het portaal maakt. T1 dicht dat niet (geen serverwijziging); T2 doet het door de
+voorbereiding door `/api/chat` te laten lopen.
+
 ## Overwogen alternatieven
 
 - **Het oppervlak naar `core/` verhuizen** in plaats van een slot. Verwerpt: ~2.500 regels
@@ -185,6 +211,9 @@ twee — en T2 raakt de route toch al.
    in de logrij of een koppeling; eigenaar nog te beleggen.
 3. **Bronintentie vanuit een module** hoort een zichtbare keuze in het paneel te zijn (een
    chip "alleen fondsbronnen"), geen onzichtbaar bijeffect van een knop.
+4. **De voorbereidingsroute logt niet in de governance log** — bekend auditgat, eigenaar **T2**.
+5. **De voorbereiding hoort in `voorbereidingen.ai_output`**, niet in een `gesprekken`-rij.
+   Vergt een serverwijziging; eigenaar **T2**.
 
 ## Referenties
 

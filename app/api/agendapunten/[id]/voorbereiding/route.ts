@@ -317,7 +317,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
     // Streaming (SSE): het antwoord wordt token voor token opgebouwd i.p.v. in één
     // keer volledig geladen — bij een trager model (Opus) voelt dat sneller en
     // houdt het de bestuurder betrokken. Zelfde event-vorm als /api/chat
-    // (meta → delta → done), zodat AgendapuntChat dezelfde consumer hergebruikt.
+    // (meta → delta → done), zodat VoorbereidingKaart dezelfde consumer hergebruikt.
     // max_tokens 3500: bij een te krap budget sneuvelt de staart (de vergadervragen).
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({

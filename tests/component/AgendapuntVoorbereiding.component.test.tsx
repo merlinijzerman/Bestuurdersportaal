@@ -1,24 +1,27 @@
 // ============================================================================
-//  "Help mij met de voorbereiding" stuurt zijn idempotentiesleutel mee.
+//  "Mijn voorbereiding": één knop per toestand, en de sleutel gaat mee.
 // ----------------------------------------------------------------------------
-//  Waarom deze test bestaat: sinds c872331 (15-08-2026, "begrens AI-verbruik in
-//  preview") eist `/api/agendapunten/[id]/voorbereiding` een `Idempotency-Key`
-//  en antwoordt zonder die header met 400. De client stuurde hem niet, en
-//  `withFondsRoute` injecteert hem niet. Het gevolg was zichtbaar noch luid: de
-//  chip rendert het 400-antwoord gewoon als AI-bericht in de kaart.
+//  Deze test begon als regressietest op één header. Sinds c872331 (15-08-2026)
+//  eist `/api/agendapunten/[id]/voorbereiding` een `Idempotency-Key` en
+//  antwoordt hij zonder die header met 400; de client stuurde hem niet, en het
+//  400-antwoord verscheen gewoon als AI-tekst in de kaart. Niemand zag het,
+//  omdat er voor dit pad geen enkele test bestond.
 //
-//  Geen enkele test zag dat, omdat er voor dit pad geen test bestond. Deze test
-//  pint daarom niet het gelukkige scherm maar het VERZOEK — de header is het
-//  contract met de route. Verdwijnt hij nog eens, dan wordt dit rood.
+//  De assertie is met T1 PR 2 MEEVERHUISD naar `VoorbereidingKaart` en niet met
+//  `AgendapuntChat` verdampt. Ze pint het VERZOEK, niet het scherm: de header is
+//  het contract met de route.
 //
-//  De test overleeft T1: verhuist deze knop naar `VoorbereidingKaart`, dan
-//  verhuist de assertie mee. Wat niet mag, is dat hij met het oude bestand
-//  verdampt.
+//  Daarnaast pint deze test de regel uit besluit 0204: één knop per toestand.
+//  Niet voorbereid → alleen "Bereid dit punt voor". Voorbereid → alleen
+//  "Doorvragen". Een "opnieuw opstellen" ernaast zou de dubbeling terugbrengen
+//  die dit ticket juist opheft.
 // ============================================================================
 
 import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import AgendapuntChat from "@/app/(dashboard)/vergaderingen/_components/AgendapuntChat";
+import VoorbereidingKaart from "@/app/(dashboard)/vergaderingen/_components/VoorbereidingKaart";
+import { AssistentHarnas } from "./assistent-harnas";
+import { verwachtGeenErnstigeAxeBevindingen } from "./axe";
 import { verwachtSseStroomEenmaal } from "./fetch-mock";
 import { renderMetProviders } from "./render-met-providers";
 import { maakSupabaseStub } from "./supabase-mock";
@@ -27,54 +30,41 @@ const { createClient } = vi.hoisted(() => ({ createClient: vi.fn() }));
 vi.mock("@/core/lib/supabase", () => ({ createClient }));
 
 const AGENDAPUNT_ID = "agendapunt-1";
+const VOORBEREIDING_VRAAG = "Stel mijn voorbereiding op voor dit agendapunt.";
 
-// jsdom kent `scrollIntoView` niet; de kaart scrolt na een beurt naar beneden.
-// Omgevingsgat, geen gedrag dat deze test toetst.
+const PROFIEL = { fonds_id: "fonds-1", fondsen: { naam: "Pensioenfonds Horizon" } };
+
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-function monteer() {
+function monteer({ gesprekken = [] as unknown[] } = {}) {
   createClient.mockReturnValue(
-    maakSupabaseStub({
-      tabellen: {
-        profielen: {
-          fonds_id: "fonds-1",
-          reflectie_uitnodiging: false,
-          fondsen: { naam: "Pensioenfonds Horizon" },
-        },
-        // Nog geen eerder gesprek over dit punt → de kaart staat op "Help mij
-        // met de voorbereiding" (niet op de herhaalvariant).
-        gesprekken: [],
-      },
-    }),
+    maakSupabaseStub({ tabellen: { profielen: PROFIEL, gesprekken } }),
   );
   return renderMetProviders(
-    <AgendapuntChat
-      agendapuntId={AGENDAPUNT_ID}
-      titel="Vaststellen jaarverslag"
-      stukken={[{ id: "doc-1", titel: "Jaarverslag 2025" }]}
-    />,
+    <AssistentHarnas>
+      <VoorbereidingKaart agendapuntId={AGENDAPUNT_ID} titel="Vaststellen jaarverslag" />
+    </AssistentHarnas>,
   );
 }
 
-describe("Agendapunt — voorbereiding opstellen", () => {
-  it("stuurt een Idempotency-Key mee naar de voorbereidingsroute", async () => {
+describe("Mijn voorbereiding", () => {
+  it("stuurt een Idempotency-Key mee en toont daarna de uitkomst", async () => {
     const { user } = monteer();
 
-    // De kaart opent ingeklapt; het uitklappen start de init (profiel + eerder
-    // gesprek), en pas daarna verschijnt de chip.
-    await user.click(
-      screen.getByRole("button", { name: /Vraag door over dit agendapunt/ }),
-    );
-    const chip = await screen.findByRole("button", {
-      name: "Help mij met de voorbereiding",
-    });
+    const knop = await screen.findByRole("button", { name: /Bereid dit punt voor/ });
+    // Nog niet voorbereid: geen tweede knop naast deze.
+    expect(screen.queryByRole("link", { name: /Doorvragen/ })).not.toBeInTheDocument();
 
     const verzoek = verwachtSseStroomEenmaal(
       `/api/agendapunten/${AGENDAPUNT_ID}/voorbereiding`,
       [
-        { type: "meta", bronnen: [{ nummer: 1, titel: "Jaarverslag 2025" }], inline_meldingen: [] },
+        {
+          type: "meta",
+          bronnen: [{ nummer: 1, titel: "Jaarverslag 2025" }],
+          inline_meldingen: [],
+        },
         { type: "delta", text: "**Bestuurlijke duiding** — het bestuur wordt gevraagd…" },
         { type: "done" },
       ],
@@ -83,16 +73,71 @@ describe("Agendapunt — voorbereiding opstellen", () => {
       { knip: 3 },
     );
 
-    await user.click(chip);
+    await user.click(knop);
 
     await waitFor(() =>
       expect(screen.getByText(/het bestuur wordt gevraagd/)).toBeInTheDocument(),
     );
 
     const sleutel = verzoek.headers().get("Idempotency-Key");
-    expect(sleutel, "de voorbereidingsroute weigert een verzoek zonder sleutel (400)").toBeTruthy();
+    expect(sleutel, "de route weigert een verzoek zonder sleutel (400)").toBeTruthy();
     expect(sleutel).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
+
+    // Voorbereid: nu precies één knop, en dat is doorvragen in het paneel.
+    expect(screen.getByRole("link", { name: /Doorvragen/ })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Bereid dit punt voor/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("1 bron uit de bibliotheek")).toBeVisible();
+  });
+
+  it("leest een eerder opgestelde voorbereiding terug uit het bewaarde gesprek", async () => {
+    const { container } = monteer({
+      gesprekken: [
+        {
+          id: "gesprek-1",
+          berichten: [
+            { rol: "gebruiker", tekst: VOORBEREIDING_VRAAG },
+            {
+              rol: "ai",
+              tekst: "**Aandachtspunten** — de dekkingsgraad daalt.",
+              onderbouwing: { aantalBronnen: 2 },
+              voltooid: true,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(await screen.findByText(/de dekkingsgraad daalt/)).toBeVisible();
+    expect(screen.getByText("2 bronnen uit de bibliotheek")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Bereid dit punt voor/ }),
+    ).not.toBeInTheDocument();
+    await verwachtGeenErnstigeAxeBevindingen(container);
+  });
+
+  it("toont de knop nog bij een oud gesprek zonder voorbereiding", async () => {
+    // Rijen van vóór T1 kunnen een heel chatgesprek dragen. Het laatste
+    // AI-bericht daaruit als "Mijn voorbereiding" tonen zou de bestuurder iets
+    // anders voorspiegelen dan hij leest.
+    monteer({
+      gesprekken: [
+        {
+          id: "gesprek-oud",
+          berichten: [
+            { rol: "gebruiker", tekst: "Wat betekent dit voorstel voor de deelnemers?" },
+            { rol: "ai", tekst: "Een antwoord op een andere vraag.", voltooid: true },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      await screen.findByRole("button", { name: /Bereid dit punt voor/ }),
+    ).toBeVisible();
+    expect(screen.queryByText(/Een antwoord op een andere vraag/)).not.toBeInTheDocument();
   });
 });

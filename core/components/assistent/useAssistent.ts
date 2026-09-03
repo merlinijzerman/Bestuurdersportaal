@@ -117,7 +117,7 @@ export interface UseAssistentOpties {
 }
 
 // Voortgang tijdens het wachten (besluit 0087): types, reducer en weergave leven
-// in core/lib/voortgang, gedeeld met de agenda-voorbereiding (AgendapuntChat).
+// in core/lib/voortgang, gedeeld met de agenda-voorbereiding (VoorbereidingKaart).
 
 // B2-vervolg (2026-08-10) — herstelt de stuk-context van een heropend/herladen
 // bureau-stuk-gesprek uit de openingszin, zodat de Word-export weer beschikbaar is
