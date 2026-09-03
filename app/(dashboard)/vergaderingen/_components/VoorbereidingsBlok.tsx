@@ -1,20 +1,23 @@
 "use client";
 // ============================================================
-//  VoorbereidingsBlok — assistent + aantekeningen per agendapunt
+//  VoorbereidingsBlok — voorbereiding + aantekeningen per agendapunt
 // ============================================================
-// Herziening 06-07 (na toetsing met externe bestuurder): het aparte blok
-// "Mijn voorbereiding" met eigen genereer-knop is vervallen — de inline chat
-// ("Vraag door over dit agendapunt") is het enige AI-instappunt. De rijke
-// voorbereiding (route met risicomatrix, procedures, profielsturing) zit
-// daar als startchip "Stel mijn voorbereiding op" (zie AgendapuntChat).
-// Dit component ordent alleen nog: (1) de chat, (2) daaronder "Mijn
-// aantekeningen" (vrije_notities, privé; PATCH notities-route werkt zonder
-// gegenereerde voorbereiding) — direct boven "Inbreng vooraf" in de kaart.
-// De `voorbereidingen`-tabel dient uitsluitend nog voor die aantekeningen.
+// Dit component ordent twee dingen, in deze volgorde: (1) "Mijn voorbereiding"
+// — de UITKOMST, met één knop per toestand — en (2) "Mijn aantekeningen"
+// (vrije_notities, privé; de PATCH-notitiesroute werkt zonder gegenereerde
+// voorbereiding). Beide staan direct boven "Inbreng vooraf" in de kaart.
+//
+// Geschiedenis, omdat de slinger twee keer is doorgeslagen: 06-07 verviel het
+// aparte blok "Mijn voorbereiding" ten gunste van een inline chat, die het
+// enige AI-instappunt werd. Die chat was een tweede gespreksimplementatie met
+// een eigen, verschraald payloadlichaam. T1 (besluit 0204) haalt hem weg: het
+// gesprek staat nu in het assistentpaneel, dat over elke module heen
+// beschikbaar is, en de kaart houdt de uitkomst plus één knop "Doorvragen".
+// De `voorbereidingen`-tabel dient nog steeds uitsluitend voor de aantekeningen.
 // Oude versies: Archief/ + git-historie.
 
 import { useState, useEffect } from "react";
-import AgendapuntChat from "./AgendapuntChat";
+import VoorbereidingKaart from "./VoorbereidingKaart";
 
 // De rij uit `voorbereidingen` — alleen de aantekeningen-velden worden nog
 // gebruikt; de overige velden blijven getypeerd voor bestaande rijen.
@@ -97,12 +100,8 @@ export default function VoorbereidingsBlok({
 
   return (
     <div className="space-y-3">
-      {/* Hét AI-instappunt van de kaart (0036 + FO duiding v0.3) */}
-      <AgendapuntChat
-        agendapuntId={agendapuntId}
-        titel={titel}
-        stukken={stukken}
-      />
+      {/* De uitkomst, niet het gesprek: doorvragen gebeurt in het paneel. */}
+      <VoorbereidingKaart agendapuntId={agendapuntId} titel={titel} />
 
       {/* Vrij notitieveld — privé, los van de AI; direct boven "Inbreng vooraf" */}
       <div className="bg-white border border-warn/30 rounded-lg p-3">

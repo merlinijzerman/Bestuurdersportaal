@@ -72,10 +72,10 @@ Alle zeven bestanden zijn in P1a onaangeraakt, dus deze nummers gelden ook op HE
 | `bibliotheek/page.tsx` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | `AssistentIngang`, documentscope | ✓ |
 | `procedures/_components/StapPaneel.tsx` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | `AssistentIngang`, documentscope (anker blijft: `fieldset disabled`) | ✓ |
 | `(dashboard)/page.tsx` — recente vraag op de home | `→ /ai` | `AssistentIngang`, **fondsbreed** — zie de correctie hieronder | ✓ |
-| `vergaderingen/_components/AgendapuntChat.tsx` — "Openen in volledige assistent" | `→ /ai?agendapunt=` | vervalt met `AgendapuntChat` (PR 2 van T1) | — |
+| ~~`AgendapuntChat.tsx` — "Openen in volledige assistent"~~ | `→ /ai?agendapunt=` | **vervallen**: het bestand bestaat niet meer | ✓ |
 | `core/lib/module-registry.ts` — nav-item "AI Assistent" | `→ /ai` | **ongewijzigd**: `/ai` ís de volledig-schermstand, en dit is de enige manifest-schakelbare ingang | ✓ |
 | Knop rechtsonder (`AssistentKnopRechtsonder`) | bestond niet | de enige generieke ingang; toggle met `aria-expanded` | ✓ |
-| Agendapuntkaart | inline chat + startchip | **één** knop "Bereid dit punt voor"; daarna alleen "Doorvragen" in het resultaatblok | PR 2 |
+| Agendapuntkaart (`VoorbereidingKaart.tsx`) | inline chat + startchip | **één** knop "Bereid dit punt voor"; daarna alleen "Doorvragen" (`AssistentIngang`) in het resultaatblok "Mijn voorbereiding" | ✓ |
 
 **De regel.** Elke ingang loopt door `AssistentIngang`. Een knop die dat niet doet, is een
 fout — het register is alleen aftoetsbaar als er één component is om tegen af te toetsen.
