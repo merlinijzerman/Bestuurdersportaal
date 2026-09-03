@@ -150,7 +150,7 @@ export default function DashboardShell({
         <main
           className={`${
             ingeklapt ? "md:ml-14" : "md:ml-64"
-          } ${paneelMarge} flex flex-col min-h-screen pt-14 md:pt-0 transition-[margin] duration-200 ease-out`}
+          } ${paneelMarge} portal-main flex flex-col min-h-screen pt-14 md:pt-0 transition-[margin] duration-200 ease-out`}
         >
           {children}
         </main>

@@ -58,7 +58,7 @@ function monteer() {
 async function stelVraag(user: ReturnType<typeof renderMetProviders>["user"]) {
   const veld = await screen.findByPlaceholderText(/Stel een vraag/);
   await user.type(veld, "Wat is onze dekkingsgraad?");
-  await user.click(screen.getByRole("button", { name: "➤" }));
+  await user.click(screen.getByRole("button", { name: "Vraag versturen" }));
 }
 
 const META = {

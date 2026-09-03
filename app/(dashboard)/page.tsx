@@ -293,23 +293,23 @@ export default async function HomePage() {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-5">
+    <div className="portal-page portal-page-stack">
       {/* Persoonlijke welkomst */}
-      <div className="bg-white border border-line rounded-xl p-5">
+      <section className="portal-hero">
         <div className="flex items-end justify-between flex-wrap gap-3">
           <div>
-            <div className="font-serif text-ink text-xl font-bold">
+            <h1 className="portal-hero-title">
               {dagdeelGroet()}
               {voornaam ? ` ${voornaam}` : ""}, fijn u terug te zien.
-            </div>
-            <div className="text-sm text-muted mt-1">
+            </h1>
+            <div className="portal-hero-copy">
               U bent {rolLabel} van {fondsnaam}.
               {volgendeVergadering ? (
                 <>
                   {" "}De volgende vergadering is{" "}
                   <Link
                     href={`/vergaderingen/${volgendeVergadering.id}`}
-                    className="text-ink font-medium hover:text-accent"
+                    className="font-medium underline decoration-white/25 underline-offset-2 hover:decoration-white/70"
                   >
                     {volgendeVergadering.titel}
                   </Link>
@@ -322,12 +322,12 @@ export default async function HomePage() {
           </div>
           <Link
             href="/vergaderingen"
-            className="text-xs text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
+            className="portal-hero-action"
           >
             Naar de vergaderingen →
           </Link>
         </div>
-      </div>
+      </section>
 
       <WerkbakBlok
         items={werkbak}
@@ -336,12 +336,12 @@ export default async function HomePage() {
       />
 
       {/* Voor u open + Mijn activiteit */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="portal-two-column">
         {/* Vergadering voorbereiden */}
-        <div className="bg-white border border-line rounded-xl p-5">
-          <div className="font-semibold text-ink text-sm mb-3">
+        <section className="portal-card p-5">
+          <h2 className="portal-card-title mb-3">
             Vergadering voorbereiden
-          </div>
+          </h2>
           {volgendeVergadering ? (
             <div className="space-y-3">
               <div className="bg-app-bg rounded-lg p-3">
@@ -416,13 +416,13 @@ export default async function HomePage() {
               </Link>
             </div>
           )}
-        </div>
+        </section>
 
         {/* Mijn recente activiteit */}
-        <div className="bg-white border border-line rounded-xl p-5">
-          <div className="font-semibold text-ink text-sm mb-3">
+        <section className="portal-card p-5">
+          <h2 className="portal-card-title mb-3">
             Uw recente activiteit
-          </div>
+          </h2>
           {!heeftActiviteit ? (
             <div className="text-sm text-muted">
               Hier verschijnen uw meldingen, laatste vragen, inbreng en uploads zodra u ze ontvangt of gebruikt.
@@ -469,12 +469,12 @@ export default async function HomePage() {
               )}
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       {/* Governance traceability — slim onderaan */}
-      <div className="bg-accent-tint border border-accent/30 rounded-xl p-4 flex items-center gap-3 text-xs text-accent-ink">
-        <span className="text-base">ℹ️</span>
+      <div className="rounded-xl border border-ai-line bg-ai-tint p-4 flex items-center gap-3 text-xs text-ai">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white font-serif text-sm font-bold" aria-hidden>i</span>
         <div className="flex-1">
           Alle AI-interacties worden gelogd in de{" "}
           <Link href="/governance" className="font-semibold hover:underline">
