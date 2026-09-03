@@ -1,8 +1,6 @@
 # AI-startpunt — Ontwerpdocument
 
-> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`. Verwijzingen hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
->
-> **Sinds T1 (03-09-2026, besluit 0204) is er één component, niet twee.** De presentatielaag heet `app/(dashboard)/ai/_components/AssistentOppervlak.tsx` en is de INHOUD van het assistentpaneel; dat paneel hangt in `core/components/DashboardShell.tsx` en kent vier standen (dicht → 400 px → 740 px → volledig scherm). `/ai` rendert de assistent niet meer zelf: die route ís de volledig-schermstand en `AssistentClient.tsx` is er nog uitsluitend de brug naartoe. Waar hieronder "de pagina /ai" staat, lees: het oppervlak in zijn volledig-schermstand.
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
 
 
 > **Status**: Revisie 1.1 — P1 gebouwd (2026-07-28); AI-taken "P2" voorbeeldvragen + document doorgronden gebouwd (2026-07-29, besluit 0089)
@@ -40,7 +38,7 @@ Elk plateau is los uitleverbaar en bouwt op het vorige. De grens tussen "routere
 
 Zodra er een bericht, een documentscope of een agendapunt-scope is, verdwijnt het startscherm en gedraagt `/ai` zich exact zoals voorheen (modi, bronselectie, @-mentions, verduidelijkingsvragen, onderbouwingspaneel).
 
-**Architectuur**: `app/(dashboard)/ai/page.tsx` is een server-component (route A) die de sessie server-side afleidt, de gedeelde context ophaalt (`core/lib/portaalcontext.ts`, `React.cache()`-gededupliceerd, gedeeld met de homepage) en die als startpuntgegevens publiceert (T1: via de paneelstaat, want het oppervlak hangt in de shell) zodat `_components/Startpunt.tsx` ze kan renderen. **Sinds P1a (besluit 0201)** consumeert het oppervlak `useAssistent()` (L2); **sinds T1 (besluit 0204)** staat de `AssistentContextProvider` (L1) in `DashboardShell` en verschijnt het volle startpunt alleen waar `PortaalContext` bestaat — dus op `/ai`. In het smalle paneel staat een compacte lege stand met dezelfde generieke startvragen; het startpunt zelf en zijn taakknoppen zijn ongewijzigd — de taken (`startVrijeVraag`, `startDoorgronden`, `startStukVoorbereiden`) komen nu uit de gesprekslaag. Een `loading.tsx`-skelet dekt de eerste weergave. Geen migratie, geen RLS-/API-contractwijziging.
+**Architectuur**: `app/(dashboard)/ai/page.tsx` is een server-component (route A) die de sessie server-side afleidt, de gedeelde context ophaalt (`core/lib/portaalcontext.ts`, `React.cache()`-gededupliceerd, gedeeld met de homepage) en de client-component `_components/AssistentClient.tsx` rendert met een `_components/Startpunt.tsx`. **Sinds P1a (besluit 0201)** mount `AssistentClient` de `AssistentContextProvider` (L1) en consumeert hij `useAssistent()` (L2); het startpunt zelf en zijn taakknoppen zijn ongewijzigd — de taken (`startVrijeVraag`, `startDoorgronden`, `startStukVoorbereiden`) komen nu uit de gesprekslaag. Een `loading.tsx`-skelet dekt de eerste weergave. Geen migratie, geen RLS-/API-contractwijziging.
 
 **Bewust buiten P1**: geen taakconfiguratie, geen bewaren/koppelen, geen voortgangsstappen, geen nieuwe/heropende antwoordmodi (`besluitrijpheid`/`persoonlijke_voorbereiding` blijven zonder knop — besluit 0068), geen tweede implementatie van de voorbereiding (besluiten 0036/0079).
 
@@ -98,4 +96,4 @@ Besluit 0068 bracht de zichtbare antwoordmodi terug tot Auto · Feiten · Duidin
 - Besluit **0085** — AI-startpunt P1 (dit plateau; twee besluitpunten: startpunt vervangt leeg invoerveld, en `/ai` routeert uitsluitend naar de bestaande voorbereiding).
 - Besluiten **0036** / **0079** — duplicatieschuld van de voorbereiding (geaccepteerd resp. opgeruimd); P1 houdt de "alleen routeren"-lijn vast.
 - Besluit **0068** — zichtbare antwoordmodi teruggebracht (raakt P4).
-- Code: `core/lib/portaalcontext.ts`, `core/lib/portaalcontext-afleiding.ts`, `app/(dashboard)/ai/page.tsx`, `app/(dashboard)/ai/_components/{AssistentOppervlak,AssistentClient,Startpunt}.tsx`, `core/components/assistent/AssistentPaneel*.tsx`, `app/(dashboard)/ai/loading.tsx`, `app/(dashboard)/page.tsx`.
+- Code: `core/lib/portaalcontext.ts`, `core/lib/portaalcontext-afleiding.ts`, `app/(dashboard)/ai/page.tsx`, `app/(dashboard)/ai/_components/{AssistentClient,Startpunt}.tsx`, `app/(dashboard)/ai/loading.tsx`, `app/(dashboard)/page.tsx`.

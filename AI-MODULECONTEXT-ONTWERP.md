@@ -1,8 +1,6 @@
 # AI-modulecontext — Ontwerpdocument
 
-> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`. Verwijzingen hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
->
-> **Sinds T1 (03-09-2026, besluit 0204) is er één component, niet twee.** De presentatielaag heet `app/(dashboard)/ai/_components/AssistentOppervlak.tsx` en is de INHOUD van het assistentpaneel; dat paneel hangt in `core/components/DashboardShell.tsx` en kent vier standen (dicht → 400 px → 740 px → volledig scherm). `/ai` rendert de assistent niet meer zelf: die route ís de volledig-schermstand en `AssistentClient.tsx` is er nog uitsluitend de brug naartoe. Waar hieronder "de pagina /ai" staat, lees: het oppervlak in zijn volledig-schermstand.
+> **Sinds P1a (03-09-2026, besluit 0201) staat de assistent in drie lagen.** De context (L1) en het gesprek (L2) wonen in `core/components/assistent/` en `core/lib/assistent-*`; `AssistentClient.tsx` is nog uitsluitend de presentatie (L3). Verwijzingen naar `AssistentClient` hieronder die over gespreksstaat, streaming of de payload gaan, slaan dus op `core/components/assistent/useAssistent.ts`. Zie `core/components/assistent/README.md`.
 
 
 > **Status**: Ontwerp — vastgesteld 2026-08-09, in bouw. Besluiten §7 belegd; uitvoering

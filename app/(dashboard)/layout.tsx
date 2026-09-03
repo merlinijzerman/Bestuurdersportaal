@@ -5,7 +5,6 @@ import { haalFondsContext, tenantEnforceAan } from "@/core/lib/tenant-context";
 import { beoordeelToegang, type ToegangsOordeel } from "@/core/lib/tenant-enforce";
 import { haalFondsConfig } from "@/core/lib/fonds-config";
 import DashboardShell from "@/core/components/DashboardShell";
-import AssistentOppervlak from "./ai/_components/AssistentOppervlak";
 
 export default async function DashboardLayout({
   children,
@@ -149,12 +148,6 @@ export default async function DashboardLayout({
         beschikbareModules={beschikbareModules}
         logoLetter={logoLetter}
         logoUrl={logoUrl}
-        // T1 (besluit 0204) — de assistent als paneel over elke module heen.
-        // Een SLOT en geen import: `core/` mag niet uit `app/` importeren
-        // (boundary T9), en de presentatielaag woont in app/. De schil bepaalt
-        // alleen wannéér deze node wordt gerenderd — pas na de eerste opening,
-        // zodat wie de assistent niet gebruikt er ook niets voor betaalt.
-        assistentOppervlak={<AssistentOppervlak />}
       >
         {children}
       </DashboardShell>

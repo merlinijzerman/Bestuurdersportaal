@@ -81,32 +81,3 @@ export function verwachtChatStream(
   });
   return { lichaam: () => opgevangen };
 }
-
-/**
- * Laat de volgende fetch naar `url` een gescripte SSE-reeks streamen en geeft
- * het opgevangen verzoek terug — inclusief de HEADERS. `verwachtChatStream`
- * pint `/api/chat` hard en toont geen headers; een kostendragende route die een
- * `Idempotency-Key` eist, is daarmee niet te toetsen.
- */
-export function verwachtSseStroomEenmaal(
-  url: string,
-  events: unknown[],
-  opties: { knip?: number; method?: string } = {},
-): { headers: () => Headers; lichaam: () => unknown } {
-  let opgevangenHeaders = new Headers();
-  let opgevangenLichaam: unknown;
-  vi.mocked(fetch).mockImplementationOnce(async (input, init) => {
-    const werkelijkeUrl = input instanceof Request ? input.url : String(input);
-    const werkelijkeMethode = init?.method ?? (input instanceof Request ? input.method : "GET");
-    expect(werkelijkeUrl).toBe(url);
-    expect(werkelijkeMethode).toBe(opties.method ?? "POST");
-    opgevangenHeaders = new Headers(init?.headers);
-    const body = init?.body;
-    opgevangenLichaam = typeof body === "string" ? JSON.parse(body) : body;
-    return maakSseAntwoord(events, opties);
-  });
-  return {
-    headers: () => opgevangenHeaders,
-    lichaam: () => opgevangenLichaam,
-  };
-}

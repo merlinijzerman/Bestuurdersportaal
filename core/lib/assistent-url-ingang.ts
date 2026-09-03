@@ -138,30 +138,6 @@ export function leesAssistentContextUitUrl(zoekstring: string): AssistentUrlVerz
 }
 
 /**
- * De omgekeerde weg: van ingangen naar de deeplink. (T1, besluit 0204.)
- *
- * De module-ingangen openen het paneel zónder navigatie, maar ze blijven een
- * `<a href>` — zodat ze klikbaar blijven binnen een uitgeschakelde fieldset
- * (de leesmodus van `StapPaneel`), zodat midden-klik en bookmarken blijven
- * werken, en zodat er een echte val-terug is als het paneel er niet is.
- *
- * Die href hoort hier thuis en niet bij de knoppen: parser en bouwer moeten
- * dezelfde parameternamen kennen. Staan ze uit elkaar, dan is een deeplink die
- * niemand meer aanroept precies het soort dode pad dat dit ticket opruimt.
- */
-export function bouwAssistentDeeplink(ingangen: AssistentUrlIngang[]): string {
-  const params = new URLSearchParams();
-  for (const ingang of ingangen) {
-    if (ingang.soort === "document") params.set("doc", ingang.documentId);
-    else if (ingang.soort === "agendapunt") params.set("agendapunt", ingang.agendapuntId);
-    else if (ingang.soort === "proces") params.set("proces", ingang.procedureId);
-    else params.set("risicomatrix", "1");
-  }
-  const query = params.toString();
-  return query ? `/ai?${query}` : "/ai";
-}
-
-/**
  * De MINIMALE vorm van de databaseclient die deze resolver gebruikt — bewust
  * een eigen structureel type en niet de supabase-client zelf. Zo is de resolver
  * te testen met een klein stubje, en is aan de signatuur af te lezen dat hij

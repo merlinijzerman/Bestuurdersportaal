@@ -188,7 +188,7 @@ export default function OrganisatieprofielTab() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-5">
           <fieldset className="bg-white border border-line rounded-xl p-5 space-y-3">
-            <legend className="overline text-muted px-1">
+            <legend className="text-xs font-bold uppercase tracking-widest text-muted px-1">
               Feiten
             </legend>
             {FEIT_VELDEN.map((v) => (
@@ -206,7 +206,7 @@ export default function OrganisatieprofielTab() {
           </fieldset>
 
           <fieldset className="bg-white border border-line rounded-xl p-5 space-y-3">
-            <legend className="overline text-muted px-1">
+            <legend className="text-xs font-bold uppercase tracking-widest text-muted px-1">
               Strategie &amp; risicohouding (max. {MAX_STRATEGISCH} tekens per veld)
             </legend>
             {STRATEGISCHE_VELDEN.map((v) => {
@@ -286,7 +286,7 @@ export default function OrganisatieprofielTab() {
 
         {/* Live preview van het exacte promptblok (§7). */}
         <div className="space-y-2">
-          <h3 className="overline text-muted">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-muted">
             Preview — wat de AI meekrijgt
           </h3>
           {preview ? (

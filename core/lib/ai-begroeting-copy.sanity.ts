@@ -35,11 +35,9 @@ console.log("ai-begroeting-copy sanity-tests:");
 
 /** De gesprekslaag: bouwt de begroeting op uit groet, voornaam en fondsnaam. */
 const GESPREKSLAAG = readFileSync("core/components/assistent/useAssistent.ts", "utf8");
-/** De presentatielaag: draagt de badge met de transparantie-tooltip.
- *  T1 — heette `AssistentClient.tsx` tot het oppervlak de inhoud van het paneel
- *  werd; die naam is nu de /ai-brug en bevat geen copy meer. */
+/** De presentatielaag: draagt de badge met de transparantie-tooltip. */
 const WEERGAVE = readFileSync(
-  "app/(dashboard)/ai/_components/AssistentOppervlak.tsx",
+  "app/(dashboard)/ai/_components/AssistentClient.tsx",
   "utf8"
 );
 

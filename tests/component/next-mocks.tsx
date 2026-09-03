@@ -3,8 +3,6 @@ import { vi } from "vitest";
 
 const nextNavigationMocks = vi.hoisted(() => ({
   pathname: "/",
-  /** De zoekstring; `useSearchParams` leest hem (T1 — de /ai-brug). */
-  zoekstring: "",
   push: vi.fn(),
   refresh: vi.fn(),
   replace: vi.fn(),
@@ -19,7 +17,6 @@ export function krijgNextNavigationMocks() {
 
 vi.mock("next/navigation", () => ({
   usePathname: () => nextNavigationMocks.pathname,
-  useSearchParams: () => new URLSearchParams(nextNavigationMocks.zoekstring),
   useRouter: () => nextNavigationMocks,
 }));
 

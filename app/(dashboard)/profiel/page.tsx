@@ -568,7 +568,7 @@ export default function ProfielPage() {
                 if (items.length === 0) return null;
                 return (
                   <div key={cat.sleutel}>
-                    <div className="overline text-muted mb-2">
+                    <div className="text-xs font-bold uppercase tracking-widest text-muted mb-2">
                       {cat.label}
                     </div>
                     <div className="flex flex-wrap gap-2">

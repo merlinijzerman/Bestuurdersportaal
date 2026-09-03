@@ -50,18 +50,6 @@ const config: Config = {
           "text-active": "rgb(var(--nav-text-active-rgb) / <alpha-value>)",
           active: "var(--nav-active)",
           accent: "rgb(var(--nav-accent-rgb) / <alpha-value>)",
-          // Accentrand van het actieve nav-item (T3). Bewust géén vulvlak met
-          // witte tekst erop: wit haalt daar 2,45:1. Zie besluit 0202.
-          rail: "rgb(var(--nav-rail-rgb) / <alpha-value>)",
-        },
-        // Assistent-accent (T3, besluit 0202) — uitsluitend voor AI-elementen.
-        // `ai.DEFAULT` is het enige lid dat tekst mag dragen; `ai.500` is
-        // grafisch en `ai.line` decoratief. Zie de noot in app/globals.css.
-        ai: {
-          DEFAULT: "rgb(var(--ai-rgb) / <alpha-value>)",
-          500: "rgb(var(--ai-500-rgb) / <alpha-value>)",
-          tint: "rgb(var(--ai-tint-rgb) / <alpha-value>)",
-          line: "rgb(var(--ai-line-rgb) / <alpha-value>)",
         },
         ok: {
           DEFAULT: "rgb(var(--ok-rgb) / <alpha-value>)",
