@@ -347,11 +347,11 @@ export default function BibliotheekPage() {
   const kolomAantal = actieveTab === "generiek" ? 8 : 7;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-6">
-      <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
+    <div className="portal-page">
+      <header className="portal-page-header">
         <div>
-          <h1 className="font-serif text-lg font-bold text-ink">Documentbibliotheek</h1>
-          <p className="text-sm text-muted mt-1">
+          <h1 className="portal-page-title">Documentbibliotheek</h1>
+          <p className="portal-page-subtitle">
             {weergave === "zoeken"
               ? `Uitgebreid zoeken in de inhoud van ${
                   actieveTab === "fonds" ? "de fondsdocumenten" : "het generieke kader"
@@ -381,7 +381,7 @@ export default function BibliotheekPage() {
             platformbeheerder en zijn hier alleen-lezen.
           </p>
         )}
-      </div>
+      </header>
 
       {/* Tabs — sinds 30-07-2026 sturen ze BEIDE weergaven: in "beheren" bepalen ze
           welke lijst je ziet, in "zoeken" waarin je zoekt. Daarom staan ze nu buiten

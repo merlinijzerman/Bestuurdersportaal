@@ -264,6 +264,115 @@ body {
     text-transform: uppercase;
   }
 
+  /* ── Portaalritme ───────────────────────────────────────────────────────
+     De hoofdcontainer is een inline-size container. Daardoor reageert een
+     pagina ook op het geopende assistentpaneel; viewport-breakpoints alleen
+     zagen die 400/740 px smallere werkruimte niet. */
+  .portal-main {
+    container-name: portal-content;
+    container-type: inline-size;
+    font-size: 0.875rem;
+  }
+  .portal-page {
+    width: 100%;
+    padding: clamp(1rem, 2.2vw, 1.75rem);
+  }
+  .portal-page-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .portal-page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .portal-page-title {
+    font-family: var(--font-serif), Georgia, serif;
+    color: var(--ink);
+    font-size: clamp(1.5rem, 2.4vw, 1.75rem);
+    line-height: 1.12;
+    letter-spacing: -0.022em;
+    font-weight: 500;
+  }
+  .portal-page-subtitle {
+    margin-top: 0.35rem;
+    max-width: 66ch;
+    color: var(--muted);
+    font-size: 0.84375rem;
+    line-height: 1.55;
+  }
+  .portal-card {
+    background: var(--app-surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+  }
+  .portal-card-title {
+    font-family: var(--font-serif), Georgia, serif;
+    color: var(--ink);
+    font-size: 1.0625rem;
+    line-height: 1.25;
+    letter-spacing: -0.012em;
+    font-weight: 500;
+  }
+  .portal-hero {
+    position: relative;
+    overflow: hidden;
+    min-height: 126px;
+    padding: clamp(1.25rem, 3vw, 1.75rem);
+    border-radius: 14px;
+    color: rgb(var(--nav-text-active-rgb));
+    background:
+      radial-gradient(circle at 92% -20%, rgb(var(--nav-rail-rgb) / 0.26), transparent 42%),
+      linear-gradient(125deg, var(--nav), rgb(var(--nav-line-rgb)));
+    box-shadow: 0 18px 42px -28px rgb(var(--ink-rgb) / 0.72);
+  }
+  .portal-hero-title {
+    max-width: 760px;
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: clamp(1.45rem, 3vw, 1.85rem);
+    line-height: 1.16;
+    letter-spacing: -0.022em;
+    font-weight: 500;
+  }
+  .portal-hero-copy {
+    margin-top: 0.55rem;
+    max-width: 760px;
+    color: rgb(var(--nav-text-rgb));
+    font-size: 0.84375rem;
+    line-height: 1.55;
+  }
+  .portal-hero-copy a {
+    color: rgb(var(--nav-text-active-rgb));
+  }
+  .portal-hero-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgb(var(--nav-text-active-rgb) / 0.24);
+    border-radius: 9px;
+    color: rgb(var(--nav-text-active-rgb));
+    background: rgb(var(--nav-text-active-rgb) / 0.08);
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: background-color 160ms ease, border-color 160ms ease;
+  }
+  .portal-hero-action:hover {
+    border-color: rgb(var(--nav-text-active-rgb) / 0.48);
+    background: rgb(var(--nav-text-active-rgb) / 0.14);
+  }
+  .portal-two-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.875rem;
+  }
+
   /* ── Kaart ── rustige rand + subtiele elevatie ─────────────────────────── */
   .si-card {
     background: var(--app-surface);
@@ -506,10 +615,13 @@ body {
     flex-direction: column;
     width: var(--assistent-paneel-breedte, 400px);
     max-width: 100vw;
-    background: var(--card);
+    background: var(--app-bg);
     border-left: 1px solid var(--line);
     box-shadow: var(--shadow-card);
     outline: none;
+    font-size: 0.875rem;
+    container-name: assistant-panel;
+    container-type: inline-size;
   }
   /* De components-laag zet hierboven expliciet `display: flex`. Zonder deze
      specifiekere regel wint dat van de globale `[hidden]`-reset en blijft een
@@ -532,6 +644,157 @@ body {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    background: var(--app-bg);
+  }
+  .assistent-paneel-kop {
+    min-height: 74px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 0.9rem 0.8rem 1rem;
+    color: rgb(var(--nav-text-active-rgb));
+    background:
+      radial-gradient(circle at 15% -35%, rgb(var(--nav-rail-rgb) / 0.22), transparent 52%),
+      var(--nav);
+    border-bottom: 1px solid rgb(var(--nav-text-active-rgb) / 0.08);
+  }
+  .assistent-identiteit {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .assistent-identiteit-icoon {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    color: var(--ai);
+    background: rgb(var(--nav-text-active-rgb));
+    box-shadow: 0 5px 16px rgb(0 0 0 / 0.16);
+  }
+  .assistent-kopknop:hover {
+    color: rgb(var(--nav-text-active-rgb));
+    background: rgb(var(--nav-text-active-rgb) / 0.1);
+  }
+  .assistent-kopknop:focus-visible {
+    outline: 2px solid rgb(var(--nav-text-active-rgb));
+    outline-offset: 1px;
+  }
+  .assistent-contextbalk {
+    min-height: 45px;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.5rem 0.85rem;
+    background: var(--app-surface);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Binnenwerk van de assistent: één lichte werkbalk, rustige leesruimte en
+     een composer die als één bedieningselement leest. */
+  .assistent-oppervlak {
+    background: var(--app-bg);
+  }
+  .assistent-werkbalk {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    padding: 0.65rem 0.8rem;
+    background: var(--app-surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .assistent-werkbalk-instellingen,
+  .assistent-werkbalk-acties {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+  .assistent-werkbalk-acties {
+    justify-content: flex-end;
+  }
+  .assistent-governance {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--ok-ink);
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+  .assistent-governance::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ok);
+  }
+  .assistent-gesprek {
+    padding: clamp(1rem, 2.5vw, 1.5rem);
+    background:
+      linear-gradient(rgb(var(--app-surface-rgb) / 0.34), rgb(var(--app-surface-rgb) / 0.34)),
+      var(--app-bg);
+  }
+  .assistent-invoerbalk {
+    position: relative;
+    padding: 0.75rem;
+    background: var(--app-surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -10px 30px -26px rgb(var(--ink-rgb) / 0.45);
+  }
+  .assistent-composer {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    min-height: 52px;
+    overflow: hidden;
+    border: 1px solid rgb(var(--app-line-control-rgb));
+    border-radius: 13px;
+    background: var(--app-surface);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .assistent-composer:focus-within {
+    border-color: var(--ai);
+    box-shadow: 0 0 0 3px rgb(var(--ai-rgb) / 0.12);
+  }
+  .assistent-composer textarea {
+    width: 100%;
+    min-height: 50px;
+    padding: 0.75rem 3.6rem 0.7rem 0.85rem;
+    border: 0;
+    outline: 0;
+    resize: none;
+    color: var(--ink);
+    background: transparent;
+    font-size: 0.84375rem;
+    line-height: 1.45;
+  }
+  .assistent-verstuurknop {
+    position: absolute;
+    right: 0.45rem;
+    bottom: 0.45rem;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    color: white;
+    background: var(--ai);
+    transition: transform 150ms ease, opacity 150ms ease;
+  }
+  .assistent-verstuurknop:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .assistent-verstuurknop:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
   }
 
   /* ── Vult de contentkolom ────────────────────────────────────────────────
@@ -579,5 +842,75 @@ body {
     .assistent-marge-vergroot {
       margin-right: 740px;
     }
+  }
+}
+
+@container portal-content (max-width: 760px) {
+  .portal-two-column {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .portal-hero > div {
+    align-items: flex-start;
+  }
+  .portal-hero-action {
+    margin-top: 0.25rem;
+  }
+}
+
+@container assistant-panel (max-width: 520px) {
+  .assistent-werkbalk {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-inline: 0.65rem;
+  }
+  .assistent-werkbalk-instellingen {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .assistent-werkbalk-instellingen::-webkit-scrollbar {
+    display: none;
+  }
+  .assistent-werkbalk-instellingen > .assistent-governance,
+  .assistent-werkbalk-instellingen > span.text-xs,
+  .assistent-werkbalk-instellingen > span + span {
+    flex: 0 0 auto;
+  }
+  .assistent-werkbalk-instellingen > span.font-semibold {
+    display: none;
+  }
+  .assistent-actielabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .assistent-werkbalk-acties button {
+    width: 32px;
+    padding-inline: 0;
+    justify-content: center;
+  }
+  .assistent-gesprek {
+    padding: 0.9rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .assistent-paneel-kop {
+    min-height: 66px;
+    padding-left: 0.75rem;
+  }
+  .assistent-identiteit-icoon {
+    width: 34px;
+    height: 34px;
+  }
+  .assistent-contextbalk {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .assistent-contextbalk p {
+    white-space: normal;
   }
 }
