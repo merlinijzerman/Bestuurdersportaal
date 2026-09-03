@@ -282,7 +282,7 @@ export default function ProcessenOverzicht({
   return (
     <div className="space-y-5">
       {/* ── Werkbalk: status altijd bij de hand, de rest achter één knop ── */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="portal-toolbar">
         <div className="inline-flex rounded-lg border border-app-line-control overflow-hidden bg-white">
           {STATUS_OPTIES.map((o, i) => {
             const aan = status === o.id;
@@ -403,7 +403,7 @@ export default function ProcessenOverzicht({
         {/* ── Ingeklapte filterrail ── */}
         {railOpen && (
           <div className="col-span-12 lg:col-span-3">
-            <div className="bg-white border border-line rounded-xl p-4 space-y-4">
+            <div className="portal-card p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold text-muted uppercase tracking-wider">
                   Filters
@@ -462,7 +462,7 @@ export default function ProcessenOverzicht({
               ))}
             </div>
           ) : zoek.trim() ? (
-            <div className="bg-white border border-dashed border-app-line-strong rounded-xl p-8 text-center text-sm text-muted">
+            <div className="portal-empty">
               Geen processen gevonden voor “{zoek.trim()}” binnen de huidige
               filters.
               <div className="mt-2">
@@ -485,7 +485,7 @@ export default function ProcessenOverzicht({
               </div>
             </div>
           ) : (
-            <div className="bg-white border border-dashed border-app-line-strong rounded-xl p-8 text-center text-sm text-muted">
+            <div className="portal-empty">
               Geen processen die aan deze filters voldoen. Pas de filters aan of
               wis ze.
             </div>
@@ -581,10 +581,11 @@ function ProcesKaart({ p, zoek }: { p: ProcesKaartVM; zoek: string }) {
   return (
     <Link
       href={`/procedures/${p.id}`}
-      className={`block bg-white border border-line rounded-xl p-4 hover:border-accent transition-colors ${
+      className={`portal-card block overflow-hidden transition-all hover:border-accent hover:shadow-card-hover ${
         p.isAfgerond ? "opacity-80" : ""
       }`}
     >
+      <div className="p-5">
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -645,10 +646,17 @@ function ProcesKaart({ p, zoek }: { p: ProcesKaartVM; zoek: string }) {
           <div className="text-xs text-muted">Gestart {p.gestartLabel}</div>
         </div>
       </div>
+      </div>
 
       {/* Aandachtspunten als aparte strook onderaan. */}
       {p.aandachtspunten.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-line flex items-center gap-4 flex-wrap text-xs">
+        <div
+          className={`flex flex-wrap items-center gap-4 border-l-[3px] border-t px-5 py-3 text-xs ${
+            p.heeftRood
+              ? "border-err/40 bg-err-tint"
+              : "border-warn/40 bg-warn-tint"
+          }`}
+        >
           {p.aandachtspunten.map((a) => (
             <span
               key={`${a.niveau}-${a.tekst}`}

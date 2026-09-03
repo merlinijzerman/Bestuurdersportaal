@@ -29,6 +29,12 @@ interface RisicoRij {
   eigenaar_naam: string | null;
 }
 
+const NIVEAU_RAIL: Record<NiveauSlug, string> = {
+  hoog: "border-l-err",
+  middel: "border-l-warn",
+  laag: "border-l-ok",
+};
+
 export default async function RisicomatrixPage() {
   const supabase = await createServerSupabase();
   const {
@@ -62,11 +68,11 @@ export default async function RisicomatrixPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-6 space-y-5">
-      <div className="flex items-end justify-between flex-wrap gap-3">
+    <div className="portal-page">
+      <header className="portal-page-header">
         <div>
-          <h1 className="font-serif text-ink text-lg font-bold">Risicomatrix</h1>
-          <p className="text-muted text-sm mt-0.5">
+          <h1 className="portal-page-title">Risicomatrix</h1>
+          <p className="portal-page-subtitle">
             Actueel inzicht in de risico&apos;s van het fonds, gerangschikt op
             Kans &times; Impact en onderverdeeld in vier categorie&euml;n.
           </p>
@@ -77,7 +83,7 @@ export default async function RisicomatrixPage() {
           <AssistentIngang
             ingangen={[{ soort: "risicomatrix" }]}
             module="risicomatrix"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-accent bg-accent/5 rounded-lg hover:bg-accent/10 text-accent font-semibold"
+            className="portal-ai-action"
           >
             <span aria-hidden>✨</span>
             Bespreek met de AI
@@ -95,13 +101,13 @@ export default async function RisicomatrixPage() {
             + Nieuw risico
           </Link>
         </div>
-      </div>
+      </header>
 
       <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 lg:col-span-8 bg-white border border-line rounded-xl p-4">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div className="portal-card col-span-12 overflow-hidden lg:col-span-8">
+          <div className="portal-card-header">
             <div>
-              <h2 className="text-sm font-semibold text-ink">
+              <h2 className="portal-card-title">
                 Kans &times; Impact heatmap
               </h2>
               <p className="text-xs text-muted mt-0.5">
@@ -112,7 +118,9 @@ export default async function RisicomatrixPage() {
               {lijst.length} actieve risico&apos;s
             </div>
           </div>
-          <Heatmap risicos={lijst} />
+          <div className="p-4">
+            <Heatmap risicos={lijst} />
+          </div>
         </div>
 
         <aside className="col-span-12 lg:col-span-4 space-y-3">
@@ -179,26 +187,26 @@ export default async function RisicomatrixPage() {
         {CATEGORIEEN.map((cat) => {
           const inCat = lijst.filter((r) => r.categorie === cat.slug);
           return (
-            <section key={cat.slug}>
-              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">
+            <section key={cat.slug} className="portal-card overflow-hidden">
+              <div className="portal-card-header">
+                <h2 className="portal-card-title">
                   {cat.label}
                 </h2>
-                <span className="text-xs text-muted">
+                <span className="portal-status-pill border border-line bg-app-surface text-muted">
                   {inCat.length} {inCat.length === 1 ? "risico" : "risico's"}
                 </span>
               </div>
               {inCat.length === 0 ? (
-                <div className="bg-white border border-dashed border-line rounded-xl px-5 py-4 text-sm text-muted">
+                <div className="px-[1.125rem] py-4 text-sm text-muted">
                   Nog geen risico&apos;s in deze categorie.
                 </div>
               ) : (
-                <div className="bg-white border border-line rounded-xl divide-y divide-line">
+                <div className="divide-y divide-line">
                   {inCat.map((r) => (
                     <Link
                       key={r.id}
                       href={`/risicomatrix/${r.id}`}
-                      className="flex items-center gap-3 p-3.5 hover:bg-app-bg"
+                      className={`portal-row portal-row-interactive flex items-center gap-3 border-l-[3px] ${NIVEAU_RAIL[r.niveau]}`}
                     >
                       <span
                         className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${NIVEAU_KLEUREN[r.niveau].dot}`}
@@ -222,7 +230,7 @@ export default async function RisicomatrixPage() {
                         K{r.kans} &middot; I{r.impact}
                       </div>
                       <span
-                        className={`text-[11px] font-semibold px-2 py-0.5 rounded ${NIVEAU_KLEUREN[r.niveau].pillBg} ${NIVEAU_KLEUREN[r.niveau].pillText}`}
+                        className={`portal-status-pill ${NIVEAU_KLEUREN[r.niveau].pillBg} ${NIVEAU_KLEUREN[r.niveau].pillText}`}
                       >
                         {NIVEAU_LABEL[r.niveau]}
                       </span>

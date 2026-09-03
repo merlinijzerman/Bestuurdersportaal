@@ -596,7 +596,7 @@ export default async function ProcedureDetailPage({
   ].sort((a, b) => (a.tijdstip < b.tijdstip ? 1 : -1));
 
   return (
-    <div className="p-4 sm:p-6 lg:p-6 space-y-5">
+    <div className="portal-page portal-page-stack">
       {/* Top-bar: terug-link links, AI-instap rechts (besluit 0151). */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Link
@@ -611,7 +611,7 @@ export default async function ProcedureDetailPage({
         <AssistentIngang
           ingangen={[{ soort: "proces", procedureId: procedure.id }]}
           module="procedures"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/5 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/10 transition-colors"
+          className="portal-ai-action"
         >
           <span aria-hidden>✨</span>
           Bespreek dit proces met de AI
@@ -649,7 +649,7 @@ export default async function ProcedureDetailPage({
           )}
         </div>
         <div className="flex items-start justify-between flex-wrap gap-3">
-          <h1 className="font-serif text-ink text-lg font-bold">
+          <h1 className="portal-page-title">
             {procedure.titel}
           </h1>
           <div className="flex items-center gap-2 flex-wrap">
@@ -678,7 +678,7 @@ export default async function ProcedureDetailPage({
       </div>
 
       {/* Meta-strook */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-line rounded-xl p-4">
+      <div className="portal-card grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Co-eigenaars
@@ -788,7 +788,7 @@ export default async function ProcedureDetailPage({
       <div className="grid grid-cols-12 gap-4">
         {/* Step rail */}
         <div className="col-span-12 lg:col-span-4">
-          <div className="bg-white border border-line rounded-xl p-4 sticky top-4">
+          <div className="portal-card sticky top-4 p-4">
             <div className="flex items-center justify-between mb-4">
               <div className="text-xs uppercase tracking-wide text-muted font-semibold">
                 Procesfasen

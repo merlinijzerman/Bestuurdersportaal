@@ -15,7 +15,7 @@
 // fasen (bewust weggehaald om de rail rustig te houden; de aandacht-afleiding
 // blijft in de data bestaan voor het portfolio-overzicht). De accordeon is
 // neutraal; alléén de GESELECTEERDE stap (of fase) wordt gehighlight met de
-// selectie-highlight (bg-accent-tint + navy cirkel).
+// selectie-highlight (phase-tint + teal zijlijn en omlijnde stapbadge).
 // GEEN beschrijvings-/toelichtingsblokken in het linkerpaneel; die staan in de
 // fase-weergave rechts. Klik op een fasekop → fase-weergave (`?fase=`); klik op
 // een stap → het stapscherm (`?stap=`). Parallel-by-default.
@@ -90,14 +90,16 @@ function StapItem({
         replace
         aria-current={geselecteerd ? "step" : undefined}
         className={`relative block -mx-3 px-3 pl-9 py-2 rounded-lg transition-colors ${
-          geselecteerd ? "bg-accent-tint" : "hover:bg-app-line/50"
+          geselecteerd
+            ? "bg-phase-tint shadow-[inset_3px_0_0_var(--phase)]"
+            : "hover:bg-app-line/50"
         }`}
       >
-        {/* Neutrale cirkel; alleen de geselecteerde stap krijgt de navy vulling. */}
+        {/* Neutrale cirkel; de geselecteerde stap krijgt een teal omlijning. */}
         <div
           className={`absolute left-3 top-2.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
             geselecteerd
-              ? "bg-accent text-white"
+              ? "border border-phase bg-app-surface text-phase-ink"
               : "bg-app-bg border border-line text-muted"
           }`}
         >
@@ -206,7 +208,9 @@ export default function FaseRail({
               onClick={() => openFase(f.fase_code)}
               aria-expanded={isOpen}
               className={`w-full text-left px-2.5 py-2.5 flex items-center gap-2.5 transition-colors ${
-                isGeselecteerd ? "bg-accent-tint" : "hover:bg-app-line/50"
+                isGeselecteerd
+                  ? "bg-phase-tint shadow-[inset_3px_0_0_var(--phase)]"
+                  : "hover:bg-app-line/50"
               }`}
             >
               <span

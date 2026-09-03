@@ -93,7 +93,7 @@ export default function UitklapbaarPaneel({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between gap-3 px-5 py-3 bg-white border border-line hover:bg-app-bg text-left ${
+        className={`w-full flex items-center justify-between gap-3 px-5 py-3 bg-white border border-line shadow-card hover:bg-app-bg text-left ${
           open ? "rounded-t-xl" : "rounded-xl"
         }`}
         aria-expanded={open}
