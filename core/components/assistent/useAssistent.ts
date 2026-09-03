@@ -53,7 +53,16 @@ import {
   pasStreamEventToe,
   splitsStreamBuffer,
 } from "@/core/lib/assistent-stream";
-import { leesScope, leesAgendapuntContext, type AssistentContextWaarde } from "@/core/lib/assistent-context";
+import {
+  leesScope,
+  leesAgendapuntContext,
+  type AssistentContextWaarde,
+} from "@/core/lib/assistent-context";
+import {
+  leesAssistentContextUitUrl,
+  resolveerAssistentContext,
+  type ContextLezer,
+} from "@/core/lib/assistent-url-ingang";
 import { type VoortgangUI } from "@/core/lib/voortgang";
 import type {
   Bericht,
@@ -458,7 +467,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     setStukContext({ stuksoort, onderwerp: onderwerp.trim() });
     const zin = bouwStukZin(stuksoort, onderwerp);
     // Expliciet `null` (niet undefined) meegeven: stuurBericht valt bij undefined
-    // terug op de — nog niet gecommitte — context.documentScope-state; null betekent
+    // terug op de — nog niet gecommitte — documentScope-state; null betekent
     // ondubbelzinnig "geen scope" en stuurt de server de bronloze bureau-tak in.
     void stuurBericht(zin, {
       scopeOverride: scope,
@@ -549,7 +558,7 @@ export function useAssistent(opties: UseAssistentOpties) {
   // Slaat het gesprek best-effort op. Faalt veilig: een mislukte opslag mag de
   // chat nooit verstoren. governance_log (auditspoor) staat hier los van.
   // `scopeVoorOpslag` is de GESPREKSSCOPE die bewaard moet worden. Normaal is dat
-  // gewoon de gecommitte `context.documentScope`-state; alleen wanneer een taak de scope in
+  // gewoon de gecommitte documentScope-state; alleen wanneer een taak de scope in
   // dezelfde tick zet én verstuurt (P2 "doorgronden") geeft de aanroeper de nieuwe
   // scope expliciet mee (anders zou de nog-niet-gecommitte closure worden bewaard).
   // Bewust NIET de per-turn `scopeOverride` van een vervolgactie: die is een
@@ -567,7 +576,7 @@ export function useAssistent(opties: UseAssistentOpties) {
 
       // Scope meeschrijven als jsonb {type, document_ids, titels, gezet_op}.
       // ADR 0028: in agendapunt-modus bewaren we additief agendapunt_context, ook
-      // als er 0 stukken zijn (context.documentScope null) — zodat de framing terugkomt.
+      // als er 0 stukken zijn (documentScope null) — zodat de framing terugkomt.
       const scopePayload =
         scopeVoorOpslag || context.agendapuntContext
           ? {
@@ -726,149 +735,47 @@ export function useAssistent(opties: UseAssistentOpties) {
           if (profielModus) setAntwoordmodus(profielModus);
         }
 
-        // Instappunt-knop "Vraag de AI over dit stuk": /ai?doc=<id> opent de chat
-        // met scope op dat document. We zetten de scope expliciet (validatie volgt
-        // server-side bij de eerste vraag). Een nieuw gesprek starten zodat de
-        // scope niet over een bestaand gesprek heen valt.
-        try {
-          const docParam = new URLSearchParams(window.location.search).get("doc");
-          if (docParam) {
-            const { data: d } = await supabase
-              .from("documenten")
-              .select("id, titel, actief")
-              .eq("id", docParam)
-              .maybeSingle();
-            if (d?.id && d.actief !== false) {
-              gesprekId.current = null;
-              gesprekBestaatInDb.current = false;
-              setBerichten([{ rol: "ai", tekst: personalTekst }]);
-              zetDocumentScope({
-                document_ids: [d.id as string],
-                titels: [(d.titel as string) || "dit document"],
-              });
-            }
-          }
-        } catch (e) {
-          console.error("Scope uit ?doc= zetten mislukt:", e);
+        // ── De URL-ingang (L1) — ÉÉN plek ────────────────────────────────
+        // `?doc=`, `?agendapunt=`, `?proces=`, `?risicomatrix=1` en `?intent=`
+        // stonden hier als vier losse blokken, elk met een eigen
+        // `new URLSearchParams(...)`, een eigen query en een eigen try/catch.
+        // Ze wonen nu in `core/lib/assistent-url-ingang.ts`.
+        //
+        // Bewust op DEZELFDE plek in deze reeks aangeroepen en niet in een
+        // eigen effect: de takken draaien ná het laden van het profiel en ná de
+        // auto-restore, en ze gebruiken de gepersonaliseerde welkomsttekst. Een
+        // eigen effect zou daarmee een race introduceren en bij een deeplink de
+        // generieke begroeting kunnen tonen.
+        const urlVerzoek = leesAssistentContextUitUrl(window.location.search);
+        // De resolver vraagt om een MINIMALE leesinterface (select/eq/order),
+        // niet om de supabase-client zelf: zo is hij te testen met een stub en is
+        // aan zijn signatuur te zien dat hij nooit schrijft. De generieke typen
+        // van de echte client matchen daar niet structureel op (tsc loopt vast op
+        // de diepte), vandaar deze ene, bewuste versmalling.
+        const urlContext = await resolveerAssistentContext(
+          supabase as unknown as ContextLezer,
+          urlVerzoek.ingang
+        );
+        if (urlContext.startSchoonGesprek) {
+          // Een schoon gesprek, zodat de scope niet over een bestaand gesprek
+          // heen valt.
+          gesprekId.current = null;
+          setActiefGesprekId(null);
+          gesprekBestaatInDb.current = false;
+          setBerichten([{ rol: "ai", tekst: personalTekst }]);
         }
+        // Alleen de velden die deze ingang ZET; een ontbrekende sleutel laat het
+        // veld met rust (zie AssistentContextPatch).
+        const { patch } = urlContext;
+        if (patch.documentScope !== undefined) zetDocumentScope(patch.documentScope);
+        if (patch.agendapuntContext !== undefined)
+          zetAgendapuntContext(patch.agendapuntContext);
+        if (patch.moduleScope !== undefined) zetModuleScope(patch.moduleScope);
+        if (patch.risicoLijst !== undefined) zetRisicoLijst(patch.risicoLijst);
+        // Ingreep 2 — de bevestigde bron-intentie geldt voor dit gesprek en
+        // staat NAAST een eventuele scope; "Nieuw gesprek" wist hem.
+        if (urlVerzoek.herkomst) zetHerkomst(urlVerzoek.herkomst);
 
-        // Instappunt-knop "Vraag de AI over dit agendapunt": /ai?agendapunt=<id>
-        // opent de chat geframed door het agendapunt (ADR 0028). We laden id+titel
-        // (RLS) en koppelen de actieve stukken als retrieval-scope. De toelichting
-        // zelf wordt server-side per beurt opgehaald — niet hier meegegeven. Een
-        // nieuw gesprek starten zodat de framing niet over een bestaand gesprek
-        // heen valt.
-        try {
-          const apParam = new URLSearchParams(window.location.search).get(
-            "agendapunt"
-          );
-          if (apParam) {
-            const { data: ap } = await supabase
-              .from("agendapunten")
-              .select("id, titel")
-              .eq("id", apParam)
-              .maybeSingle();
-            if (ap?.id) {
-              const { data: stukken } = await supabase
-                .from("documenten")
-                .select("id, titel")
-                .eq("agendapunt_id", ap.id)
-                .eq("actief", true);
-              const geldig = Array.isArray(stukken)
-                ? stukken.filter(
-                    (s): s is { id: string; titel: string } =>
-                      typeof s?.id === "string"
-                  )
-                : [];
-              gesprekId.current = null;
-              gesprekBestaatInDb.current = false;
-              setBerichten([{ rol: "ai", tekst: personalTekst }]);
-              zetAgendapuntContext({
-                id: ap.id as string,
-                titel: (ap.titel as string) || "dit agendapunt",
-              });
-              zetDocumentScope(
-                geldig.length > 0
-                  ? {
-                      document_ids: geldig.map((s) => s.id),
-                      titels: geldig.map((s) => s.titel || "stuk"),
-                    }
-                  : null
-              );
-            }
-          }
-        } catch (e) {
-          console.error("Scope uit ?agendapunt= zetten mislukt:", e);
-        }
-
-        // Besluit 0151 — module-scope-ingang. /ai?proces=<id> opent de chat in de
-        // context van dat dossier; /ai?risicomatrix=1 in de context van de hele
-        // risicomatrix (de enige risico-ingang). De inhoud resolveert de server
-        // per beurt onder RLS; hier zetten we alleen de sleutel + een label voor de
-        // chip. Een nieuw gesprek starten zodat de scope niet over een bestaand
-        // gesprek heen valt (gelijk aan ?doc=/?agendapunt=).
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const procesParam = params.get("proces");
-          const risicomatrixParam = params.get("risicomatrix");
-          if (procesParam) {
-            const { data: p } = await supabase
-              .from("procedures")
-              .select("id, titel")
-              .eq("id", procesParam)
-              .maybeSingle();
-            if (p?.id) {
-              gesprekId.current = null;
-              gesprekBestaatInDb.current = false;
-              setBerichten([{ rol: "ai", tekst: personalTekst }]);
-              zetModuleScope({
-                soort: "proces",
-                procedure_id: p.id as string,
-                label: (p.titel as string) || "dit proces",
-              });
-            }
-          } else if (risicomatrixParam) {
-            gesprekId.current = null;
-            gesprekBestaatInDb.current = false;
-            setBerichten([{ rol: "ai", tekst: personalTekst }]);
-            zetModuleScope({ soort: "risicomatrix", label: "de risicomatrix" });
-            // De risico's van het fonds voor de "verdiep dit risico"-chips (RLS).
-            const { data: rs } = await supabase
-              .from("risicos")
-              .select("id, titel")
-              .eq("status", "actief")
-              .order("niveau", { ascending: false });
-            zetRisicoLijst(
-              (rs ?? [])
-                .filter((r): r is { id: string; titel: string } => typeof r?.id === "string")
-                .map((r) => ({ id: r.id, titel: r.titel || "risico" }))
-            );
-          }
-        } catch (e) {
-          console.error("Module-scope uit ?proces=/?risicomatrix= zetten mislukt:", e);
-        }
-
-        // Ingreep 2 — module-ingang: /ai?intent=fonds&context.herkomst=<module>. Zet de
-        // bevestigde bron-intentie voor dit gesprek. Bewust NA de ?doc=/?agendapunt=-
-        // takken: die zetten een document-scope, en dan negeert de route de
-        // bron-intentie toch (scopeActief ⇒ bronIntentResultaat = null). De
-        // parameter is een gebruikersactie (hij klikte in die module op de knop),
-        // geen heuristiek — daarom mag hij het vertrouwen op "zeker" zetten.
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const intentParam = params.get("intent");
-          if (intentParam === "fonds" || intentParam === "algemeen") {
-            const moduleParam = (params.get("context.herkomst") || "").slice(0, 40);
-            zetHerkomst({
-              intent: intentParam,
-              // Alleen een sobere slug toestaan; de waarde landt in het auditspoor
-              // en (als label) in de UI, dus geen vrije tekst uit de URL.
-              module: /^[a-z0-9-]{1,40}$/.test(moduleParam) ? moduleParam : "portaal",
-            });
-          }
-        } catch (e) {
-          console.error("Bron-intentie uit ?intent= zetten mislukt:", e);
-        }
 
         // Vul het gesprekken-overzicht.
         laadGesprekken();
@@ -908,7 +815,7 @@ export function useAssistent(opties: UseAssistentOpties) {
         : antwoordmodus;
     const effScope =
       opties?.scopeOverride !== undefined ? opties.scopeOverride : context.documentScope;
-    // De te BEWAREN gespreksscope. Default = de (gecommitte) context.documentScope-state,
+    // De te BEWAREN gespreksscope. Default = de (gecommitte) documentScope-state,
     // zodat vervolgacties met een per-turn scopeOverride de bewaarde gespreksscope
     // NIET wijzigen (regressie-fix). Alleen doorgronden geeft persistScope mee,
     // omdat het de scope in dezelfde tick zet én verstuurt (state nog niet gecommit).

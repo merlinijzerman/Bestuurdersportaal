@@ -1,14 +1,13 @@
 "use client";
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 // P1a — de assistent in drie lagen (besluit 0201). Dit bestand is L3: de
 // presentatie. Het houdt alleen kijkstaat en rendert wat L1 (context) en L2
 // (gesprek) leveren; het bouwt geen aanroep en kent de payload niet.
 import { useAssistent } from "@/core/components/assistent/useAssistent";
 import {
-  bepaalContextSoort,
-  type AssistentContextWaarde,
-} from "@/core/lib/assistent-context";
-import type { Herkomst } from "@/core/lib/assistent-payload";
+  AssistentContextProvider,
+  useAssistentContext,
+} from "@/core/components/assistent/AssistentContextProvider";
 import {
   ZICHTBARE_ANTWOORDMODI,
   bepaalVervolgacties,
@@ -96,7 +95,28 @@ const HERKOMST_LABEL: Record<string, string> = {
   portaal: "het portaal",
 };
 
+/**
+ * De pagina `/ai`. Mount de contextlaag en rendert het oppervlak.
+ *
+ * De provider staat hier en niet in de shell, omdat de assistent in P1a nog
+ * alleen als pagina bestaat. In P1b verhuist hij naar `DashboardShell`, zodat
+ * een paneel naast een module dezelfde context deelt; dit bestand wordt dan de
+ * volledig-schermstand van datzelfde oppervlak.
+ */
 export default function AssistentClient({
+  startpuntContext,
+}: {
+  startpuntContext: PortaalContext;
+}) {
+  return (
+    <AssistentContextProvider>
+      <AssistentOppervlak startpuntContext={startpuntContext} />
+    </AssistentContextProvider>
+  );
+}
+
+/** L3 — de presentatie: kijkstaat en opmaak, verder niets. */
+function AssistentOppervlak({
   startpuntContext,
 }: {
   startpuntContext: PortaalContext;
@@ -132,46 +152,19 @@ export default function AssistentClient({
   const [mentionSuggesties, setMentionSuggesties] = useState<DocSuggestie[]>([]);
 
   // ── L1: waar kijkt de bestuurder naar? ────────────────────────────────────
-  // In P1a woont deze staat nog hier; in P1b verhuist hij naar de
-  // AssistentContextProvider in de shell, zodat een paneel naast een module
-  // dezelfde context deelt. De VORM is nu al die van de contextlaag, zodat de
-  // signatuur van `useAssistent` daarbij niet meer hoeft te wijzigen.
-  const [documentScope, setDocumentScope] = useState<DocumentScope | null>(null);
-  const [agendapuntContext, setAgendapuntContext] =
-    useState<AgendapuntContext | null>(null);
-  const [moduleScope, setModuleScope] = useState<ModuleScope | null>(null);
-  const [risicoLijst, setRisicoLijst] = useState<{ id: string; titel: string }[]>([]);
-  const [herkomst, setHerkomst] = useState<Herkomst | null>(null);
-
-  const context: AssistentContextWaarde = useMemo(
-    () => ({
-      documentScope,
-      zetDocumentScope: setDocumentScope,
-      agendapuntContext,
-      zetAgendapuntContext: setAgendapuntContext,
-      moduleScope,
-      zetModuleScope: setModuleScope,
-      risicoLijst,
-      zetRisicoLijst: setRisicoLijst,
-      herkomst,
-      zetHerkomst: setHerkomst,
-      soort: bepaalContextSoort({ documentScope, agendapuntContext, moduleScope }),
-    }),
-    [
-      documentScope,
-      agendapuntContext,
-      moduleScope,
-      risicoLijst,
-      herkomst,
-      // De setters zijn stabiel, maar de React Compiler leidt ze wél als
-      // afhankelijkheid af; ze weglaten laat hem de memoisatie overslaan.
-      setDocumentScope,
-      setAgendapuntContext,
-      setModuleScope,
-      setRisicoLijst,
-      setHerkomst,
-    ]
-  );
+  const context = useAssistentContext();
+  const {
+    documentScope,
+    zetDocumentScope,
+    agendapuntContext,
+    zetAgendapuntContext,
+    moduleScope,
+    zetModuleScope,
+    risicoLijst,
+    zetRisicoLijst,
+    herkomst,
+    zetHerkomst,
+  } = context;
 
   // ── L2: het gesprek ───────────────────────────────────────────────────────
   const {
@@ -310,8 +303,8 @@ export default function AssistentClient({
 
   function scopeUitDocumentlijst(documentIds: string[], titels: string[]) {
     if (laden || documentIds.length === 0) return;
-    setAgendapuntContext(null);
-    setDocumentScope({ document_ids: documentIds, titels, algemene_kennis: true });
+    zetAgendapuntContext(null);
+    zetDocumentScope({ document_ids: documentIds, titels, algemene_kennis: true });
     focusInvoer();
   }
 
@@ -353,8 +346,8 @@ export default function AssistentClient({
   function kiesDocument(s: DocSuggestie) {
     // Een expliciete documentkeuze verlaat de agendapunt-modus (ADR 0028): de
     // gebruiker stuurt nu zelf op één stuk i.p.v. de agendapunt-framing.
-    setAgendapuntContext(null);
-    setDocumentScope({ document_ids: [s.id], titels: [s.titel] });
+    zetAgendapuntContext(null);
+    zetDocumentScope({ document_ids: [s.id], titels: [s.titel] });
     setInvoer((huidig) => huidig.replace(/@([^\s@]*)$/, "").trimEnd());
     sluitMention();
   }
@@ -560,7 +553,7 @@ export default function AssistentClient({
             {herkomst.intent === "fonds" ? "uw fonds" : "algemeen"}
             <button
               type="button"
-              onClick={() => setHerkomst(null)}
+              onClick={() => zetHerkomst(null)}
               aria-label="Herkomst wissen en terug naar automatische bronkeuze"
               className="text-muted hover:text-ink"
             >
@@ -1234,8 +1227,8 @@ export default function AssistentClient({
                 </span>
                 <button
                   onClick={() => {
-                    setModuleScope(null);
-                    setRisicoLijst([]);
+                    zetModuleScope(null);
+                    zetRisicoLijst([]);
                   }}
                   className="shrink-0 w-4 h-4 rounded-full bg-accent hover:bg-accent text-accent-ink flex items-center justify-center"
                   aria-label="Modulecontext wissen"
@@ -1247,7 +1240,7 @@ export default function AssistentClient({
               {moduleScope.soort === "risico" && (
                 <button
                   onClick={() =>
-                    setModuleScope({ soort: "risicomatrix", label: "de risicomatrix" })
+                    zetModuleScope({ soort: "risicomatrix", label: "de risicomatrix" })
                   }
                   className="text-xs text-accent hover:text-accent-ink underline underline-offset-2"
                 >
@@ -1268,7 +1261,7 @@ export default function AssistentClient({
                       <button
                         key={r.id}
                         onClick={() =>
-                          setModuleScope({
+                          zetModuleScope({
                             soort: "risico",
                             risico_id: r.id,
                             label: r.titel,
@@ -1308,8 +1301,8 @@ export default function AssistentClient({
               </span>
               <button
                 onClick={() => {
-                  setAgendapuntContext(null);
-                  setDocumentScope(null);
+                  zetAgendapuntContext(null);
+                  zetDocumentScope(null);
                 }}
                 className="shrink-0 w-4 h-4 rounded-full bg-accent hover:bg-accent text-accent-ink flex items-center justify-center"
                 aria-label="Agendapunt-scope wissen"
@@ -1332,7 +1325,7 @@ export default function AssistentClient({
                   : ""}
               </span>
               <button
-                onClick={() => setDocumentScope(null)}
+                onClick={() => zetDocumentScope(null)}
                 className="shrink-0 w-4 h-4 rounded-full bg-warn hover:bg-warn text-warn-ink flex items-center justify-center"
                 aria-label="Documentscope wissen"
                 title="Onderwerp wissen — weer zonder hoofddocument vragen"
@@ -1348,7 +1341,7 @@ export default function AssistentClient({
                 type="checkbox"
                 checked={documentScope.algemene_kennis === true}
                 onChange={(e) =>
-                  setDocumentScope(
+                  zetDocumentScope(
                     documentScope
                       ? { ...documentScope, algemene_kennis: e.target.checked }
                       : null

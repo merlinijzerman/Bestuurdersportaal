@@ -110,3 +110,47 @@ export function leesAgendapuntContext(ruw: unknown): AgendapuntContext | null {
   if (typeof id !== "string" || id.length === 0) return null;
   return { id, titel: typeof titel === "string" && titel ? titel : "dit agendapunt" };
 }
+
+/**
+ * De tekst van de contextchip: "waar gaat dit gesprek over?".
+ *
+ * Vandaag bouwt de weergavelaag deze zinnen nog inline op, elk in zijn eigen
+ * JSX-tak met eigen kleuren en een eigen wisknop. Die opbouw is hier ONGEWIJZIGD
+ * overgenomen en met `assistent-context.sanity.ts` op de letter vastgelegd, maar
+ * bewust nog niet in `/ai` ingeschakeld: P1a mag geen letter aan de weergave
+ * veranderen, en P1b bouwt de chip toch opnieuw als paneelonderdeel.
+ *
+ * Deze functie is dus het CONTRACT dat P1b erft: één plek waar staat hoe een
+ * context zich benoemt, in plaats van drie takken die uiteen kunnen lopen.
+ * Zonder consument tot P1b — dat is een bewuste keuze, geen vergeten draad.
+ */
+export function contextChipLabel(velden: {
+  documentScope: DocumentScope | null;
+  agendapuntContext: AgendapuntContext | null;
+  moduleScope: ModuleScope | null;
+}): string | null {
+  const { documentScope, agendapuntContext, moduleScope } = velden;
+  switch (bepaalContextSoort(velden)) {
+    case "agendapunt": {
+      const aantal = documentScope?.document_ids.length ?? 0;
+      const stukken =
+        aantal > 0 ? `${aantal} ${aantal === 1 ? "stuk" : "stukken"}` : "geen stukken";
+      return `Agendapunt: «${agendapuntContext!.titel}» · ${stukken}`;
+    }
+    case "proces":
+      return `Proces: «${moduleScope!.label}»`;
+    case "risico":
+      return `Risico: «${moduleScope!.label}»`;
+    case "risicomatrix":
+      return "Risicomatrix";
+    case "document": {
+      const extra = documentScope!.document_ids.length - 1;
+      return `Onderwerp: «${documentScope!.titels[0] || "dit document"}»${
+        extra > 0 ? ` +${extra}` : ""
+      }`;
+    }
+    default:
+      // Fondsbreed draagt geen chip: er is niets ingeperkt om te tonen.
+      return null;
+  }
+}
