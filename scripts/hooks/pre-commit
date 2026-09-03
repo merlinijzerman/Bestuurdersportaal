@@ -3,9 +3,30 @@
 # (gezet door het "prepare"-script bij `npm install`).
 # Blokkeert een commit zodra er hardcoded merkkleuren of gemigreerde
 # Tailwind-palette-classes insluipen. Zie scripts/check-brand-hex.mjs.
+# Een verse worktree heeft geen node_modules; dan kan geen van beide controles
+# draaien. Hard stoppen mét uitleg is beter dan een cryptische npm-fout — en
+# beter dan stilzwijgend overslaan, want dan draait de geheimenscan niet.
+if [ ! -d node_modules ]; then
+  echo ""
+  echo "✗ Commit geblokkeerd: node_modules ontbreekt in deze worktree."
+  echo "  De kleur- en geheimencontrole kunnen niet draaien. Doe eerst: npm install"
+  exit 1
+fi
+
 npm run --silent lint:colors || {
   echo ""
   echo "✗ Commit geblokkeerd: gebruik semantische tokens i.p.v. losse kleuren."
+  echo "  (overslaan in noodgeval: git commit --no-verify)"
+  exit 1
+}
+
+# Geheimenscan (besluit 0207). Draaide alleen in `test:ci` — dus ná de commit.
+# Nu de deploy niet meer per se langs GitHub Desktop loopt, is dit het moment
+# waarop een geheim nog tegen te houden is.
+npm run --silent security:secrets || {
+  echo ""
+  echo "✗ Commit geblokkeerd: mogelijk geheim in deze wijziging."
+  echo "  Controleer scripts/check-committed-secrets.sh"
   echo "  (overslaan in noodgeval: git commit --no-verify)"
   exit 1
 }

@@ -1,0 +1,20 @@
+#!/bin/sh
+# Gedeelde pre-push hook — geactiveerd via `core.hooksPath scripts/hooks`
+# (gezet door het "prepare"-script bij `npm install`). Besluit 0207.
+#
+# Weigert een rechtstreekse push naar main of preview. Branch protection
+# weigert dat server-side ook, maar pas ná een mislukte poging en zonder
+# uitleg; lokaal is het sneller en duidelijker. Ga via een PR:
+#   gh pr create --base preview …
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/preview)
+      echo ""
+      echo "✗ Push naar ${remote_ref##refs/heads/} geweigerd (besluit 0207)."
+      echo "  Ga via een PR:  gh pr create --base preview"
+      echo "  Promotie naar main gaat vanuit preview, ná expliciet akkoord."
+      exit 1
+      ;;
+  esac
+done
+exit 0

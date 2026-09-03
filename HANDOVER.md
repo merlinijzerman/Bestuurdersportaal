@@ -36,7 +36,7 @@ Vercel-URL: het Vercel project heet `bestuurdersportaal` — exacte productie-UR
 - **unpdf** voor PDF-tekstextractie (modern pdfjs onder de motorkap, met eigen positionele joiner voor juiste woordafstanden)
 - **mammoth** voor Word (.docx) tekstextractie
 - **xlsx** (SheetJS) voor Excel (.xlsx) parsing naar markdown-tabellen
-- **GitHub Desktop** is hoe Merlin commit/pusht (geen terminal-git voor commits)
+- **Committen/pushen mag met `gh` of GitHub Desktop** (besluit 0207). PR verplicht; rechtstreeks pushen naar `main`/`preview` is geblokkeerd (branch protection + `scripts/hooks/pre-push`). Merges naar `preview` mogen autonoom na groene checks; de promotie naar `main` vraagt een expliciet akkoord
 
 Geen aparte library voor charts — alle visuals zijn pure SVG of HTML/CSS met percentage-widths. De Risicomatrix-heatmap is een Tailwind-grid van 5×5 cellen, geen library.
 
