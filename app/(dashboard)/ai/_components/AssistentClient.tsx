@@ -57,8 +57,23 @@ import type {
 import { GENERIEKE_STARTVRAGEN, type Startvraag } from "@/core/lib/startvragen";
 import { bouwDoorgrondZin, type DoorgrondSectieId } from "@/core/lib/doorgrond";
 import { maakIdempotentVerzoek } from "@/core/lib/idempotency-key";
+import { bouwChatPayload } from "@/core/lib/assistent-payload";
+// P1a — de gespreks- en contexttypen wonen sinds de laagsplitsing in `core/`,
+// zodat de payload-bouwer en de gesprekshook ze kunnen gebruiken zonder uit
+// `app/` te importeren (boundary T9). Ongewijzigd verhuisd uit dit bestand.
+import type {
+  Modus,
+  VerduidelijkingKeuze,
+  VolledigeAnalyseAanbod,
+  Bericht,
+  DocumentScope,
+  ModuleScope,
+  DocSuggestie,
+  GesprekItem,
+  AgendapuntContext,
+  StuurOpties,
+} from "@/core/lib/assistent-types";
 
-type Modus = "documenten" | "combineren" | "algemeen";
 
 // Antwoordmodusfamilie — Increment I-1 (FO §13): nog maar VIER zichtbare modi.
 // Auto (= null) plus de drie hieronder. De overige interne modi (historisch,
@@ -91,122 +106,12 @@ const ANTWOORDMODUS_KEUZES: { value: Antwoordmodus; label: string; help: string 
   }));
 
 
-// Increment I-2 (FO §11a) — bij een twijfelgeval vraagt de assistent terug i.p.v.
-// te gokken. Dit AI-bericht draagt de verduidelijkingsvraag + de twee chips en
-// de originele vraag, zodat een chipkeuze dezelfde vraag opnieuw stuurt met een
-// bevestigde bron-intentie (combineren-vloer voor "fonds", niet een harde scope).
-interface VerduidelijkingKeuze {
-  vraag: string;
-  opties: { intent: "fonds" | "algemeen"; label: string }[];
-  origineleVraag: string;
-}
 
-interface VolledigeAnalyseAanbod {
-  origineel_log_id: string;
-  document_id: string;
-  document_titel: string;
-  originele_vraag: string;
-  label: string;
-}
 
-interface Bericht {
-  rol: "gebruiker" | "ai";
-  tekst: string;
-  bronnen?: Bron[];
-  modus?: Modus;
-  // Increment I-1 (FO §11c) — rustige weergave: controle-informatie voor het
-  // paneel "Onderbouwing en bronnen" + de conditionele inline-meldingen.
-  onderbouwing?: OnderbouwingMeta;
-  inlineMeldingen?: InlineMelding[];
-  // Increment I-2 (FO §11a) — verduidelijkingsvraag met chips (geen antwoord).
-  verduidelijking?: VerduidelijkingKeuze;
-  // T5 — een vergelijkresultaat (side-by-side per dimensie). Rendert via
-  // VergelijkResultaatWeergave i.p.v. de gewone antwoordtekst.
-  vergelijking?: VergelijkResultaat;
-  // T5 — vergelijkvraag met twee mogelijke doelbronnen: een gerichte verduidelijking.
-  vergelijkingVerduidelijking?: {
-    bronHint: string | null;
-    doelHint: string | null;
-    bronKandidaten: { id: string; titel: string }[];
-    doelKandidaten: { id: string; titel: string }[];
-  };
-  // 30-07-2026 — de actualiteitsfilter nam alle treffers weg terwijl er wél
-  // niet-vastgestelde fondsstukken over het onderwerp zijn. Eén chip stelt
-  // dezelfde vraag opnieuw met die filter uit. `vraag` is de oorspronkelijke
-  // vraag, zodat de chip hem letterlijk kan herhalen.
-  verbreding?: {
-    aantal: number;
-    titels: string[];
-    label: string;
-    vraag: string;
-  };
-  // Besluit 0137 (antwoord-eerst) — dit fondsgerichte antwoord kwam uit een
-  // ONZEKERE bron-intentie; in plaats van de blokkerende terugvraag biedt de
-  // assistent de twee keuzes als chips ÓNDER het antwoord aan. Een klik hergenereert
-  // dezelfde vraag met de bevestigde intentie (bron_intent_override + vertrouwen
-  // "zeker"), waarbij het eerste antwoord blijft staan (navolgbaarheid, M-B5).
-  // `origineleVraag` herhaalt de vraag letterlijk. Live-only, net als `verbreding`:
-  // de bronbasis-melding (die het schijnzekerheidsrisico afdekt) staat in
-  // `onderbouwing` en overleeft wél een refresh.
-  bronkeuzeAanbod?: {
-    opties: { intent: "fonds" | "algemeen"; label: string }[];
-    origineleVraag: string;
-  };
-  // M7 — server-gevalideerde opschaling van targeted naar volledige dekking.
-  volledigeAnalyseAanbod?: VolledigeAnalyseAanbod;
-  // Besluit 0098 — alleen een NETJES afgeronde generatie ('done' ontvangen) is
-  // kopieerbaar. Welkomsttekst, foutmeldingen en afgebroken streams krijgen dus
-  // geen kopieerknop: een herkomstregel onder iets dat geen antwoord is,
-  // ondermijnt precies de geloofwaardigheid van diezelfde regel.
-  voltooid?: boolean;
-  // Plateau B — het id van de auditregel van dít antwoord. Nodig om de bronset
-  // te bevriezen wanneer de bestuurder op dit antwoord gaat reflecteren: de
-  // server valideert dat de logregel van deze gebruiker én dit gesprek is.
-  // Puur correlatie, geen autorisatie — en het verdwijnt met het gesprek.
-  //
-  // Het staat op ELK antwoord, niet alleen op de gereflecteerde: het is geen
-  // markering dat er gereflecteerd is (besluit 0112).
-  logId?: string;
-}
 
-// Actieve documentscope (increment 1). titels op moment van zetten, zodat de
-// chip en de gesprekshistorie het stuk herkenbaar tonen.
-interface DocumentScope {
-  document_ids: string[];
-  titels: string[];
-  // Opt-in algemene kennis (increment 2). Default uit = strict-document.
-  algemene_kennis?: boolean;
-}
 
-// Besluit 0151 — AI-modulecontext. De client houdt alleen de sleutel + een label
-// voor de chip bij; de server resolveert de inhoud onder RLS. `risicomatrix` is de
-// enige risico-ingang; `risico` ontstaat door in de chat in te zoomen (verdiep-chip).
-interface ModuleScope {
-  soort: "proces" | "risicomatrix" | "risico";
-  procedure_id?: string;
-  risico_id?: string;
-  // Alleen voor de chip/onderbouwing; niet naar de server (die kent de titel al).
-  label: string;
-}
 
-// Eén suggestie in de @-mention-typeahead.
-interface DocSuggestie {
-  id: string;
-  titel: string;
-  bron: string;
-  bestandstype: string | null;
-  aangemaakt: string | null;
-}
 
-// Eén item in het gesprekken-overzicht (Fase B2-volledig).
-interface GesprekItem {
-  id: string;
-  titel: string | null;
-  bijgewerkt: string;
-  berichten: Bericht[];
-  document_scope?: unknown;
-  actieve_antwoordmodus?: unknown;
-}
 
 // `leesAntwoordmodus` woont sinds tranche 2B in de gedeelde renderer (zie de
 // import hierboven): de agendapuntchat heeft hem ook nodig, en twee kopieën van
@@ -227,13 +132,6 @@ function leesScope(ruw: unknown): DocumentScope | null {
   return { document_ids: ids, titels, algemene_kennis: ak };
 }
 
-// ADR 0028 — agendapunt-modus: de vraag is geframed door een agendapunt. We
-// bewaren id + titel zodat de chip "Agendapunt: «titel»" toont en de toelichting
-// per beurt server-side wordt opgehaald (de route trust de client-titel niet).
-interface AgendapuntContext {
-  id: string;
-  titel: string;
-}
 
 // Leest het (additieve) agendapunt_context-blok uit een opgeslagen gesprek terug,
 // zodat een hervat agendapunt-gesprek de framing behoudt.
@@ -1126,72 +1024,6 @@ export default function AssistentClient({
     }
   }, [berichten]);
 
-  // Increment I-1 — vervolgacties kunnen de antwoordmodus en/of de bronselectie
-  // voor één turn overrulen zonder de gespreksinstelling te wijzigen.
-  interface StuurOpties {
-    antwoordmodusOverride?: Antwoordmodus | null;
-    scopeOverride?: DocumentScope | null;
-    // Increment I-2 (FO §11a) — bevestigde bron-intentie na een verduidelijkingschip.
-    bronIntentOverride?: "fonds" | "algemeen";
-    // Waar komt die bevestigde intentie vandaan (ingreep 1/2)? Uitsluitend voor het
-    // auditspoor: "chip" = de bestuurder koos zelf, "startvraag" = prefill uit onze
-    // eigen copy, "herkomst" = de module waaruit de assistent is geopend. Zonder dit
-    // onderscheid staat in de log alleen dat er een override wás, niet van wie.
-    bronIntentBron?: "chip" | "startvraag" | "herkomst";
-    // 30-07-2026 — zet de actualiteitsfilter uit voor deze beurt: neem stukken met
-    // status concept/ter bespreking/vervallen mee. Alleen via de expliciete chip.
-    neemNietVastgesteldeMee?: boolean;
-    // Besluit 0137 (antwoord-eerst) — het log-id van het eerste (fondsgerichte)
-    // antwoord waar de bestuurder een bronkeuze-chip onder klikte. Uitsluitend voor
-    // de audit-koppeling (bronkeuze_herzien); reist mee met de hergegenereerde beurt.
-    bronkeuzeVorigeLogId?: string;
-    // Stuurt dezelfde (al getoonde) vraag opnieuw zonder een nieuwe gebruikersbubbel
-    // toe te voegen; `basisBerichten` is dan de geschiedenis die op die vraag eindigt.
-    geenNieuweVraag?: boolean;
-    basisBerichten?: Bericht[];
-    // FO §13 — transformatie-vervolgactie: bewerk het vorige antwoord i.p.v. een
-    // nieuwe documentvraag. De route schakelt dan naar herschrijf-intent.
-    transformatie?: boolean;
-    // P2 Deel B — "een document doorgronden": de gekozen secties (+ bij Afwijkingen
-    // de eerdere versie). De route stelt hieruit de instructie samen en logt de
-    // parameters; de zichtbare beurt blijft de korte zin.
-    doorgrond?: { secties: DoorgrondSectieId[]; vorigeId: string | null };
-    // T2 — bureau-stand: de gekozen stuksoort. De route bouwt hieruit de
-    // instructie + past de bureau-toon toe, maar alleen met de capability.
-    stukvoorbereiding?: { stuksoort: Stuksoort };
-    // P2 Deel A — markeert dat deze beurt uit een aangeklikte voorbeeldvraag komt
-    // (telemetrie in het auditspoor; onderscheidt prefill van zelf getypt).
-    startvraagBron?: "voorbeeldvraag";
-    // De GESPREKSSCOPE die bij deze beurt bewaard moet worden. Alleen nodig als een
-    // taak de scope in dezelfde tick zet én verstuurt (doorgronden) — dan is de
-    // `documentScope`-state nog niet gecommit. Losstaand van `scopeOverride`, dat
-    // een puur PER-TURN retrieval-override is (vervolgacties) en de bewaarde
-    // gespreksscope juist NIET mag wijzigen.
-    persistScope?: DocumentScope | null;
-    // Plateau B — deze beurt komt uit het GELABELDE reflectie-invoerveld, niet
-    // uit de normale invoerbalk. Het onderscheid volgt uitsluitend uit het
-    // invoerkanaal; er wordt nooit op inhoud geclassificeerd (FR-56).
-    reflectieAntwoord?: boolean;
-    // B-opt tranche 1a — deze beurt is een HERFORMULERING vanuit de
-    // conceptweergave (knop "Aanpassen"). Stuurt actie `herformuleren`; de status
-    // blijft conceptweergave en de beurt verandert niet.
-    reflectieHerformuleren?: boolean;
-    // B-opt tranche 2d — "Nog een stap verdiepen": vraagt om één extra
-    // verdiepingsvraag. Geen zichtbare gebruikersbeurt (geenNieuweVraag).
-    reflectieVerdiepen?: boolean;
-    // B-opt tranche 4a — "Wat pleit er tegen?": tegenperspectief, zelfde
-    // transitie als verdiepen, andere promptvariant.
-    reflectieTegenperspectief?: boolean;
-    // De gekozen reflectie-ingang + de logregel waarvan de bronset bevriest.
-    reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
-    /** M7 — koppeling naar het targeted antwoord dat dit aanbod voortbracht. */
-    volledigeAnalyse?: {
-      origineelLogId: string;
-      documentId: string;
-    };
-    /** Zichtbare actietekst; de server ontvangt voor de analyse de originele vraag. */
-    weergaveTekst?: string;
-  }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
     const tekst = vraag || invoer.trim();
@@ -1261,106 +1093,27 @@ export default function AssistentClient({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: idempotentVerzoek.headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          messages,
-          fonds_id: fondsId,
-          // Increment I-2 (FO §11a) — geen zichtbare bron-modus meer; alleen de
-          // expliciete restrictie + (na een chip) de bevestigde bron-intentie.
-          alleen_fondsdocumenten: alleenFondsdocumenten,
-          // Precedentie: een expliciete keuze in DEZE beurt (chip of startvraag)
-          // gaat vóór de herkomst-ingang van het gesprek (ingreep 2).
-          bron_intent_override: opties?.bronIntentOverride ?? herkomst?.intent,
-          // Auditspoor (ingreep 1/2): van wie kwam de bevestigde intentie? Zonder
-          // dit staat er alleen dát er een override was, niet wie hem zette.
-          bron_intent_bron:
-            opties?.bronIntentBron ?? (herkomst ? "herkomst" : undefined),
-          bron_intent_herkomst: herkomst?.module,
-          document_scope: effScope
-            ? {
-                document_ids: effScope.document_ids,
-                algemene_kennis: effScope.algemene_kennis === true,
-              }
-            : undefined,
-          // Increment G — vastgezette antwoordmodus (null = auto-detectie).
-          actieve_antwoordmodus: effAntwoordmodus,
-          // Increment F (FO §14) — "algemeen perspectief": profielsturing overslaan.
-          algemeen_perspectief: algemeenPerspectief,
-          // FO §13 — transformatie-vervolgactie (herschrijf-intent op vorige antwoord).
-          transformatie: opties?.transformatie === true,
-          // ADR 0028 — agendapunt-modus: alleen het id (+ titel voor de UI). De
-          // route haalt de toelichting zelf op onder RLS; de client-titel wordt
-          // niet vertrouwd voor de promptinhoud. Precedentie: stuurt een
-          // vervolgactie tegelijk een per-turn scopeOverride mee, dan wint
-          // agendapunt-modus server-side (route.ts) — die override-stukken worden
-          // dan agendapunt-retrievalscope i.p.v. een strikte document-scope.
-          agendapunt_context: agendapuntContext
-            ? { id: agendapuntContext.id, titel: agendapuntContext.titel }
-            : undefined,
-          // Besluit 0151 — module-scope: alleen de sleutel; de route resolveert de
-          // inhoud onder RLS en zet daarbij (net als document_scope) de intent-
-          // heuristiek uit. De client-titel wordt niet vertrouwd voor de prompt.
-          module_scope: moduleScope
-            ? {
-                soort: moduleScope.soort,
-                ...(moduleScope.procedure_id
-                  ? { procedure_id: moduleScope.procedure_id }
-                  : {}),
-                ...(moduleScope.risico_id ? { risico_id: moduleScope.risico_id } : {}),
-              }
-            : undefined,
-          // P2 Deel B — de doorgrond-parameters; de route stelt hieruit de
-          // instructie samen en logt ze in retrieval_meta (criterium 13).
-          doorgrond: opties?.doorgrond
-            ? {
-                secties: opties.doorgrond.secties,
-                vorige_document_id: opties.doorgrond.vorigeId ?? undefined,
-              }
-            : undefined,
-          // T2 — bureau-stand "Een stuk voorbereiden". De route negeert dit veld
-          // zonder de capability ai.stukvoorbereiding (server-side gate).
-          stukvoorbereiding: opties?.stukvoorbereiding
-            ? { stuksoort: opties.stukvoorbereiding.stuksoort }
-            : undefined,
-          // P2 Deel A — herkomst voorbeeldvraag, meegelogd (criterium 4).
-          startvraag_bron: opties?.startvraagBron,
-          // 30-07-2026 — expliciete verbreding na de melding "wel stukken, niet
-          // vastgesteld". Alleen true als de gebruiker de chip aanklikte.
-          // De chip (per beurt) OF de werkstand (heel het gesprek). Beide zetten
-          // hetzelfde serverveld; de chip blijft werken zoals hij deed.
-          neem_niet_vastgestelde_mee:
-            opties?.neemNietVastgesteldeMee === true || voorbereidingsstand,
-          // Besluit 0137 (antwoord-eerst) — koppelt de hergegenereerde beurt na een
-          // bronkeuze-chipklik aan het eerste antwoord (auditspoor: bronkeuze_herzien).
-          bronkeuze_vorige_log_id: opties?.bronkeuzeVorigeLogId,
-          // Plateau A — koppelt de auditregel van deze beurt aan dit gesprek,
-          // zodat de gebruiker hem later kan verwijderen. Het id wordt hier
-          // gemaakt als het nog niet bestond; `bewaarGesprek` gebruikt straks
-          // hetzelfde id als expliciete `id` bij de insert. Zonder deze volgorde
-          // zou juist de eerste beurt van elk gesprek onkoppelbaar blijven.
-          gesprek_id: zorgVoorGesprekId(),
-          // ── Plateau B — signalen over het gebruikte invoerkanaal ──────────
-          // Dit zijn SIGNALEN, geen waarheden. De route vraagt op basis hiervan
-          // een transitie aan bij reflectie_transitie(), die valideert tegen de
-          // opnieuw uitgelezen serverstatus. Past de gevraagde overgang niet,
-          // dan wordt deze beurt gewoon als normale chatbeurt afgehandeld —
-          // een client kan zich dus geen reflectie toe-eigenen (FR-67).
-          reflectie_antwoord: opties?.reflectieAntwoord === true,
-          reflectie_herformuleren: opties?.reflectieHerformuleren === true,
-          reflectie_verdiepen: opties?.reflectieVerdiepen === true,
-          reflectie_tegenperspectief: opties?.reflectieTegenperspectief === true,
-          reflectie_start: opties?.reflectieStart
-            ? {
-                ingang: opties.reflectieStart.ingang,
-                bronset_log_id: opties.reflectieStart.bronsetLogId ?? undefined,
-              }
-            : undefined,
-          volledige_analyse: opties?.volledigeAnalyse
-            ? {
-                origineel_log_id: opties.volledigeAnalyse.origineelLogId,
-                document_id: opties.volledigeAnalyse.documentId,
-              }
-            : undefined,
-        }),
+        // P1a — het verzoeklichaam wordt gebouwd door de ENE payload-bouwer
+        // (core/lib/assistent-payload.ts). Zo kan geen enkele surface nog een
+        // eigen, verschraalde variant van dit object opbouwen; de contracttest
+        // `assistent-payload.sanity.ts` bewaakt dat het veld voor veld gelijk
+        // blijft aan het origineel dat hier stond.
+        body: JSON.stringify(
+          bouwChatPayload({
+            messages,
+            fondsId,
+            alleenFondsdocumenten,
+            algemeenPerspectief,
+            voorbereidingsstand,
+            herkomst,
+            documentScope: effScope,
+            antwoordmodus: effAntwoordmodus,
+            agendapuntContext,
+            moduleScope,
+            gesprekId: zorgVoorGesprekId(),
+            opties,
+          })
+        ),
       });
 
       // Fouten (400/401/500) komen als JSON terug, niet als stream.
