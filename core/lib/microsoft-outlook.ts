@@ -3,6 +3,7 @@ import { MicrosoftConnectorError, microsoftTestFoutcategorie } from "@/core/lib/
 import { outlookAccessToken, type ConnectorContext } from "@/core/lib/microsoft-connector";
 import * as vault from "@/core/lib/microsoft-vault";
 import {
+  bouwStandaardAgendaDeltaUrl,
   OutlookGraphError,
   graphGet,
   normaliseerGraphUtc,
@@ -11,7 +12,7 @@ import {
   veiligeTeamsLink,
 } from "@/core/lib/microsoft-outlook-graph-core";
 
-type GraphCalendar = { id?: string; name?: string; canEdit?: boolean; canShare?: boolean; owner?: unknown };
+type GraphCalendar = { id?: string; name?: string; canEdit?: boolean; canShare?: boolean; isDefaultCalendar?: boolean; owner?: unknown };
 type GraphEvent = {
   id?: string; iCalUId?: string; changeKey?: string; seriesMasterId?: string; subject?: string;
   start?: { dateTime?: string; timeZone?: string }; end?: { dateTime?: string; timeZone?: string };
@@ -26,22 +27,25 @@ const GRAPH = "https://graph.microsoft.com/v1.0";
 
 export async function outlookAgendaLijst(ctx: ConnectorContext) {
   const { accessToken, tenantId, mailboxId } = await outlookAccessToken(ctx);
-  const agendas = new Map<string, string>();
+  const agendas = new Map<string, { naam: string; standaard: boolean }>();
   const bezocht = new Set<string>();
-  let volgende = `${GRAPH}/me/calendars?$select=id,name,canEdit,canShare`;
+  let volgende = `${GRAPH}/me/calendars?$select=id,name,canEdit,canShare,isDefaultCalendar`;
   for (let pagina = 0; volgende; pagina += 1) {
     if (pagina >= 100 || bezocht.has(volgende)) throw new OutlookGraphError("graph_paginering");
     bezocht.add(volgende);
     const response = await graphGet(accessToken, volgende);
     const body = await response.json() as { value?: GraphCalendar[]; "@odata.nextLink"?: string };
     for (const agenda of body.value ?? []) {
-      if (agenda.id && agenda.name) agendas.set(agenda.id, agenda.name.slice(0, 160));
+      if (agenda.id && agenda.name) agendas.set(agenda.id, {
+        naam: agenda.name.slice(0, 160),
+        standaard: agenda.isDefaultCalendar === true,
+      });
     }
     volgende = body["@odata.nextLink"] ?? "";
   }
   return {
     tenantId, mailboxId,
-    agendas: [...agendas].map(([id, naam]) => ({ id, naam })),
+    agendas: [...agendas].map(([id, agenda]) => ({ id, ...agenda })),
   };
 }
 
@@ -49,6 +53,10 @@ export async function kiesOutlookAgenda(ctx: ConnectorContext, calendarId: strin
   const lijst = await outlookAgendaLijst(ctx);
   const agenda = lijst.agendas.find((x) => x.id === calendarId);
   if (!agenda) throw new OutlookGraphError("agenda_niet_toegankelijk");
+  // Microsoft documenteert calendarView/delta in Graph v1.0 alleen voor de
+  // standaardagenda. Een specifieke agenda vereist momenteel het beta-pad;
+  // dat gebruiken we niet voor productiegegevens.
+  if (!agenda.standaard) throw new OutlookGraphError("agenda_delta_niet_ondersteund");
   const nu = new Date();
   const start = new Date(Date.UTC(nu.getUTCFullYear(), nu.getUTCMonth() - 3, nu.getUTCDate())).toISOString().slice(0, 10);
   const eind = new Date(Date.UTC(nu.getUTCFullYear() + 1, nu.getUTCMonth(), nu.getUTCDate())).toISOString().slice(0, 10);
@@ -69,9 +77,22 @@ export async function synchroniseerOutlookAgenda(ctx: ConnectorContext & { corre
   if (!run) throw new OutlookGraphError("agenda_niet_geconfigureerd");
   let gelezen = 0, aangemaakt = 0, bijgewerkt = 0, overgeslagen = 0;
   try {
-    const me = await graphGet(accessToken, `${GRAPH}/me?$select=userPrincipalName`);
-    const userPrincipalName = ((await me.json()) as { userPrincipalName?: string }).userPrincipalName ?? null;
-    let volgende = run.delta_link ?? `${GRAPH}/me/calendars/${encodeURIComponent(run.calendar_id)}/calendarView/delta?startDateTime=${encodeURIComponent(`${run.venster_start}T00:00:00Z`)}&endDateTime=${encodeURIComponent(`${run.venster_eind}T00:00:00Z`)}`;
+    const [me, standaardAgendaResponse] = await Promise.all([
+      graphGet(accessToken, `${GRAPH}/me?$select=userPrincipalName`),
+      graphGet(accessToken, `${GRAPH}/me/calendar?$select=id,isDefaultCalendar`),
+    ]);
+    const [meBody, standaardAgenda] = await Promise.all([
+      me.json() as Promise<{ userPrincipalName?: string }>,
+      standaardAgendaResponse.json() as Promise<GraphCalendar>,
+    ]);
+    const userPrincipalName = meBody.userPrincipalName ?? null;
+    if (
+      !standaardAgenda.id
+      || standaardAgenda.isDefaultCalendar !== true
+      || standaardAgenda.id !== run.calendar_id
+    ) throw new OutlookGraphError("agenda_delta_niet_ondersteund");
+    let volgende = run.delta_link
+      ?? bouwStandaardAgendaDeltaUrl(run.venster_start, run.venster_eind).toString();
     let definitieveDeltaLink: string | undefined;
     const bezocht = new Set<string>();
     for (let paginaNummer = 0; volgende; paginaNummer += 1) {

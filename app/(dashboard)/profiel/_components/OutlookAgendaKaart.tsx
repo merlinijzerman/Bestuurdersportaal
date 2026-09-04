@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 type Status = { beschikbaar: boolean; magBeheren?: boolean; toestemmingVereist?: boolean; configuratie?: { agenda: string; status: string; laatstGeluktOp: string | null; foutcategorie: string | null } | null };
-type Agenda = { id: string; naam: string };
+type Agenda = { id: string; naam: string; standaard: boolean };
 async function status(): Promise<Status> { const r = await fetch("/api/microsoft/outlook/status", { cache: "no-store" }); return r.ok ? r.json() : { beschikbaar: false }; }
 
 export default function OutlookAgendaKaart() {
@@ -29,7 +29,7 @@ export default function OutlookAgendaKaart() {
     {waarde.magBeheren ? <div className="space-y-3">
       {waarde.toestemmingVereist ? <a href="/api/microsoft/outlook/toestemming?returnTo=/profiel" className="inline-flex bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg">Outlook-toestemming uitbreiden</a> : <>
         <div className="flex gap-3"><button disabled={bezig} onClick={() => void haalAgendas()} className="border border-app-line-strong text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50">Agenda kiezen</button>{waarde.configuratie && <button disabled={bezig} onClick={() => void sync()} className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50">Nu synchroniseren</button>}</div>
-        {agendas.length > 0 && <div className="border border-line rounded-lg divide-y">{agendas.map((agenda) => <button key={agenda.id} disabled={bezig} onClick={() => void kies(agenda.id)} className="block w-full text-left px-3 py-2 text-sm hover:bg-app-bg disabled:opacity-50">{agenda.naam}</button>)}</div>}
+        {agendas.length > 0 && <div className="border border-line rounded-lg divide-y">{agendas.map((agenda) => <button key={agenda.id} disabled={bezig || !agenda.standaard} onClick={() => void kies(agenda.id)} title={agenda.standaard ? undefined : "Delta-synchronisatie voor deze agenda is niet beschikbaar via Microsoft Graph v1.0."} className="block w-full text-left px-3 py-2 text-sm hover:bg-app-bg disabled:opacity-50">{agenda.naam}{agenda.standaard ? " · standaardagenda" : " · nog niet synchroniseerbaar"}</button>)}</div>}
       </>}
     </div> : <p className="text-sm text-muted">Alleen een fondsbeheerder kan Outlook-toestemming, agenda en synchronisatie beheren.</p>}
     {melding && <p role="status" className="mt-4 text-sm text-muted">{melding}</p>}

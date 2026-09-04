@@ -19,6 +19,10 @@ test("Outlook 2A is alleen de driedubbele fonds-poort plus beheer-capability", (
 
 test("delta-sync bewaart alleen een volledig afgehandelde deltaLink en markeert removed veilig", () => {
   assert.match(outlook, /calendarView\/delta/);
+  assert.match(outlook, /isDefaultCalendar/);
+  assert.match(outlook, /agenda_delta_niet_ondersteund/);
+  assert.match(outlook, /bouwStandaardAgendaDeltaUrl/);
+  assert.doesNotMatch(outlook, /\/calendars\/\$\{encodeURIComponent\(run\.calendar_id\)\}\/calendarView\/delta/);
   assert.match(graphCore, /IdType="ImmutableId"/);
   assert.match(graphCore, /Retry-After/);
   assert.match(outlook, /await vault\.voltooiOutlookRun/);
