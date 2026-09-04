@@ -82,6 +82,13 @@ export async function verwerkOutlookEvent(args: { runId: string; eventId: string
   const r = await db().query("select microsoft_private.outlook_verwerk_event($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) as resultaat", [args.runId,args.eventId,args.iCalUId ?? "",args.changeKey ?? "",args.serieMasterId ?? "",args.titel,args.start,args.eind,args.tijdzone,args.locatie,args.teamsLink,args.sensitivity,args.geannuleerd,args.lokaleDeelnemers,args.onbekendeDeelnemers]);
   return r.rows[0]?.resultaat as "aangemaakt" | "bijgewerkt" | "afgeschermd" | "overgeslagen_privacy" | undefined;
 }
+export async function markeerOutlookEventExternGewijzigd(runId: string, eventId: string) {
+  const r = await db().query(
+    "select microsoft_private.outlook_markeer_extern_gewijzigd($1,$2) as gemarkeerd",
+    [runId, eventId],
+  );
+  return r.rows[0]?.gemarkeerd === true;
+}
 export async function voltooiOutlookRun(runId: string, deltaLink: string, aantallen: { gelezen: number; aangemaakt: number; bijgewerkt: number; overgeslagen: number }) {
   await db().query("select microsoft_private.outlook_voltooi_run($1,$2,$3,$4,$5,$6)", [runId,deltaLink,aantallen.gelezen,aantallen.aangemaakt,aantallen.bijgewerkt,aantallen.overgeslagen]);
 }

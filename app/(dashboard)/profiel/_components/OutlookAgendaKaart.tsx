@@ -11,7 +11,13 @@ export default function OutlookAgendaKaart() {
   const [bezig, setBezig] = useState(false);
   const [melding, setMelding] = useState<string | null>(null);
   const laad = useCallback(async () => setWaarde(await status()), []);
-  useEffect(() => { void laad(); }, [laad]);
+  useEffect(() => {
+    let actief = true;
+    void status().then((resultaat) => {
+      if (actief) setWaarde(resultaat);
+    });
+    return () => { actief = false; };
+  }, []);
   if (!waarde?.beschikbaar) return null;
   const haalAgendas = async () => { setBezig(true); setMelding(null); try { const r = await fetch("/api/microsoft/outlook/agendas", { cache: "no-store" }); const json = await r.json() as { agendas?: Agenda[]; error?: string }; setAgendas(json.agendas ?? []); if (!r.ok) setMelding(json.error ?? "Agenda's kunnen niet worden geladen."); } catch { setMelding("Agenda's kunnen niet worden geladen."); } finally { setBezig(false); } };
   const kies = async (calendarId: string) => { setBezig(true); setMelding(null); try { const r = await fetch("/api/microsoft/outlook/agendas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ calendarId }) }); setMelding(r.ok ? "Agenda gekozen. U kunt nu handmatig synchroniseren." : "Agenda kiezen mislukt."); if (r.ok) { setAgendas([]); await laad(); } } catch { setMelding("Agenda kiezen mislukt."); } finally { setBezig(false); } };
@@ -19,7 +25,7 @@ export default function OutlookAgendaKaart() {
   return <section className="bg-white border border-line rounded-xl p-5 mb-6">
     <h2 className="font-bold text-ink mb-1">Outlook-agenda</h2>
     <p className="text-sm text-muted mb-4">Read-only pilot. Outlook blijft bron voor afspraakgegevens; portaalinhoud wordt niet verwijderd of overschreven.</p>
-    {waarde.configuratie && <p className="text-sm mb-3">Gekozen agenda: <strong>{waarde.configuratie.agenda}</strong> · Status: {waarde.configuratie.status}{waarde.configuratie.laatstGeluktOp ? ` · Laatst gelukt: ${new Date(waarde.configuratie.laatstGeluktOp).toLocaleString("nl-NL")}` : ""}</p>}
+    {waarde.configuratie && <p className="text-sm mb-3">Gekozen agenda: <strong>{waarde.configuratie.agenda}</strong> · Status: {waarde.configuratie.status}{waarde.configuratie.laatstGeluktOp ? ` · Laatst gelukt: ${new Date(waarde.configuratie.laatstGeluktOp).toLocaleString("nl-NL")}` : ""}{waarde.configuratie.foutcategorie ? ` · Foutcategorie: ${waarde.configuratie.foutcategorie}` : ""}</p>}
     {waarde.magBeheren ? <div className="space-y-3">
       {waarde.toestemmingVereist ? <a href="/api/microsoft/outlook/toestemming?returnTo=/profiel" className="inline-flex bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg">Outlook-toestemming uitbreiden</a> : <>
         <div className="flex gap-3"><button disabled={bezig} onClick={() => void haalAgendas()} className="border border-app-line-strong text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50">Agenda kiezen</button>{waarde.configuratie && <button disabled={bezig} onClick={() => void sync()} className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50">Nu synchroniseren</button>}</div>

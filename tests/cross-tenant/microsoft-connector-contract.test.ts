@@ -38,10 +38,11 @@ test("private vault is browserdicht en alle definers eindigen op pg_temp", () =>
   assert.match(vaultRij, /sleutelVersie: rij\.sleutel_versie/);
 });
 
-test("nieuwe fondsen krijgen fail-safe profiel eigen en pilot uit", () => {
+test("nieuwe fondsen starten eigen en de connector blijft bruikbaar na bewuste bronwissel", () => {
   assert.match(migratie, /trg_fonds_integratieprofiel_standaard/);
   assert.match(migratie, /values \(new\.id, 'eigen', false\)/);
-  assert.match(connector, /data\?\.integratieprofiel === "eigen" && data\?\.microsoft_koppeling_pilot === true/);
+  assert.match(connector, /integratieprofiel === "eigen" \|\| data\?\.integratieprofiel === "microsoft"/);
+  assert.match(connector, /microsoft_koppeling_pilot === true/);
 });
 
 test("callback valideert bestaande sessie en registreert veilige fouten", () => {

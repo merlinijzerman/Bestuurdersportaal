@@ -15,7 +15,7 @@ alter table public.vergaderingen
   add column if not exists outlook_laatst_gesynchroniseerd_op timestamptz;
 alter table public.vergaderingen drop constraint if exists vergaderingen_outlook_sync_status_check;
 alter table public.vergaderingen add constraint vergaderingen_outlook_sync_status_check
-  check (outlook_sync_status is null or outlook_sync_status in ('gesynchroniseerd','geannuleerd','afgeschermd'));
+  check (outlook_sync_status is null or outlook_sync_status in ('gesynchroniseerd','geannuleerd','afgeschermd','extern_gewijzigd_of_verwijderd'));
 alter table public.vergaderingen drop constraint if exists vergaderingen_outlook_onbekende_deelnemers_check;
 alter table public.vergaderingen add constraint vergaderingen_outlook_onbekende_deelnemers_check
   check (outlook_onbekende_deelnemers between 0 and 10000);
@@ -121,8 +121,26 @@ returns table(run_id uuid,configuratie_id uuid,tenant_id text,mailbox_id text,ca
 language plpgsql security definer set search_path = microsoft_private, public, pg_temp as $$
 declare v_cfg outlook_agenda_configuraties%rowtype; v_run uuid;
 begin
-  select * into v_cfg from outlook_agenda_configuraties where fonds_id=p_fonds and gebruiker_id=p_gebruiker and status in ('gereed','fout') for update;
+  select * into v_cfg from outlook_agenda_configuraties where fonds_id=p_fonds and gebruiker_id=p_gebruiker for update;
   if v_cfg.id is null then raise exception 'geen bruikbare Outlook-agenda voor deze gekoppelde gebruiker'; end if;
+  -- Een afgebroken serverless request mag de agenda niet blijvend op `bezig`
+  -- laten staan. Alleen aantoonbaar oude runs worden gesloten; een actuele run
+  -- blijft door de unieke partiële index en deze expliciete controle beschermd.
+  with verlopen as (
+    update outlook_sync_runs r
+       set status='mislukt',afgerond_op=now(),foutcategorie='run_afgebroken'
+     where r.configuratie_id=v_cfg.id and r.status='bezig'
+       and r.gestart_op < now() - interval '15 minutes'
+     returning r.fonds_id,r.gestart_door,r.correlation_id
+  )
+  insert into audit_log(fonds_id,gebruiker_id,gebeurtenis,correlation_id,foutcategorie)
+  select fonds_id,gestart_door,'microsoft.outlook.sync.mislukt',correlation_id,'run_afgebroken' from verlopen;
+  if exists (select 1 from outlook_sync_runs r where r.configuratie_id=v_cfg.id and r.status='bezig') then
+    raise exception 'outlook synchronisatie is al bezig';
+  end if;
+  if v_cfg.status not in ('gereed','fout','bezig') then
+    raise exception 'geen bruikbare Outlook-agenda voor deze gekoppelde gebruiker';
+  end if;
   insert into outlook_sync_runs(configuratie_id,fonds_id,gestart_door,correlation_id,status) values(v_cfg.id,p_fonds,p_gebruiker,p_correlation,'bezig') returning id into v_run;
   update outlook_agenda_configuraties set status='bezig',laatst_foutcategorie=null where id=v_cfg.id;
   return query select v_run,v_cfg.id,v_cfg.tenant_id,v_cfg.mailbox_id,v_cfg.calendar_id,v_cfg.venster_start,v_cfg.venster_eind,v_cfg.delta_link;
@@ -160,6 +178,31 @@ begin
   return case when v_nieuw then 'aangemaakt' when p_geannuleerd then 'bijgewerkt' else 'bijgewerkt' end;
 end $$;
 
+-- calendarView/delta gebruikt @removed zowel voor echte verwijderingen als
+-- voor verplaatsingen buiten het vaste venster. Houd die gevallen daarom
+-- bewust samen en verwijder geen vergadering of portaalinhoud.
+create or replace function microsoft_private.outlook_markeer_extern_gewijzigd(
+  p_run uuid,p_event text
+) returns boolean language plpgsql security definer set search_path = microsoft_private, public, pg_temp as $$
+declare v_run outlook_sync_runs%rowtype; v_map outlook_event_koppelingen%rowtype;
+begin
+  select * into v_run from outlook_sync_runs where id=p_run and status='bezig' for update;
+  if v_run.id is null or coalesce(p_event,'')='' then raise exception 'outlook synchronisatierun of event is ongeldig'; end if;
+  select k.* into v_map
+    from outlook_event_koppelingen k
+   where k.configuratie_id=v_run.configuratie_id and k.fonds_id=v_run.fonds_id
+     and k.immutable_event_id=p_event
+   for update;
+  if v_map.id is null then return false; end if;
+  update public.vergaderingen
+     set outlook_sync_status='extern_gewijzigd_of_verwijderd',
+         outlook_laatst_gesynchroniseerd_op=now()
+   where id=v_map.vergadering_id and fonds_id=v_run.fonds_id;
+  insert into public.vergadering_log(vergadering_id,event_type,actor_id,payload)
+  values(v_map.vergadering_id,'outlook_extern_gewijzigd_of_verwijderd',v_run.gestart_door,jsonb_build_object('bron','outlook','run_id',p_run));
+  return true;
+end $$;
+
 create or replace function microsoft_private.outlook_voltooi_run(p_run uuid,p_delta_link text,p_gelezen integer,p_aangemaakt integer,p_bijgewerkt integer,p_overgeslagen integer)
 returns void language plpgsql security definer set search_path = microsoft_private, public, pg_temp as $$
 declare v_run outlook_sync_runs%rowtype;
@@ -178,18 +221,25 @@ begin
   select * into v_run from outlook_sync_runs where id=p_run and status='bezig' for update;
   if v_run.id is null then return; end if;
   update outlook_sync_runs set status='mislukt',afgerond_op=now(),foutcategorie=left(coalesce(nullif(p_fout,''),'onverwachte_fout'),80) where id=p_run;
-  update outlook_agenda_configuraties set status='fout',laatst_foutcategorie=left(coalesce(nullif(p_fout,''),'onverwachte_fout'),80) where id=v_run.configuratie_id;
+  update outlook_agenda_configuraties
+     set status='fout',
+         laatst_foutcategorie=left(coalesce(nullif(p_fout,''),'onverwachte_fout'),80),
+         -- Een verlopen Graph-cursor mag de agenda niet permanent blokkeren.
+         -- De eerstvolgende handmatige run bouwt veilig een nieuwe baseline op.
+         delta_link=case when p_fout='delta_verlopen' then null else delta_link end
+   where id=v_run.configuratie_id;
   insert into audit_log(fonds_id,gebruiker_id,gebeurtenis,correlation_id,foutcategorie) values(v_run.fonds_id,v_run.gestart_door,'microsoft.outlook.sync.mislukt',v_run.correlation_id,left(coalesce(nullif(p_fout,''),'onverwachte_fout'),80));
 end $$;
 
 alter table public.vergadering_log drop constraint if exists vergadering_log_event_type_check;
-alter table public.vergadering_log add constraint vergadering_log_event_type_check check (event_type in ('vergadering_gewijzigd','vergadering_gearchiveerd','vergadering_gedearchiveerd','outlook_geimporteerd','outlook_gesynchroniseerd','outlook_geannuleerd'));
+alter table public.vergadering_log add constraint vergadering_log_event_type_check check (event_type in ('vergadering_gewijzigd','vergadering_gearchiveerd','vergadering_gedearchiveerd','outlook_geimporteerd','outlook_gesynchroniseerd','outlook_geannuleerd','outlook_extern_gewijzigd_of_verwijderd'));
 revoke all on all tables in schema microsoft_private from public, anon, authenticated;
 revoke all on all functions in schema microsoft_private from public, anon, authenticated;
 grant execute on function microsoft_private.outlook_configureer_agenda(uuid,uuid,text,text,text,text,date,date) to microsoft_vault;
 grant execute on function microsoft_private.outlook_lees_configuratie(uuid,uuid) to microsoft_vault;
 grant execute on function microsoft_private.outlook_start_run(uuid,uuid,uuid) to microsoft_vault;
 grant execute on function microsoft_private.outlook_verwerk_event(uuid,text,text,text,text,text,timestamptz,timestamptz,text,text,text,text,boolean,uuid[],integer) to microsoft_vault;
+grant execute on function microsoft_private.outlook_markeer_extern_gewijzigd(uuid,text) to microsoft_vault;
 grant execute on function microsoft_private.outlook_voltooi_run(uuid,text,integer,integer,integer,integer) to microsoft_vault;
 grant execute on function microsoft_private.outlook_misluk_run(uuid,text) to microsoft_vault;
 commit;

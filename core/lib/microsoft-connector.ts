@@ -59,7 +59,8 @@ function client() {
 }
 export async function microsoftPilotActief(supabase: { from: (table: string) => any }, fondsId: string): Promise<boolean> {
   const { data } = await supabase.from("fonds_integratie_profielen").select("integratieprofiel, microsoft_koppeling_pilot").eq("fonds_id", fondsId).maybeSingle();
-  return data?.integratieprofiel === "eigen" && data?.microsoft_koppeling_pilot === true;
+  return (data?.integratieprofiel === "eigen" || data?.integratieprofiel === "microsoft")
+    && data?.microsoft_koppeling_pilot === true;
 }
 export async function microsoftOutlookActief(supabase: { from: (table: string) => any }, fondsId: string): Promise<boolean> {
   const [{ data: profiel }, { data: vlag }] = await Promise.all([
@@ -69,6 +70,10 @@ export async function microsoftOutlookActief(supabase: { from: (table: string) =
   return profiel?.integratieprofiel === "microsoft" && profiel?.microsoft_koppeling_pilot === true && vlag?.waarde === true;
 }
 export async function startKoppeling(ctx: ConnectorContext, returnTo: string, scopes: readonly string[] = MICROSOFT_SCOPES) {
+  const toegestaan = new Set<string>(MICROSOFT_OUTLOOK_SCOPES);
+  if (!MICROSOFT_SCOPES.every((scope) => scopes.includes(scope)) || scopes.some((scope) => !toegestaan.has(scope))) {
+    throw new MicrosoftConnectorError("oauth_transactie");
+  }
   const state = b64url(32), nonce = b64url(32), verifier = b64url(64);
   const cfg = microsoftConfig();
   await vault.maakOAuthTransactie({ state, fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, expiresAt: new Date(Date.now() + 10 * 60_000), blob: versleutelMicrosoftGeheim(JSON.stringify({ nonce, verifier, returnTo, scopes }), aad(ctx.fondsId, ctx.gebruikerId, "oauth")) });
@@ -83,10 +88,12 @@ export async function voltooiKoppeling(args: ConnectorContext & { state: string;
   }
   const geheim = koppelStapSync("oauth_decryptie", () => {
     const waarde = JSON.parse(ontsleutelMicrosoftGeheim({ sleutelVersie: tx.sleutel_versie, iv: tx.iv, tag: tx.tag, ciphertext: tx.ciphertext }, aad(args.fondsId, args.gebruikerId, "oauth"))) as Record<string, unknown>;
-    if (typeof waarde.nonce !== "string" || typeof waarde.verifier !== "string" || typeof waarde.returnTo !== "string" || !Array.isArray(waarde.scopes) || !waarde.scopes.every((scope) => typeof scope === "string")) {
+    const toegestaan = new Set<string>(MICROSOFT_OUTLOOK_SCOPES);
+    const scopes = waarde.scopes;
+    if (typeof waarde.nonce !== "string" || typeof waarde.verifier !== "string" || typeof waarde.returnTo !== "string" || !Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string" && toegestaan.has(scope)) || !MICROSOFT_SCOPES.every((scope) => scopes.includes(scope))) {
       throw new Error("OAuth-transactie is onvolledig.");
     }
-    return { nonce: waarde.nonce, verifier: waarde.verifier, returnTo: waarde.returnTo, scopes: waarde.scopes as string[] };
+    return { nonce: waarde.nonce, verifier: waarde.verifier, returnTo: waarde.returnTo, scopes: scopes as string[] };
   });
   const cfg = microsoftConfig();
   const msal = client();

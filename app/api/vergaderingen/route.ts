@@ -35,7 +35,9 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         status: status || "in_voorbereiding",
         aangemaakt_door: ctx.gebruikerId,
       })
-      .select()
+      // Houd het bestaande API-contract stabiel wanneer Outlook-kolommen in de
+      // database worden toegevoegd; deze route is ook de bron voor variant eigen.
+      .select("id, fonds_id, titel, datum, locatie, status, aangemaakt, aangemaakt_door, gewijzigd_op, gewijzigd_door, gearchiveerd_op, gearchiveerd_door")
       .single();
 
     if (error) {

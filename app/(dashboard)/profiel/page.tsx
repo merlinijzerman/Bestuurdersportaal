@@ -284,8 +284,8 @@ export default function ProfielPage() {
         <OrganisatieprofielTab />
       ) : (
         <div className="max-w-3xl">
-      <MicrosoftKoppelingKaart />
-      <OutlookAgendaKaart />
+          <MicrosoftKoppelingKaart />
+          <OutlookAgendaKaart />
           <p className="text-sm text-muted mb-6">
             Uw profiel personaliseert de AI-voorbereiding (welke aandachtspunten en kritische
             vragen vóórkomen).

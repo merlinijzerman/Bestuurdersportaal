@@ -11,8 +11,11 @@ Graph gebruikt delegated `Calendars.Read.Shared` op v1.0. De server vraagt die s
 - `calendarView/delta` werkt binnen een bij selectie vastgelegd venster: drie maanden terug en twaalf maanden vooruit.
 - Iedere Graph-pagina draagt `Prefer: IdType="ImmutableId"`; de primaire koppelsleutel is `(tenant, mailbox, calendar, immutable event-id)`. `iCalUId` en `changeKey` zijn uitsluitend aanvullende diagnose-/wijzigingsmetadata.
 - De database staat maximaal één actieve run per agenda toe. Alleen een volledig gepagineerde ronde schrijft de definitieve `@odata.deltaLink`; een storing, rate-limit of onvolledige pagina houdt de vorige cursor intact.
-- `Retry-After` wordt maximaal tweemaal gevolgd. Een `@removed`-event telt als overgeslagen: het is geen bewijs van verwijdering, want het kan buiten het venster zijn verplaatst.
+- Een door een afgebroken serverrequest achtergebleven run wordt na vijftien minuten als `run_afgebroken` gesloten en geaudit; daarna kan de beheerder veilig opnieuw synchroniseren.
+- `Retry-After` wordt maximaal tweemaal gevolgd. Een gekoppeld `@removed`-event krijgt de gecombineerde status `extern_gewijzigd_of_verwijderd`: het is geen bewijs van verwijdering, want het kan buiten het venster zijn verplaatst. Portaalinhoud blijft behouden.
+- Een verlopen delta-cursor wordt na de mislukte run gewist; de eerstvolgende handmatige run bouwt een nieuwe volledige baseline op.
 - Een expliciet geannuleerde afspraak wordt zichtbaar als geannuleerd; portaalinhoud en audit worden nooit verwijderd.
+- Outlook-beheerde titel, datum en locatie zijn in het portaal read-only. De lijst en detailpagina tonen de Outlook-herkomst, veilige synchronisatiestatus en — indien aanwezig — een gevalideerde Teams-link.
 
 ## Privacyregel
 
@@ -23,6 +26,6 @@ Graph gebruikt delegated `Calendars.Read.Shared` op v1.0. De server vraagt die s
 
 ## Database en rollback
 
-`microsoft_private` bevat agenda-configuraties, runs en eventkoppelingen; browserrollen en de vaultrol krijgen geen directe tabelrechten. Zes gepinde `SECURITY DEFINER`-functies zijn uitsluitend uitvoerbaar voor `microsoft_vault`. De publieke vergadering draagt uitsluitend afgeleide weergavevelden.
+`microsoft_private` bevat agenda-configuraties, runs en eventkoppelingen; browserrollen en de vaultrol krijgen geen directe tabelrechten. Zeven gepinde `SECURITY DEFINER`-functies zijn uitsluitend uitvoerbaar voor `microsoft_vault`. De publieke vergadering draagt uitsluitend afgeleide weergavevelden.
 
 Voer eerst de forwardmigratie uit, daarna `supabase/checks/2026_09_04_microsoft_outlook_fase2a.sql`. De rollback weigert terwijl een run actief is. Productie valt buiten fase 2A.
