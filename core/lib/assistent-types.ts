@@ -332,6 +332,15 @@ export interface StuurOpties {
   // een puur PER-TURN retrieval-override is (vervolgacties) en de bewaarde
   // gespreksscope juist NIET mag wijzigen.
   persistScope?: DocumentScope | null;
+  // T2 (#304) — dezelfde tick-val als `persistScope`, maar dan voor de
+  // AGENDAPUNTCONTEXT. De startbeurt vanuit een module-ingang zet de context
+  // (state-setter) en verstuurt in dezelfde tick; `context.agendapuntContext`
+  // wijst dan nog naar de oude closurewaarde en de beurt zou als gewone
+  // bibliotheekvraag lopen — zonder toelichtingsseed, zonder de gekoppelde
+  // stukken en met een andere prompt-tak. De aanroeper geeft de zojuist
+  // opgeloste context daarom expliciet mee. `undefined` = gebruik de
+  // gespreksstaat (elk bestaand pad).
+  agendapuntContextOverride?: AgendapuntContext | null;
   // Plateau B — deze beurt komt uit het GELABELDE reflectie-invoerveld, niet
   // uit de normale invoerbalk. Het onderscheid volgt uitsluitend uit het
   // invoerkanaal; er wordt nooit op inhoud geclassificeerd (FR-56).

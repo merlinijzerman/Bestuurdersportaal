@@ -407,7 +407,7 @@ export default function AssistentOppervlak() {
     if (!aanvraag) return;
     let afgebroken = false;
     void (async () => {
-      await pasIngangToe(aanvraag.ingangen);
+      const patch = await pasIngangToe(aanvraag.ingangen);
       if (afgebroken) return;
       meldAanvraagVerwerkt(aanvraag.sleutel);
 
@@ -435,6 +435,13 @@ export default function AssistentOppervlak() {
       startbeurtGedaanRef.current = aanvraag.sleutel;
       await stuurBerichtRef.current(start.vraag, {
         antwoordmodusOverride: start.antwoordmodus,
+        // De zojuist OPGELOSTE context, niet de state: `pasIngangToe` zet die
+        // via een setter en wij versturen in dezelfde tick, dus de gespreksstaat
+        // wijst hier nog naar de vorige waarde. Zonder deze override loopt de
+        // voorbereiding als gewone bibliotheekvraag — andere prompt-tak, geen
+        // toelichtingsseed, geen gekoppelde stukken. Zelfde val als
+        // `persistScope` bij "doorgronden".
+        agendapuntContextOverride: patch.agendapuntContext ?? null,
       });
       if (afgebroken || !start.productVoorAgendapunt) return;
       // De route heeft het product nu (bij een geslaagde beurt) weggeschreven;

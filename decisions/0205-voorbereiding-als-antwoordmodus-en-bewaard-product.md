@@ -103,6 +103,14 @@ Daarmee verdwijnt de laatste eigen streamverwerking en de laatste eigen payload 
 `useAssistent`, en krijgt de voorbereiding vanzelf voortgangsmeldingen, verduidelijking,
 reflectie en het onderbouwingspaneel.
 
+Bij de bouw kwam één val boven water die geen enkele bestaande test zou hebben gevangen:
+`pasIngangToe` zet de agendapuntcontext via een state-setter, en de startbeurt verstuurt in
+**dezelfde tick** — de gespreksstaat wijst dan nog naar de vorige waarde. Zonder correctie loopt
+de voorbereiding als een gewone bibliotheekvraag: andere prompt-tak, geen toelichtingsseed, geen
+gekoppelde stukken, en niets in de interface dat dat verklaart. `pasIngangToe` geeft de opgeloste
+patch daarom terug en de beurt krijgt hem als `agendapuntContextOverride` mee — exact hetzelfde
+patroon als `persistScope` bij "doorgronden", dat om dezelfde reden bestaat.
+
 **Dit doorbreekt bewust één bestaande regel.** `useAssistent` draagt op twee plekken
 *"er wordt nooit automatisch een bericht verstuurd"*. Die regel gold het **herstel** van een
 gesprek na een refresh en de reflectieflow — daar zou de gebruiker een beurt krijgen die hij

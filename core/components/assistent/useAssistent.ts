@@ -61,11 +61,13 @@ import {
 import {
   leesAssistentContextUitUrl,
   resolveerAssistentContext,
+  type AssistentContextPatch,
   type AssistentUrlIngang,
   type ContextLezer,
 } from "@/core/lib/assistent-url-ingang";
 import { type VoortgangUI } from "@/core/lib/voortgang";
 import type {
+  AgendapuntContext,
   Bericht,
   DocSuggestie,
   OnderbouwingMeta,
@@ -572,7 +574,10 @@ export function useAssistent(opties: UseAssistentOpties) {
   // retrieval-override en mag de bewaarde gespreksscope niet wijzigen.
   async function bewaarGesprek(
     finale: Bericht[],
-    scopeVoorOpslag: DocumentScope | null
+    scopeVoorOpslag: DocumentScope | null,
+    // T2 (#304): net als `scopeVoorOpslag` — bij een startbeurt is de
+    // agendapuntcontext in dezelfde tick gezet en nog niet gecommit.
+    agendapuntVoorOpslag: AgendapuntContext | null = context.agendapuntContext
   ) {
     try {
       const uid = userIdRef.current;
@@ -585,17 +590,17 @@ export function useAssistent(opties: UseAssistentOpties) {
       // ADR 0028: in agendapunt-modus bewaren we additief agendapunt_context, ook
       // als er 0 stukken zijn (documentScope null) — zodat de framing terugkomt.
       const scopePayload =
-        scopeVoorOpslag || context.agendapuntContext
+        scopeVoorOpslag || agendapuntVoorOpslag
           ? {
               type: "single",
               document_ids: scopeVoorOpslag?.document_ids ?? [],
               titels: scopeVoorOpslag?.titels ?? [],
               algemene_kennis: scopeVoorOpslag?.algemene_kennis === true,
-              ...(context.agendapuntContext
+              ...(agendapuntVoorOpslag
                 ? {
                     agendapunt_context: {
-                      id: context.agendapuntContext.id,
-                      titel: context.agendapuntContext.titel,
+                      id: agendapuntVoorOpslag.id,
+                      titel: agendapuntVoorOpslag.titel,
                     },
                   }
                 : {}),
@@ -653,8 +658,8 @@ export function useAssistent(opties: UseAssistentOpties) {
    * gedeactiveerd document geen scope oplevert.
    */
   const pasIngangToe = useCallback(
-    async (ingangen: AssistentUrlIngang[]) => {
-      if (ingangen.length === 0) return;
+    async (ingangen: AssistentUrlIngang[]): Promise<AssistentContextPatch> => {
+      if (ingangen.length === 0) return {};
       // De resolver vraagt om een MINIMALE leesinterface (select/eq/order),
       // niet om de supabase-client zelf: zo is hij te testen met een stub en is
       // aan zijn signatuur te zien dat hij nooit schrijft. De generieke typen
@@ -680,6 +685,10 @@ export function useAssistent(opties: UseAssistentOpties) {
         zetAgendapuntContext(patch.agendapuntContext);
       if (patch.moduleScope !== undefined) zetModuleScope(patch.moduleScope);
       if (patch.risicoLijst !== undefined) zetRisicoLijst(patch.risicoLijst);
+      // T2 (#304) — de opgeloste patch teruggeven. Een aanroeper die in DEZELFDE
+      // tick een beurt verstuurt (de startbeurt) kan de zojuist gezette state
+      // nog niet lezen; hij geeft de waarde hieruit expliciet mee als override.
+      return patch;
     },
     [
       supabase,
@@ -858,6 +867,13 @@ export function useAssistent(opties: UseAssistentOpties) {
     // omdat het de scope in dezelfde tick zet én verstuurt (state nog niet gecommit).
     const scopeVoorOpslag =
       opties?.persistScope !== undefined ? opties.persistScope : context.documentScope;
+    // T2 (#304) — zie `agendapuntContextOverride` in StuurOpties: bij een
+    // startbeurt is de context in dezelfde tick gezet en dus nog niet zichtbaar
+    // in deze closure. Elk ander pad geeft niets mee en houdt de gespreksstaat.
+    const effAgendapunt =
+      opties?.agendapuntContextOverride !== undefined
+        ? opties.agendapuntContextOverride
+        : context.agendapuntContext;
 
     // Voeg de nieuwe vraag toe en stuur de complete geschiedenis mee. Bij een
     // verduidelijkingsvervolg (geenNieuweVraag) eindigt `basisBerichten` al op de
@@ -914,7 +930,7 @@ export function useAssistent(opties: UseAssistentOpties) {
             herkomst: context.herkomst,
             documentScope: effScope,
             antwoordmodus: effAntwoordmodus,
-            agendapuntContext: context.agendapuntContext,
+            agendapuntContext: effAgendapunt,
             moduleScope: context.moduleScope,
             gesprekId: zorgVoorGesprekId(),
             opties,
@@ -1011,7 +1027,7 @@ export function useAssistent(opties: UseAssistentOpties) {
             logId: stand.logId,
           },
         ];
-        await bewaarGesprek(finale, scopeVoorOpslag);
+        await bewaarGesprek(finale, scopeVoorOpslag, effAgendapunt);
 
         // ── Plateau B / B-2 — de proactieve uitnodiging ────────────────────
         // Nadrukkelijk PAS hier: het antwoord is af en bewaard. De uitnodiging
@@ -1025,7 +1041,8 @@ export function useAssistent(opties: UseAssistentOpties) {
         // verduidelijkingsbubbel verdwijnt dus netjes, geen dubbele beurt.
         await bewaarGesprek(
           [...conversatie, stand.verduidelijkingBericht],
-          scopeVoorOpslag
+          scopeVoorOpslag,
+          effAgendapunt
         );
       }
     } catch {

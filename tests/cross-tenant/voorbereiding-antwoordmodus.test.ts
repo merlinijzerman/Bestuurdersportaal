@@ -217,6 +217,31 @@ test("voorbereiding — de kaart leest het product, niet een gesprekquery", () =
   assert.equal(kaartCode.includes("agendapunt_context"), false);
 });
 
+test("voorbereiding — de startbeurt draagt de OPGELOSTE agendapuntcontext, niet de state", () => {
+  // `pasIngangToe` zet de context via een state-setter en het oppervlak verstuurt
+  // in dezelfde tick; de gespreksstaat wijst dan nog naar de vorige waarde.
+  // Zonder deze override loopt de voorbereiding als gewone bibliotheekvraag:
+  // andere prompt-tak, geen toelichtingsseed, geen gekoppelde stukken — en
+  // niets in de interface dat dat verklaart. Zelfde val als `persistScope`.
+  const oppervlak = lees(
+    "app",
+    "(dashboard)",
+    "ai",
+    "_components",
+    "AssistentOppervlak.tsx"
+  );
+  assert.match(
+    oppervlak,
+    /const patch = await pasIngangToe\(aanvraag\.ingangen\);/,
+    "de opgeloste patch moet worden opgevangen"
+  );
+  assert.match(
+    oppervlak,
+    /agendapuntContextOverride: patch\.agendapuntContext \?\? null,/,
+    "de startbeurt moet de opgeloste context expliciet meegeven"
+  );
+});
+
 test("voorbereiding — de kaart stuurt de modus als per-beurt-override mee", () => {
   assert.match(
     kaart,
