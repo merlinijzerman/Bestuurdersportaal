@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  bouwStandaardAgendaDeltaUrl,
   OutlookGraphError,
   graphGet,
   normaliseerGraphUtc,
@@ -10,6 +11,15 @@ import {
   veiligeGraphUrl,
   veiligeTeamsLink,
 } from "../../core/lib/microsoft-outlook-graph-core";
+
+test("delta-start gebruikt het gedocumenteerde v1.0-pad van de standaardagenda", () => {
+  const url = bouwStandaardAgendaDeltaUrl("2026-06-01", "2027-06-01");
+  assert.equal(url.origin, "https://graph.microsoft.com");
+  assert.equal(url.pathname, "/v1.0/me/calendarView/delta");
+  assert.equal(url.searchParams.get("startDateTime"), "2026-06-01T00:00:00Z");
+  assert.equal(url.searchParams.get("endDateTime"), "2027-06-01T00:00:00Z");
+  assert.doesNotMatch(url.pathname, /\/calendars\//);
+});
 
 test("Graph-client accepteert uitsluitend Microsoft Graph v1.0 en gebruikt immutable ID", async () => {
   assert.equal(veiligeGraphUrl("https://graph.microsoft.com/v1.0/me/calendars").hostname, "graph.microsoft.com");

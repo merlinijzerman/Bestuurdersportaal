@@ -20,6 +20,17 @@ export class OutlookGraphError extends Error {
 }
 
 const MAX_RETRY_WACHTTIJD_MS = 30_000;
+const GRAPH_V1 = "https://graph.microsoft.com/v1.0";
+
+export function bouwStandaardAgendaDeltaUrl(
+  vensterStart: string,
+  vensterEind: string,
+): URL {
+  const url = new URL(`${GRAPH_V1}/me/calendarView/delta`);
+  url.searchParams.set("startDateTime", `${vensterStart}T00:00:00Z`);
+  url.searchParams.set("endDateTime", `${vensterEind}T00:00:00Z`);
+  return url;
+}
 
 export function veiligeGraphUrl(url: string): URL {
   const parsed = new URL(url);
