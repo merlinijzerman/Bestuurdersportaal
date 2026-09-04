@@ -1,6 +1,6 @@
 # AI-gateway — inventarisatie en uitvoeringsplan (M365 fase 2B, issue #311)
 
-- **Status:** plan **gereviewd en akkoord** (opdrachtgever, 2026-09-04, zie §6) met twee verplichte beveiligingsaanpassingen (§3.3a, §3.3b); T1 uitgevoerd op branch `feat/311-ai-gateway`
+- **Status:** plan **gereviewd en akkoord** (opdrachtgever, 2026-09-04, zie §6) met twee verplichte beveiligingsaanpassingen (§3.3a, §3.3b); T1 gemerged (PR #312); **T2 (DB-laag) in uitvoering** op `feat/311-t2-ai-gateway-db` — migratie `2026_09_04_ai_gateway_configuratie.sql`, suite `2026_09_04_ai_gateway.sql`, runbook `security/AI-GATEWAY-RUNBOOK.md`
 - **Datum:** 2026-09-04
 - **Context:** besluit 0208 (twee productvarianten, AI-provider als aparte configuratiedimensie), issue #311
 - **Leidend principe:** het bestaande gedrag blijft standaard Anthropic; deze fase levert het uitbreidingspunt, geen klant-eigen provider.

@@ -188,6 +188,9 @@ SQL_T2VB="supabase/checks/2026_09_04_t2_voorbereiding_product.sql"
 # Microsoft 365 fase 1 — private tokenkluis, minimale DB-rol, secdef-paths en
 # exact één fail-safe integratieprofiel per fonds.
 SQL_M365F1="supabase/checks/2026_09_04_microsoft_fase1_connectorfundament.sql"
+# #311 T2 — AI-gateway: privaat schema, minimale rol ai_gateway (exact 3 executes,
+# nul tabelrechten), profiel-eigenaarschap, backfill ×4, fail-closed fondstrigger.
+SQL_AIGW="supabase/checks/2026_09_04_ai_gateway.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -388,6 +391,9 @@ echo
 
 echo "-- Microsoft 365 F1 (private vaultrol, grants, secdef-path en fondsprofiel) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1"
+echo
+echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
 echo
 
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
