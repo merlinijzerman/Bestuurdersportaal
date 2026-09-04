@@ -38,6 +38,7 @@ test("Graph-client accepteert uitsluitend Microsoft Graph v1.0 en gebruikt immut
     maxRetries: 0,
   });
   const prefer = new Headers(headers).get("Prefer") ?? "";
+  assert.equal(new Headers(headers).get("Content-Type"), "application/json");
   assert.match(prefer, /IdType="ImmutableId"/);
   assert.match(prefer, /outlook\.timezone="UTC"/);
 });
