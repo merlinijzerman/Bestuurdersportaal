@@ -343,6 +343,12 @@ const HYBRID_ENABLED = process.env.HYBRID_SEARCH === "on";
 // env-default. Zo blijven overige aanroepers (agendaprep) ongemoeid.
 export interface RetrievalOpties {
   rerank?: boolean; // R1.3 Haiku-reranker
+  /**
+   * #311: de reranker loopt op het productiepad door de AI-gateway (taaktype
+   * `rerank`); de route geeft gateway + servercontext mee. Ontbreekt dit én is er
+   * geen testclient, dan valt de reranker terug op de RRF-volgorde.
+   */
+  gateway?: { gateway: import("./ai-gateway/contract").AiGateway; ctx: import("./ai-gateway/contract").GatewayContext };
   relevantieDrempel?: boolean; // R1.5 ilike-uitsluiting (b1) + scoredrempel (b2)
   jargonExpansie?: boolean; // R1.4 FTS-jargonexpansie
   parentRetrieval?: boolean; // R1.6 small-to-big
@@ -372,6 +378,7 @@ type VolledigeOpties = {
   regimeWeging: boolean;
   drempelWaarde: number;
   rerankClient?: RerankClient;
+  gateway?: RetrievalOpties["gateway"];
 };
 
 function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
@@ -388,6 +395,7 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     regimeWeging: o?.regimeWeging ?? process.env.REGIME_WEGING !== "off",
     drempelWaarde: o?.drempelWaarde ?? DEFAULT_RELEVANTIE_DREMPEL,
     rerankClient: o?.rerankClient,
+    gateway: o?.gateway,
   };
 }
 
@@ -466,10 +474,11 @@ async function naVerwerking(
       (c) => verrijkTekst(prefixMap.get(c.id), c.tekst),
       {
         client: opties.rerankClient,
-        // AI-BEGRENZING (besluit 0180). Zonder geïnjecteerde testclient loopt de
-        // reranker door de poort; is die dicht, dan valt hij terug op de
-        // RRF-volgorde in plaats van een ongemeten call te doen.
-        poort: { supabase: await createServerSupabase(), label: "rag.rerank" },
+        // AI-BEGRENZING (besluit 0180) + #311. Zonder geïnjecteerde testclient
+        // loopt de reranker door de gateway (fondsconfiguratie → poort → audit);
+        // is de poort dicht, dan valt hij terug op de RRF-volgorde in plaats van
+        // een ongemeten call te doen.
+        gateway: opties.gateway,
       }
     );
     kandidaten = r.chunks;
@@ -1058,6 +1067,17 @@ export interface RetrievalMeta {
     bevat_reranker: boolean;
     bevat_query_reformulatie: boolean;
     bevat_web_search: boolean;
+  };
+  /**
+   * #311 — de EFFECTIEVE provider/model/profiel/configuratieversie van de
+   * eindgeneratie, zoals de AI-gateway die uit fonds + taakgroep bepaalde.
+   * Auditbaar: welk profiel en welke versie stonden er toen. Geen inhoud.
+   */
+  gateway?: {
+    provider: string;
+    model: string;
+    profiel_id: string;
+    config_versie: number | null;
   };
 }
 

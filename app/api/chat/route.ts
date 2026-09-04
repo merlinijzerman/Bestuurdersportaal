@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
-import { bewaakteAnthropic, bewaakteAnthropicStream } from "@/core/lib/ai-poort";
+// #311 — de centrale AI-gateway: provider/model komen server-side uit fonds +
+// taaktype (ai_gateway_private), de poort (kill switch/allowlist) draait vlak
+// vóór iedere call en elke call krijgt een inhoudsvrije auditregel.
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import { isVoorNetwerkGestopt } from "@/core/lib/ai-gateway/fout";
+import type { GatewayContext } from "@/core/lib/ai-gateway/contract";
 import {
   preflight,
   preflightRespons,
@@ -61,7 +66,7 @@ import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@
 import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource, type AssistantSourceWeb } from "@/core/lib/assistant-source";
 import { allowedDomeinenUit } from "@/core/lib/web-whitelist";
 import { haalActieveWhitelist } from "@/core/lib/web-whitelist-data";
-import { beoordeelWebGate, buildWebSearchTool, extractWebResultaten, bouwWebbronnen, bevraagdeDomeinen } from "@/core/lib/web-retrieval";
+import { beoordeelWebGate, extractWebResultaten, bouwWebbronnen, bevraagdeDomeinen } from "@/core/lib/web-retrieval";
 import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel, bouwRegimeKaderBlok } from "@/core/lib/organisatieprofiel";
@@ -160,11 +165,12 @@ const CHUNK_BUDGET = 10;
 // vóór deze wijziging had en kan de verbreding de dekking van dat stuk per
 // constructie niet verslechteren. De prompt groeit met hooguit 5 passages.
 const AANVULLEND_BUDGET = 5;
-// History-aware query-reformulatie (Fase B1). Bewust op het sterke model: de
-// rewrite bepaalt wat de retrieval ophaalt, dus fouten hier (bv. dubbelzinnige
-// afkortingen verkeerd expanderen) vergiftigen álle downstream-resultaten. De
-// meerkosten zijn klein (één korte call), de hefboom op antwoordkwaliteit groot.
-const REWRITE_MODEL = "claude-sonnet-4-6";
+// History-aware query-reformulatie (Fase B1) en de contextresolver draaien op
+// het STERKE hulpmodel: de rewrite bepaalt wat de retrieval ophaalt, dus fouten
+// hier (bv. dubbelzinnige afkortingen verkeerd expanderen) vergiftigen álle
+// downstream-resultaten. #311: welk model dat is, bepaalt de fondsconfiguratie
+// (taakgroep hulp_sterk, taaktypes chat_contextresolutie/chat_reformulatie) —
+// niet langer een constante in deze route.
 
 // Plateau 1 — harde timeout op de vroege contextresolver. De resolver blokkeert
 // de retrieval, dus een trage call mag de hele chat niet ophouden: bij overschrijding
@@ -214,7 +220,7 @@ function telDekkingslocaties(chunks: DocumentChunk[]): {
 }
 // Goedkoop/snel model voor de extractieve map-stap; het sterke AI_MODEL doet de
 // reduce-stap (kwaliteit van het eindantwoord).
-const MAP_MODEL = HAIKU_MODEL;
+// #311: het mapstap-model komt uit de fondsconfiguratie (taakgroep hulp_snel, taaktype chat_mapstap).
 
 // ── Scenario A live web-retrieval (besluit 0072) ────────────────────────────
 // Hoofdschakelaar: web-retrieval draait ALLEEN als WEB_RETRIEVAL_ACTIEF='true'
@@ -645,7 +651,6 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // voortkomen (Opus-stream + tot twaalf Haiku-mapstappen + reformulatie +
     // embeddings + reranker). Reserveren gebeurt hier, vóór de eerste
     // providercall; de poort hieronder draait daarna per afzonderlijke call.
-    const aiPoort = { supabase, label: "chat.POST" };
     const idempotentie = sleutelUitRequest(req, "chat");
     if (!idempotentie) {
       return badRequest(
@@ -671,6 +676,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const aiBlokkade = preflightRespons("chat.POST", pf);
     if (aiBlokkade) return aiBlokkade;
     const aiActieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
+
+    // #311 — één gateway-context per beurt: fonds en gebruiker uit de
+    // sessiecontext, de reservering als bewijs, de request-id als correlatie.
+    // Alle providercalls in deze route (contextresolver, reformulatie,
+    // vraagrouter, reranker, mapstap, eindgeneratie, vergelijking) lopen hierdoor.
+    const gateway = productieGateway();
+    const gatewayCtx: GatewayContext = {
+      supabase,
+      fondsId,
+      actor: { soort: "gebruiker", id: ctx.gebruikerId },
+      actieId: aiActieId,
+      correlatieId: ctx.requestId,
+      label: "chat.POST",
+    };
 
     // Increment T4 — manipulatie-signaal: de client MAG body.fonds_id nog meesturen
     // (backwards-compat), maar hij wordt genegeerd. Wijkt hij af van de server-side
@@ -902,43 +921,40 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // dus NIET als modelcall; een timeout ná start telt wél.
           let providercallGestart = false;
           try {
-            const resp = await bewaakteAnthropic(aiPoort, REWRITE_MODEL, (client) => {
-              providercallGestart = true;
-              return client.messages.create(
-                {
-                  model: REWRITE_MODEL,
-                  max_tokens: 220,
-                  temperature: 0,
-                  system: systeem,
-                  messages: [{ role: "user", content: gebruiker }],
-                },
-                { timeout: CONTEXTRESOLVER_SDK_TIMEOUT_MS, signal: ctrl.signal }
-              );
+            providercallGestart = true;
+            const resp = await gateway.genereer(gatewayCtx, {
+              taaktype: "chat_contextresolutie",
+              systeem,
+              berichten: [{ role: "user", content: gebruiker }],
+              maxTokens: 220,
+              temperature: 0,
+              timeoutMs: CONTEXTRESOLVER_SDK_TIMEOUT_MS,
+              signal: ctrl.signal,
             });
-            const tekst =
-              resp.content[0]?.type === "text" ? resp.content[0].text : "";
             return {
-              tekst,
+              tekst: resp.tekst,
               meting: {
-                model: REWRITE_MODEL,
+                model: resp.model,
                 duurMs: Date.now() - start,
-                tokensIn: resp.usage?.input_tokens ?? 0,
-                tokensOut: resp.usage?.output_tokens ?? 0,
+                tokensIn: resp.usage.in,
+                tokensOut: resp.usage.out,
                 timeout: false,
                 modelAangeroepen: true,
               },
             };
-          } catch {
+          } catch (e) {
             // Nooit throwen: de resolver beslist de fallback op basis van de meting.
             // Drie onderscheidbare gevallen, expliciet (niet uit lege tekst afgeleid):
             //   aborted            → timeout ná callstart;
             //   call gestart, fout → providerfout;
-            //   niet gestart       → poortweigering (geen modelcall).
+            //   niet gestart       → configuratie-/poortweigering vóór het netwerk
+            //                        (geen modelcall; de gateway stopt daar).
+            if (isVoorNetwerkGestopt(e)) providercallGestart = false;
             const aborted = ctrl.signal.aborted;
             return {
               tekst: "",
               meting: {
-                model: REWRITE_MODEL,
+                model: "niet_bepaald",
                 duurMs: Date.now() - start,
                 tokensIn: 0,
                 tokensOut: 0,
@@ -1652,7 +1668,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           basis: basisRoute,
           documentAantal: scopeActief ? scopeDocumentIds?.length ?? 0 : 0,
           actief: vraagrouterVlaggen.modelrouter,
-          poort: aiPoort,
+          gateway,
+          ctx: gatewayCtx,
         });
         vraagRoute = verfijnd.route;
         vraagrouterUitvoering = {
@@ -1789,7 +1806,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             doelDocumentId: koppeling.doel.id,
             versies: VERGELIJK_VERSIES,
           },
-          productieDeps({ supabase, fondsId })
+          productieDeps({ supabase, fondsId, gateway, gatewayCtx })
         );
 
         // Governance-logging: een vergelijking is een AI-interactie (verplicht spoor,
@@ -1865,7 +1882,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_antwoord: vvSamenvatting,
             p_bronnen: [],
             p_modus: "documenten",
-            p_model: vergelijkVerduidelijkingResolverModel ? REWRITE_MODEL : null,
+            p_model: vergelijkVerduidelijkingResolverModel ? (vraagContext?.meting?.model ?? null) : null,
             p_retrieval_meta: {
               vergelijkmodus: true,
               verduidelijking: true,
@@ -1923,7 +1940,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         const zegel = bouwInhoudZegel(vraag, VERDUIDELIJKINGSVRAAG);
         // Plateau 1 — modelcall-semantiek. Deze tak doet geen ANTWOORD-generatie,
         // maar de contextresolver kan wél een providercall hebben gestart. Dan is
-        // `geen_modelcall` false en registreren we REWRITE_MODEL als gebruikt model;
+        // `geen_modelcall` false en registreren we het effectieve resolvermodel;
         // `geen_generatiecall` legt afzonderlijk vast dat er geen generatie was.
         const resolverModelGebruikt = vraagContext?.modelAangeroepen ?? false;
         const { data: verduidelijkingLogId, error: logFout } = await supabase.rpc(
@@ -1938,7 +1955,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_modus: bepaalAutoBronModus(alleenFondsdocumenten),
             // Registreer het door de resolver gebruikte model waar het auditcontract
             // een modelveld verwacht; null als er geen enkele providercall was.
-            p_model: resolverModelGebruikt ? REWRITE_MODEL : null,
+            p_model: resolverModelGebruikt ? (vraagContext?.meting?.model ?? null) : null,
             p_retrieval_meta: {
               // Markeert de regel als een TERUGVRAAG, geen antwoord. Zo is in het log
               // te onderscheiden en te meten hoe vaak de assistent doorvraagt.
@@ -2353,8 +2370,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // Voortgang (besluit 0087): de reformulatie draait op het STERKE model en
         // is meestal het grootste stille-tijd-blok. Melden vóór en na de call.
         send({ type: "progress", fase: "reformulatie", status: "bezig", label: VOORTGANG_LABEL.reformulatie });
-        const herschreven = await bewaakteAnthropic(aiPoort, REWRITE_MODEL, (client) =>
-          reformuleerVraag(client, priorBeurten, vraag, REWRITE_MODEL)
+        const herschreven = await reformuleerVraag(
+          async (invoer) =>
+            (
+              await gateway.genereer(gatewayCtx, {
+                taaktype: "chat_reformulatie",
+                systeem: invoer.systeem,
+                berichten: [{ role: "user", content: invoer.gebruiker }],
+                maxTokens: invoer.maxTokens,
+                temperature: invoer.temperature,
+              })
+            ).tekst,
+          priorBeurten,
+          vraag
         );
         if (herschreven.trim() && herschreven.trim() !== vraag.trim()) {
           zoekVraag = herschreven.trim();
@@ -2371,9 +2399,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // ORIGINELE vraag mee, zodat de hybride retrieval een extra poging met de
       // originele vraag draait en fuseert (reformulatie voegt alleen recall toe,
       // nooit minder). Niet-geherformuleerd → ongewijzigd gedrag.
+      // #311: de (optionele) reranker binnen de retrieval loopt door dezelfde
+      // gateway-context als de rest van de beurt.
       const retrievalOpties = gereformuleerd
-        ? { ...retrievalVlaggen, origineleVraag: vraag }
-        : retrievalVlaggen;
+        ? { ...retrievalVlaggen, origineleVraag: vraag, gateway: { gateway, ctx: gatewayCtx } }
+        : { ...retrievalVlaggen, gateway: { gateway, ctx: gatewayCtx } };
 
       // ── 12-08-2026 — tweesporen-retrieval bij een primair document ────────
       // Een documentselectie was tot nu toe een HARDE afbakening: de RPC's
@@ -3101,8 +3131,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       bronsoortprofiel: webBronsoortprofiel,
       bevatPii: piiUitkomst.bevatPii,
     });
+    // #311: neutrale tool voor de gateway; de Anthropic-adapter mapt hem op de
+    // web_search-servertool (zelfde parameters als vóór de gateway).
     const webTool = webGate.mag
-      ? buildWebSearchTool(allowedDomeinenUit(whitelistEntries), WEB_MAX_USES)
+      ? ({ soort: "webzoek", domeinen: allowedDomeinenUit(whitelistEntries), maxGebruik: WEB_MAX_USES } as const)
       : null;
 
     // Voortgang (besluit 0087): alleen melden als live web-retrieval daadwerkelijk
@@ -3302,34 +3334,28 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                   .join("\n\n");
                 mapCalls += 1;
                 try {
-                  const mapResp = await bewaakteAnthropic(aiPoort, MAP_MODEL, (client) =>
-                    client.messages.create(
+                  const mapResp = await gateway.genereer(gatewayCtx, {
+                    taaktype: "chat_mapstap",
+                    systeem: SP_MAP_EXTRACTIE,
+                    berichten: [
                       {
-                        model: MAP_MODEL,
-                        max_tokens: 1200,
-                        temperature: 0,
-                        system: SP_MAP_EXTRACTIE,
-                        messages: [
-                          {
-                            role: "user",
-                            content: `VRAAG: ${effectieveVraag}\n\n${
-                              analyseplanTekst ? `${analyseplanTekst}\n\n` : ""
-                            }DOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
-                          },
-                        ],
+                        role: "user",
+                        content: `VRAAG: ${effectieveVraag}\n\n${
+                          analyseplanTekst ? `${analyseplanTekst}\n\n` : ""
+                        }DOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
                       },
-                      { timeout: MAP_CALL_TIMEOUT_MS, signal: mapAbort.signal }
-                    )
-                  );
-                  const tekst =
-                    mapResp.content[0]?.type === "text"
-                      ? mapResp.content[0].text.trim()
-                      : "";
+                    ],
+                    maxTokens: 1200,
+                    temperature: 0,
+                    timeoutMs: MAP_CALL_TIMEOUT_MS,
+                    signal: mapAbort.signal,
+                  });
+                  const tekst = mapResp.tekst.trim();
                   resultaten[i] = {
                     index: i,
                     tekst,
-                    tokensIn: mapResp.usage?.input_tokens ?? 0,
-                    tokensUit: mapResp.usage?.output_tokens ?? 0,
+                    tokensIn: mapResp.usage.in,
+                    tokensUit: mapResp.usage.out,
                     chunks: breedBatches[i].length,
                     ok: true,
                     timeout: false,
@@ -3459,29 +3485,23 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               : []),
           ];
 
-          // Basis-call; de web_search-server-tool wordt defensief toegevoegd (SDK
-          // 0.39 typeert deze server-tool nog niet — de API ondersteunt hem wel).
-          const streamParams: Anthropic.Messages.MessageStreamParams = {
-            model: AI_MODEL,
-            max_tokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
-            system: streamSysteem,
-            messages: streamMessages,
-          };
-          if (webTool) {
-            (streamParams as { tools?: unknown[] }).tools = [webTool];
-          }
-          // P5 signaal 3: duur van de generatie. De provider-adapter meet dit al
-          // (core/lib/llm-providers/anthropic.ts), maar dit pad loopt daar niet
-          // doorheen — het roept de SDK rechtstreeks aan. Meet vanaf de aanroep
-          // tot finalMessage(), dus inclusief wachttijd bij de provider.
+          // #311 — eindgeneratie via de AI-gateway (taaktype chat_generatie,
+          // taakgroep generatie). Provider/model komen uit de fondsconfiguratie;
+          // de poort draait vlak vóór de call; usage/stopreden komen genormaliseerd
+          // terug. De web_search-servertool gaat als neutrale tool mee.
+          // P5 signaal 3: duur van de generatie, gemeten vanaf de aanroep tot en
+          // met afronden(), dus inclusief wachttijd bij de provider.
           const generatieStart = Date.now();
-          const claudeStream = await bewaakteAnthropicStream(aiPoort, AI_MODEL, (client) =>
-            scopeStrategie === "targeted"
-              ? client.messages.stream(streamParams)
-              : client.messages.stream(streamParams, {
-                  timeout: VOLLEDIGE_ANALYSE_GENERATIE_TIMEOUT_MS,
-                })
-          );
+          const claudeStream = await gateway.stream(gatewayCtx, {
+            taaktype: "chat_generatie",
+            systeem: streamSysteem,
+            berichten: streamMessages,
+            maxTokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
+            ...(webTool ? { tools: [webTool] } : {}),
+            ...(scopeStrategie === "targeted"
+              ? {}
+              : { timeoutMs: VOLLEDIGE_ANALYSE_GENERATIE_TIMEOUT_MS }),
+          });
 
           // Besluit 0151 (criterium 11) — tijd tot eerste zichtbare token (TTFT).
           // Gemeten vanaf de generatie-aanroep tot het eerste delta; per module-
@@ -3494,7 +3514,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // opduikt, sturen we tot dáár en daarna niets meer.
           let verzonden = 0;
           let markerGezien = false;
-          claudeStream.on("text", (delta) => {
+          claudeStream.onTekst((delta) => {
             if (ttftMs === null) ttftMs = Date.now() - generatieStart;
             volledig += delta;
             // B-opt tranche 3b — de verdiepingsvraag wordt niet gestreamd: accumuleer
@@ -3518,7 +3538,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             }
           });
 
-          const finaleMsg = await claudeStream.finalMessage();
+          const finaleMsg = await claudeStream.afronden();
           const generatieDuurMs = Date.now() - generatieStart;
 
           if (bufferReflectievraag) {
@@ -3601,7 +3621,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // Afkap-signaal: raakt het antwoord het max_tokens-plafond, dan tonen we
           // dat expliciet i.p.v. het stil af te kappen (relevant sinds de Opus-
           // overstap, besluit 0067). De gebruiker kan dan om een vervolg vragen.
-          if (finaleMsg.stop_reason === "max_tokens") {
+          if (finaleMsg.stopReden === "max_tokens") {
             inlineMeldingenFinaal.push(AFGEKAPT_MELDING);
           }
 
@@ -3623,7 +3643,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           let webAudit: RetrievalMeta["web"];
           if (webTool) {
             const ophaaltijdstip = new Date().toISOString();
-            const webRes = extractWebResultaten(finaleMsg.content);
+            const webRes = extractWebResultaten(finaleMsg.inhoud);
             webBronnen = bouwWebbronnen(webRes.geciteerd, whitelistEntries, ophaaltijdstip);
             webAudit = {
               ingezet: true,
@@ -3910,17 +3930,24 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             duur_model_ms: Date.now() - modelStart,
             tokens: {
               in:
-                (finaleMsg.usage?.input_tokens ?? 0) +
-                (finaleMsg.usage?.cache_creation_input_tokens ?? 0) +
-                (finaleMsg.usage?.cache_read_input_tokens ?? 0) +
+                finaleMsg.usage.in +
+                finaleMsg.usage.cacheCreatie +
+                finaleMsg.usage.cacheLezen +
                 mapTokensIn,
-              out: (finaleMsg.usage?.output_tokens ?? 0) + mapTokensUit,
+              out: finaleMsg.usage.out + mapTokensUit,
             },
             tokendekking: {
               map_calls: mapCalls,
               bevat_reranker: false,
               bevat_query_reformulatie: false,
               bevat_web_search: false,
+            },
+            // #311 — de effectieve gateway-configuratie van deze eindgeneratie.
+            gateway: {
+              provider: finaleMsg.provider,
+              model: finaleMsg.model,
+              profiel_id: finaleMsg.profielId,
+              config_versie: finaleMsg.configVersie,
             },
           };
 
@@ -3944,7 +3971,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_antwoord: zichtbaarAntwoord,
             p_bronnen: bronnen,
             p_modus: effectieveModus,
-            p_model: AI_MODEL,
+            p_model: finaleMsg.model,
             p_retrieval_meta: meta_spoor,
             p_retrieval_meta_inhoud: meta_inhoud,
             p_gesprek_audit_id: gesprekAuditId,

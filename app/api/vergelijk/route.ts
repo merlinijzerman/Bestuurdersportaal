@@ -26,6 +26,7 @@ import {
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
 import { voerVergelijkingUit } from "@/core/lib/vergelijk-kern";
 import { productieDeps, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -136,7 +137,20 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
           extraDimensies,
           versies: VERGELIJK_VERSIES,
         },
-        productieDeps({ supabase, fondsId })
+        productieDeps({
+          supabase,
+          fondsId,
+          gateway: productieGateway(),
+          // #311 — fonds/gebruiker uit de sessiecontext, reservering als bewijs.
+          gatewayCtx: {
+            supabase,
+            fondsId,
+            actor: { soort: "gebruiker", id: ctx.gebruikerId },
+            actieId,
+            correlatieId: ctx.requestId,
+            label: "vergelijk.POST",
+          },
+        })
       );
     } catch (e) {
       // Reservering blijft staan: het verbruik is gemaakt. Alleen de

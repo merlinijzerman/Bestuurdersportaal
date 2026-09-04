@@ -20,7 +20,7 @@
 // resultaat i.p.v. token-deltas.
 // -----------------------------------------------------------------------------
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { Antwoordmodus } from "@/core/lib/vraagtype";
 import { genereerViaProvider, type ProviderRequest } from "@/core/lib/llm-providers/index";
 import type { ModelProvider, ReasoningEffort } from "@/core/lib/aqlab/modellen";
@@ -31,7 +31,10 @@ import type { ModelProvider, ReasoningEffort } from "@/core/lib/aqlab/modellen";
 // vóór deploy. Overschrijfbaar via de AI_MODEL-env-var — één plek voor A/B-testen
 // en terugschakelen; alle generatie-call-sites (chat-route, agendavoorbereiding)
 // lezen deze constante zodat er geen model-drift tussen paden ontstaat.
-export const AI_MODEL = process.env.AI_MODEL ?? "claude-opus-4-8";
+// #311 (reviewbesluit R2): geen runtime-override via AI_MODEL meer. Dit is de
+// seed-/backfill-default van taakgroep `generatie` (ai_gateway_private) en de
+// AQLab-baseline-constante; op productiepaden beslist de database.
+export const AI_MODEL = "claude-opus-4-8";
 // Verhoogd naar 5000 (was 3200) na de overstap naar Opus 4.8 (besluit 0067):
 // ook feitelijke antwoorden schrijft Opus uitgebreider, dus ruimer plafond tegen
 // afkappen. Plafond, geen streefwaarde; het afkap-signaal (AFGEKAPT_MELDING) vangt

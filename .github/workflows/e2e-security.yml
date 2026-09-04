@@ -24,6 +24,12 @@ jobs:
       PLATFORM_HOST: "beheer.localhost"
       TENANT_ENFORCE: "on"
       SEED_DOELOMGEVING: "local"
+      # #311 T3 — de AI-gateway leest zijn fondsconfiguratie via de aparte rol
+      # ai_gateway (fixture met vast wachtwoord uit scripts/testdb-apply-migrations.sh).
+      # TLS uit is alleen toegestaan op loopback + SEED_DOELOMGEVING=local
+      # (core/lib/ai-gateway/config-db-core.ts), nooit op Preview/Productie.
+      AI_GATEWAY_DATABASE_URL: "postgresql://ai_gateway:ai_gateway_lokaal@127.0.0.1:54322/postgres"
+      AI_GATEWAY_DB_SSL: "uit"
       WP3_MALWARESCAN_AAN: "true"
       WP3_SCANNER_URL: "http://127.0.0.1:8787"
       WP3_E2E_SCANNER: "local"

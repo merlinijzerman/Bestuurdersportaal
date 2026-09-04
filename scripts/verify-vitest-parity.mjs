@@ -22,6 +22,16 @@ const expected = {
     count: 5,
     titlesSha256: "4683b6f5268e537e79cfb5bb4b33a9d48f1b69da50cbc0ac6697385ae11e1736",
   },
+  // #311 T3 — contracttests van de AI-gateway (gateway.test.ts) en de
+  // secret-/foutlaag (secrets.test.ts); titels gepind zoals de overige suites.
+  "core/lib/ai-gateway/gateway.test.ts": {
+    count: 13,
+    titlesSha256: "543b2529098adb6b38820714a59764182ac1cfda39653c3e7a3288ebcdda73d7",
+  },
+  "core/lib/ai-gateway/secrets.test.ts": {
+    count: 3,
+    titlesSha256: "f6a62443a9230d63ee92130df0a2984c004a20960fe47127ad1a93881849d5a4",
+  },
   "platform/lib/aqlab-checks.test.ts": {
     count: 17,
     titlesSha256: "d15a71dfa140f25cec461f5a92876dde1a0f07de2843c4f057814559d04f1889",
@@ -68,4 +78,5 @@ assert.deepEqual(
   "één of meer gemigreerde suites ontbreken",
 );
 
-console.log("WP1 testcasepariteit groen: 5 suites, 127 tests, titelpins conform nulmeting.");
+const totaal = Object.values(expected).reduce((som, e) => som + e.count, 0);
+console.log(`WP1 testcasepariteit groen: ${actualFiles.size} suites, ${totaal} tests, titelpins conform nulmeting.`);
