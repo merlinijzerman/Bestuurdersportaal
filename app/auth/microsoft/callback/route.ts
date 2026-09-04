@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { haalProfiel } from "@/core/lib/profiel";
-import { microsoftPilotActief, registreerKoppelfout, voltooiKoppeling } from "@/core/lib/microsoft-connector";
+import { microsoftOutlookActief, microsoftPilotActief, registreerKoppelfout, voltooiKoppeling } from "@/core/lib/microsoft-connector";
 import { microsoftKoppelfoutcategorie } from "@/core/lib/microsoft-connector-error-core";
 import { veiligeMicrosoftReturnUrl } from "@/core/lib/microsoft-config";
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.redirect(fallback, { headers: { "Cache-Control": "no-store" } });
     const profiel = await haalProfiel(supabase, user.id);
-    if (!profiel?.fondsId || !(await microsoftPilotActief(supabase, profiel.fondsId))) return NextResponse.redirect(fallback, { headers: { "Cache-Control": "no-store" } });
+    if (!profiel?.fondsId || !((await microsoftPilotActief(supabase, profiel.fondsId)) || (await microsoftOutlookActief(supabase, profiel.fondsId)))) return NextResponse.redirect(fallback, { headers: { "Cache-Control": "no-store" } });
     auditContext = { fondsId: profiel.fondsId, gebruikerId: user.id };
     const returnTo = veiligeMicrosoftReturnUrl(await voltooiKoppeling({ fondsId: profiel.fondsId, gebruikerId: user.id, state, code }));
     const bestemming = new URL(returnTo, req.url);

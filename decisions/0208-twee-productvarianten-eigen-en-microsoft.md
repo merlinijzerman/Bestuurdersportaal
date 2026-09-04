@@ -2,7 +2,7 @@
 
 - **Status:** Geaccepteerd als productrichting; Microsoftvariant na een geslaagde proef
 - **Datum:** 2026-09-03
-- **Aangevuld:** 2026-09-04 (duaal productmodel, klant-eigen AI en fase 0-pilotkader)
+- **Aangevuld:** 2026-09-04 (duaal productmodel, klant-eigen AI, fase 0-pilotkader en Outlook fase 2A)
 - **Betrokkenen:** Merlin (opdrachtgever/productowner), Codex (onderzoek en uitwerking)
 
 ## Besluit in het kort
@@ -31,6 +31,15 @@ koppelstatus staan in een private database-schema achter een afzonderlijke, mini
 server-only database-rol; de bestaande service-roleclient wordt niet in tenant-routes gebruikt.
 Alle fondsen blijven `eigen`; de Preview-pilotflag ontsluit alleen de koppeling en schakelt geen
 bronlaag om.
+
+### Outlook fase 2A — read-only pilot (2026-09-04)
+
+Na de groene fase-1-smoke gebruikt de Microsoftvariant voor één expliciet geselecteerde agenda
+Graph v1.0 `calendarView/delta` met delegated `Calendars.Read.Shared`. De activering is driemaal
+gepoort (Microsoftprofiel, fase-1-pilot, fase-2A-featureflag), de selectie en delta-cursor zijn
+private vaultdata en alleen een fondsbeheerder kan consent/selectie/synchronisatie wijzigen.
+Private/personal afspraken worden niet geïmporteerd en bestaande afgeleide details worden
+afgeschermd; Teams-links en ruwe deelnemersgegevens komen nooit in audit of logging.
 
 | Onderdeel | Eigen variant | Microsoftvariant |
 |---|---|---|

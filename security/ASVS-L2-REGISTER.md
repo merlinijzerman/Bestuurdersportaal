@@ -132,6 +132,16 @@ objecten, grant/RLS-export en herhaalbare migratieverificatie.
 
 ## Verplichte CI-poorten
 
+### Microsoft Outlook fase 2A (Preview-only)
+
+De fase-2A-uitwerking dekt ASVS-toepassingen voor least privilege, server-side
+autorisatie, veilige foutafhandeling en privacy-minimalisatie: alleen delegated
+`Calendars.Read.Shared`, een beheer-capability, private vaulttabellen zonder
+browserrechten, gepinde `SECURITY DEFINER`-paden, en cursors/tokens buiten logs.
+Het resterende bewijs is de migratiereplay plus de echte Preview-Graph-smoke uit
+`security/MICROSOFT-365-F2A-RUNBOOK.md`; tot die tijd is dit geen afgeronde
+ASVS-control.
+
 Deze commando's moeten op elke wijziging slagen:
 
 ```bash

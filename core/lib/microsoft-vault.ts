@@ -10,6 +10,16 @@ import {
 } from "@/core/lib/microsoft-vault-row-core";
 
 type Verbinding = { id: string; fonds_id: string; gebruiker_id: string; tenant_id: string; microsoft_object_id: string; home_account_id: string; display_name: string | null; masked_username: string | null; status: "gekoppeld" | "fout" | "ontkoppeld"; scopes: string[]; laatst_getest_op: string | null; gekoppeld_op: string | null };
+export type OutlookConfiguratie = {
+  id: string; gebruiker_id: string; tenant_id: string; mailbox_id: string; calendar_id: string;
+  calendar_naam: string; venster_start: string; venster_eind: string; delta_link: string | null;
+  status: "gereed" | "bezig" | "fout" | "toestemming_nodig"; laatst_gelukt_op: string | null;
+  laatst_foutcategorie: string | null;
+};
+export type OutlookRun = {
+  run_id: string; configuratie_id: string; tenant_id: string; mailbox_id: string; calendar_id: string;
+  venster_start: string; venster_eind: string; delta_link: string | null;
+};
 let pool: Pool | undefined;
 function db() {
   const config = microsoftVaultDbConfig(
@@ -55,4 +65,26 @@ export async function registreerKoppelfout(fondsId: string, gebruikerId: string,
 }
 export async function ontkoppel(fondsId: string, gebruikerId: string) {
   await db().query("select microsoft_private.ontkoppel($1,$2)", [fondsId, gebruikerId]);
+}
+export async function leesOutlookConfiguratie(fondsId: string, gebruikerId: string): Promise<OutlookConfiguratie | undefined> {
+  const r = await db().query("select * from microsoft_private.outlook_lees_configuratie($1,$2)", [fondsId, gebruikerId]);
+  return r.rows[0] as OutlookConfiguratie | undefined;
+}
+export async function configureerOutlookAgenda(args: { fondsId: string; gebruikerId: string; tenantId: string; mailboxId: string; calendarId: string; naam: string; vensterStart: string; vensterEind: string }) {
+  const r = await db().query("select microsoft_private.outlook_configureer_agenda($1,$2,$3,$4,$5,$6,$7,$8) as id", [args.fondsId,args.gebruikerId,args.tenantId,args.mailboxId,args.calendarId,args.naam,args.vensterStart,args.vensterEind]);
+  return r.rows[0]?.id as string | undefined;
+}
+export async function startOutlookRun(fondsId: string, gebruikerId: string, correlationId: string): Promise<OutlookRun | undefined> {
+  const r = await db().query("select * from microsoft_private.outlook_start_run($1,$2,$3)", [fondsId, gebruikerId, correlationId]);
+  return r.rows[0] as OutlookRun | undefined;
+}
+export async function verwerkOutlookEvent(args: { runId: string; eventId: string; iCalUId: string | null; changeKey: string | null; serieMasterId: string | null; titel: string; start: string; eind: string; tijdzone: string; locatie: string; teamsLink: string; sensitivity: string; geannuleerd: boolean; lokaleDeelnemers: string[]; onbekendeDeelnemers: number }) {
+  const r = await db().query("select microsoft_private.outlook_verwerk_event($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) as resultaat", [args.runId,args.eventId,args.iCalUId ?? "",args.changeKey ?? "",args.serieMasterId ?? "",args.titel,args.start,args.eind,args.tijdzone,args.locatie,args.teamsLink,args.sensitivity,args.geannuleerd,args.lokaleDeelnemers,args.onbekendeDeelnemers]);
+  return r.rows[0]?.resultaat as "aangemaakt" | "bijgewerkt" | "afgeschermd" | "overgeslagen_privacy" | undefined;
+}
+export async function voltooiOutlookRun(runId: string, deltaLink: string, aantallen: { gelezen: number; aangemaakt: number; bijgewerkt: number; overgeslagen: number }) {
+  await db().query("select microsoft_private.outlook_voltooi_run($1,$2,$3,$4,$5,$6)", [runId,deltaLink,aantallen.gelezen,aantallen.aangemaakt,aantallen.bijgewerkt,aantallen.overgeslagen]);
+}
+export async function mislukOutlookRun(runId: string, categorie: string) {
+  await db().query("select microsoft_private.outlook_misluk_run($1,$2)", [runId,categorie]);
 }

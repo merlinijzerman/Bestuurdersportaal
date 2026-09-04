@@ -1,5 +1,7 @@
 # Bestuurdersportaal MVP — Handover
 
+> **2026-09-04 — Microsoft 365 fase 2A:** Outlook read-only is als Preview-only pilot gebouwd bovenop fase 1: incrementele delegated `Calendars.Read.Shared`, één server-geverifieerde agenda, v1.0 `calendarView/delta` en een private cursor/run/event-koppellaag. De route vereist Microsoftprofiel + fase-1-pilot + aparte fase-2A-vlag; alleen fondsbeheer kan consent, selectie en sync uitvoeren. Zie `MICROSOFT-365-OUTLOOK-F2A-ONTWERP.md` en `security/MICROSOFT-365-F2A-RUNBOOK.md`. Vereist nog migratiereplay en echte Graph-smoke in Preview.
+
 > **2026-09-04 — Microsoft 365 fase 1:** Preview-only single-tenant connectorfundament toegevoegd: Supabase-login blijft leidend; alleen delegated `User.Read` en Graph `/me`; koppeling, test en lokaal ontkoppelen onder `/api/microsoft/*`. Token-cache/OAuth-materiaal leeft encrypted in `microsoft_private` achter een aparte minimale database-rol. Vereist vóór Preview: migratie toepassen, database-rol provisionen en de geheimen/pilotflag volgens `security/MICROSOFT-365-F1-RUNBOOK.md` instellen. Geen agenda-, SharePoint- of bronwisselfunctionaliteit.
 
 > **Voor toekomstige Claude-sessies**: dit document is de samenvatting van wat is gebouwd, hoe het in elkaar zit, en wat de logische volgende stappen zijn. Lees dit eerst voordat je aan iets nieuws begint, zodat je niet de hele code hoeft te scannen.

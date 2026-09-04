@@ -2,16 +2,16 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 102,
+    "aantalHandlers": 104,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 25,
+    "zonderSpoor": 27,
     "klasseTelling": {
       "domein": 39,
       "geen": 9,
       "bewijsketen": 38,
       "machine": 6,
-      "operationeel": 10
+      "operationeel": 12
     },
     "ketengebeurtenisVereist": [],
     "spoorVereist": [],
@@ -851,6 +851,30 @@
     },
     {
       "handler": "DELETE app/api/microsoft/connectie/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/microsoft/outlook/agendas/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/microsoft/outlook/sync/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",

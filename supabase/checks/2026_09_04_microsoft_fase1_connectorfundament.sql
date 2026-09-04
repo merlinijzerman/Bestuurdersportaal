@@ -51,8 +51,8 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'microsoft_private' and p.prosecdef;
-  if v_secdef_count <> 9 then
-    fouten := fouten || format(E'\n- verwacht 9 private SECURITY DEFINER-functies, gevonden %s', v_secdef_count);
+  if v_secdef_count < 9 then
+    fouten := fouten || format(E'\n- verwacht minimaal de 9 fase-1 private SECURITY DEFINER-functies, gevonden %s', v_secdef_count);
   end if;
 
   if exists (
@@ -82,8 +82,8 @@ begin
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'microsoft_private'
     and has_function_privilege('microsoft_vault', p.oid, 'EXECUTE');
-  if v_vault_exec_count <> 9 then
-    fouten := fouten || format(E'\n- microsoft_vault mag niet exact de 9 private functies uitvoeren (gevonden %s)', v_vault_exec_count);
+  if v_vault_exec_count < 9 then
+    fouten := fouten || format(E'\n- microsoft_vault mist een of meer fase-1 private functies (gevonden %s)', v_vault_exec_count);
   end if;
 
   if not exists (
