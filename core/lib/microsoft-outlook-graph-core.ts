@@ -75,6 +75,7 @@ export async function graphGet(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
+        "Content-Type": "application/json",
         Prefer: 'IdType="ImmutableId", outlook.timezone="UTC", odata.maxpagesize=50',
       },
       cache: "no-store",
