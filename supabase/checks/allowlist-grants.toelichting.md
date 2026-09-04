@@ -273,3 +273,19 @@ De notulen-RPC's (`fn_notulen_segment_bevestig`/`_verwijder`) zijn `create or re
 van bestaande functies — hun grants blijven ongewijzigd (geen nieuwe TSV-regels). De
 fonds/decision-consistentie zit niet in deze functies maar in de composite FK
 `governance_events_decision_zelfde_fonds` (0192 §2e).
+
+## #311 T2 — AI-gateway (migratie 2026_09_04_ai_gateway_configuratie.sql)
+
+Eén nieuw publiek object: `fn_fonds_ai_configuratie_standaard()` — de AFTER
+INSERT-triggerfunctie op `public.fondsen` die voor elk nieuw fonds de vier
+configuratieregels in `ai_gateway_private` aanmaakt. SECURITY DEFINER (de
+invoegende rol heeft bewust geen rechten in het private schema) en **voor niemand
+uitvoerbaar**: `anon -`, `authenticated -`, `service_role -`. Een triggerfunctie
+heeft geen execute-grant nodig om te vuren; elke grant zou alleen een directe
+aanroep mogelijk maken en dat is precies wat niet mag.
+
+Het schema `ai_gateway_private` zelf en de loginrol `ai_gateway` vallen buiten de
+scope van deze gate (die scant `public` en `storage`); hun contract wordt volledig
+door `supabase/checks/2026_09_04_ai_gateway.sql` bewezen (exact vier executes, nul
+tabelrechten, nul toegang voor browser- en servicerollen).
+

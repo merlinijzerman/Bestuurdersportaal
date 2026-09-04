@@ -159,6 +159,9 @@ FUNC	public	fn_export_log_immutable()	function	service_role	EXECUTE
 FUNC	public	fn_fonds_config_capture()	function	anon	-
 FUNC	public	fn_fonds_config_capture()	function	authenticated	EXECUTE
 FUNC	public	fn_fonds_config_capture()	function	service_role	EXECUTE
+FUNC	public	fn_fonds_ai_configuratie_standaard()	function	anon	-
+FUNC	public	fn_fonds_ai_configuratie_standaard()	function	authenticated	-
+FUNC	public	fn_fonds_ai_configuratie_standaard()	function	service_role	-
 FUNC	public	fn_fonds_integratieprofiel_standaard()	function	anon	-
 FUNC	public	fn_fonds_integratieprofiel_standaard()	function	authenticated	-
 FUNC	public	fn_fonds_integratieprofiel_standaard()	function	service_role	EXECUTE

@@ -130,6 +130,18 @@ begin
       nobypassrls
       connection limit 5;
   end if;
+  -- #311 T2 — de AI-gateway heeft dezelfde minimale loginvorm (security/AI-GATEWAY-RUNBOOK.md).
+  if not exists (select 1 from pg_roles where rolname = 'ai_gateway') then
+    create role ai_gateway
+      login
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls
+      connection limit 5;
+  end if;
 end
 $$;
 SQL

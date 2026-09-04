@@ -1,6 +1,6 @@
 # AI-gateway — inventarisatie en uitvoeringsplan (M365 fase 2B, issue #311)
 
-- **Status:** plan **gereviewd en akkoord** (opdrachtgever, 2026-09-04, zie §6) met twee verplichte beveiligingsaanpassingen (§3.3a, §3.3b); T1 uitgevoerd op branch `feat/311-ai-gateway`
+- **Status:** plan **gereviewd en akkoord** (opdrachtgever, 2026-09-04, zie §6) met twee verplichte beveiligingsaanpassingen (§3.3a, §3.3b); T1 gemerged (PR #312); **T2 (DB-laag) in uitvoering** op `feat/311-t2-ai-gateway-db` — migratie `2026_09_04_ai_gateway_configuratie.sql`, suite `2026_09_04_ai_gateway.sql`, runbook `security/AI-GATEWAY-RUNBOOK.md`
 - **Datum:** 2026-09-04
 - **Context:** besluit 0208 (twee productvarianten, AI-provider als aparte configuratiedimensie), issue #311
 - **Leidend principe:** het bestaande gedrag blijft standaard Anthropic; deze fase levert het uitbreidingspunt, geen klant-eigen provider.
@@ -234,6 +234,7 @@ De configuratie- en log-RPC's zijn **niet** bereikbaar voor `authenticated` (en 
   - `lees_config(p_fonds_id uuid, p_taakgroep text)` → `{ok, profiel_id, provider, model, secret_ref, endpoint_ref, versie, eigenaar_fonds_id}` of `{ok:false, reden}`; het fonds-id komt van de server (sessiecontext via `withFondsRoute`, of de job-rij), nooit van de browser. De functie weigert een profiel dat niet platform is én niet van het fonds (§3.3b).
   - `schrijf_log(…)` → append-only insert in `ai_gateway_private.gateway_log`; `fonds_id` is een verplicht argument dat door de gateway uit dezelfde servercontext komt als bij `lees_config`.
   - `lees_log_platform(p_fonds_id, p_limiet)` → uitsluitend voor de platformlaag (beheerscherm #317), via dezelfde rol; geen `authenticated`-pad.
+  - `lees_platform_profiel(p_provider)` → het actieve platformprofiel (secret-/endpointreferentie) voor platformbrede taaktypes zonder fonds (AQLab); een klantprofiel komt hier nooit uit.
 - **Wat de browser dus nooit ziet:** `secret_ref`, `endpoint_ref`, profiel-id's, configuratieversies van andere fondsen, de logfunctie. Een ingelogde sessie heeft geen enkele executable in dit schema; `supabase/checks/<datum>_ai_gateway.sql` bewijst dat (`has_function_privilege('authenticated', …) = false` voor élke functie, `has_schema_privilege('authenticated','ai_gateway_private','USAGE') = false`, en `ai_gateway` heeft exact N executes en nul tabelrechten — patroon `2026_09_04_microsoft_fase1_connectorfundament.sql`).
 - **Configuratietabellen** verhuizen mee naar `ai_gateway_private` (`provider_profiel`, `taakgroep_default`, `fonds_configuratie`, `fonds_configuratie_log`, `gateway_log`); alleen `ai_model_allowlist` blijft in `public` (bestaand, deny-by-default). De FK vanuit het private schema naar `public.ai_model_allowlist` blijft mogelijk.
 - **Secret- en endpointreferenties** zijn sleutelnamen die de adapter via een **code-allowlist** vertaalt naar `process.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `OPENAI_BASE_URL`, `MISTRAL_CHAT_URL`); een onbekende referentie faalt gesloten (`configuratie`). Geen vrije URL uit de database (SSRF), geen key in de database.

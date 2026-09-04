@@ -2391,3 +2391,26 @@ create table if not exists public.procedure_afschriften (
 -- microsoft_vault mag de benoemde SECURITY DEFINER-functies aanroepen. Cache en
 -- OAuth-materiaal zijn AES-256-GCM-ciphertext; er zijn geen browser-toegankelijke
 -- decryptie- of cachefuncties.
+
+-- ── AI-gateway — configuratielaag per fonds (M365 fase 2B, #311, T2) ──────
+-- Bron van waarheid: supabase/migrations/2026_09_04_ai_gateway_configuratie.sql.
+-- ai_gateway_private.provider_profiel: platform- (eigenaar_fonds_id NULL) of
+--   fondsgebonden profiel; alleen secret_ref/endpoint_ref als SLEUTELNAAM, nooit
+--   een key of URL. Seed: platform-anthropic, platform-openai, platform-mistral.
+-- ai_gateway_private.taakgroep_default: productbeleid per taakgroep
+--   (generatie|hulp_sterk|concept|hulp_snel), uitsluitend platformprofielen.
+-- ai_gateway_private.fonds_configuratie: fonds × taakgroep → profiel + model,
+--   FK naar public.ai_model_allowlist; trigger dwingt af: profiel actief, provider
+--   consistent, eigenaar platform óf dit fonds, reden bij update, versie++.
+-- ai_gateway_private.fonds_configuratie_log en gateway_log: append-only; de
+--   gateway_log is inhoudsvrij (provider, model, profiel, versies, resultaat-
+--   categorie, latency, tokens, correlatie-id) — geen prompt of documentinhoud.
+-- Alle vijf: RLS aan, geen policies, nul rechten voor anon/authenticated/
+--   service_role. Alleen loginrol ai_gateway mag lees_config(uuid,text),
+--   schrijf_log(jsonb), lees_log_platform(uuid,int) en lees_platform_profiel(text)
+--   uitvoeren (SECURITY DEFINER,
+--   gepinde search_path). public.fn_fonds_ai_configuratie_standaard() (AFTER
+--   INSERT op fondsen, SECURITY DEFINER, voor niemand uitvoerbaar) maakt voor elk
+--   nieuw fonds vier rijen transactioneel; onvolledige defaults laten de
+--   fondscreatie falen. Backfill: elk bestaand fonds vier rijen op platform-anthropic
+--   met het huidige model per taakgroep.
