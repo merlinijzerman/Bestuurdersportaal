@@ -2407,7 +2407,8 @@ create table if not exists public.procedure_afschriften (
 --   categorie, latency, tokens, correlatie-id) — geen prompt of documentinhoud.
 -- Alle vijf: RLS aan, geen policies, nul rechten voor anon/authenticated/
 --   service_role. Alleen loginrol ai_gateway mag lees_config(uuid,text),
---   schrijf_log(jsonb) en lees_log_platform(uuid,int) uitvoeren (SECURITY DEFINER,
+--   schrijf_log(jsonb), lees_log_platform(uuid,int) en lees_platform_profiel(text)
+--   uitvoeren (SECURITY DEFINER,
 --   gepinde search_path). public.fn_fonds_ai_configuratie_standaard() (AFTER
 --   INSERT op fondsen, SECURITY DEFINER, voor niemand uitvoerbaar) maakt voor elk
 --   nieuw fonds vier rijen transactioneel; onvolledige defaults laten de

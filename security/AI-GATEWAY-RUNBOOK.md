@@ -7,13 +7,13 @@ Patroon: identiek aan de Microsoft-kluisrol uit fase 1 (`MICROSOFT-365-F1-RUNBOO
 ## Wat deze laag is
 
 - Een privaat schema `ai_gateway_private` met per fonds × taakgroep de goedgekeurde provider/modelconfiguratie, platform- of fondsgebonden providerprofielen (alleen **sleutelnamen**, nooit keys of URL's), een append-only wijzigingslog en een append-only, inhoudsvrije auditregel per providercall.
-- Eén aparte, minimale loginrol `ai_gateway` die uitsluitend drie functies mag uitvoeren: `lees_config`, `schrijf_log`, `lees_log_platform`. `anon`, `authenticated` én `service_role` hebben nul rechten in dit schema; tenantroutes blijven op de RLS-client.
+- Eén aparte, minimale loginrol `ai_gateway` die uitsluitend vier functies mag uitvoeren: `lees_config`, `schrijf_log`, `lees_log_platform`, `lees_platform_profiel`. `anon`, `authenticated` én `service_role` hebben nul rechten in dit schema; tenantroutes blijven op de RLS-client.
 - Backfill: elk bestaand fonds krijgt vier rijen op `platform-anthropic` met het huidige model per taakgroep (`generatie` opus-4-8, `hulp_sterk` sonnet-4-6, `concept` sonnet-4-5, `hulp_snel` haiku-4-5). Geen gedragswijziging; Vercel heeft geen `AI_MODEL`-override (gecontroleerd 2026-09-04).
 
 ## Vooraf (per omgeving: Preview, daarna Productie)
 
 1. Breng de branch via PR naar `preview`; wacht op groene gates. De migratie is additief; de code (T3) raakt de tabellen nog niet.
-2. Maak vóór de migratie de loginrol `ai_gateway`. Genereer een lang willekeurig wachtwoord interactief; zet het niet in een script of commit. Flags: `LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 5`. De migratie faalt gesloten als de rol ontbreekt en geeft daarna alleen `USAGE` op `ai_gateway_private` en `EXECUTE` op de drie benoemde functies. Geen tabelrechten, geen service-rolekey.
+2. Maak vóór de migratie de loginrol `ai_gateway`. Genereer een lang willekeurig wachtwoord interactief; zet het niet in een script of commit. Flags: `LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 5`. De migratie faalt gesloten als de rol ontbreekt en geeft daarna alleen `USAGE` op `ai_gateway_private` en `EXECUTE` op de vier benoemde functies. Geen tabelrechten, geen service-rolekey.
 
    Controle vóór de migratie (zonder wachtwoord in het script):
 

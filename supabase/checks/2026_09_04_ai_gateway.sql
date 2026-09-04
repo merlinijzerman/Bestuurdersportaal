@@ -3,7 +3,7 @@
 --  supabase/migrations/2026_09_04_ai_gateway_configuratie.sql.
 --
 --  WAT DEZE SUITE BEWIJST
---    DEEL 1 — STRUCTUUR: minimale loginrol ai_gateway (exact 3 executes, nul
+--    DEEL 1 — STRUCTUUR: minimale loginrol ai_gateway (exact 4 executes, nul
 --                        tabelrechten), privaat schema zonder browser-/service-
 --                        toegang, gepinde search_path, RLS aan, append-only,
 --                        publieke triggerfunctie voor niemand uitvoerbaar,
@@ -87,11 +87,11 @@ begin
     fouten := fouten || E'\n- een rol heeft directe tabelrechten in ai_gateway_private';
   end if;
 
-  -- 1d. Exact drie SECURITY DEFINER-functies, gepinde search_path, exact drie executes voor ai_gateway.
+  -- 1d. Exact vier SECURITY DEFINER-functies, gepinde search_path, exact vier executes voor ai_gateway.
   select count(*) into v_n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'ai_gateway_private' and p.prosecdef;
-  if v_n <> 3 then
-    fouten := fouten || format(E'\n- verwacht 3 SECURITY DEFINER-functies, gevonden %s', v_n);
+  if v_n <> 4 then
+    fouten := fouten || format(E'\n- verwacht 4 SECURITY DEFINER-functies, gevonden %s', v_n);
   end if;
   if exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -102,8 +102,8 @@ begin
   end if;
   select count(*) into v_n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'ai_gateway_private' and has_function_privilege('ai_gateway', p.oid, 'EXECUTE');
-  if v_n <> 3 then
-    fouten := fouten || format(E'\n- ai_gateway mag exact 3 functies uitvoeren, gevonden %s', v_n);
+  if v_n <> 4 then
+    fouten := fouten || format(E'\n- ai_gateway mag exact 4 functies uitvoeren, gevonden %s', v_n);
   end if;
   if exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -160,7 +160,7 @@ begin
   end if;
 
   if fouten <> '' then raise exception E'FAALT DEEL 1:\n%', fouten; end if;
-  raise notice 'OK #1: rol, schema, 5 tabellen deny-by-default, 3 functies, triggers, backfill ×4.';
+  raise notice 'OK #1: rol, schema, 5 tabellen deny-by-default, 4 functies, triggers, backfill ×4.';
 end $$;
 
 \echo '== DEEL 2 — GEDRAG =='
@@ -309,6 +309,8 @@ begin
   update public.ai_model_allowlist set actief = false where provider = 'anthropic' and model = 'claude-haiku-4-5-20251001';
 
   set local role ai_gateway;
+  v := ai_gateway_private.lees_platform_profiel('anthropic');
+  if v->>'profiel_id' <> 'platform-anthropic' then raise exception 'FAALT #2e: klantprofiel lekt als platformprofiel: %', v; end if;
   v := ai_gateway_private.lees_config('a2222222-2222-2222-2222-2222222222a2', 'concept');
   if v->>'reden' <> 'config_inactief' then raise exception 'FAALT #2e: inactieve configuratie: %', v; end if;
   v := ai_gateway_private.lees_config('a1111111-1111-1111-1111-1111111111a1', 'generatie');
@@ -316,6 +318,13 @@ begin
   v := ai_gateway_private.lees_config('a2222222-2222-2222-2222-2222222222a2', 'hulp_snel');
   if v->>'reden' <> 'model_niet_toegestaan' then raise exception 'FAALT #2e: gedeactiveerd allowlistmodel: %', v; end if;
   if v ? 'secret_ref' then raise exception 'FAALT #2e: een weigering lekt secret_ref'; end if;
+  -- Platformprofiel per provider (platformbrede taken): alleen platform, alleen actief.
+  v := ai_gateway_private.lees_platform_profiel('openai');
+  if (v->>'ok')::boolean is not true or v->>'profiel_id' <> 'platform-openai' or v->>'secret_ref' <> 'OPENAI_API_KEY' then
+    raise exception 'FAALT #2e: platformprofiel openai resolveert niet: %', v;
+  end if;
+  v := ai_gateway_private.lees_platform_profiel('gemini');
+  if v->>'reden' <> 'provider_onbekend' then raise exception 'FAALT #2e: onbekende provider: %', v; end if;
   reset role;
   raise notice 'OK #2e: lees_config resolveert correct en faalt gesloten op ontbrekend/inactief/onbekend/niet-toegestaan.';
 end $$;

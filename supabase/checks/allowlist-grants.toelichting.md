@@ -286,6 +286,6 @@ aanroep mogelijk maken en dat is precies wat niet mag.
 
 Het schema `ai_gateway_private` zelf en de loginrol `ai_gateway` vallen buiten de
 scope van deze gate (die scant `public` en `storage`); hun contract wordt volledig
-door `supabase/checks/2026_09_04_ai_gateway.sql` bewezen (exact drie executes, nul
+door `supabase/checks/2026_09_04_ai_gateway.sql` bewezen (exact vier executes, nul
 tabelrechten, nul toegang voor browser- en servicerollen).
 

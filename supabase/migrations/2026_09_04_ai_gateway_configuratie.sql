@@ -19,9 +19,9 @@
 --        gateway_log             — append-only, inhoudsvrije auditregel per
 --                                  providercall (provider, model, versie, usage,
 --                                  resultaatcategorie, correlatie-id);
---    * drie SECURITY DEFINER-functies die UITSLUITEND de aparte minimale loginrol
+--    * vier SECURITY DEFINER-functies die UITSLUITEND de aparte minimale loginrol
 --      ai_gateway mag uitvoeren (patroon microsoft_vault, fase 1):
---        lees_config, schrijf_log, lees_log_platform;
+--        lees_config, schrijf_log, lees_log_platform, lees_platform_profiel;
 --    * profiel-eigenaarschap: een fonds kan alleen een platformprofiel of zijn
 --      EIGEN profiel selecteren (trigger + leescontrole);
 --    * deterministische backfill: elk bestaand fonds krijgt vier rijen op het
@@ -487,14 +487,55 @@ as $$
    limit greatest(1, least(coalesce(p_limiet, 100), 500));
 $$;
 
+-- 6d. Platformprofiel per provider — voor PLATFORMBREDE taaktypes zonder fonds
+--     (AQLab-generatie/-judge, fonds_id = null). De secret-/endpointreferentie
+--     komt dan uit hetzelfde profielregister als bij fondsgebonden taken; de
+--     code kent geen eigen lijst met sleutelnamen per provider. Alleen
+--     platformprofielen (eigenaar_fonds_id is null), alleen actieve.
+create or replace function ai_gateway_private.lees_platform_profiel(p_provider text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ai_gateway_private, public, pg_temp
+as $$
+declare
+  v_profiel ai_gateway_private.provider_profiel%rowtype;
+begin
+  if p_provider is null or p_provider not in ('anthropic','openai','mistral') then
+    return jsonb_build_object('ok', false, 'reden', 'provider_onbekend');
+  end if;
+  select * into v_profiel from ai_gateway_private.provider_profiel
+   where provider = p_provider and eigenaar_fonds_id is null and actief
+   order by id
+   limit 1;
+  if not found then
+    return jsonb_build_object('ok', false, 'reden', 'profiel_ontbreekt');
+  end if;
+  return jsonb_build_object(
+    'ok', true,
+    'profiel_id', v_profiel.id,
+    'profiel_versie', v_profiel.versie,
+    'provider', v_profiel.provider,
+    'secret_ref', v_profiel.secret_ref,
+    'endpoint_ref', v_profiel.endpoint_ref
+  );
+end;
+$$;
+
 revoke all on function ai_gateway_private.lees_config(uuid, text)               from public, anon, authenticated, service_role;
 revoke all on function ai_gateway_private.schrijf_log(jsonb)                     from public, anon, authenticated, service_role;
 revoke all on function ai_gateway_private.lees_log_platform(uuid, integer)       from public, anon, authenticated, service_role;
+revoke all on function ai_gateway_private.lees_platform_profiel(text)            from public, anon, authenticated, service_role;
 
 grant usage on schema ai_gateway_private to ai_gateway;
 grant execute on function ai_gateway_private.lees_config(uuid, text)          to ai_gateway;
 grant execute on function ai_gateway_private.schrijf_log(jsonb)                to ai_gateway;
 grant execute on function ai_gateway_private.lees_log_platform(uuid, integer)  to ai_gateway;
+grant execute on function ai_gateway_private.lees_platform_profiel(text)       to ai_gateway;
+
+comment on function ai_gateway_private.lees_platform_profiel(text) is
+  'AI-gateway (#311): actief platformprofiel per provider voor platformbrede taaktypes zonder fonds (AQLab). Alleen uitvoerbaar door ai_gateway.';
 
 comment on function ai_gateway_private.lees_config(uuid, text) is
   'AI-gateway (#311): server-side configuratieresolutie per fonds × taakgroep. Alleen uitvoerbaar door de loginrol ai_gateway; fail-closed bij elke onvolledige of inconsistente toestand.';
@@ -571,12 +612,12 @@ begin
   ) then
     fouten := fouten || E'\n- een browser- of servicerol kan een functie in ai_gateway_private uitvoeren';
   end if;
-  -- 9d. De gateway-rol: exact drie executes, nul tabelrechten.
+  -- 9d. De gateway-rol: exact vier executes, nul tabelrechten.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'ai_gateway_private' and has_function_privilege('ai_gateway', p.oid, 'EXECUTE');
-  if v_n <> 3 then
-    fouten := fouten || format(E'\n- ai_gateway mag exact 3 functies uitvoeren, gevonden %s', v_n);
+  if v_n <> 4 then
+    fouten := fouten || format(E'\n- ai_gateway mag exact 4 functies uitvoeren, gevonden %s', v_n);
   end if;
   if exists (
     select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -598,7 +639,7 @@ begin
   if fouten <> '' then
     raise exception E'AI-gateway T2 FAALT — transactie teruggedraaid:%', fouten;
   end if;
-  raise notice 'AI-gateway T2 OK: privaat schema, 3 gateway-functies, backfill volledig, nul browser-/servicetoegang.';
+  raise notice 'AI-gateway T2 OK: privaat schema, 4 gateway-functies, backfill volledig, nul browser-/servicetoegang.';
 end $$;
 
 commit;
