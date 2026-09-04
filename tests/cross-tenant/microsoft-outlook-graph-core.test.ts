@@ -60,6 +60,27 @@ test("Graph-client respecteert Retry-After en begrenst retries", async () => {
   assert.equal(retryNa(new Response("", { headers: { "Retry-After": "999" } })), 30_000);
 });
 
+test("Graph-client classificeert HTTP-fouten zonder response-inhoud te lekken", async () => {
+  const gevallen = [
+    [400, "graph_verzoek_ongeldig"],
+    [404, "graph_bron_niet_gevonden"],
+    [405, "graph_methode_niet_toegestaan"],
+    [500, "graph_serverfout"],
+    [418, "graph_response"],
+  ] as const;
+  for (const [status, categorie] of gevallen) {
+    await assert.rejects(
+      graphGet("test-token", "https://graph.microsoft.com/v1.0/me/calendarView/delta", {
+        fetchImpl: async () => new Response("gevoelige Graph-response", { status }),
+        maxRetries: 0,
+      }),
+      (fout: unknown) => fout instanceof OutlookGraphError
+        && fout.categorie === categorie
+        && !fout.message.includes("gevoelige"),
+    );
+  }
+});
+
 test("UTC-normalisatie behoudt instanten over de Amsterdamse zomertijdovergang", () => {
   const voor = normaliseerGraphUtc({ dateTime: "2026-03-29T00:30:00.0000000", timeZone: "UTC" });
   const na = normaliseerGraphUtc({ dateTime: "2026-03-29T01:30:00.0000000", timeZone: "UTC" });
