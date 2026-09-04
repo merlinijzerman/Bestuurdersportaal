@@ -1,4 +1,5 @@
 import http from "node:http";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import {
   E2E_AI_EERSTE_DELTA,
@@ -7,6 +8,41 @@ import {
 } from "./config.mjs";
 
 export const AI_PROVIDER_POORT = 8790;
+
+/** Aantal bewaarde verzoekvingerafdrukken (ringbuffer; oudste valt af). */
+const MAX_VERZOEKEN = 50;
+
+function sha256(waarde) {
+  return createHash("sha256").update(waarde).digest("hex");
+}
+
+/**
+ * Vingerafdruk van één providerverzoek — UITSLUITEND vorm en hashes, nooit de
+ * inhoud. Het karakteriseringsharnas (#311) leest dit terug om te bewijzen dat
+ * de migratie naar de AI-gateway het verzoek aan de provider byte-identiek laat:
+ * zelfde model, zelfde tokenbudget, zelfde sampling, zelfde system-prompt en
+ * zelfde berichten. Een hash volstaat daarvoor; de prompttekst zelf blijft
+ * buiten dit proces (de stub bewaart nooit promptinhoud — zie de unit-test).
+ */
+function vingerafdruk(body) {
+  const systeem = body.system === undefined ? null : JSON.stringify(body.system);
+  const berichten = body.messages === undefined ? null : JSON.stringify(body.messages);
+  return {
+    model: typeof body.model === "string" ? body.model : null,
+    stream: body.stream === true,
+    max_tokens: typeof body.max_tokens === "number" ? body.max_tokens : null,
+    temperature: typeof body.temperature === "number" ? body.temperature : null,
+    top_p: typeof body.top_p === "number" ? body.top_p : null,
+    tools: Array.isArray(body.tools)
+      ? body.tools.map((t) => (t && typeof t === "object" && typeof t.type === "string" ? t.type : "onbekend"))
+      : null,
+    tool_choice: body.tool_choice === undefined ? null : JSON.stringify(body.tool_choice),
+    system_sha256: systeem === null ? null : sha256(systeem),
+    system_tekens: systeem === null ? 0 : systeem.length,
+    messages_sha256: berichten === null ? null : sha256(berichten),
+    messages_aantal: Array.isArray(body.messages) ? body.messages.length : 0,
+  };
+}
 
 function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
@@ -29,12 +65,22 @@ export function createAiProviderStub({
   tweedeDeltaVertragingMs = 700,
 } = {}) {
   const stats = { requests: 0, streams: 0, nonStreams: 0, failures: 0 };
+  // Losse buffer naast `stats`: `stats` blijft exact de vier tellers (unit-test),
+  // de vingerafdrukken staan apart en zijn per scenario te wissen.
+  const verzoeken = [];
   const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       return json(res, 200, { ok: true });
     }
     if (req.method === "GET" && req.url === "/stats") {
       return json(res, 200, stats);
+    }
+    if (req.method === "GET" && req.url === "/verzoeken") {
+      return json(res, 200, verzoeken);
+    }
+    if (req.method === "DELETE" && req.url === "/verzoeken") {
+      verzoeken.length = 0;
+      return json(res, 200, { ok: true });
     }
     if (req.method !== "POST" || req.url !== "/v1/messages") {
       return json(res, 404, { error: { type: "not_found_error", message: "Niet gevonden" } });
@@ -48,6 +94,8 @@ export function createAiProviderStub({
     } catch {
       return json(res, 400, { error: { type: "invalid_request_error", message: "Ongeldige JSON" } });
     }
+    verzoeken.push(vingerafdruk(body));
+    if (verzoeken.length > MAX_VERZOEKEN) verzoeken.shift();
     if (raw.includes(E2E_AI_PROVIDER_FOUT_MARKER)) {
       stats.failures += 1;
       return json(res, 500, {

@@ -30,7 +30,8 @@ import {
   LIMIET_CHAT,
   LIMIET_CHAT_ENDPOINT,
 } from "./ratelimit-const.mjs";
-import { FIX, FONDS_ID } from "./config.mjs";
+import { ENV, FIX, FONDS_ID } from "./config.mjs";
+import { E2E_AI_PROVIDER_FOUT_MARKER } from "../e2e/fixtures/config.mjs";
 
 const LEEG = {};
 const KANDIDATEN_DOELSLEUTEL = "9|approval|W6 kandidaat kiezen";
@@ -91,6 +92,17 @@ async function vulLimiet(admin, uid, endpoint, limiet) {
   const rijen = Array.from({ length: limiet }, () => ({ gebruiker_id: uid, endpoint }));
   const { error } = await admin.from("rate_limit_events").insert(rijen);
   if (error) throw new Error(`preseed rate_limit_events(${endpoint}): ${error.message}`);
+}
+
+// #311 — stub-vingerafdrukken lezen/wissen (zie tests/e2e/fixtures/ai-provider-stub.mjs).
+async function stubVerzoeken() {
+  const res = await fetch(`${ENV.aiStubUrl}/verzoeken`);
+  if (!res.ok) throw new Error(`stub /verzoeken: ${res.status}`);
+  return res.json();
+}
+async function wisStubVerzoeken() {
+  const res = await fetch(`${ENV.aiStubUrl}/verzoeken`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`stub DELETE /verzoeken: ${res.status}`);
 }
 
 /** Eigen besluit voor de auditdossier-route, met een LEEG gebeurtenissenspoor.
@@ -1646,6 +1658,118 @@ export const scenarios = [
     body: { vraag: "Wat is de dekkingsgraad van het fonds?" }, verwacht: "json",
     preseed: async ({ admin }) => wisLimiet(admin, LIMIET_CHAT_ENDPOINT),
   },
+
+  // ── 1b. /api/chat — SSE happy path, gekarakteriseerd via de providerstub ───
+  //  (#311, M365 fase 2B — centrale AI-gateway.)
+  //
+  //  De W5-lacune hierboven ("het streamende happy path is NIET
+  //  gekarakteriseerd") wordt hier gesloten, uitsluitend in de LOKALE E2E-modus:
+  //  `WP4_E2E_AI_PROVIDER=local` + de WP4-providerstub op 127.0.0.1:8790.
+  //  core/lib/ai-provider-endpoint.mjs grendelt dat pad met een dubbele
+  //  controle (SEED_DOELOMGEVING=local én de lokale Supabase-URL), dus een
+  //  Preview- of productieomgeving kan hier nooit in belanden. Zonder stub-URL
+  //  slaat run.mjs deze scenario's zichtbaar over (`vereist: "ai-stub"`).
+  //
+  //  WAT ELK SNAPSHOT VASTLEGT
+  //    body.events   — de volledige SSE-stroom (progress/meta/delta/done/error)
+  //    nawerk        — de VINGERAFDRUK van wat de stub ontving: per providercall
+  //                    model, stream-vlag, max_tokens, temperature/top_p, tools,
+  //                    sha256 van system-blokken en berichten. Geen inhoud.
+  //
+  //  Dat tweede deel is de eigenlijke acceptatie-eis van #311: "het bestaande
+  //  Anthropicgedrag blijft functioneel gelijk". Na de migratie naar de gateway
+  //  moet de route exact hetzelfde verzoek naar de provider sturen — zelfde
+  //  model, zelfde budget, zelfde prompt — en exact dezelfde stroom teruggeven.
+  //  Een omgeslagen hash is dan een gedragswijziging, geen ruis.
+  //
+  //  BEWUST NIET HIER: kill switch/quotum-blokkade (mutatie van append-only
+  //  platformtabellen → snapshotdrift; al gedekt door
+  //  supabase/checks/2026_08_16_ai_begrenzing.sql) en het web_search-pad (vereist
+  //  een actieve whitelist-mutatie met audittrail).
+  //
+  //  DETERMINISME: de stub streamt vaste delta's; de retrieval draait op de
+  //  W1-seed (één FTS-chunk onder document1, geen embedding → zichtbare
+  //  FTS-terugval). `idempotentie: true` geeft elke ronde een verse sleutel,
+  //  zodat verify-ronde 2 en 3 hetzelfde pad lopen als ronde 1.
+  //  De scenario's staan ONVOORWAARDELIJK in de tabel (de statische W7-matrix
+  //  moet omgevingsonafhankelijk zijn); `vereist: "ai-stub"` laat run.mjs ze
+  //  zichtbaar overslaan wanneer de stub-URL ontbreekt.
+        {
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-bronloos",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: { vraag: "Wat is een beleidsdekkingsgraad?" },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({ provider_verzoeken: await stubVerzoeken() }),
+        },
+        {
+          //  Beurt MÉT broncontext. Twee keuzes die gemeten zijn, niet aangenomen:
+          //   • "van ons fonds" in de vraag: zonder die fondsverwijzing stelt de
+          //     bronintentie-gate een verduidelijkingsvraag en komt er GEEN
+          //     providercall (zie het derde scenario hieronder — dat pad is
+          //     apart gekarakteriseerd, het is de guardrail vóór het netwerk);
+          //   • `neem_niet_vastgestelde_mee`: document1 draagt status `concept`
+          //     en valt daardoor buiten de actuele retrieval. De client-vlag van
+          //     de verbredingschip neemt hem mee — het bestaande contract, geen
+          //     seedwijziging (die zou de documentlijst-snapshots omgooien).
+          //  De prompthashes ontbreken hier BEWUST: de bronkop draagt een
+          //  willekeurige bron-sentinel (maakBronSentinel) én de peildatum van
+          //  vandaag, dus de hash is per aanroep anders. Vorm en budget zijn wél
+          //  vast; de hashes staan als expliciete lacune in het snapshot.
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-met-bron",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: {
+            vraag: "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?",
+            neem_niet_vastgestelde_mee: true,
+          },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({
+            provider_verzoeken: (await stubVerzoeken()).map(
+              ({ system_sha256, messages_sha256, system_tekens, ...vorm }) => ({
+                ...vorm,
+                prompthash_niet_gekarakteriseerd: "bronkop bevat bron-sentinel en peildatum",
+              })
+            ),
+          }),
+        },
+        {
+          //  Guardrail vóór het netwerk: een fondsloze, dubbelzinnige vraag krijgt
+          //  een verduidelijkingsvraag en GEEN providercall (provider_verzoeken=[]).
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-verduidelijking",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: { vraag: "Wat is de actuele dekkingsgraad van het fonds?" },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({ provider_verzoeken: await stubVerzoeken() }),
+        },
+        {
+          //  Veilige providerfout: de stub geeft 500 op de fout-marker; de route
+          //  hoort {type:"error"} zonder providerdetail te sturen en géén
+          //  governance_log-regel te schrijven.
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-providerfout",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: { vraag: `Simuleer ${E2E_AI_PROVIDER_FOUT_MARKER} voor ons fonds.` },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({ provider_verzoeken: await stubVerzoeken() }),
+        },
 
   // ── 2. /api/ai/stuk-export — docx-download ────────────────────────────────
   //  De invariant van deze route is de VOLGORDE: `log_word_export` moet slagen

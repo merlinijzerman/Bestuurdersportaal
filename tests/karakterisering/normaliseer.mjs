@@ -119,9 +119,31 @@ function mapUuids(node, mapping) {
   return node;
 }
 
+// BESLUIT (#311): de sleutel `peildatum` wordt op waarde `<datum>` gezet.
+// De chatroute zet de peildatum van de retrieval op "vandaag" (new Date()) en
+// stuurt hem in het meta-event mee naar de client. Dat is per definitie een
+// dagafhankelijke waarde; zonder deze regel valt het SSE-snapshot elke
+// middernacht om en leert het aan om snapshots blind bij te werken. Bewust
+// SLEUTELGEBONDEN en niet "elke datum overal": een datum in een documentveld
+// (documentdatum, geldig_vanaf) is seeddata en hoort juist wél gekarakteriseerd.
+function vervangPeildatum(node) {
+  if (Array.isArray(node)) return node.map(vervangPeildatum);
+  if (isObject(node)) {
+    const out = {};
+    for (const k of Object.keys(node)) {
+      out[k] =
+        k === "peildatum" && typeof node[k] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(node[k])
+          ? "<datum>"
+          : vervangPeildatum(node[k]);
+    }
+    return out;
+  }
+  return node;
+}
+
 /** Normaliseer een geparste JSON-body naar canonieke vorm. */
 export function normaliseerJson(body) {
-  const stap1 = vervangTimestamps(body);
+  const stap1 = vervangTimestamps(vervangPeildatum(body));
   const stap2 = sorteerArrays(stap1);
   const stap3 = mapUuids(stap2, new Map());
   return stap3;

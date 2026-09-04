@@ -1,7 +1,7 @@
 {
   "meta": {
     "_commentaar": "GEGENEREERD door scripts/gen/w7-authz-matrix.mjs — niet met de hand wijzigen. Dit is het W7-autorisatiecontract: per karakteriseringsscenario de zou-uitkomst onder ENFORCE_CAPABILITY=on. 'onveranderd' = de poort laat door en het route-eigen gedrag blijft (vergelijk met het byte-identieke snapshot); '403' = de poort weigert. De statische test w7-autz-matrix.test.ts hergenereert dit en faalt op elk verschil; de flag-on-runner toetst het tegen de draaiende server.",
-    "scenarios_in_scope": 353,
+    "scenarios_in_scope": 357,
     "weigeringen_403": 30,
     "rollen": [
       "bestuurder",
@@ -609,6 +609,38 @@
       "route": "/procedures/[id]/dossier",
       "rol": "bestuurder",
       "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w311.chat.post.bestuurder.sse-bronloos",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "bestuurder",
+      "capability": "chat.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w311.chat.post.bestuurder.sse-met-bron",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "bestuurder",
+      "capability": "chat.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w311.chat.post.bestuurder.sse-providerfout",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "bestuurder",
+      "capability": "chat.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w311.chat.post.bestuurder.sse-verduidelijking",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "bestuurder",
+      "capability": "chat.use",
       "vlagAan": "onveranderd"
     },
     {

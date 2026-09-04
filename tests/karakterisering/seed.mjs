@@ -116,6 +116,7 @@ export async function seed(admin = adminClient()) {
   await seedProcedures(admin, { preview: doelomgeving === "preview" });
   await seedAfschrift(admin);
   await seedAgendapunten(admin, users);
+  await seedAiChat(admin, doelomgeving);
   // Preview-waarnemingsdata hoort niet in de lokale CI-stack: die stack
   // karakteriseert de bestaande productroutes en hun vaste snapshots. Alleen
   // de expliciet bevestigde Preview-run vult de extra, synthetische UI-data.
@@ -520,6 +521,49 @@ async function seedDocumenten(admin) {
       actief: false,
     }, { onConflict: "id" });
     if (error) throw new Error(`documenten(intrekken): ${error.message}`);
+  }
+}
+
+// ── #311 — SSE-karakterisering van /api/chat ─────────────────────────────────
+// Twee dingen die de chatroute nodig heeft om de PROVIDER te bereiken:
+//
+//  (1) AI-quota. De begrenzingsmigratie seedt bewust géén quota (ontbrekende
+//      rij = geblokkeerd, besluit 0180). Zonder rij stopt de preflight vóór de
+//      providercall en karakteriseer je alleen de blokkade. Zelfde ruime,
+//      synthetische waarden als de E2E-seed; UITSLUITEND lokaal — op Preview
+//      staan de echte quota en die raakt dit harnas niet aan.
+//  (2) Eén FTS-vindbare chunk onder document1, zodat er een beurt MÉT
+//      broncontext bestaat naast de bronloze. Geen nieuw document: de
+//      documentlijst-snapshots (w4.documents-metadata/-upload) zouden dan
+//      omslaan. `zoek_vector` is een generated column; `tekst` volstaat.
+//      Bewust zonder embedding: de Mistral-arm valt zichtbaar terug op FTS
+//      (embedding_query_success=false in retrieval_meta) en dat is precies het
+//      lokale pad zonder sleutel — deterministisch en gedocumenteerd.
+async function seedAiChat(admin, doelomgeving) {
+  if (doelomgeving !== "local") return;
+  {
+    const { error } = await admin.from("ai_quota_config").upsert(
+      ["gebruiker_maand", "fonds_maand", "globaal_maand", "ocr_fonds_maand"].map(
+        (sleutel) => ({ sleutel, waarde: 10000 })
+      ),
+      { onConflict: "sleutel" }
+    );
+    if (error) throw new Error(`ai_quota_config: ${error.message}`);
+  }
+  {
+    const { error } = await admin.from("document_chunks").upsert({
+      id: FIX.document1Chunk,
+      document_id: FIX.document1,
+      chunk_index: 0,
+      tekst:
+        "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. " +
+        "De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
+      pagina: 1,
+      structuur_type: "tekst",
+      structuur_label: "W1 karakteriseringsfixture",
+      indexering_versie: "w1-karakterisering-311",
+    }, { onConflict: "id" });
+    if (error) throw new Error(`document_chunks(311): ${error.message}`);
   }
 }
 
