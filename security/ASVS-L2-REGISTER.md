@@ -132,6 +132,20 @@ objecten, grant/RLS-export en herhaalbare migratieverificatie.
 
 ## Verplichte CI-poorten
 
+### Microsoft SharePoint fase 3 (Preview-only, #321)
+
+De fase-3-uitwerking dekt ASVS-toepassingen voor least privilege, server-side
+autorisatie, veilige uitvoer en privacy-minimalisatie: alleen delegated
+`Sites.Selected` per gebruiker (unie met al verleende scopes), server-geregistreerde
+kandidaatsites zonder schrijfpad voor het portaal, een fondsgebonden bronkeuze en
+documentregister in `microsoft_private` zonder inhoud, lijst en preview met het
+token van de gebruiker zelf, een preview-URL die alleen in een `no-store`-respons
+bestaat en door de audit-DB-functie wordt geweigerd, en een pad-specifieke CSP met
+sandbox-iframe voor de previewpagina. Het resterende bewijs is de migratiereplay
+plus de echte Preview-Graph-smoke uit `security/MICROSOFT-365-F3-RUNBOOK.md`
+(scopedekking per call, cross-fonds, intrekking, vier documenttypen); tot die tijd
+is dit geen afgeronde ASVS-control.
+
 ### Microsoft Outlook fase 2A (Preview-only)
 
 De fase-2A-uitwerking dekt ASVS-toepassingen voor least privilege, server-side

@@ -121,3 +121,75 @@ test("drives en mappen worden geprojecteerd zonder bestanden, systeemdrives of v
     { id: "m2", name: "Vreemd", folder: { childCount: 1 }, parentReference: { driveId: "ander" } },
   ], "d"), [{ itemId: "m1", naam: "2026", aantalKinderen: 3 }]);
 });
+
+// ── Deel B: documentenboom en preview ────────────────────────────────────────
+import {
+  bestandstypeVanNaam,
+  bouwDocumentboom,
+  deltaUrl,
+  itemOnderRoot,
+  rootPadVanItem,
+  veiligeSharePointUrl,
+} from "../../core/lib/microsoft-sharepoint-graph-core";
+
+test("alleen PDF/Word/PowerPoint/Excel krijgen een previewtype; andere typen een veilige null", () => {
+  assert.equal(bestandstypeVanNaam("Nota.PDF"), "pdf");
+  assert.equal(bestandstypeVanNaam("stuk.docx"), "docx");
+  assert.equal(bestandstypeVanNaam("deck.pptx"), "pptx");
+  assert.equal(bestandstypeVanNaam("cijfers.xlsx"), "xlsx");
+  for (const naam of ["foto.png", "archief.zip", "script.exe", "zonder-extensie", "raar.pdf.exe"]) assert.equal(bestandstypeVanNaam(naam), null, naam);
+});
+
+test("preview- en web-URL's worden alleen op https *.sharepoint.com zonder credentials doorgelaten", () => {
+  assert.equal(veiligeSharePointUrl("https://pgb.sharepoint.com/sites/x/_layouts/15/embed.aspx?id=1"), "https://pgb.sharepoint.com/sites/x/_layouts/15/embed.aspx?id=1");
+  assert.equal(veiligeSharePointUrl("https://pgb-my.sharepoint.com/personal/x/doc.docx"), "https://pgb-my.sharepoint.com/personal/x/doc.docx");
+  for (const url of [
+    "http://pgb.sharepoint.com/x",
+    "https://pgb.sharepoint.com.evil.test/x",
+    "https://evil.test/pgb.sharepoint.com",
+    "https://user:pw@pgb.sharepoint.com/x",
+    "javascript:alert(1)",
+    "",
+    null,
+    undefined,
+  ]) assert.equal(veiligeSharePointUrl(url), null, String(url));
+});
+
+test("documentenboom herleidt paden tot het rootitem en laat verwijderde, vreemde en onbereikbare items weg", () => {
+  const root = "root";
+  const items = [
+    { id: "root", name: "Vergaderstukken", folder: { childCount: 2 }, parentReference: { driveId: "d", id: "drive-root" } },
+    { id: "m2026", name: "2026", folder: { childCount: 1 }, parentReference: { driveId: "d", id: "root" } },
+    { id: "m09", name: "09 September", folder: { childCount: 1 }, parentReference: { driveId: "d", id: "m2026" } },
+    { id: "f1", name: "Agenda.docx", file: { mimeType: "application/vnd" }, size: 10, eTag: "e1", lastModifiedDateTime: "2026-09-01T10:00:00Z", webUrl: "https://pgb.sharepoint.com/sites/x/Agenda.docx", parentReference: { driveId: "d", id: "m09" } },
+    { id: "f2", name: "Nota.pdf", file: {}, size: 20, parentReference: { driveId: "d", id: "root" } },
+    { id: "f3", name: "Weg.pdf", file: {}, deleted: { state: "deleted" }, parentReference: { driveId: "d", id: "root" } },
+    { id: "f4", name: "Vreemd.pdf", file: {}, parentReference: { driveId: "andere-drive", id: "root" } },
+    { id: "f5", name: "Zwevend.pdf", file: {}, parentReference: { driveId: "d", id: "onbekende-map" } },
+    { id: "f1", name: "Agenda.docx", file: {}, parentReference: { driveId: "d", id: "m09" } },
+    { id: "lus-a", name: "A", folder: {}, parentReference: { driveId: "d", id: "lus-b" } },
+    { id: "lus-b", name: "B", folder: {}, parentReference: { driveId: "d", id: "lus-a" } },
+    { id: "f6", name: "InLus.pdf", file: {}, parentReference: { driveId: "d", id: "lus-a" } },
+  ];
+  const boom = bouwDocumentboom(items, "d", root);
+  assert.deepEqual(boom.documenten.map((x) => [x.itemId, x.mappad, x.bestandstype]), [["f2", "", "pdf"], ["f1", "2026/09 September", "docx"]]);
+  assert.equal(boom.documenten[1].webUrl, "https://pgb.sharepoint.com/sites/x/Agenda.docx");
+  assert.equal(boom.documenten[1].gewijzigdOp, "2026-09-01T10:00:00.000Z");
+  assert.deepEqual(boom.mappen, ["2026", "2026/09 September"]);
+  assert.match(deltaUrl("d", root), /^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/d\/items\/root\/delta\?/);
+  assert.doesNotMatch(deltaUrl("d", root), /content|downloadUrl/);
+});
+
+test("preview eist dat het item nog in dezelfde drive én onder het rootitem ligt", () => {
+  const rootPad = rootPadVanItem({ id: "root", name: "Vergaderstukken", folder: {}, parentReference: { driveId: "d", id: "x", path: "/drives/d/root:" } }, "d");
+  assert.equal(rootPad, "/drives/d/root:/Vergaderstukken");
+  assert.equal(rootPadVanItem({ id: "r", name: "root", folder: {} }, "d"), "/drives/d/root:");
+  const onder = { id: "f", name: "Nota.pdf", file: {}, parentReference: { driveId: "d", id: "m", path: "/drives/d/root:/Vergaderstukken/2026" } };
+  assert.equal(itemOnderRoot(onder, "d", rootPad), true);
+  assert.equal(itemOnderRoot({ ...onder, parentReference: { driveId: "d", id: "m", path: "/drives/d/root:/Vergaderstukken" } }, "d", rootPad), true);
+  assert.equal(itemOnderRoot({ ...onder, parentReference: { driveId: "d", id: "m", path: "/drives/d/root:/Vergaderstukken%202026" } }, "d", rootPad), false);
+  assert.equal(itemOnderRoot({ ...onder, parentReference: { driveId: "d", id: "m", path: "/drives/d/root:/Archief" } }, "d", rootPad), false);
+  assert.equal(itemOnderRoot({ ...onder, parentReference: { driveId: "andere", id: "m", path: "/drives/andere/root:/Vergaderstukken" } }, "d", rootPad), false);
+  assert.equal(itemOnderRoot({ ...onder, file: undefined, folder: {} }, "d", rootPad), false);
+  assert.equal(itemOnderRoot({ ...onder, parentReference: { driveId: "d", id: "m" } }, "d", rootPad), false);
+});

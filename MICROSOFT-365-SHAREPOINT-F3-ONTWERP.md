@@ -4,7 +4,7 @@
 
 Fase 3 (#321, besluit 0210) is alleen beschikbaar wanneer het fondsprofiel `microsoft` is, de fase-1-pilotvlag aan staat en de afzonderlijke vlag `microsoft_sharepoint_fase3=true` is gezet. De vlag blijft standaard uit. Graph gebruikt uitsluitend delegated `Sites.Selected` op v1.0; de site-grant wordt buiten het portaal verleend en het portaal kan die alleen toetsen. Fondsen zonder de vlag houden exact hun bestaande UI en gedrag.
 
-Deel A (PR-A) levert toestemming en bronselectie; deel B (PR-B) levert documentenlijst, browserpreview, bibliotheek en CSP.
+Deel A (PR-A, #323) levert toestemming en bronselectie; deel B (PR-B) levert documentenlijst, browserpreview, bibliotheek en CSP.
 
 ## Toestemmingsmodel
 
@@ -34,9 +34,24 @@ Forwardmigratie `2026_09_04_microsoft_sharepoint_fase3.sql`, check `supabase/che
 
 Wrapper-handelingen: `microsoft.sharepoint.toestemming-uitbreiden`, `bron-kiezen`, `bron-ontkoppelen`, `bron-controleren`. Private audit: `microsoft.sharepoint.bron_gekozen`, `controle.geslaagd|mislukt`, `bron_ontkoppeld`, met alleen bron-id, versie en foutcategorie. Geen tokens, Graph-bodies, site-, drive- of item-id's in audit of logs.
 
-## Deel B (PR-B, ontwerp)
+## Deel B — documentenlijst, referentieregister en preview
 
-- **Documentenlijst:** live per gebruiker via delta-enumeratie op het rootitem (`/drives/{driveId}/items/{rootItemId}/delta`), volledige boom ongeacht diepte, plafond 5000 items en 30 pagina's; terugval op recursieve `children` tot diepte 10 als delta onder `Sites.Selected` niet blijkt te werken. Alleen metadata, geen content-call.
-- **Referentieregister:** `microsoft_private.sharepoint_documenten` vertaalt een lokale uuid naar drive/item met naam, type, grootte, gewijzigd, eTag/cTag en mappad; nooit een autorisatiebron.
-- **Preview:** `POST …/documenten/{ref}/preview` valideert fonds, bron, gebruiker en mapketen opnieuw, haalt via `POST /drives/{driveId}/items/{itemId}/preview` een kortlevende URL, valideert de host op `*.sharepoint.com` en geeft hem alleen in een `no-store`-JSON-respons terug. Weergave op `/bibliotheek/sharepoint/{ref}` met een pad-specifieke CSP (`frame-src https://*.sharepoint.com`), sandbox-iframe en `referrerpolicy="no-referrer"`.
-- **Bibliotheek:** aparte sectie in de fonds-tab met bronbadge, mapnavigatie, Preview-actie en een "Openen in Microsoft 365"-link.
+### Documentenlijst
+
+`GET /api/microsoft/sharepoint/documenten` (`documents.view`) haalt met het token van de ingelogde gebruiker de volledige boom onder het rootitem op via delta-enumeratie (`GET /drives/{driveId}/items/{rootItemId}/delta`), ongeacht diepte, met plafond 5000 items en 30 pagina's en een `afgekapt`-vlag. Werkt delta niet onder de verleende scope, dan volgt automatisch een begrensde recursieve `children`-listing (diepte 10, zelfde plafond); beide zijn read-only metadata-calls. Er wordt nooit een content- of download-URL opgevraagd. Het weergavepad wordt via de ouderketen tot het rootitem herleid; items buiten die keten, verwijderde items en items uit een andere drive vallen af. Alleen bestaande ondersteunde typen (PDF, Word, PowerPoint, Excel) krijgen een Preview-actie; andere typen tonen "Geen preview".
+
+### Referentieregister
+
+`microsoft_private.sharepoint_documenten` vertaalt een lokale uuid naar `(bron, drive, item)` en bewaart naam, type, mime, grootte, gewijzigd, eTag/cTag, oudermap, weergavepad, `webUrl` (alleen `https://*.sharepoint.com`), status en configuratieversie. Eén referentie per `(bron, item)`: rename, move en versie werken de bestaande rij bij. Het register is nooit een autorisatiebron; de opzoeking is fondsgebonden en zichtbaarheid komt uitsluitend uit de live Graph-respons van de gebruiker. Geen bestand, tekst, chunks, embeddings of preview-URL. Deze velden zijn tevens de minimale documentidentiteit en versie voor later bronbewijs (fase 4/5).
+
+### Preview
+
+`POST /api/microsoft/sharepoint/documenten/{ref}/preview` (`documents.view`): fondsgebonden opzoeking van de referentie → eigen token → item opnieuw ophalen (404 markeert `verwijderd`) → rootitem ophalen en controleren dat het item in dezelfde drive én onder het rootpad ligt (anders `ontoegankelijk`, 410) → `POST …/preview` → `getUrl` alleen na hostvalidatie op `https://*.sharepoint.com`. De URL komt uitsluitend in de `no-store`-JSON-respons; niet in register, logs of audit. De private audit-functie weigert details met URL's, tokens of externe id's. Pagina `/bibliotheek/sharepoint/{ref}` zet de URL alleen als iframe-bron (`sandbox="allow-scripts allow-same-origin allow-forms allow-popups"`, `referrerpolicy="no-referrer"`, `allow=""`) en krijgt als enige route een CSP met `frame-src … https://*.sharepoint.com` en `Referrer-Policy: no-referrer` (`next.config.ts`, pad-specifiek na de algemene regel). `frame-ancestors 'none'` blijft overal gelden.
+
+### Bibliotheek
+
+De fonds-tab toont onder de bestaande tabel een aparte kaart met badge "SharePoint", bronnaam, "Vernieuwen", kruimelpad en mapnavigatie (client-side over het weergavepad), per document type, naam, omvang, gewijzigd, Preview en "Openen in Microsoft 365" (`webUrl`, `rel="noopener noreferrer"`). Zonder vlag rendert de kaart niets: de eigen variant blijft byte-voor-byte gelijk. Een ontbrekende consent geeft een begrijpelijke melding met verwijzing naar het profiel.
+
+### Audit
+
+Wrapper-handeling `microsoft.sharepoint.documenten.previewen`; private gebeurtenissen `microsoft.sharepoint.lijst.geslaagd|mislukt` (bron-id, aantallen, afgekapt, latency, correlation-id) en `preview.geslaagd|mislukt` (document-referentie, categorie, latency, correlation-id).
