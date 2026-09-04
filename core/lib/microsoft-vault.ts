@@ -2,13 +2,20 @@ import "server-only";
 import { Pool } from "pg";
 import { createHash } from "node:crypto";
 import type { VersleuteldBlob } from "@/core/lib/microsoft-crypto";
+import { microsoftVaultDbConfig } from "@/core/lib/microsoft-vault-config-core";
 
 type Verbinding = { id: string; fonds_id: string; gebruiker_id: string; tenant_id: string; microsoft_object_id: string; home_account_id: string; display_name: string | null; masked_username: string | null; status: "gekoppeld" | "fout" | "ontkoppeld"; scopes: string[]; laatst_getest_op: string | null; gekoppeld_op: string | null };
 let pool: Pool | undefined;
 function db() {
-  const url = process.env.MICROSOFT_VAULT_DATABASE_URL;
-  if (!url) throw new Error("Microsoft-tokenkluis is niet geconfigureerd.");
-  pool ??= new Pool({ connectionString: url, max: 2, ssl: { rejectUnauthorized: true } });
+  const config = microsoftVaultDbConfig(
+    process.env.MICROSOFT_VAULT_DATABASE_URL,
+    process.env.MICROSOFT_VAULT_CA_CERT_BASE64,
+  );
+  pool ??= new Pool({
+    connectionString: config.connectionString,
+    max: 2,
+    ssl: { ca: config.ca, rejectUnauthorized: true },
+  });
   return pool;
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
