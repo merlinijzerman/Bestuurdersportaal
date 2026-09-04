@@ -14,11 +14,23 @@ import { join } from "node:path";
 const css = readFileSync(join(process.cwd(), "app", "globals.css"), "utf8");
 const verborgenRegel = css.match(/\.assistent-paneel\[hidden\]\s*\{([^}]*)\}/);
 const antwoordRegel = css.match(/\.assistent-antwoord\s*\{([^}]*)\}/);
+const resultaatkaartRegel = css.match(/\.assistent-resultaatkaart\s*\{([^}]*)\}/);
 const paneelRegel = css.match(/\.assistent-paneel\s*\{([^}]*)\}/);
 const gesprekRegel = css.match(/\.assistent-gesprek\s*\{([^}]*)\}/);
 const kopstatusRegel = css.match(/\.assistent-kopstatus\s*\{([^}]*)\}/);
 const oppervlak = readFileSync(
   join(process.cwd(), "app", "(dashboard)", "ai", "_components", "AssistentOppervlak.tsx"),
+  "utf8",
+);
+const voorbereidingKaart = readFileSync(
+  join(
+    process.cwd(),
+    "app",
+    "(dashboard)",
+    "vergaderingen",
+    "_components",
+    "VoorbereidingKaart.tsx",
+  ),
   "utf8",
 );
 
@@ -61,6 +73,40 @@ assert.doesNotMatch(
 );
 console.log("  ✓ tekstmaat en regelafstand volgen het referentieprototype");
 
+assert.ok(resultaatkaartRegel, "de generieke AI-resultaatkaart ontbreekt");
+assert.match(
+  resultaatkaartRegel[1],
+  /border\s*:\s*1px solid var\(--ai-line\)\s*;/,
+  "AI-resultaatkaarten moeten de vaste assistentrand gebruiken",
+);
+assert.match(
+  resultaatkaartRegel[1],
+  /background\s*:\s*var\(--ai-tint\)\s*;/,
+  "AI-resultaatkaarten moeten het rustige assistentvlak gebruiken",
+);
+assert.match(
+  resultaatkaartRegel[1],
+  /font-family\s*:\s*var\(--font-sans\)/,
+  "AI-resultaatkaarten moeten hetzelfde lettertype als het assistentpaneel gebruiken",
+);
+console.log("  ✓ inline AI-uitkomsten volgen de kaartgrammatica van het prototype");
+
+assert.match(
+  voorbereidingKaart,
+  /className="assistent-resultaatkaart"/,
+  "Mijn voorbereiding moet de generieke AI-resultaatkaart gebruiken",
+);
+assert.ok(
+  (voorbereidingKaart.match(/className="assistent-antwoord"/g) ?? []).length >= 2,
+  "lopende en voltooide voorbereiding moeten de generieke antwoordtypografie gebruiken",
+);
+assert.doesNotMatch(
+  voorbereidingKaart,
+  /className="text-sm leading-relaxed text-ink"/,
+  "Mijn voorbereiding mag geen lokale antwoordtypografie houden",
+);
+console.log("  ✓ Mijn voorbereiding erft dezelfde antwoordtypografie als het paneel");
+
 assert.ok(paneelRegel, "de assistent-paneelregel ontbreekt");
 assert.match(
   paneelRegel[1],
@@ -90,4 +136,4 @@ assert.match(
 );
 console.log("  ✓ secundaire koptekst blijft over modules heen gelijk");
 
-console.log("\n6 sanity-tests geslaagd.");
+console.log("\n8 sanity-tests geslaagd.");

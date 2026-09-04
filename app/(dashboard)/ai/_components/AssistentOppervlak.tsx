@@ -1230,7 +1230,7 @@ export default function AssistentOppervlak() {
 
         {laden && !antwoordGestart && (
           <div className="flex">
-            <div className="text-sm leading-relaxed text-ink">
+            <div className="assistent-antwoord">
               <VoortgangWeergave voortgang={voortgang} />
             </div>
           </div>
@@ -1261,7 +1261,7 @@ export default function AssistentOppervlak() {
               begroeting en dezelfde voorbeeldvragen. */}
           {toonStartpunt && !startpuntContext && (
             <div className="space-y-3 py-2">
-              <p className="text-sm text-ink">
+              <p className="assistent-antwoord">
                 {voornaam ? `Dag ${voornaam}. ` : ""}Waar kan ik u mee helpen?
               </p>
               <ul className="space-y-1.5">

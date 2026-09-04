@@ -925,6 +925,35 @@ body {
   .assistent-antwoord ol > li::marker {
     color: var(--ai-500);
   }
+  /* AI-uitkomsten die in een module blijven staan — zoals "Mijn voorbereiding"
+     bij een agendapunt — gebruiken dezelfde rustige kaartgrammatica als het
+     referentieprototype. De antwoordtekst zelf blijft de generieke
+     `.assistent-antwoord`, zodat lettertype, kleur en regelafstand niet opnieuw
+     per module worden uitgeschreven. */
+  .assistent-resultaatkaart {
+    padding: 0.75rem 0.8125rem;
+    border: 1px solid var(--ai-line);
+    border-radius: 10px;
+    background: var(--ai-tint);
+    font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .assistent-resultaatkop {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    color: var(--ai);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .assistent-resultaatvoet {
+    margin-top: 0.6875rem;
+    padding-top: 0.5625rem;
+    border-top: 1px dashed var(--ai-line);
+  }
   .assistent-voorbereidingsstand {
     display: flex;
     align-items: flex-start;
