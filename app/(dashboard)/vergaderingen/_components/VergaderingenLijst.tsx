@@ -27,7 +27,16 @@ export interface VergaderingRij extends VergaderingArchiefToestand {
   titel: string;
   locatie: string | null;
   status: "gepland" | "in_voorbereiding" | "afgerond";
+  outlook_beheerd?: boolean;
+  outlook_sync_status?: "gesynchroniseerd" | "geannuleerd" | "afgeschermd" | "extern_gewijzigd_of_verwijderd" | null;
 }
+
+const OUTLOOK_BADGE: Record<NonNullable<VergaderingRij["outlook_sync_status"]>, { klas: string; label: string }> = {
+  gesynchroniseerd: { klas: "bg-accent-tint text-accent-ink", label: "Outlook" },
+  geannuleerd: { klas: "bg-err-tint text-err-ink", label: "Geannuleerd in Outlook" },
+  afgeschermd: { klas: "bg-app-bg text-muted", label: "Afgeschermd in Outlook" },
+  extern_gewijzigd_of_verwijderd: { klas: "bg-warn-tint text-warn-ink", label: "Gewijzigd of verwijderd in Outlook" },
+};
 
 const STATUS_BADGE: Record<string, { klas: string; label: string }> = {
   gepland: { klas: "bg-accent-tint text-accent-ink", label: "Gepland" },
@@ -206,6 +215,9 @@ function Kaart({
   // geen knop die een foutmelding oplevert, maar helemaal geen knop.
   const archiveerbaar = onArchiveer && magArchiveren(v).mag;
   const tegel = datumTegel(v.datum);
+  const outlookBadge = v.outlook_beheerd && v.outlook_sync_status
+    ? OUTLOOK_BADGE[v.outlook_sync_status]
+    : null;
 
   return (
     <div
@@ -235,6 +247,11 @@ function Kaart({
           </span>
         </Link>
         <div className="flex flex-shrink-0 items-center gap-2">
+          {outlookBadge && (
+            <span className={`portal-status-pill ${outlookBadge.klas}`}>
+              {outlookBadge.label}
+            </span>
+          )}
           <span className={`portal-status-pill ${badge.klas}`}>
             {badge.label}
           </span>

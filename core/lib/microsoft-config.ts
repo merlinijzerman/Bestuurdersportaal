@@ -2,6 +2,8 @@ import "server-only";
 export { veiligeMicrosoftReturnUrl } from "@/core/lib/microsoft-config-core";
 
 export const MICROSOFT_SCOPES = ["openid", "profile", "offline_access", "User.Read"] as const;
+/** Alleen na een bewuste fase-2A-actie toegevoegd; nooit bij fase-1-connect. */
+export const MICROSOFT_OUTLOOK_SCOPES = [...MICROSOFT_SCOPES, "Calendars.Read.Shared"] as const;
 
 export type MicrosoftConfig = { tenantId: string; clientId: string; clientSecret: string; callbackUrl: string };
 

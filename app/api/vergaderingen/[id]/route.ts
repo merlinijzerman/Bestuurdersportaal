@@ -10,6 +10,7 @@ type VergaderingRow = {
   locatie: string | null;
   status: "gepland" | "in_voorbereiding" | "afgerond";
   aangemaakt_door: string | null;
+  outlook_beheerd: boolean;
 };
 
 // ============================================================
@@ -29,7 +30,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
 
     const { data: vergaderingRaw } = await supabase
       .from("vergaderingen")
-      .select("id, fonds_id, titel, datum, locatie, status, aangemaakt_door")
+      .select("id, fonds_id, titel, datum, locatie, status, aangemaakt_door, outlook_beheerd")
       .eq("id", id)
       .maybeSingle();
 
@@ -42,6 +43,13 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
       return NextResponse.json(
         { error: "Een afgeronde vergadering kan niet meer worden gewijzigd" },
         { status: 400 }
+      );
+    }
+
+    if (vergadering.outlook_beheerd) {
+      return NextResponse.json(
+        { error: "Datum, titel en locatie worden voor deze vergadering vanuit Outlook beheerd" },
+        { status: 409 }
       );
     }
 
@@ -112,7 +120,9 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
       .from("vergaderingen")
       .update(updatePayload)
       .eq("id", id)
-      .select()
+      // Outlook-projectievelden horen niet stil aan het bestaande mutatiecontract
+      // te worden toegevoegd, zeker niet voor fondsen in variant eigen.
+      .select("id, fonds_id, titel, datum, locatie, status, aangemaakt, aangemaakt_door, gewijzigd_op, gewijzigd_door, gearchiveerd_op, gearchiveerd_door")
       .single();
 
     if (updFout) {

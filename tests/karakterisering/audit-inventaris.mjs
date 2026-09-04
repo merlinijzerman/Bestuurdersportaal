@@ -148,6 +148,8 @@ const SPLIT_KLASSE = {
   "PATCH app/api/profiel/route.ts": "operationeel", // fonds_id/rol-tabel (C-01), goedkope verzekering
   "DELETE app/api/microsoft/connectie/route.ts": "operationeel", // lokaal tokenmateriaal beëindigen; wrapper-audit + private connectoraudit
   "POST app/api/microsoft/test/route.ts": "operationeel", // externe verbindingstest; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/outlook/agendas/route.ts": "operationeel", // fondsgebonden bronselectie; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/outlook/sync/route.ts": "operationeel", // read-only synchronisatierun; wrapper-audit + private connectoraudit
   // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",

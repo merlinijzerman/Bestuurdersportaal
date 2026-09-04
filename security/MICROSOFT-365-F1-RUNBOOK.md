@@ -1,5 +1,9 @@
 # Microsoft 365 — fase 1 Preview-runbook
 
+> Voor Outlook read-only na een succesvolle fase-1-smoke: zie
+> [`MICROSOFT-365-F2A-RUNBOOK.md`](./MICROSOFT-365-F2A-RUNBOOK.md). Fase 2A
+> breidt alleen na beheeractie uit met `Calendars.Read.Shared`.
+
 ## Vooraf
 
 0. Breng de featurebranch eerst via PR naar `preview`. Controleer dat Vercel de wijziging op de custom environment `preview-stable` heeft gebouwd. De databasewijziging is additief en de pilotflag blijft standaard uit.

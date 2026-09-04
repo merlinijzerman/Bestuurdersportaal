@@ -30,6 +30,11 @@ interface Vergadering {
   status: "gepland" | "in_voorbereiding" | "afgerond";
   fonds_id: string;
   aangemaakt_door: string | null;
+  outlook_beheerd: boolean;
+  outlook_sync_status: "gesynchroniseerd" | "geannuleerd" | "afgeschermd" | "extern_gewijzigd_of_verwijderd" | null;
+  outlook_eind: string | null;
+  outlook_teams_link: string | null;
+  outlook_laatst_gesynchroniseerd_op: string | null;
 }
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
@@ -301,6 +306,7 @@ export default async function VergaderingDetailPage({
   // (PATCH /api/vergaderingen/[id]) dwingt dit onafhankelijk af.
   const magVergaderingBewerken =
     v.status !== "afgerond" &&
+    !v.outlook_beheerd &&
     (v.aangemaakt_door === user.id ||
       huidigeRol === "voorzitter" ||
       huidigeRol === "beheerder");
@@ -321,8 +327,23 @@ export default async function VergaderingDetailPage({
             <h1 className="portal-page-title">{v.titel}</h1>
             <p className="text-sm text-muted mt-1">
               {formatDatum(v.datum)}
+              {v.outlook_eind ? ` tot ${new Date(v.outlook_eind).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}` : ""}
               {v.locatie ? ` · ${v.locatie}` : ""}
             </p>
+            {v.outlook_beheerd && (
+              <p className="mt-2 text-xs text-muted">
+                Beheerd vanuit Outlook
+                {v.outlook_sync_status === "geannuleerd" ? " · Geannuleerd in Outlook" : ""}
+                {v.outlook_sync_status === "afgeschermd" ? " · Afspraakdetails afgeschermd" : ""}
+                {v.outlook_sync_status === "extern_gewijzigd_of_verwijderd" ? " · Mogelijk verplaatst of verwijderd in Outlook" : ""}
+                {v.outlook_laatst_gesynchroniseerd_op ? ` · Laatst gesynchroniseerd ${new Date(v.outlook_laatst_gesynchroniseerd_op).toLocaleString("nl-NL")}` : ""}
+              </p>
+            )}
+            {v.outlook_teams_link && (
+              <a href={v.outlook_teams_link} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-accent-ink hover:underline">
+                Deelnemen via Microsoft Teams
+              </a>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {magVergaderingBewerken && (

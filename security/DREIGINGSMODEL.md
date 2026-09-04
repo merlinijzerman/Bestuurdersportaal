@@ -55,6 +55,8 @@
 | R-19 | Fondsgerichte Preview-host resolveert naar de verkeerde Preview-tenant of een extern account ziet een ander previewfonds | Kritiek | Exacte hostmapping, RLS, host↔fonds fail-closed | Deels — host×account-matrix en directe REST/Storage/RPC-tests voor ieder previewfonds |
 | R-20 | Aanvaller koppelt zijn Microsoft-account aan de portaalaccount van een ander, replayt callback/state of wisselt tenant | Kritiek | Bestaande Supabase-sessie, eenmalige 10-minutentransactie, PKCE, nonce, tenant-/audiencevalidatie en exact callbackpad | Deels — Preview-smoke en negatieve route-tests uitvoeren |
 | R-21 | Token/cache, code of secret lekt naar browser, log, audit of directe PostgREST-toegang | Kritiek | AES-256-GCM, private schema, minimale database-rol, no-store en inhoudsarme audit | Deels — grantscontrole, ciphertext-tampertest en loginspectie uitvoeren |
+| R-22 | Outlook-sync mengt agenda/event van andere tenant, mailbox of kalender, of dupliceert een meeting | Kritiek | Private selectie bindt tenant+mailbox+calendar; immutable event-key; unieke actieve run; server verifieert lijstresultaat | Deels — echte Preview-negatieve test en DB-check uitvoeren |
+| R-23 | Delta-run markeert een afspraak onterecht verdwenen of lekt private/Teams/deelnemerdetails | Hoog | Cursor pas na volledige run; `@removed` krijgt de niet-destructieve status `extern_gewijzigd_of_verwijderd`; privacyregel, Teams-hostvalidatie en inhoudsarme audit | Deels — Preview-scenariobewijs voor sensitivity, annulering en foutpad |
 
 ## AI-specifieke grenzen voor Preview
 

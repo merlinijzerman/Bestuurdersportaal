@@ -12,10 +12,11 @@ const callback = lees("app/auth/microsoft/callback/route.ts");
 const connectorFouten = lees("core/lib/microsoft-connector-error-core.ts");
 const vaultRij = lees("core/lib/microsoft-vault-row-core.ts");
 
-test("Microsoft F1 gebruikt exact de vier goedgekeurde delegated scopes", () => {
+test("Microsoft F1 houdt de basisset klein en 2A voegt alleen Calendars.Read.Shared toe", () => {
   const config = lees("core/lib/microsoft-config.ts");
   assert.match(config, /MICROSOFT_SCOPES = \["openid", "profile", "offline_access", "User\.Read"\] as const/);
-  assert.doesNotMatch(config, /Calendars\.|Files\.|Sites\.|Mail\./);
+  assert.match(config, /MICROSOFT_OUTLOOK_SCOPES = \[\.\.\.MICROSOFT_SCOPES, "Calendars\.Read\.Shared"\] as const/);
+  assert.doesNotMatch(config, /Files\.|Sites\.|Mail\.|Calendars\.ReadWrite/);
 });
 
 test("Microsoft F1 gebruikt geen Supabase service-role in het tenantpad", () => {
@@ -37,10 +38,11 @@ test("private vault is browserdicht en alle definers eindigen op pg_temp", () =>
   assert.match(vaultRij, /sleutelVersie: rij\.sleutel_versie/);
 });
 
-test("nieuwe fondsen krijgen fail-safe profiel eigen en pilot uit", () => {
+test("nieuwe fondsen starten eigen en de connector blijft bruikbaar na bewuste bronwissel", () => {
   assert.match(migratie, /trg_fonds_integratieprofiel_standaard/);
   assert.match(migratie, /values \(new\.id, 'eigen', false\)/);
-  assert.match(connector, /data\?\.integratieprofiel === "eigen" && data\?\.microsoft_koppeling_pilot === true/);
+  assert.match(connector, /integratieprofiel === "eigen" \|\| data\?\.integratieprofiel === "microsoft"/);
+  assert.match(connector, /microsoft_koppeling_pilot === true/);
 });
 
 test("callback valideert bestaande sessie en registreert veilige fouten", () => {

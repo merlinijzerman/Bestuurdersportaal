@@ -75,7 +75,7 @@ export default function MicrosoftKoppelingKaart() {
     <section className="bg-white border border-line rounded-xl p-5 mb-6">
       <h2 className="font-bold text-ink mb-1">Microsoft 365-koppeling</h2>
       <p className="text-sm text-muted mb-4">
-        Pilot in onze eigen Microsoft 365-omgeving. Outlook en SharePoint zijn nog niet beschikbaar.
+        Beveiligde accountkoppeling voor Microsoft 365-functies. Beschikbaarheid van Outlook en SharePoint wordt afzonderlijk per fonds ingesteld.
       </p>
       {status.gekoppeld && status.verbinding ? (
         <div className="space-y-3 text-sm">

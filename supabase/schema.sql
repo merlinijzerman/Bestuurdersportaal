@@ -2391,7 +2391,6 @@ create table if not exists public.procedure_afschriften (
 -- microsoft_vault mag de benoemde SECURITY DEFINER-functies aanroepen. Cache en
 -- OAuth-materiaal zijn AES-256-GCM-ciphertext; er zijn geen browser-toegankelijke
 -- decryptie- of cachefuncties.
-
 -- ── AI-gateway — configuratielaag per fonds (M365 fase 2B, #311, T2) ──────
 -- Bron van waarheid: supabase/migrations/2026_09_04_ai_gateway_configuratie.sql.
 -- ai_gateway_private.provider_profiel: platform- (eigenaar_fonds_id NULL) of
@@ -2414,3 +2413,8 @@ create table if not exists public.procedure_afschriften (
 --   nieuw fonds vier rijen transactioneel; onvolledige defaults laten de
 --   fondscreatie falen. Backfill: elk bestaand fonds vier rijen op platform-anthropic
 --   met het huidige model per taakgroep.
+
+-- ── Microsoft 365 — Outlook fase 2A (read-only, #310) ─────────────────────
+-- Fase 2A voegt private agenda_configuraties, sync_runs en event_koppelingen toe.
+-- Calendar/event-id's en delta-cursors blijven private; de publieke vergadering
+-- draagt alleen een veilige Outlook-projectie, zonder ruwe deelnemersgegevens.
