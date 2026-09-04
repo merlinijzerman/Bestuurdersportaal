@@ -1,0 +1,39 @@
+{
+  "body": {
+    "meta": {
+      "geselecteerd": 1,
+      "methode": "fts_dutch_ranked",
+      "modus": "alles",
+      "opgehaald": 1
+    },
+    "procesinstanties": [],
+    "resultaten": [
+      {
+        "bibliotheek": "fonds",
+        "bron": "Intern",
+        "bronorganisatie": null,
+        "bronstatus": null,
+        "document_id": "<uuid:1>",
+        "documentdatum": null,
+        "documentstatus": "concept",
+        "extern_url": null,
+        "geldig_tot": null,
+        "heeft_origineel": true,
+        "normgewicht": null,
+        "procesinstantie_id": null,
+        "titel": "W1 Document",
+        "treffers": [
+          {
+            "fragment": "Het herstelplan beschrijft de maatregelen bij een reservetekort. Het premiebeleid en het indexatiebeleid worden jaarlijks getoetst aan de uitgangspunten van het herstelplan.",
+            "pagina": 3,
+            "paragraaf": null
+          }
+        ]
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

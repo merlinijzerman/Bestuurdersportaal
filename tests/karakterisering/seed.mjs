@@ -565,6 +565,31 @@ async function seedAiChat(admin, doelomgeving) {
     }, { onConflict: "id" });
     if (error) throw new Error(`document_chunks(311): ${error.message}`);
   }
+  // #322 F4-T1 — retrieval-golden-fixtures. Vier chunks onder hetzelfde
+  // document1, met onderling overlappende termen (renteafdekking ×2,
+  // premiebeleid ×2, herstelplan ×1) zodat ranking, dedup-per-document en
+  // fragmentafkapping in de zoekroute meetbaar zijn. Géén embedding: het
+  // FTS-pad is het lokale pad zonder Mistral-sleutel (zie seedAiChat hierboven).
+  {
+    const fixtures = [
+      { id: FIX.retrievalChunkRente1, chunk_index: 1, pagina: 2, tekst: "De renteafdekking van de matchingportefeuille is per ultimo verhoogd naar 60 procent van de verplichtingen. De strategische bandbreedte voor de renteafdekking loopt van 50 tot 70 procent." },
+      { id: FIX.retrievalChunkHerstel, chunk_index: 2, pagina: 3, tekst: "Het herstelplan beschrijft de maatregelen bij een reservetekort. Het premiebeleid en het indexatiebeleid worden jaarlijks getoetst aan de uitgangspunten van het herstelplan." },
+      { id: FIX.retrievalChunkRente2, chunk_index: 3, pagina: 4, tekst: "Het uitbestedingsbeleid regelt de selectie en de monitoring van de fiduciair beheerder en de pensioenuitvoerder. De uitvoering van de renteafdekking valt onder het mandaat van de fiduciair beheerder." },
+      { id: FIX.retrievalChunkPremie, chunk_index: 4, pagina: 5, tekst: "De premie voor het komende jaar is vastgesteld op 24 procent van de pensioengrondslag. Het premiebeleid volgt de kostendekkende premie en wordt door het bestuur jaarlijks herijkt." },
+    ];
+    const { error } = await admin.from("document_chunks").upsert(
+      fixtures.map((f) => ({
+        ...f,
+        document_id: FIX.document1,
+        paragraaf: null,
+        structuur_type: "tekst",
+        structuur_label: "W1 retrieval-golden (#322)",
+        indexering_versie: "w1-karakterisering-322",
+      })),
+      { onConflict: "id" }
+    );
+    if (error) throw new Error(`document_chunks(322): ${error.message}`);
+  }
 }
 
 // Handmatig: `node --env-file=.env.local tests/karakterisering/seed.mjs`

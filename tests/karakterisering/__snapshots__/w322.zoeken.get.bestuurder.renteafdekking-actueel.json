@@ -1,0 +1,16 @@
+{
+  "body": {
+    "meta": {
+      "geselecteerd": 0,
+      "methode": "geen",
+      "modus": "actueel",
+      "opgehaald": 0
+    },
+    "procesinstanties": [],
+    "resultaten": []
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

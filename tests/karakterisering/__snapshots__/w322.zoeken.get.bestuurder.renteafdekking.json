@@ -1,0 +1,44 @@
+{
+  "body": {
+    "meta": {
+      "geselecteerd": 2,
+      "methode": "fts_dutch_ranked",
+      "modus": "alles",
+      "opgehaald": 2
+    },
+    "procesinstanties": [],
+    "resultaten": [
+      {
+        "bibliotheek": "fonds",
+        "bron": "Intern",
+        "bronorganisatie": null,
+        "bronstatus": null,
+        "document_id": "<uuid:1>",
+        "documentdatum": null,
+        "documentstatus": "concept",
+        "extern_url": null,
+        "geldig_tot": null,
+        "heeft_origineel": true,
+        "normgewicht": null,
+        "procesinstantie_id": null,
+        "titel": "W1 Document",
+        "treffers": [
+          {
+            "fragment": "De renteafdekking van de matchingportefeuille is per ultimo verhoogd naar 60 procent van de verplichtingen. De strategische bandbreedte voor de renteafdekking loopt van 50 tot 70 procent.",
+            "pagina": 2,
+            "paragraaf": null
+          },
+          {
+            "fragment": "Het uitbestedingsbeleid regelt de selectie en de monitoring van de fiduciair beheerder en de pensioenuitvoerder. De uitvoering van de renteafdekking valt onder het mandaat van de fiduciair beheerder.",
+            "pagina": 4,
+            "paragraaf": null
+          }
+        ]
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}
