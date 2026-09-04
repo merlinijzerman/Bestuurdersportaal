@@ -23,6 +23,28 @@ import { AFGEKAPT_MELDING } from "@/core/lib/vraagtype";
 // centrale poort, die live de kill switch en de modelallowlist toetst.
 
 // ============================================================
+//  ⚠ DEPRECATED — deze route vervalt (T2, #304, besluit 0205).
+// ------------------------------------------------------------
+//  De voorbereiding loopt sinds T2 door `/api/chat`, als antwoordmodus
+//  `persoonlijke_voorbereiding`. Daarmee krijgt ze wat deze route mist: een
+//  `governance_log`-regel met inhoudszegel, de PII- en webretrieval-gate,
+//  voortgangsmeldingen, hybride retrieval en het bewaarde product in
+//  `voorbereidingen`. Het auditgat dat hier zat — geen enkele inhoudelijke
+//  auditregel op de zwaarste AI-output van het portaal — is daarmee gedicht.
+//
+//  Deze route staat er nog één release, zodat de omzetting met één revert terug
+//  te draaien is. Er is GEEN client meer die hem aanroept: `VoorbereidingKaart`
+//  opent nu het paneel. PR 2 verwijdert dit bestand, de bijbehorende
+//  karakteriseringssnapshots (`w5.voorbereiding.post.*`) én de meting hieronder.
+//
+//  DE METING (tijdelijk, verdwijnt met PR 2). §5 van de werkopdracht vraagt om
+//  verbruik vóór en ná — gemeten, niet geschat. Dat kan alleen hier: deze route
+//  schrijft geen governance_log, dus haar tokengebruik staat nergens vast
+//  (`ai_acties` telt acties, geen tokens). Zonder deze regel is er domweg geen
+//  "vóór"-getal, en dan wordt de vergelijking met /api/chat een schatting.
+// ============================================================
+
+// ============================================================
 //  Voorbereiding als gespreksopener (06-07, herziening FO duiding)
 // ============================================================
 // De eerdere opzet (gestructureerd JSON-product in een eigen blok) is op
@@ -351,6 +373,12 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
           });
 
           const finaal = await claudeStream.finalMessage();
+          // T2-baselinemeting (tijdelijk, zie de kop van dit bestand). Eén regel
+          // met een vast voorvoegsel, zodat de tien A/B-metingen uit de
+          // serverlog te grepen zijn zonder handwerk.
+          console.warn(
+            `[T2-baseline][DEPRECATED /voorbereiding] agendapunt=${id} tokens_in=${finaal.usage.input_tokens} tokens_uit=${finaal.usage.output_tokens} cache_lees=${finaal.usage.cache_read_input_tokens ?? 0} cache_schrijf=${finaal.usage.cache_creation_input_tokens ?? 0} bronnen=${bronnen.length}`
+          );
           // Afkapping niet stil laten passeren (herleidbaar in de serverlog).
           if (finaal.stop_reason === "max_tokens") {
             console.warn(

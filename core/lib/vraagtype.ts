@@ -168,6 +168,17 @@ export function retrievalModusVoor(modus: Antwoordmodus): RetrievalModus {
       return "historisch";
     case "besluitrijpheid":
       return "besluitvorming";
+    // T2 (#304) — de persoonlijke voorbereiding gaat per definitie over stukken
+    // die nog VÓÓRliggen. Onder 'actueel' filtert de RPC op documentstatus
+    // 'vastgesteld'/'van_kracht', en vergaderstukken krijgen bij ingest de
+    // DB-default 'concept': dat sloot precies het materiaal uit waar de
+    // voorbereiding voor bedoeld is. De vervallen voorbereidingsroute had
+    // hiervoor een eigen correctie (12-08-2026, hardcoded modus 'besluitvorming');
+    // die correctie hoort thuis bij de modus, niet bij een route. De statuslabels
+    // in de bronkop dragen de nuance, zodat een concept niet als geldend beleid
+    // in de voorbereiding belandt.
+    case "persoonlijke_voorbereiding":
+      return "besluitvorming";
     default:
       return "actueel";
   }

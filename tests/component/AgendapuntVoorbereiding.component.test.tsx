@@ -1,20 +1,27 @@
 // ============================================================================
-//  "Mijn voorbereiding": één knop per toestand, en de sleutel gaat mee.
+//  "Mijn voorbereiding": de kaart is de uitkomst, het paneel de werkplaats.
 // ----------------------------------------------------------------------------
-//  Deze test begon als regressietest op één header. Sinds c872331 (15-08-2026)
-//  eist `/api/agendapunten/[id]/voorbereiding` een `Idempotency-Key` en
-//  antwoordt hij zonder die header met 400; de client stuurde hem niet, en het
-//  400-antwoord verscheen gewoon als AI-tekst in de kaart. Niemand zag het,
-//  omdat er voor dit pad geen enkele test bestond.
+//  Deze test pinde tot T2 het VERZOEK van de kaart aan de eigen
+//  voorbereidingsroute: de `Idempotency-Key`, ingevoerd nadat een 400-antwoord
+//  maandenlang als AI-tekst in de kaart verscheen zonder dat iemand het zag.
 //
-//  De assertie is met T1 PR 2 MEEVERHUISD naar `VoorbereidingKaart` en niet met
-//  `AgendapuntChat` verdampt. Ze pint het VERZOEK, niet het scherm: de header is
-//  het contract met de route.
+//  Met T2 (#304) doet de kaart dat verzoek niet meer. De laatste eigen `fetch` +
+//  SSE-lus buiten `useAssistent` is weg; beide knoppen openen het paneel, en het
+//  paneel verstuurt de beurt door `/api/chat`. De sleutel-assertie verhuist
+//  daarmee naar het chat-pad, waar hij al gold (route.ts r. 647) en waar
+//  `assistent-payload.sanity.ts` hem bewaakt. Ze verdampt dus niet, ze verhuist
+//  — net als bij T1.
 //
-//  Daarnaast pint deze test de regel uit besluit 0204: één knop per toestand.
-//  Niet voorbereid → alleen "Bereid dit punt voor". Voorbereid → alleen
-//  "Doorvragen". Een "opnieuw opstellen" ernaast zou de dubbeling terugbrengen
-//  die dit ticket juist opheft.
+//  Wat deze test nu pint:
+//   • de kaart LEEST het bewaarde product uit `voorbereidingen`, niet een
+//     gesprekquery — "voorbereid" is een feit, geen gevolgtrekking;
+//   • een rij die alleen aantekeningen draagt is GEEN voorbereiding;
+//   • de knop legt een paneelaanvraag neer MÉT startbeurt (vraag + modus +
+//     agendapunt), want dat is het hele mechanisme van variant B;
+//   • twee handelingen op een voltooid product (opnieuw opstellen én
+//     doorvragen). Dit preciseert besluit 0204: "één knop per toestand" was
+//     gericht tegen twee INGANGEN op een onvoorbereid punt, en dáár staat er
+//     nog steeds precies één.
 // ============================================================================
 
 import { screen, waitFor } from "@testing-library/react";
@@ -22,9 +29,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import VoorbereidingKaart from "@/app/(dashboard)/vergaderingen/_components/VoorbereidingKaart";
 import { AssistentHarnas } from "./assistent-harnas";
 import { verwachtGeenErnstigeAxeBevindingen } from "./axe";
-import { verwachtSseStroomEenmaal } from "./fetch-mock";
 import { renderMetProviders } from "./render-met-providers";
 import { maakSupabaseStub } from "./supabase-mock";
+import type { AssistentPaneelWaarde } from "@/core/components/assistent/AssistentPaneelProvider";
 
 const { createClient } = vi.hoisted(() => ({ createClient: vi.fn() }));
 vi.mock("@/core/lib/supabase", () => ({ createClient }));
@@ -32,112 +39,144 @@ vi.mock("@/core/lib/supabase", () => ({ createClient }));
 const AGENDAPUNT_ID = "agendapunt-1";
 const VOORBEREIDING_VRAAG = "Stel mijn voorbereiding op voor dit agendapunt.";
 
-const PROFIEL = { fonds_id: "fonds-1", fondsen: { naam: "Pensioenfonds Horizon" } };
+const PROFIEL = { fondsen: { naam: "Pensioenfonds Horizon" } };
+
+/** Een bewaard product zoals de chat-route het wegschrijft. */
+const PRODUCT = {
+  ai_output: {
+    tekst: "**Aandachtspunten** — de dekkingsgraad daalt [Bron 1].",
+    opgesteld_op: "2026-09-02T10:00:00.000Z",
+    governance_log_id: "log-1",
+    gesprek_id: "gesprek-1",
+  },
+  bronnen_meta: {
+    aantal: 2,
+    titels: ["Jaarverslag 2025", "Beleidsnota"],
+    bronnen: [
+      {
+        nummer: 1,
+        document_id: "doc-1",
+        titel: "Jaarverslag 2025",
+        bron: "bibliotheek",
+        pagina: 12,
+        paragraaf: null,
+        heeft_origineel: true,
+      },
+      {
+        nummer: 2,
+        document_id: "doc-2",
+        titel: "Beleidsnota",
+        bron: "bibliotheek",
+        pagina: null,
+        paragraaf: "3.2",
+        heeft_origineel: false,
+      },
+    ],
+  },
+  gegenereerd_op: "2026-09-02T10:00:00.000Z",
+  bijgewerkt_op: "2026-09-02T10:00:00.000Z",
+};
 
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-function monteer({ gesprekken = [] as unknown[] } = {}) {
+function monteer({ voorbereiding = null as unknown }: { voorbereiding?: unknown } = {}) {
   createClient.mockReturnValue(
-    maakSupabaseStub({ tabellen: { profielen: PROFIEL, gesprekken } }),
+    maakSupabaseStub({
+      tabellen: { profielen: PROFIEL, voorbereidingen: voorbereiding },
+    }),
   );
-  return renderMetProviders(
-    <AssistentHarnas>
+  let paneel: AssistentPaneelWaarde | null = null;
+  const weergave = renderMetProviders(
+    <AssistentHarnas
+      onWaarde={(w) => {
+        paneel = w;
+      }}
+    >
       <VoorbereidingKaart agendapuntId={AGENDAPUNT_ID} titel="Vaststellen jaarverslag" />
     </AssistentHarnas>,
   );
+  return { ...weergave, paneelStaat: () => paneel };
 }
 
 describe("Mijn voorbereiding", () => {
-  it("stuurt een Idempotency-Key mee en toont daarna de uitkomst", async () => {
-    const { user } = monteer();
+  it("legt bij een klik een paneelaanvraag mét startbeurt neer", async () => {
+    const { user, paneelStaat } = monteer();
 
-    const knop = await screen.findByRole("button", { name: /Bereid dit punt voor/ });
-    // Nog niet voorbereid: geen tweede knop naast deze.
+    const knop = await screen.findByRole("link", { name: /Bereid dit punt voor/ });
+    // Nog niet voorbereid: precies één ingang, zoals besluit 0204 vraagt.
     expect(screen.queryByRole("link", { name: /Doorvragen/ })).not.toBeInTheDocument();
-
-    const verzoek = verwachtSseStroomEenmaal(
-      `/api/agendapunten/${AGENDAPUNT_ID}/voorbereiding`,
-      [
-        {
-          type: "meta",
-          bronnen: [{ nummer: 1, titel: "Jaarverslag 2025" }],
-          inline_meldingen: [],
-        },
-        { type: "delta", text: "**Bestuurlijke duiding** — het bestuur wordt gevraagd…" },
-        { type: "done" },
-      ],
-      // Knip de stroom, zodat een event over twee reads valt: precies waar een
-      // eigengebouwde bufferlus stukgaat.
-      { knip: 3 },
-    );
+    expect(
+      screen.queryByRole("link", { name: /Opnieuw opstellen/ }),
+    ).not.toBeInTheDocument();
 
     await user.click(knop);
 
-    await waitFor(() =>
-      expect(screen.getByText(/het bestuur wordt gevraagd/)).toBeInTheDocument(),
-    );
-
-    const sleutel = verzoek.headers().get("Idempotency-Key");
-    expect(sleutel, "de route weigert een verzoek zonder sleutel (400)").toBeTruthy();
-    expect(sleutel).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
-
-    // Voorbereid: nu precies één knop, en dat is doorvragen in het paneel.
-    expect(screen.getByRole("link", { name: /Doorvragen/ })).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: /Bereid dit punt voor/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("1 bron uit de bibliotheek")).toBeVisible();
+    await waitFor(() => expect(paneelStaat()?.aanvraag).toBeTruthy());
+    const aanvraag = paneelStaat()!.aanvraag!;
+    // De context: dit agendapunt, via dezelfde resolver als een deeplink.
+    expect(aanvraag.ingangen).toEqual([
+      { soort: "agendapunt", agendapuntId: AGENDAPUNT_ID },
+    ]);
+    // En de beurt die het paneel moet versturen. Zonder deze drie velden opent
+    // het paneel wel, maar stelt niemand de vraag.
+    expect(aanvraag.startbeurt).toEqual({
+      vraag: VOORBEREIDING_VRAAG,
+      antwoordmodus: "persoonlijke_voorbereiding",
+      productVoorAgendapunt: AGENDAPUNT_ID,
+    });
+    // Het paneel gaat open; de kaart doet zelf niets meer.
+    expect(paneelStaat()!.stand).toBe("paneel");
   });
 
-  it("leest een eerder opgestelde voorbereiding terug uit het bewaarde gesprek", async () => {
-    const { container } = monteer({
-      gesprekken: [
-        {
-          id: "gesprek-1",
-          berichten: [
-            { rol: "gebruiker", tekst: VOORBEREIDING_VRAAG },
-            {
-              rol: "ai",
-              tekst: "**Aandachtspunten** — de dekkingsgraad daalt.",
-              onderbouwing: { aantalBronnen: 2 },
-              voltooid: true,
-            },
-          ],
-        },
-      ],
-    });
+  it("leest het bewaarde product uit voorbereidingen", async () => {
+    const { container } = monteer({ voorbereiding: PRODUCT });
 
     expect(await screen.findByText(/de dekkingsgraad daalt/)).toBeVisible();
-    expect(screen.getByText("2 bronnen uit de bibliotheek")).toBeVisible();
+    // Datum én bronaantal komen uit het product zelf — dat is precies wat een
+    // gesprekquery niet kon leveren.
+    expect(screen.getByText(/2 bronnen uit de bibliotheek/)).toBeVisible();
+    expect(screen.getByText(/Opgesteld 2 september 2026/)).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: /Bereid dit punt voor/ }),
+      screen.queryByRole("link", { name: /Bereid dit punt voor/ }),
     ).not.toBeInTheDocument();
     await verwachtGeenErnstigeAxeBevindingen(container);
   });
 
-  it("toont de knop nog bij een oud gesprek zonder voorbereiding", async () => {
-    // Rijen van vóór T1 kunnen een heel chatgesprek dragen. Het laatste
-    // AI-bericht daaruit als "Mijn voorbereiding" tonen zou de bestuurder iets
-    // anders voorspiegelen dan hij leest.
+  it("biedt op een voltooid product twee handelingen (0204 gepreciseerd)", async () => {
+    const { user, paneelStaat } = monteer({ voorbereiding: PRODUCT });
+
+    const opnieuw = await screen.findByRole("link", { name: /Opnieuw opstellen/ });
+    expect(screen.getByRole("link", { name: /Doorvragen/ })).toBeVisible();
+
+    // "Opnieuw opstellen" draagt de startbeurt; "Doorvragen" juist niet — dat
+    // opent het gesprek zonder ongevraagd een kostendragende beurt te starten.
+    await user.click(opnieuw);
+    await waitFor(() => expect(paneelStaat()?.aanvraag?.startbeurt).toBeTruthy());
+
+    await user.click(screen.getByRole("link", { name: /Doorvragen/ }));
+    await waitFor(() =>
+      expect(paneelStaat()?.aanvraag?.startbeurt).toBeUndefined(),
+    );
+  });
+
+  it("toont de knop nog bij een rij met alleen aantekeningen", async () => {
+    // De notities-route maakt een rij aan zodra een bestuurder een aantekening
+    // opslaat. Zou de kaart die als "voorbereid" lezen, dan ziet hij een lege
+    // voorbereiding én verdwijnt de knop om er een te maken.
     monteer({
-      gesprekken: [
-        {
-          id: "gesprek-oud",
-          berichten: [
-            { rol: "gebruiker", tekst: "Wat betekent dit voorstel voor de deelnemers?" },
-            { rol: "ai", tekst: "Een antwoord op een andere vraag.", voltooid: true },
-          ],
-        },
-      ],
+      voorbereiding: {
+        ai_output: {},
+        bronnen_meta: {},
+        eigen_notities: { lens: "Vragen naar de termijn." },
+        gegenereerd_op: "2026-09-01T10:00:00.000Z",
+      },
     });
 
     expect(
-      await screen.findByRole("button", { name: /Bereid dit punt voor/ }),
+      await screen.findByRole("link", { name: /Bereid dit punt voor/ }),
     ).toBeVisible();
-    expect(screen.queryByText(/Een antwoord op een andere vraag/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Opgesteld/)).not.toBeInTheDocument();
   });
 });

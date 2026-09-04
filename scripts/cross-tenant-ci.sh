@@ -179,6 +179,12 @@ SQL_P4I1="supabase/checks/2026_08_29_p4_04_status_feitenmatrix.sql"
 SQL_P2C_ONGB="supabase/checks/2026_08_31_p2c_ongebonden_besluit.sql"
 # P5c (§9.3) — werkverkeer per stap: statusneutraal, I5 en auteur-/tenantgrens.
 SQL_P5C_NOTITIE="supabase/checks/2026_08_30_p5c_stap_notitie_gedrag.sql"
+# T2 (#304) — de voorbereiding als bewaard product. `/api/chat` schrijft hier
+# voor het eerst naar een DOMEINtabel; dat vraagt om bewijs in plaats van een
+# aanname. Meet: schrijfbaarheid van de eigen rij onder RLS, overschrijven via de
+# unique-constraint, dat de upsert de aantekeningen van de notities-route LAAT
+# STAAN, en dat de voorbereiding privé blijft — ook voor de voorzitter.
+SQL_T2VB="supabase/checks/2026_09_04_t2_voorbereiding_product.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -373,6 +379,10 @@ echo "-- P5c aantekeningen (statusneutraal, I5, auteur- en tenantgrens) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5C_NOTITIE"
 echo
 
+echo "-- T2 voorbereidingen-product (eigen schrijfrecht, overschrijven, aantekeningen intact, privé) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T2VB"
+echo
+
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5D_BEEINDIGEN"
 echo
@@ -420,4 +430,5 @@ echo "  T8   semantische extractie: gate H op de schrijffunctie + hints         
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "  V3   grants-gate: feitelijke rechten op alle relaties/functies == allowlist (DB-laag)"
 echo "  BBIND bewijsbinding: één-op-één + DB-validatie/audit + snapshotdekking       (DB-laag)"
+echo "  T2   voorbereiding-product: eigen schrijfrecht, overschrijven, notities intact (DB-laag)"
 echo "============================================================================"
