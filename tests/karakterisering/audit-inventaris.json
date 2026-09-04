@@ -2,13 +2,13 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 101,
+    "aantalHandlers": 100,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 24,
+    "zonderSpoor": 23,
     "klasseTelling": {
       "domein": 39,
-      "geen": 10,
+      "geen": 9,
       "bewijsketen": 38,
       "machine": 6,
       "operationeel": 8
@@ -133,18 +133,6 @@
     },
     {
       "handler": "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts",
-      "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "geen",
-      "ketengebeurtenisVereist": false,
-      "declaredAudit": "geen",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
-      "domein": [],
-      "platform": []
-    },
-    {
-      "handler": "POST app/api/agendapunten/[id]/voorbereiding/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",

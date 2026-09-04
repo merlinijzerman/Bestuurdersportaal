@@ -29,8 +29,6 @@ import {
   LIMIET_ZOEKEN_ENDPOINT,
   LIMIET_CHAT,
   LIMIET_CHAT_ENDPOINT,
-  LIMIET_VOORBEREIDING,
-  LIMIET_VOORBEREIDING_ENDPOINT,
 } from "./ratelimit-const.mjs";
 import { FIX, FONDS_ID } from "./config.mjs";
 
@@ -1649,26 +1647,7 @@ export const scenarios = [
     preseed: async ({ admin }) => wisLimiet(admin, LIMIET_CHAT_ENDPOINT),
   },
 
-  // ── 2. /api/agendapunten/[id]/voorbereiding — SSE ──────────────────────────
-  //  Zelfde patroon, kleiner. Deze route heeft GEEN host-guard en GEEN
-  //  module-guard; de poorten zijn auth → rate limit → fonds → idempotentie.
-  //  LACUNE: ook hier is het streamende happy path niet gekarakteriseerd.
-  { slug: "w5.voorbereiding.post.anon", method: "POST", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/voorbereiding`, rol: "anon", body: LEEG, verwacht: "json" },
-  {
-    slug: "w5.voorbereiding.post.bestuurder.429",
-    method: "POST", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/voorbereiding`, rol: "bestuurder",
-    body: LEEG, verwacht: "json",
-    preseed: async ({ admin, users }) =>
-      vulLimiet(admin, users.bestuurder.userId, LIMIET_VOORBEREIDING_ENDPOINT, LIMIET_VOORBEREIDING),
-  },
-  {
-    slug: "w5.voorbereiding.post.bestuurder.400-idempotentie",
-    method: "POST", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/voorbereiding`, rol: "bestuurder",
-    body: LEEG, verwacht: "json",
-    preseed: async ({ admin }) => wisLimiet(admin, LIMIET_VOORBEREIDING_ENDPOINT),
-  },
-
-  // ── 3. /api/ai/stuk-export — docx-download ────────────────────────────────
+  // ── 2. /api/ai/stuk-export — docx-download ────────────────────────────────
   //  De invariant van deze route is de VOLGORDE: `log_word_export` moet slagen
   //  vóór het bestand teruggaat (B-4/G16).
   //

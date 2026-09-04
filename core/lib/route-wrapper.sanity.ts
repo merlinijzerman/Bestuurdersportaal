@@ -184,8 +184,8 @@ async function main() {
    *  gewoon in de handleraanroep uit en het vangnet van de wrapper hoort hem
    *  juist wél af te vangen. De test hieronder maakt dat onderscheid expliciet.
    *
-   *  Beide W5-SSE-routes gebruiken `async start(controller)` op de tak die de
-   *  modelstream draagt (chat/route.ts en agendapunten/[id]/voorbereiding). De
+   *  De W5-SSE-route gebruikt `async start(controller)` op de tak die de
+   *  modelstream draagt (chat/route.ts). De
    *  twee synchrone streams in chat enqueue'n een kant-en-klare payload en
    *  sluiten meteen; die kunnen niet ná de headers falen. */
   function sseRespons(daarna: () => void) {

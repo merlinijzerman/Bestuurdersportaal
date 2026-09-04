@@ -99,13 +99,16 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // 121: P5c voegt vier aantekeningenhandlers toe (lezen, toevoegen, wijzigen,
   // verwijderen), allemaal via de gewone procedures.view/manage-capabilities.
   //
-  // BEDOELDE DIVERGENTIE (geen drift): 121 gewrapte declaraties, maar het aantal
+  // 120: T2 verwijdert de deprecated voorbereidingroute; de voorbereiding loopt
+  // sindsdien uitsluitend via de al gewrapte chat-route.
+  //
+  // BEDOELDE DIVERGENTIE (geen drift): 120 gewrapte declaraties, maar het aantal
   // OPGENOMEN 403-cellen in authz-matrix.expected.json blijft op de oude set. Het
   // negatieve contract van de afwijking-route (beheerder/bureau → 403) wordt tegen
   // een DRAAIENDE server opgenomen bij de stack-run, niet voorspeld (besluit 0192,
   // contractwaarde-regel). Zie tests/karakterisering/uitgestelde-opnames.json; die
   // lijst moet leeg zijn vóór P6.
-  assert.equal(HANDLERS.length, 121, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  assert.equal(HANDLERS.length, 120, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

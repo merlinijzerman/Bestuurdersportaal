@@ -95,6 +95,13 @@ toggle wenselijk is (consistentie met de chat), en of de profielsturing onder
 dezelfde B10-poort/DPIA-actualisatie valt vóór go-live (werkhypothese: ja, het is
 dezelfde profileringsverwerking, alleen een extra afnemer).
 
+### Bijstelling 2026-09-04 — T2
+
+De aparte `bouwProfielsturingAgenda()` is samen met de eigen voorbereidingsroute
+verwijderd. De antwoordmodus `persoonlijke_voorbereiding` gebruikt nu
+`bouwProfielsturing()` via `/api/chat`; het principe prioriteren/nadruk, niet
+inperken blijft daarmee op één plek geborgd.
+
 ## Referenties
 
 - FO v1.3 §14 (Module 12), TO v1.2 §2.7.
