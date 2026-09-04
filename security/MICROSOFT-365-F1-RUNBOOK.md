@@ -76,6 +76,8 @@ Controleer op `https://pgb.preview.bestuurdersportaal.com` normale Supabase-logi
 
 Bij een mislukte callback registreert de applicatie uitsluitend een vaste fasecode: `oauth_transactie`, `oauth_decryptie`, `token_exchange`, `identity_validation`, `graph_me`, `vault_save` of `onverwachte_fout`. Zoek in de Preview-runtime-log op `[MICROSOFT] OAuth-callback mislukt` en verifieer dezelfde categorie in `microsoft_private.audit_log`. Neem de onderliggende providerfout niet over in logs of auditvelden. De tokenuitwisseling krijgt de oorspronkelijke nonce mee, zodat MSAL de ID-tokennonce vóór verdere verwerking controleert.
 
+De verbindingstest gebruikt dezelfde aanpak met de prefix `test_`: `cache_read`, `cache_decryptie`, `account_lookup`, `silent_token`, `graph_me`, `cache_save`, `status_save` of `onverwachte_fout`. De runtime-log bevat alleen deze vaste categorie; de private auditrij krijgt dezelfde categorie.
+
 Rol eerst uit naar `preview-stable`, activeer daarna de PGB-flag en voer de smoke uit. Bij een blokkerende fout gaat eerst de PGB-flag terug naar `false`; pas daarna wordt de deployment teruggezet. Productie blijft in fase 1 ongewijzigd.
 
 ## Lokaal databasebewijs 2026-09-04

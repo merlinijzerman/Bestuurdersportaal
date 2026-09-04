@@ -7,6 +7,8 @@ import { microsoftIdentiteitGeldig } from "@/core/lib/microsoft-identity-core";
 import {
   MicrosoftConnectorError,
   type MicrosoftKoppelFoutcategorie,
+  type MicrosoftTestFoutcategorie,
+  microsoftTestFoutcategorie,
 } from "@/core/lib/microsoft-connector-error-core";
 import * as vault from "@/core/lib/microsoft-vault";
 
@@ -25,6 +27,24 @@ async function koppelStap<T>(categorie: MicrosoftKoppelFoutcategorie, actie: () 
 }
 
 function koppelStapSync<T>(categorie: MicrosoftKoppelFoutcategorie, actie: () => T): T {
+  try {
+    return actie();
+  } catch (fout) {
+    if (fout instanceof MicrosoftConnectorError) throw fout;
+    throw new MicrosoftConnectorError(categorie, fout);
+  }
+}
+
+async function testStap<T>(categorie: MicrosoftTestFoutcategorie, actie: () => Promise<T>): Promise<T> {
+  try {
+    return await actie();
+  } catch (fout) {
+    if (fout instanceof MicrosoftConnectorError) throw fout;
+    throw new MicrosoftConnectorError(categorie, fout);
+  }
+}
+
+function testStapSync<T>(categorie: MicrosoftTestFoutcategorie, actie: () => T): T {
   try {
     return actie();
   } catch (fout) {
@@ -84,22 +104,31 @@ export async function voltooiKoppeling(args: ConnectorContext & { state: string;
   return geheim.returnTo;
 }
 export async function testKoppeling(ctx: ConnectorContext) {
-  const verbinding = await vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId);
-  const cache = await vault.leesCache(ctx.fondsId, ctx.gebruikerId);
-  if (!verbinding || verbinding.status !== "gekoppeld" || !cache) throw new Error("Er is geen actieve Microsoft-koppeling.");
-  const msal = client();
   try {
-    msal.getTokenCache().deserialize(ontsleutelMicrosoftGeheim(cache, aad(ctx.fondsId,ctx.gebruikerId,"cache")));
-    const account = await msal.getTokenCache().getAccountByHomeId(verbinding.home_account_id);
-    if (!account) throw new Error("Microsoft-sessie is verlopen.");
-    const result = await msal.acquireTokenSilent({ account, scopes: ["User.Read"] });
-    const me = await fetch("https://graph.microsoft.com/v1.0/me?$select=id", { headers: { Authorization: `Bearer ${result.accessToken}` }, cache: "no-store" });
-    if (!me.ok) throw new Error("Microsoft-verbinding kon niet worden getest.");
-    if (!(await vault.bewaarCache({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, expectedVersion: cache.versie, cache: versleutelMicrosoftGeheim(msal.getTokenCache().serialize(), aad(ctx.fondsId,ctx.gebruikerId,"cache")) }))) throw new Error("Microsoft-sessie wijzigde gelijktijdig; probeer opnieuw.");
-    await vault.markeerTest(ctx.fondsId, ctx.gebruikerId, true, null);
-  } catch (error) {
-    await vault.markeerTest(ctx.fondsId, ctx.gebruikerId, false, "token_of_graph_fout");
-    throw error;
+    const { verbinding, cache } = await testStap("test_cache_read", async () => ({
+      verbinding: await vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId),
+      cache: await vault.leesCache(ctx.fondsId, ctx.gebruikerId),
+    }));
+    if (!verbinding || verbinding.status !== "gekoppeld" || !cache) throw new MicrosoftConnectorError("test_cache_read");
+    const msal = client();
+    testStapSync("test_cache_decryptie", () => msal.getTokenCache().deserialize(ontsleutelMicrosoftGeheim(cache, aad(ctx.fondsId,ctx.gebruikerId,"cache"))));
+    const account = await testStap("test_account_lookup", () => msal.getTokenCache().getAccountByHomeId(verbinding.home_account_id));
+    if (!account) throw new MicrosoftConnectorError("test_account_lookup");
+    const result = await testStap("test_silent_token", () => msal.acquireTokenSilent({ account, scopes: ["User.Read"] }));
+    await testStap("test_graph_me", async () => {
+      const response = await fetch("https://graph.microsoft.com/v1.0/me?$select=id", { headers: { Authorization: `Bearer ${result.accessToken}` }, cache: "no-store" });
+      if (!response.ok) throw new Error("Graph /me gaf geen succesvolle status.");
+    });
+    await testStap("test_cache_save", async () => {
+      const bewaard = await vault.bewaarCache({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, expectedVersion: cache.versie, cache: versleutelMicrosoftGeheim(msal.getTokenCache().serialize(), aad(ctx.fondsId,ctx.gebruikerId,"cache")) });
+      if (!bewaard) throw new Error("Microsoft-cache wijzigde gelijktijdig.");
+    });
+    await testStap("test_status_save", () => vault.markeerTest(ctx.fondsId, ctx.gebruikerId, true, null));
+  } catch (fout) {
+    const categorie = microsoftTestFoutcategorie(fout);
+    console.error(`[MICROSOFT] Verbindingstest mislukt: ${categorie}`);
+    await vault.markeerTest(ctx.fondsId, ctx.gebruikerId, false, categorie).catch(() => undefined);
+    throw fout;
   }
 }
 export async function statusKoppeling(ctx: ConnectorContext) { return vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId); }

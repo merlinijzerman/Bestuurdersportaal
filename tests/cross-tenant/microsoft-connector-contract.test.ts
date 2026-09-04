@@ -53,6 +53,10 @@ test("callback valideert bestaande sessie en registreert veilige fouten", () => 
   assert.match(connectorFouten, /"graph_me"/);
   assert.match(connectorFouten, /"vault_save"/);
   assert.match(connector, /nonce: geheim\.nonce/);
+  assert.match(connectorFouten, /"test_silent_token"/);
+  assert.match(connectorFouten, /"test_graph_me"/);
+  assert.match(connectorFouten, /"test_cache_save"/);
+  assert.match(connector, /Verbindingstest mislukt: \$\{categorie\}/);
 });
 
 test("rollback schakelt vaultlogin uit en verwijdert beide schemaonderdelen", () => {
