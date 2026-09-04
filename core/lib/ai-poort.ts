@@ -25,10 +25,10 @@
 //  Besluit 0180.
 // ============================================================================
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Provider } from "./ai-preflight";
-import { resolveAnthropicBaseUrl } from "./ai-provider-endpoint.mjs";
+import { maakAnthropicClient } from "./ai-gateway/adapters/anthropic";
 
 export type { Provider };
 
@@ -111,23 +111,16 @@ export async function poortCheck(
 
 // ── Anthropic ───────────────────────────────────────────────────────────────
 
-let _anthropic: Anthropic | null = null;
-
 /**
- * De enige Anthropic-client in de codebase. Niet geëxporteerd: hij is alleen
- * bereikbaar binnen de callback van `bewaakteAnthropic`, ná de poortcontrole.
+ * Overgangspad (#311 T3→T4). De client komt uit de gateway-adapter — de enige
+ * module die de SDK-client construeert — met de platformsleutel uit de omgeving. Niet
+ * geëxporteerd: alleen bereikbaar binnen de callback van `bewaakteAnthropic`,
+ * ná de poortcontrole. De resterende aanroepers (samenvatting, context-prefix,
+ * semantische extractie, afschrift-/besluitconcept, AQLab-judge) migreren in T4
+ * naar de gateway; daarna verdwijnen `bewaakteAnthropic*` en deze functie.
  */
 function client(): Anthropic {
-  if (!_anthropic) {
-    const baseURL = resolveAnthropicBaseUrl();
-    _anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      timeout: 60_000,
-      maxRetries: 1,
-      ...(baseURL ? { baseURL } : {}),
-    });
-  }
-  return _anthropic;
+  return maakAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
 }
 
 /**

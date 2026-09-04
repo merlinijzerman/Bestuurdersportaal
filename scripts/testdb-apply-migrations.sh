@@ -130,10 +130,16 @@ begin
       nobypassrls
       connection limit 5;
   end if;
-  -- #311 T2 — de AI-gateway heeft dezelfde minimale loginvorm (security/AI-GATEWAY-RUNBOOK.md).
+  -- #311 T2/T3 — de AI-gateway heeft dezelfde minimale loginvorm
+  -- (security/AI-GATEWAY-RUNBOOK.md). Anders dan de kluisrol MOET de app in de
+  -- lokale/CI-stack met deze rol kunnen verbinden (de chat leest zijn
+  -- configuratie erdoor), dus krijgt de fixture een vast, niet-geheim
+  -- wachtwoord. Uitsluitend geldig in de wegwerp-DB; Preview/Productie hebben
+  -- een beheerd wachtwoord in de secretstore.
   if not exists (select 1 from pg_roles where rolname = 'ai_gateway') then
     create role ai_gateway
       login
+      password 'ai_gateway_lokaal'
       noinherit
       nosuperuser
       nocreatedb

@@ -195,10 +195,12 @@ test("C1 — geen_modelcall wordt niet hardgecodeerd op true", () => {
   );
 });
 
-test("C2 — een resolver-providercall registreert REWRITE_MODEL, niet null", () => {
+test("C2 — een resolver-providercall registreert het effectieve resolvermodel, niet null", () => {
+  // #311: het model is geen routeconstante meer maar komt uit de fondsconfiguratie
+  // (taakgroep hulp_sterk); de meting van de resolver draagt het effectieve model.
   assert.ok(
-    ROUTE.includes("p_model: resolverModelGebruikt ? REWRITE_MODEL : null"),
-    "verduidelijking legt REWRITE_MODEL vast zodra de resolver een call deed"
+    ROUTE.includes("p_model: resolverModelGebruikt ? (vraagContext?.meting?.model ?? null) : null"),
+    "verduidelijking legt het effectieve resolvermodel vast zodra de resolver een call deed"
   );
 });
 
@@ -261,8 +263,8 @@ test("C9 — geen race tussen twee timeouts: SDK-timeout ruimer dan het abort-bu
     "de SDK-timeout staat ruimer dan het harde AbortController-budget"
   );
   assert.ok(
-    ROUTE.includes("timeout: CONTEXTRESOLVER_SDK_TIMEOUT_MS, signal: ctrl.signal"),
-    "de resolvercall gebruikt de ruimere SDK-timeout + de leidende abort-signal"
+    /timeoutMs: CONTEXTRESOLVER_SDK_TIMEOUT_MS,\s*signal: ctrl\.signal/.test(ROUTE),
+    "de resolvercall gebruikt de ruimere SDK-timeout + de leidende abort-signal (via de gateway)"
   );
   // De harde deadline (setTimeout→abort) blijft op het 3500 ms-budget.
   assert.ok(ROUTE.includes("setTimeout(() => ctrl.abort(), CONTEXTRESOLVER_TIMEOUT_MS)"));

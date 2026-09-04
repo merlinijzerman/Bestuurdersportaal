@@ -1,19 +1,28 @@
 // lib/llm-providers/index.ts
 // -----------------------------------------------------------------------------
-// AQLab — provider-registry (AQL-6). Kiest de juiste generatie-adapter op basis
-// van de provider. Anthropic is de default en het baseline-/productiepad; OpenAI
-// en Mistral zijn challengers ("ander provider dan productie", decision 0064).
+// AQLab — provider-registry (AQL-6), sinds #311 een dunne schil op de adapters
+// van de centrale AI-gateway (core/lib/ai-gateway/adapters/*). Er is dus één
+// adapterhiërarchie: het Lab en de productiechat draaien dezelfde providercode.
+//
+// Wat hier BEWUST anders is dan het gateway-pad: AQLab is platformbreed
+// (fonds = null), de provider/modelkeuze is caller-supplied uit de
+// runconfiguratie (decision 0064) en wordt door de preflight + de live poort
+// (fn_ai_poort_check, DB-allowlist) gedekt — niet door de fondsconfiguratie.
+// De volledige gateway-route voor AQLab (taaktypes aqlab_generatie/aqlab_judge
+// met platformprofiel + gateway-log) volgt in tranche T4.
 // -----------------------------------------------------------------------------
 
 import type { ModelProvider, ProviderRequest, ProviderResultaat } from "./types";
-import { genereerAnthropic, type AnthropicStreamClient } from "./anthropic";
-import { genereerOpenAI } from "./openai";
-import { genereerMistral } from "./mistral";
-import type { PoortContext } from "../ai-poort";
+import { poortCheck, type PoortContext } from "../ai-poort";
+import { maakAnthropicAdapter, type AnthropicStreamClient } from "../ai-gateway/adapters/anthropic";
+import { maakOpenAIAdapter } from "../ai-gateway/adapters/openai";
+import { maakMistralAdapter } from "../ai-gateway/adapters/mistral";
+import type { AdapterVerzoek } from "../ai-gateway/adapters/types";
+import { resolveerCredentials, type Credentials } from "../ai-gateway/secrets";
 
 export type { ModelProvider, ProviderRequest, ProviderResultaat } from "./types";
 export { systeemBlokkenNaarTekst } from "./types";
-export type { AnthropicStreamClient } from "./anthropic";
+export type { AnthropicStreamClient };
 
 export interface ProviderOpties {
   /** Injecteerbare Anthropic stream-client (hermetische tests/smoke). */
@@ -21,11 +30,31 @@ export interface ProviderOpties {
   /** Injecteerbare fetch (hermetische tests voor OpenAI/Mistral). */
   fetchImpl?: typeof fetch;
   /**
-   * AI-BEGRENZING (besluit 0180). Verplicht op het productiepad: elke adapter
-   * toetst hiermee live de kill switch en de modelallowlist. Alleen met een
-   * geïnjecteerde client/fetch (hermetische tests) mag hij ontbreken.
+   * AI-BEGRENZING (besluit 0180). Verplicht op het productiepad: de kill switch
+   * en de modelallowlist worden live getoetst. Alleen met een geïnjecteerde
+   * client/fetch (hermetische tests) mag hij ontbreken.
    */
   poort?: PoortContext;
+}
+
+/** Dezelfde platformreferenties als de seed van ai_gateway_private.provider_profiel. */
+const PLATFORM_REFS: Record<ModelProvider, { secretRef: string; endpointRef?: string }> = {
+  anthropic: { secretRef: "ANTHROPIC_API_KEY" },
+  openai: { secretRef: "OPENAI_API_KEY", endpointRef: "OPENAI_BASE_URL" },
+  mistral: { secretRef: "MISTRAL_API_KEY", endpointRef: "MISTRAL_CHAT_URL" },
+};
+
+function naarAdapterVerzoek(req: ProviderRequest): AdapterVerzoek {
+  return {
+    model: req.model,
+    systeem: req.systeemBlokken,
+    berichten: req.berichten,
+    maxTokens: req.maxTokens,
+    temperature: req.temperature,
+    topP: req.topP,
+    redeneermodel: req.redeneermodel,
+    reasoningEffort: req.reasoningEffort ?? null,
+  };
 }
 
 /**
@@ -38,13 +67,46 @@ export async function genereerViaProvider(
   req: ProviderRequest,
   opts?: ProviderOpties
 ): Promise<ProviderResultaat> {
+  const geinjecteerd = Boolean(opts?.anthropicClient || opts?.fetchImpl);
+  if (!geinjecteerd) {
+    if (!opts?.poort) {
+      throw new Error(`${provider}: poortcontext ontbreekt (AI-begrenzing, besluit 0180)`);
+    }
+    await poortCheck(opts.poort, provider, req.model);
+  }
+  const credentials: Credentials = geinjecteerd ? { apiKey: "test-key" } : resolveerCredentials(PLATFORM_REFS[provider]);
+  const verzoek = naarAdapterVerzoek(req);
+
   switch (provider) {
-    case "openai":
-      return genereerOpenAI(req, { fetchImpl: opts?.fetchImpl, poort: opts?.poort });
-    case "mistral":
-      return genereerMistral(req, { fetchImpl: opts?.fetchImpl, poort: opts?.poort });
+    case "openai": {
+      const r = await maakOpenAIAdapter({ fetchImpl: opts?.fetchImpl }).genereer(verzoek, credentials);
+      return { tekst: r.tekst, tokens: { in: r.usage.in, out: r.usage.out }, latency_ms: r.latencyMs };
+    }
+    case "mistral": {
+      const r = await maakMistralAdapter({ fetchImpl: opts?.fetchImpl }).genereer(verzoek, credentials);
+      return { tekst: r.tekst, tokens: { in: r.usage.in, out: r.usage.out }, latency_ms: r.latencyMs };
+    }
     case "anthropic":
-    default:
-      return genereerAnthropic(req, opts?.anthropicClient, opts?.poort);
+    default: {
+      // Historisch (AQL-6) draait de Lab-generatie via messages.stream +
+      // finalMessage — byte-identiek aan de streaming-route. Dat blijft zo.
+      const client = opts?.anthropicClient;
+      const adapter = maakAnthropicAdapter(
+        client
+          ? {
+              clientVoor: () => ({
+                messages: {
+                  stream: client.stream.bind(client),
+                  create: () => {
+                    throw new Error("AQLab-mockclient kent alleen stream()");
+                  },
+                } as never,
+              }),
+            }
+          : undefined
+      );
+      const r = await adapter.stream(verzoek, credentials).afronden();
+      return { tekst: r.tekst, tokens: { in: r.usage.in, out: r.usage.out }, latency_ms: r.latencyMs };
+    }
   }
 }

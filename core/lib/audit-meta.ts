@@ -112,6 +112,9 @@ export const META_BASIS = [
   "duur_model_ms",
   "tokens",
   "tokendekking",
+  // #311 — effectieve gateway-configuratie van de eindgeneratie (provider,
+  // model, profiel-id, configuratieversie). Operationeel, inhoudsvrij.
+  "gateway",
   // Besluit 0151 — TTFT-telemetrie (criterium 11).
   "ttft_ms",
   // T3 — selectie-diagnostiek: intent/regime, de afgedwongen representatie-

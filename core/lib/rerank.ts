@@ -23,7 +23,8 @@
 // ============================================================================
 
 import type Anthropic from "@anthropic-ai/sdk";
-import { bewaakteAnthropic, isPoortGesloten, type PoortContext } from "./ai-poort";
+import type { AiGateway, GatewayContext } from "./ai-gateway/contract";
+import { isGatewayFout } from "./ai-gateway/fout";
 import { HAIKU_MODEL } from "./llm-modellen";
 
 // Tijdsbudget voor de rerank-call. Bewust krap: de rerank staat in het kritieke
@@ -76,7 +77,11 @@ export interface RerankOpties {
    * valt de reranker terug op de RRF-volgorde in plaats van een ongemeten call
    * te doen.
    */
-  poort?: PoortContext;
+  /**
+   * #311: op het productiepad loopt de rerank door de AI-gateway (taaktype
+   * `rerank`, taakgroep hulp_snel); provider/model komen uit de fondsconfiguratie.
+   */
+  gateway?: { gateway: AiGateway; ctx: GatewayContext };
 }
 
 // ── Zuivere kern ─────────────────────────────────────────────────────────────
@@ -174,11 +179,12 @@ export async function rerankChunks<T extends { id: string }>(
   const c = opties?.client ?? null;
   // Zonder injecteerbare client (productiepad) is een poortcontext verplicht:
   // anders zou hier een ongemeten providercall ontstaan.
-  if (!c && !opties?.poort) {
+  if (!c && !opties?.gateway) {
     return metFallback(kandidaten, "geen_poortcontext", model);
   }
 
   let ruw: string;
+  let effectiefModel = model;
   // Timer-handle buiten de try zodat we hem in `finally` altijd opruimen: wint de
   // API-call de race, dan blijft de timeout anders 4s gewapend staan en houdt hij
   // de event loop bezig (dangling teardown-latency op het kritieke chatpad).
@@ -199,16 +205,28 @@ export async function rerankChunks<T extends { id: string }>(
         },
       ],
     } satisfies Anthropic.Messages.MessageCreateParamsNonStreaming;
-    const call = c
-      ? c.create(params)
-      : bewaakteAnthropic(opties!.poort!, model, (anthropic) => anthropic.messages.create(params));
+    const call: Promise<{ tekst: string; model: string }> = c
+      ? c.create(params).then((r) => ({
+          tekst: r.content[0]?.type === "text" ? r.content[0].text : "",
+          model,
+        }))
+      : opties!.gateway!.gateway
+          .genereer(opties!.gateway!.ctx, {
+            taaktype: "rerank",
+            systeem: SP_RERANK,
+            berichten: params.messages,
+            maxTokens: 1024,
+            temperature: 0,
+          })
+          .then((r) => ({ tekst: r.tekst, model: r.model }));
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error("rerank_timeout")), timeoutMs);
     });
     const response = await Promise.race([call, timeout]);
-    ruw = response.content[0]?.type === "text" ? response.content[0].text : "";
+    ruw = response.tekst;
+    effectiefModel = response.model;
   } catch (e) {
-    const reden = isPoortGesloten(e)
+    const reden = isGatewayFout(e) && e.categorie === "poort_gesloten"
       ? `poort_dicht:${e.reden}`
       : e instanceof Error && e.message === "rerank_timeout"
         ? "timeout"
@@ -228,7 +246,7 @@ export async function rerankChunks<T extends { id: string }>(
     chunks: nieuw,
     meta: {
       methode: "haiku_listwise",
-      model,
+      model: effectiefModel,
       toegepast: true,
       scores: scoresPerId,
       volgorde_voor: kandidaten.map((x) => x.id),

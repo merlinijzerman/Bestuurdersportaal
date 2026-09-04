@@ -1,6 +1,6 @@
 # AI-gateway — inventarisatie en uitvoeringsplan (M365 fase 2B, issue #311)
 
-- **Status:** plan **gereviewd en akkoord** (opdrachtgever, 2026-09-04, zie §6) met twee verplichte beveiligingsaanpassingen (§3.3a, §3.3b); T1 gemerged (PR #312); **T2 (DB-laag) in uitvoering** op `feat/311-t2-ai-gateway-db` — migratie `2026_09_04_ai_gateway_configuratie.sql`, suite `2026_09_04_ai_gateway.sql`, runbook `security/AI-GATEWAY-RUNBOOK.md`
+- **Status:** plan **gereviewd en akkoord** (opdrachtgever, 2026-09-04, zie §6) met twee verplichte beveiligingsaanpassingen (§3.3a, §3.3b); T1 gemerged (PR #312); T2 (DB-laag) gemerged (PR #318); **T3 (gateway + chatroute) in uitvoering** op `feat/311-t3-ai-gateway-code` — `core/lib/ai-gateway/*`, chatroute C1–C7 en de helpers (vraagrouter, reranker, reformulatie, vergelijking) door de gateway; SSE-golden byte-identiek
 - **Datum:** 2026-09-04
 - **Context:** besluit 0208 (twee productvarianten, AI-provider als aparte configuratiedimensie), issue #311
 - **Leidend principe:** het bestaande gedrag blijft standaard Anthropic; deze fase levert het uitbreidingspunt, geen klant-eigen provider.
@@ -311,6 +311,22 @@ Bewijs vóór de verplaatsing, in de repo-idioom (byte-identieke snapshots):
 | **T5** Docs + smoke | besluit met het dan eerstvolgende vrije nummer (in T5 opnieuw bepalen; niet vooraf gereserveerd), 0208 bijwerken met de implementatiekeuze, `security/DREIGINGSMODEL.md` (grens 4: gateway als enige uitgang; R-06/R-15), `security/ASVS-L2-REGISTER.md` (V13 providerconfig als bewijs, V14 logredactie), `HANDOVER.md`, `AI-GOVERNANCE-ONTWERP.md`, `SETUP.md` (env-refs); **Preview-smoke** met echte Anthropic: regulier gesprek, gestreamd antwoord met broncontext, geblokkeerde input (PII-gate), quota/kill switch, veilige providerfout; controle dat geen secret/prompt in respons, log of audit zit | — | — |
 
 Volgorde per omgeving: T2-migratie eerst in Supabase (Preview, daarna Productie), dán T3-code — code zonder tabellen faalt gesloten (`config_ontbreekt`), tabellen zonder code zijn inert.
+
+## 5a. Aansluittabel T3 — plan → gerealiseerd
+
+| Planonderdeel (§3/§5) | Gerealiseerd in T3 | Afwijking / vervolg |
+|---|---|---|
+| Contract (§3.2) | `core/lib/ai-gateway/contract.ts` — `GatewayContext`, `GenereerVerzoek`, `GenereerResultaat`, `StreamHandle`, `NeutraleTool`, `TAAKGROEP_VAN_TAAKTYPE` | `systeem` accepteert string óf blokken (byte-pariteit met de bestaande call-sites) |
+| Gateway-kern (§3.1) | `gateway.ts` (hermetisch, injecteerbaar) + `gateway-productie.ts` (server-only wiring) | — |
+| DB-toegang (§3.3a) | `config-db.ts` (`pg.Pool`, rol `ai_gateway`, `lees_config`/`lees_platform_profiel`/`schrijf_log`), `config-db-core.ts` (TLS fail-closed, loopback-uitzondering dubbel gegrendeld) | `lees_log_platform` wordt pas door #317 gebruikt |
+| Secret-/endpointreferenties (§3.3a) | `secrets.ts` — code-allowlist, alleen https-endpoints | — |
+| Adapters (§3.4) | `adapters/anthropic.ts` (enige SDK; stream + non-stream; webzoek → web_search; functie → tools/tool_choice), `adapters/openai.ts`, `adapters/mistral.ts` (verhuisd uit `llm-providers`) | `llm-providers/index.ts` is nu een schil op de adapters voor AQLab (poort + platformreferenties); volledige AQLab-gateway-route (log, `lees_platform_profiel`) in T4 |
+| Chatroute C1–C7 | contextresolver, reformulatie (closure), vraagrouter, reranker (via `RetrievalOpties.gateway`), mapstap, eindgeneratie (stream, web-tool), vergelijking (`productieDeps` met gateway) | `REWRITE_MODEL`/`MAP_MODEL` verwijderd; de preflight blijft `AI_MODEL` als allowlist-hint meegeven (seed-default) |
+| Boundarytest (§3.4) | `ai-poort.test.ts`: runtime-SDK-import alleen in de adapter, type-import gepind, poort-vóór-adapter, geen letterlijke modelstring naast gateway-aanroepen | type-importlijst krimpt in T4 |
+| Audit (§3.5) | `gateway_log` per call; `retrieval_meta.gateway` (`META_BASIS`); `p_model` = effectief model; logfout → `app_errors` met correlatie-id | monitoringssignaal "gateway-logfouten" op het dashboard: T4/T5 |
+| Fouten (§3.5) | `fout.ts` — configuratie / poort_gesloten / provider / timeout / rate_limit / geannuleerd | — |
+| R2 | `AI_MODEL` zonder env-override | — |
+| Tests (§5 T3) | `gateway.test.ts` (13), `secrets.test.ts` (3), `ai-gateway-config-db.sanity.ts`, AQLab-smoke 7/7, karakterisering 378/378 byte-identiek | — |
 
 ## 6. Reviewbesluiten (opdrachtgever, 2026-09-04)
 
