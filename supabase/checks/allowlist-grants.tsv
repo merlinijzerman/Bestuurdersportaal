@@ -159,6 +159,9 @@ FUNC	public	fn_export_log_immutable()	function	service_role	EXECUTE
 FUNC	public	fn_fonds_config_capture()	function	anon	-
 FUNC	public	fn_fonds_config_capture()	function	authenticated	EXECUTE
 FUNC	public	fn_fonds_config_capture()	function	service_role	EXECUTE
+FUNC	public	fn_fonds_integratieprofiel_standaard()	function	anon	-
+FUNC	public	fn_fonds_integratieprofiel_standaard()	function	authenticated	-
+FUNC	public	fn_fonds_integratieprofiel_standaard()	function	service_role	EXECUTE
 FUNC	public	fn_fonds_stuurinfo_capture()	function	anon	-
 FUNC	public	fn_fonds_stuurinfo_capture()	function	authenticated	EXECUTE
 FUNC	public	fn_fonds_stuurinfo_capture()	function	service_role	EXECUTE
@@ -678,6 +681,9 @@ REL	public	fonds_feature_flags	table	service_role	SELECT,INSERT,UPDATE,DELETE,TR
 REL	public	fonds_instellingen	table	anon	SELECT
 REL	public	fonds_instellingen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	fonds_instellingen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_integratie_profielen	table	anon	-
+REL	public	fonds_integratie_profielen	table	authenticated	SELECT
+REL	public	fonds_integratie_profielen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	fonds_klantbeeld_cohort	table	anon	SELECT
 REL	public	fonds_klantbeeld_cohort	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	fonds_klantbeeld_cohort	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN

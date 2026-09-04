@@ -185,6 +185,9 @@ SQL_P5C_NOTITIE="supabase/checks/2026_08_30_p5c_stap_notitie_gedrag.sql"
 # unique-constraint, dat de upsert de aantekeningen van de notities-route LAAT
 # STAAN, en dat de voorbereiding privé blijft — ook voor de voorzitter.
 SQL_T2VB="supabase/checks/2026_09_04_t2_voorbereiding_product.sql"
+# Microsoft 365 fase 1 — private tokenkluis, minimale DB-rol, secdef-paths en
+# exact één fail-safe integratieprofiel per fonds.
+SQL_M365F1="supabase/checks/2026_09_04_microsoft_fase1_connectorfundament.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -381,6 +384,10 @@ echo
 
 echo "-- T2 voorbereidingen-product (eigen schrijfrecht, overschrijven, aantekeningen intact, privé) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T2VB"
+echo
+
+echo "-- Microsoft 365 F1 (private vaultrol, grants, secdef-path en fondsprofiel) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1"
 echo
 
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"

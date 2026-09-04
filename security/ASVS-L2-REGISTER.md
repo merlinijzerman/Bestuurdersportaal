@@ -43,7 +43,7 @@ Level 1/2-vereiste uit de canonieke CSV als afzonderlijke bewijsregel opnemen.
 | V7 Session Management | Deels | Supabase SSR-cookies en server-side usercontrole | Idle/absolute timeout, rotatie, logout/revocation en cookie-attributen aantoonbaar testen |
 | V8 Authorization | Deels | RLS, fonds-ID server-side, host↔fonds fail-closed, capabilities | Directe Storage- en RPC-paden volledig negatief testen; DEFINER-functies en grants reviewen |
 | V9 Self-contained Tokens | Deels | JWT-afhandeling primair via Supabase | Claims, audience/issuer, expiratie, keyrotatie en afwijzing gemanipuleerde tokens bewijzen |
-| V10 OAuth and OIDC | Te bepalen | Alleen van toepassing op werkelijk ingeschakelde federatieve providers | Providerinventaris en redirect-/state-/nonce-/PKCE-bewijs; anders gemotiveerd N.v.t. |
+| V10 OAuth and OIDC | Deels | Microsoft 365 fase 1: authorization code + PKCE, state/nonce, tenant-specifieke authority en callbackrunbook | Preview-negatieve tests, Entra-configexport zonder geheimen en callback-/replaybewijs |
 | V11 Cryptography | Deels | TLS bij providers; HMAC-integriteitszegel voor auditinhoud | Sleutelregister, rotatie, algoritme-/lengtecontrole en secret-lifecycle aantoonbaar maken |
 | V12 Secure Communication | Deels | Vercel TLS, HSTS/securityheaders | TLS-/certificaatconfig, interne providerverbindingen en redirect naar HTTPS periodiek toetsen |
 | V13 Configuration | Deels | Security-CI, boundarylint, service-role scanner, fail-closed deploymentdetectie | Preview/Productie-secrets isoleren; dependency/SBOM/secretscan; providerconfig als bewijs vastleggen |

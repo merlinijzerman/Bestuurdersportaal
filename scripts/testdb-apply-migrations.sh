@@ -111,6 +111,31 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$BASELINE_STORAGE"
 echo "OK: baseline toegepast."
 echo
 
+# De Microsoft-migratie faalt bewust wanneer de aparte kluislogin niet vooraf
+# is geprovisioneerd. Deze runner werkt uitsluitend op een ephemere test-DB, dus
+# maakt hier een wachtwoordloze fixture met exact dezelfde minimale rolflags.
+# Preview/Productie blijven een afzonderlijk, beheerd wachtwoord vereisen.
+echo "Ephemere database-loginfixtures gereedmaken…"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'microsoft_vault') then
+    create role microsoft_vault
+      login
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls
+      connection limit 5;
+  end if;
+end
+$$;
+SQL
+echo "OK: ephemere loginfixtures aanwezig."
+echo
+
 echo "Voorwaartse migraties ná $BASELINE_CUTOFF toepassen (${#MIGRATIES[@]} bestanden)…"
 if [ "${#MIGRATIES[@]}" -gt 0 ]; then
   for f in "${MIGRATIES[@]}"; do
