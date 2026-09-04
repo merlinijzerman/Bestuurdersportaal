@@ -2,16 +2,16 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 104,
+    "aantalHandlers": 107,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 27,
+    "zonderSpoor": 30,
     "klasseTelling": {
       "domein": 39,
       "geen": 9,
       "bewijsketen": 38,
       "machine": 6,
-      "operationeel": 12
+      "operationeel": 15
     },
     "ketengebeurtenisVereist": [],
     "spoorVereist": [],
@@ -875,6 +875,42 @@
     },
     {
       "handler": "POST app/api/microsoft/outlook/sync/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/microsoft/sharepoint/bron/controle/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/microsoft/sharepoint/bron/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "DELETE app/api/microsoft/sharepoint/bron/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
