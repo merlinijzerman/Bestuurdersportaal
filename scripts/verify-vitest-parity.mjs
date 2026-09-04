@@ -78,4 +78,5 @@ assert.deepEqual(
   "één of meer gemigreerde suites ontbreken",
 );
 
-console.log("WP1 testcasepariteit groen: 5 suites, 127 tests, titelpins conform nulmeting.");
+const totaal = Object.values(expected).reduce((som, e) => som + e.count, 0);
+console.log(`WP1 testcasepariteit groen: ${actualFiles.size} suites, ${totaal} tests, titelpins conform nulmeting.`);
