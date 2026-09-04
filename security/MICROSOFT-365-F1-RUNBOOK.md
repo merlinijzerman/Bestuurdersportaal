@@ -78,6 +78,8 @@ Bij een mislukte callback registreert de applicatie uitsluitend een vaste faseco
 
 De verbindingstest gebruikt dezelfde aanpak met de prefix `test_`: `cache_read`, `cache_decryptie`, `account_lookup`, `silent_token`, `graph_me`, `cache_save`, `status_save` of `onverwachte_fout`. De runtime-log bevat alleen deze vaste categorie; de private auditrij krijgt dezelfde categorie.
 
+De vault-adapter vertaalt databasekolom `sleutel_versie` expliciet naar applicatieveld `sleutelVersie` voordat decryptie plaatsvindt. Gebruik de ruwe PostgreSQL-rij niet rechtstreeks als `VersleuteldBlob`; dat omzeilt de compile-timecontrole door het verschil tussen snake_case en camelCase.
+
 Rol eerst uit naar `preview-stable`, activeer daarna de PGB-flag en voer de smoke uit. Bij een blokkerende fout gaat eerst de PGB-flag terug naar `false`; pas daarna wordt de deployment teruggezet. Productie blijft in fase 1 ongewijzigd.
 
 ## Lokaal databasebewijs 2026-09-04

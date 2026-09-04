@@ -4,6 +4,10 @@ import { createHash } from "node:crypto";
 import type { VersleuteldBlob } from "@/core/lib/microsoft-crypto";
 import { microsoftVaultDbConfig } from "@/core/lib/microsoft-vault-config-core";
 import type { MicrosoftConnectorFoutcategorie } from "@/core/lib/microsoft-connector-error-core";
+import {
+  normaliseerMicrosoftCacheRij,
+  type MicrosoftCacheDatabaseRij,
+} from "@/core/lib/microsoft-vault-row-core";
 
 type Verbinding = { id: string; fonds_id: string; gebruiker_id: string; tenant_id: string; microsoft_object_id: string; home_account_id: string; display_name: string | null; masked_username: string | null; status: "gekoppeld" | "fout" | "ontkoppeld"; scopes: string[]; laatst_getest_op: string | null; gekoppeld_op: string | null };
 let pool: Pool | undefined;
@@ -37,7 +41,7 @@ export async function bewaarKoppeling(args: Omit<Verbinding, "id" | "laatst_gete
 }
 export async function leesCache(fondsId: string, gebruikerId: string) {
   const r = await db().query("select * from microsoft_private.lees_cache($1,$2)", [fondsId, gebruikerId]);
-  return r.rows[0] as ({ verbinding_id: string; versie: number } & VersleuteldBlob) | undefined;
+  return normaliseerMicrosoftCacheRij(r.rows[0] as MicrosoftCacheDatabaseRij | undefined);
 }
 export async function bewaarCache(args: { fondsId: string; gebruikerId: string; expectedVersion: number; cache: VersleuteldBlob }) {
   const r = await db().query("select microsoft_private.bewaar_cache($1,$2,$3,$4,$5,$6,$7) as ok", [args.fondsId,args.gebruikerId,args.expectedVersion,args.cache.sleutelVersie,args.cache.iv,args.cache.tag,args.cache.ciphertext]);
