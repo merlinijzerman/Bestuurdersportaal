@@ -35,6 +35,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/core/lib/supabase";
 import { maakIdempotentVerzoek } from "@/core/lib/idempotency-key";
 import AssistentIngang from "@/core/components/assistent/AssistentIngang";
+import Icoon from "@/core/components/icons/Icoon";
 import {
   renderAntwoord,
   AntwoordKopieerKnop,
@@ -287,9 +288,10 @@ export default function VoorbereidingKaart({
   const aantalBronnen = voorbereiding?.onderbouwing?.aantalBronnen ?? 0;
 
   return (
-    <div className="rounded-lg border border-line bg-card p-3">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-ink">
+    <div className="assistent-resultaatkaart">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="assistent-resultaatkop">
+          <Icoon sleutel="sprankel" grootte={13} streek={1.9} />
           Mijn voorbereiding
         </h4>
         <span className="text-[10px] font-normal text-muted">
@@ -304,7 +306,7 @@ export default function VoorbereidingKaart({
           <p role="status" aria-live="polite" className="sr-only">
             De voorbereiding wordt opgesteld.
           </p>
-          <div className="text-sm leading-relaxed text-ink">
+          <div className="assistent-antwoord">
             {tekstTijdensGeneratie ? (
               renderAntwoord(tekstTijdensGeneratie, undefined, 0, null, geenBronSprong, null)
             ) : (
@@ -334,13 +336,13 @@ export default function VoorbereidingKaart({
               ))}
             </div>
           )}
-          <div className="text-sm leading-relaxed text-ink">
+          <div className="assistent-antwoord">
             {renderAntwoord(voorbereiding.tekst, voorbereiding.bronnen, 0, null, geenBronSprong, {
               fondsnaam: fondsNaam,
               surface: "agendapunt",
             })}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
+          <div className="assistent-resultaatvoet flex flex-wrap items-center gap-3">
             <AntwoordKopieerKnop
               tekst={voorbereiding.tekst}
               bronnen={voorbereiding.bronnen}
