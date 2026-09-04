@@ -30,6 +30,7 @@ import { GENERIEKE_STARTVRAGEN } from "@/core/lib/startvragen";
 import VergelijkResultaatWeergave from "./VergelijkResultaatWeergave";
 import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
 import StukVoorbereiden from "./StukVoorbereiden";
+import Icoon from "@/core/components/icons/Icoon";
 // Plateau B — de reflectiedialoog. De flowstatus is server-controlled; deze
 // module levert alleen de labels, de type-guards en de weergavehulp.
 import { isActief as isReflectieActief } from "@/core/lib/reflectie-flow";
@@ -109,6 +110,7 @@ const HERKOMST_LABEL: Record<string, string> = {
 export default function AssistentOppervlak() {
   // ── Kijkstaat: alles wat alleen over de WEERGAVE gaat ────────────────────
   const [aanpassenOpen, setAanpassenOpen] = useState(false);
+  const [instellingenOpen, setInstellingenOpen] = useState(false);
   const [historieOpen, setHistorieOpen] = useState(false);
   // Welke onderbouwingspanelen open staan (per bericht-index). Default dicht.
   const [openPanelen, setOpenPanelen] = useState<Set<number>>(new Set());
@@ -140,6 +142,12 @@ export default function AssistentOppervlak() {
   // ── De paneelstaat: stand, openstaande ingang-aanvraag, startpuntgegevens ──
   const paneel = useAssistentPaneel();
   const { startpuntContext } = paneel;
+  const { registreerBediening } = paneel;
+  const paneelBedieningRef = useRef({
+    nieuwGesprek: () => {},
+    nieuwGesprekBeschikbaar: false,
+    openInstellingen: () => {},
+  });
 
   // ── L1: waar kijkt de bestuurder naar? ────────────────────────────────────
   const context = useAssistentContext();
@@ -395,6 +403,32 @@ export default function AssistentOppervlak() {
     };
   }, [aanvraag, pasIngangToe, meldAanvraagVerwerkt]);
 
+  // De knoppen leven visueel in de vaste paneelkop, terwijl hun gedrag bij de
+  // gespreklaag hoort. Registratie houdt die architectuurgrens intact en maakt
+  // de kop gelijk aan het mockup: nieuw gesprek en instellingen bovenin.
+  useEffect(() => {
+    paneelBedieningRef.current = {
+      nieuwGesprek: startNieuwGesprek,
+      nieuwGesprekBeschikbaar: !laden && berichten.length > 1,
+      openInstellingen: () => setInstellingenOpen(true),
+    };
+  }, [startNieuwGesprek, laden, berichten.length]);
+  useEffect(() => {
+    registreerBediening({
+      nieuwGesprek: () => {
+        if (paneelBedieningRef.current.nieuwGesprekBeschikbaar) {
+          paneelBedieningRef.current.nieuwGesprek();
+        }
+      },
+      // De knop mag altijd focusbaar blijven; de actuele callback beslist of
+      // er iets te resetten is. Zo hoeft de schil niet bij ieder bericht opnieuw
+      // geregistreerd te worden.
+      nieuwGesprekBeschikbaar: true,
+      openInstellingen: () => paneelBedieningRef.current.openInstellingen(),
+    });
+    return () => registreerBediening(null);
+  }, [registreerBediening]);
+
   // T1 — de hoogte komt van het PANEEL, niet meer van dit oppervlak. Hier stond
   // `h-[calc(100vh-3.5rem)] md:h-screen`, een compensatie voor de mobiele
   // topbalk van de shell. Het paneel is nu de vaste container (top/bottom in
@@ -405,10 +439,10 @@ export default function AssistentOppervlak() {
   // De vh/dvh-keuze uit P1a blijft daarmee op één plek staan (globals.css); een
   // eventuele overstap op `dvh` is nog steeds een keuze voor de hele keten.
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="assistent-oppervlak flex h-full min-h-0 flex-col">
       {/* Gesprekken-overzicht (drawer) */}
       {historieOpen && (
-        <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
+        <div className="absolute inset-0 z-[60]" role="dialog" aria-modal="true">
           <div
             className="absolute inset-0 bg-black/30"
             onClick={() => setHistorieOpen(false)}
@@ -418,10 +452,10 @@ export default function AssistentOppervlak() {
               <span className="font-bold text-ink">Gesprekken</span>
               <button
                 onClick={() => setHistorieOpen(false)}
-                className="text-muted hover:text-ink text-lg leading-none"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-app-bg hover:text-ink"
                 aria-label="Sluiten"
               >
-                ✕
+                <Icoon sleutel="sluiten" grootte={17} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
@@ -462,7 +496,7 @@ export default function AssistentOppervlak() {
                       className="opacity-0 group-hover:opacity-100 text-muted hover:text-err-ink text-sm transition-opacity flex-shrink-0"
                       aria-label="Gesprek definitief verwijderen"
                     >
-                      🗑
+                      <Icoon sleutel="prullenbak" grootte={15} />
                     </button>
                   </div>
                 ))
@@ -471,31 +505,49 @@ export default function AssistentOppervlak() {
             <div className="border-t border-line p-3">
               <button
                 onClick={startNieuwGesprek}
-                className="w-full text-sm text-ink border border-line rounded-lg px-3 py-2 hover:border-accent transition-colors"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink transition-colors hover:border-accent"
               >
-                + Nieuw gesprek
+                <Icoon sleutel="plus" grootte={15} />
+                Nieuw gesprek
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Kopbalk — samengevoegd tot één balk (besluitpunt 1, middenpad): titel +
-          governance-badge, brongebruik als compacte chip mét zichtbare stand (i.p.v.
-          de volzin), antwoordmodus als segmented control, en rechts de gespreksacties.
-          Brongebruik én antwoordmodus blijven volledig afleesbaar (transparantie,
-          besluit 0068/0071); alleen de brongebruik-VOLZIN is een chip-met-stand
-          geworden — de volledige uitleg staat in de tooltip. Dit vervangt de drie
-          losse kopbalken (topbar h-14 + brongebruik + antwoordmodus, ~200px chrome). */}
-      <div className="bg-card border-b border-line px-7 py-2.5 flex items-center gap-x-3 gap-y-2 flex-wrap">
-        <span className="font-bold text-ink">AI Assistent</span>
-        <span
-          className="bg-ok-tint text-ok-ink text-xs font-semibold px-2.5 py-1 rounded-full cursor-help"
-          title="Elke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt."
-          aria-label="Governance logging actief. Elke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt."
+      {/* De mockup laat de chat direct onder de context beginnen. De verplichte
+          bron-, governance- en modusinformatie blijft beschikbaar, maar woont
+          achter één instellingentoets in de paneelkop in plaats van permanent
+          circa 100px leesruimte op te eisen. */}
+      {instellingenOpen && (
+        <section
+          className="assistent-instellingenpaneel"
+          role="dialog"
+          aria-label="Gespreksinstellingen"
         >
-          ● Governance logging actief
-        </span>
+          <div className="assistent-instellingenkop">
+            <div>
+              <h3>Gespreksinstellingen</h3>
+              <p>Brongebruik, antwoordvorm en governance</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setInstellingenOpen(false)}
+              aria-label="Gespreksinstellingen sluiten"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-app-bg hover:text-ink"
+            >
+              <Icoon sleutel="sluiten" grootte={16} />
+            </button>
+          </div>
+          <div className="assistent-werkbalk">
+        <div className="assistent-werkbalk-instellingen">
+          <span
+            className="assistent-governance cursor-help"
+            title="Elke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt."
+            aria-label="Governance logging actief. Elke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt."
+          >
+            Governance actief
+          </span>
 
         {/* Brongebruik-chip — toont de gekozen bron-stand en opent de aanpas-popover.
             De volledige uitleg ("automatische bronkeuze …") staat in de tooltip, zodat
@@ -511,7 +563,11 @@ export default function AssistentOppervlak() {
             <span className="text-ink">
               {alleenFondsdocumenten ? "alleen fondsdocumenten" : "automatisch"}
             </span>
-            <span>{aanpassenOpen ? "▴" : "▾"}</span>
+            <Icoon
+              sleutel="chevron-rechts"
+              grootte={13}
+              className={aanpassenOpen ? "-rotate-90" : "rotate-90"}
+            />
           </button>
           {aanpassenOpen && (
             <div className="absolute top-full left-0 mt-1.5 w-64 bg-card border border-line rounded-lg shadow-lg z-20 p-3 space-y-2.5">
@@ -565,9 +621,9 @@ export default function AssistentOppervlak() {
               type="button"
               onClick={() => zetHerkomst(null)}
               aria-label="Herkomst wissen en terug naar automatische bronkeuze"
-              className="text-muted hover:text-ink"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted hover:bg-white/70 hover:text-ink"
             >
-              ×
+              <Icoon sleutel="sluiten" grootte={12} streek={2} />
             </button>
           </span>
         )}
@@ -579,7 +635,7 @@ export default function AssistentOppervlak() {
             className="text-xs text-ink inline-flex items-center gap-1"
             title="Collectieve weergave — niet op uw profiel geprioriteerd"
           >
-            <span>👥</span>
+            <Icoon sleutel="gebruikers" grootte={14} />
             <span>Collectief</span>
           </span>
         )}
@@ -590,7 +646,7 @@ export default function AssistentOppervlak() {
         <span className="text-xs text-muted font-semibold uppercase tracking-wide">
           Antwoordmodus
         </span>
-        <div className="flex gap-0.5 bg-app-bg rounded-lg p-1">
+        <div className="assistent-modi flex gap-0.5 bg-app-bg rounded-lg p-1">
           <button
             onClick={() => setAntwoordmodus(null)}
             title="Automatisch de passende antwoordvorm bepalen op basis van uw vraag"
@@ -617,22 +673,45 @@ export default function AssistentOppervlak() {
             </button>
           ))}
         </div>
+        </div>
 
-        {/* Gespreksacties — rechts uitgelijnd. */}
-        <button
-          onClick={() => setHistorieOpen(true)}
-          className="ml-auto text-xs text-muted hover:text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
-        >
-          🕑 Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
-        </button>
-        <button
-          onClick={startNieuwGesprek}
-          disabled={laden || berichten.length <= 1}
-          className="text-xs text-muted hover:text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          + Nieuw gesprek
-        </button>
-      </div>
+        {/* Gespreksgeschiedenis blijft hier beschikbaar; een nieuw gesprek staat
+            volgens het mockup als plus in de vaste paneelkop. */}
+        <div className="assistent-werkbalk-acties">
+          <button
+            onClick={() => {
+              setInstellingenOpen(false);
+              setHistorieOpen(true);
+            }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs text-muted transition-colors hover:border-ai hover:text-ink"
+            title="Gespreksgeschiedenis"
+          >
+            <Icoon sleutel="geschiedenis" grootte={14} />
+            <span className="assistent-actielabel">
+              Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
+            </span>
+          </button>
+        </div>
+
+          <label
+            className="assistent-voorbereidingsstand"
+            title="Aan: stukken die nog niet zijn vastgesteld worden meegenomen en herkenbaar gelabeld."
+          >
+            <input
+              type="checkbox"
+              checked={voorbereidingsstand}
+              onChange={(e) => setVoorbereidingsstand(e.target.checked)}
+              className="accent-accent"
+              disabled={laden}
+            />
+            <span>
+              <strong>Stukken in voorbereiding meenemen</strong>
+              <small>Concepten blijven herkenbaar aan hun statuslabel.</small>
+            </span>
+          </label>
+          </div>
+        </section>
+      )}
 
       {/* Chat — gedeelde kolom: één centrerende wrapper (max-w-[1020px], mockup
           .wrap) omvat zowel de berichten als het startpunt, zodat de bubbels en de
@@ -647,15 +726,29 @@ export default function AssistentOppervlak() {
           de gespreksinhoud. Gemeten op een gesprek van 29 berichten: 6.187 px lege
           scroll, en exact 0 met deze regel. De kopieerknoppen per blok zitten wél
           in `.ai-blok` en waren nooit het probleem. */}
-      <div className="relative flex-1 overflow-y-auto p-6">
+      <div className="assistent-gesprek relative flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1020px] space-y-5">
         {!toonStartpunt && !scherpstelActief &&
-          berichten.map((b, i) => (
+          berichten
+            .map((b, i) => ({ b, i }))
+            // Zodra een echt gesprek begint verdwijnt de lange welkomsttekst.
+            // Het mockup opent dan direct met de vraag en het antwoord; de
+            // begroeting blijft alleen de lege staat begeleiden.
+            .filter(
+              ({ b, i }) => berichten.length <= 1 || i > 0 || b.rol !== "ai"
+            )
+            .map(({ b, i }) => (
           <div key={i} id={`bericht-${i}`} className={b.rol === "gebruiker" ? "flex justify-end" : "flex"}>
             {/* `min-w-0` op de AI-kolom: een flex-item krimpt standaard niet onder
                 zijn min-content-breedte. Zonder dit duwt een brede bronkaart (of
                 een lange documenttitel) de hele kolom voorbij de 1020px-maat. */}
             <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1 min-w-0"}>
+              {b.rol === "ai" && (
+                <div className="assistent-antwoordrol">
+                  <Icoon sleutel="sprankel" grootte={13} streek={1.9} />
+                  Assistent
+                </div>
+              )}
               {/* Inline-meldingen (FO §11c) — alleen bij de zes uitzonderingen,
                   direct boven het antwoord. */}
               {b.rol === "ai" &&
@@ -671,11 +764,8 @@ export default function AssistentOppervlak() {
               <div
                 className={
                   b.rol === "gebruiker"
-                    ? // De eigen vraag is een rustig blok, geen gekleurd vlak: massief
-                      // violet trok in een lang gesprek meer aandacht dan het antwoord
-                      // eronder. Zebra + hairline houdt de nadruk waar hij hoort.
-                      "bg-app-zebra text-ink border border-app-line px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
-                    : "text-sm leading-relaxed text-ink"
+                    ? "assistent-gebruikersvraag px-4 py-3"
+                    : "assistent-antwoord"
                 }
               >
                 {b.rol === "ai"
@@ -1140,7 +1230,7 @@ export default function AssistentOppervlak() {
 
         {laden && !antwoordGestart && (
           <div className="flex">
-            <div className="text-sm leading-relaxed text-ink">
+            <div className="assistent-antwoord">
               <VoortgangWeergave voortgang={voortgang} />
             </div>
           </div>
@@ -1171,7 +1261,7 @@ export default function AssistentOppervlak() {
               begroeting en dezelfde voorbeeldvragen. */}
           {toonStartpunt && !startpuntContext && (
             <div className="space-y-3 py-2">
-              <p className="text-sm text-ink">
+              <p className="assistent-antwoord">
                 {voornaam ? `Dag ${voornaam}. ` : ""}Waar kan ik u mee helpen?
               </p>
               <ul className="space-y-1.5">
@@ -1214,7 +1304,7 @@ export default function AssistentOppervlak() {
       </div>
 
       {/* Invoerbalk */}
-      <div className="bg-card border-t border-line p-4 relative">
+      <div className="assistent-invoerbalk">
         {/* @-mention-typeahead */}
         {mentionOpen && (
           <div className="absolute bottom-full left-4 right-4 mb-2 max-h-64 overflow-y-auto bg-card border border-line rounded-xl shadow-lg z-20">
@@ -1270,7 +1360,7 @@ export default function AssistentOppervlak() {
                   aria-label="Modulecontext wissen"
                   title="Context wissen — niet langer over deze module vragen"
                 >
-                  ✕
+                  <Icoon sleutel="sluiten" grootte={10} streek={2.2} />
                 </button>
               </span>
               {moduleScope.soort === "risico" && (
@@ -1278,9 +1368,10 @@ export default function AssistentOppervlak() {
                   onClick={() =>
                     zetModuleScope({ soort: "risicomatrix", label: "de risicomatrix" })
                   }
-                  className="text-xs text-accent hover:text-accent-ink underline underline-offset-2"
+                  className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent-ink underline underline-offset-2"
                 >
-                  ← hele risicomatrix
+                  <Icoon sleutel="chevron-links" grootte={13} />
+                  hele risicomatrix
                 </button>
               )}
             </div>
@@ -1344,7 +1435,7 @@ export default function AssistentOppervlak() {
                 aria-label="Agendapunt-scope wissen"
                 title="Scope wissen — niet langer over dit agendapunt vragen"
               >
-                ✕
+                <Icoon sleutel="sluiten" grootte={10} streek={2.2} />
               </button>
             </span>
           </div>
@@ -1366,7 +1457,7 @@ export default function AssistentOppervlak() {
                 aria-label="Documentscope wissen"
                 title="Onderwerp wissen — weer zonder hoofddocument vragen"
               >
-                ✕
+                <Icoon sleutel="sluiten" grootte={10} streek={2.2} />
               </button>
             </span>
             <label
@@ -1390,31 +1481,7 @@ export default function AssistentOppervlak() {
           </div>
         )}
 
-        {/* Werkstand "stukken in voorbereiding" — zie de state hierboven. Bewust
-            hier, direct boven het invoerveld: het is een stand die geldt voor de
-            volgende vraag, geen instelling die je in een menu zoekt. */}
-        <div className="mb-2 flex items-center gap-2">
-          <label
-            className="inline-flex items-center gap-1.5 text-xs text-muted cursor-pointer"
-            title="Aan: stukken die nog niet zijn vastgesteld (concepten, vergaderstukken, stukken die ter besluitvorming voorliggen) worden meegenomen in het antwoord. Ze blijven herkenbaar aan hun statuslabel."
-          >
-            <input
-              type="checkbox"
-              checked={voorbereidingsstand}
-              onChange={(e) => setVoorbereidingsstand(e.target.checked)}
-              className="accent-accent"
-              disabled={laden}
-            />
-            Stukken in voorbereiding meenemen
-          </label>
-          {voorbereidingsstand && (
-            <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 rounded-full px-2 py-0.5">
-              concepten worden meegenomen
-            </span>
-          )}
-        </div>
-
-        <div className="flex gap-3">
+        <div className="assistent-composer">
           <textarea
             ref={invoerRef}
             value={invoer}
@@ -1435,18 +1502,22 @@ export default function AssistentOppervlak() {
                 ? "Stel een vraag over dit document... (@ om te wisselen)"
                 : "Stel een vraag... (@ om een specifiek document te kiezen)"
             }
-            className="flex-1 border border-line rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-accent bg-app-bg"
             rows={2}
             disabled={laden}
           />
           <button
             onClick={() => stuurBericht()}
             disabled={laden || !invoer.trim()}
-            className="w-11 h-11 bg-accent rounded-xl flex items-center justify-center text-white hover:bg-accent hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
+            className="assistent-verstuurknop"
+            aria-label="Vraag versturen"
           >
-            ➤
+            <Icoon sleutel="pijl-rechts" grootte={18} streek={2} />
           </button>
         </div>
+        <p className="assistent-disclaimer">
+          AI-hulpmiddel ter voorbereiding — geen bestuurlijk advies. Vraag en
+          bronkeuze worden vastgelegd in de governance log.
+        </p>
       </div>
     </div>
   );

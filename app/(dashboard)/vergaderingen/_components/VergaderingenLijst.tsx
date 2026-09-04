@@ -46,6 +46,16 @@ function formatDatum(d: string) {
   });
 }
 
+function datumTegel(d: string) {
+  const datum = new Date(d);
+  return {
+    dag: datum.toLocaleDateString("nl-NL", { day: "2-digit" }),
+    maand: datum
+      .toLocaleDateString("nl-NL", { month: "short" })
+      .replace(".", ""),
+  };
+}
+
 export default function VergaderingenLijst({ lijst }: { lijst: VergaderingRij[] }) {
   const router = useRouter();
   const [archiefOpen, setArchiefOpen] = useState(false);
@@ -81,16 +91,19 @@ export default function VergaderingenLijst({ lijst }: { lijst: VergaderingRij[] 
         </div>
       )}
 
-      <section>
-        <div className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">
-          Komend ({komend.length})
+      <section className="portal-card overflow-hidden">
+        <div className="portal-card-header">
+          <h2 className="portal-card-title">Komend</h2>
+          <span className="portal-status-pill border border-line bg-app-surface text-muted">
+            {komend.length}
+          </span>
         </div>
         {komend.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-app-line-strong bg-app-surface p-8 text-center text-sm text-muted">
+          <div className="m-4 portal-empty">
             Nog geen geplande vergaderingen. Maak hierboven een nieuwe vergadering aan.
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="divide-y divide-line">
             {komend.map((v) => (
               <Kaart
                 key={v.id}
@@ -104,11 +117,14 @@ export default function VergaderingenLijst({ lijst }: { lijst: VergaderingRij[] 
       </section>
 
       {afgelopen.length > 0 && (
-        <section>
-          <div className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">
-            Afgelopen ({afgelopen.length})
+        <section className="portal-card overflow-hidden">
+          <div className="portal-card-header">
+            <h2 className="portal-card-title">Afgelopen</h2>
+            <span className="portal-status-pill border border-line bg-app-surface text-muted">
+              {afgelopen.length}
+            </span>
           </div>
-          <div className="space-y-2">
+          <div className="divide-y divide-line">
             {afgelopen.map((v) => (
               <Kaart
                 key={v.id}
@@ -125,12 +141,12 @@ export default function VergaderingenLijst({ lijst }: { lijst: VergaderingRij[] 
       {/* Archief — ingeklapt in rust. Het blok verschijnt alleen als er iets in
           zit; een leeg "Gearchiveerd (0)" is ruis. */}
       {gearchiveerd.length > 0 && (
-        <section>
+        <section className="portal-card overflow-hidden">
           <button
             type="button"
             onClick={() => setArchiefOpen((o) => !o)}
             aria-expanded={archiefOpen}
-            className="flex w-full items-center gap-2 rounded-xl border border-line bg-app-surface px-4 py-3 text-left transition-colors hover:border-accent"
+            className="portal-card-header w-full text-left transition-colors hover:bg-app-zebra"
           >
             <span
               className={`text-[10px] text-muted transition-transform ${
@@ -139,10 +155,8 @@ export default function VergaderingenLijst({ lijst }: { lijst: VergaderingRij[] 
             >
               ▼
             </span>
-            <span className="text-xs font-bold uppercase tracking-wider text-muted">
-              Gearchiveerd
-            </span>
-            <span className="rounded-full border border-line bg-app-bg px-2 py-0.5 text-[11px] font-semibold text-muted">
+            <span className="portal-card-title">Gearchiveerd</span>
+            <span className="portal-status-pill border border-line bg-app-surface text-muted">
               {gearchiveerd.length}
             </span>
             <span className="ml-auto text-[11.5px] text-muted">
@@ -150,8 +164,8 @@ export default function VergaderingenLijst({ lijst }: { lijst: VergaderingRij[] 
             </span>
           </button>
           {archiefOpen && (
-            <div className="mt-2 space-y-2">
-              <p className="px-1 text-[11.5px] text-muted">
+            <div className="divide-y divide-line border-t border-line">
+              <p className="px-[1.125rem] py-3 text-[11.5px] text-muted">
                 Gearchiveerde vergaderingen blijven volledig raadpleegbaar — inclusief
                 agendapunten, stukken en besluiten. Archiveren verwijdert niets en is
                 omkeerbaar.
@@ -191,23 +205,37 @@ function Kaart({
   // "maak vereisten en blokkers expliciet": bij een komende vergadering tonen we
   // geen knop die een foutmelding oplevert, maar helemaal geen knop.
   const archiveerbaar = onArchiveer && magArchiveren(v).mag;
+  const tegel = datumTegel(v.datum);
 
   return (
     <div
-      className={`rounded-xl border border-line bg-app-surface transition-colors hover:border-accent ${
+      className={`portal-row portal-row-interactive ${
         gedempt ? "opacity-75" : ""
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5">
-        <Link href={`/vergaderingen/${v.id}`} className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-ink">{v.titel}</div>
-          <div className="mt-1 text-xs text-muted">
-            {formatDatum(v.datum)}
-            {v.locatie ? ` · ${v.locatie}` : ""}
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href={`/vergaderingen/${v.id}`}
+          className="flex min-w-0 flex-1 items-center gap-3"
+        >
+          <span className="portal-date-tile" aria-hidden>
+            <span className="font-serif text-base font-semibold leading-none">
+              {tegel.dag}
+            </span>
+            <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider">
+              {tegel.maand}
+            </span>
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-ink">{v.titel}</span>
+            <span className="mt-1 block text-xs text-muted">
+              {formatDatum(v.datum)}
+              {v.locatie ? ` · ${v.locatie}` : ""}
+            </span>
+          </span>
         </Link>
         <div className="flex flex-shrink-0 items-center gap-2">
-          <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${badge.klas}`}>
+          <span className={`portal-status-pill ${badge.klas}`}>
             {badge.label}
           </span>
           {archiveerbaar && (

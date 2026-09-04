@@ -52,6 +52,14 @@ export interface PaneelAanvraag {
   sleutel: number;
 }
 
+/** Handelingen die door de gespreklaag worden geleverd, maar in de paneelkop
+ * staan. De schil kent de gespreksimplementatie bewust niet. */
+export interface AssistentPaneelBediening {
+  nieuwGesprek: () => void;
+  nieuwGesprekBeschikbaar: boolean;
+  openInstellingen: () => void;
+}
+
 export interface AssistentPaneelWaarde {
   stand: PaneelStand;
   /** Manifest (T8): staat module `ai` uit, dan bestaat er geen enkele ingang. */
@@ -60,10 +68,15 @@ export interface AssistentPaneelWaarde {
   ooitGeopend: boolean;
   /** Het label "Vanuit «…»" in de paneelkop. Clientstaat, geen payloadveld. */
   ingangModule: string | null;
+  /** Laat een puur presentatieve modulecontext los. */
+  wisIngangModule: () => void;
   /** De openstaande aanvraag, of null. */
   aanvraag: PaneelAanvraag | null;
   /** De gespreklaag meldt dat ze de aanvraag heeft verzilverd. */
   meldAanvraagVerwerkt: (sleutel: number) => void;
+  /** Registreert gespreksacties die de paneelkop mag aanbieden. */
+  bediening: AssistentPaneelBediening | null;
+  registreerBediening: (bediening: AssistentPaneelBediening | null) => void;
   /** Opent het paneel met een context-aanvraag (de zes module-ingangen). */
   openMet: (aanvraag: { ingangen: AssistentUrlIngang[]; module: string | null }) => void;
   /** Opent het paneel zonder aanvraag (de knop rechtsonder). */
@@ -110,6 +123,7 @@ export function useAssistentPaneelStaat({
   const [ooitGeopend, zetOoitGeopend] = useState(false);
   const [aanvraag, zetAanvraag] = useState<PaneelAanvraag | null>(null);
   const [ingangModule, zetIngangModule] = useState<string | null>(null);
+  const [bediening, zetBediening] = useState<AssistentPaneelBediening | null>(null);
   const [startpuntContext, zetStartpuntContext] = useState<PortaalContext | null>(null);
   const [vorigPad, zetVorigPad] = useState<string | null>(null);
   // Waar de focus vandaan kwam. Bij sluiten keert hij daarheen terug; anders
@@ -175,14 +189,23 @@ export function useAssistentPaneelStaat({
     zetAanvraag((huidig) => (huidig && huidig.sleutel === sleutel ? null : huidig));
   }, []);
 
+  const wisIngangModule = useCallback(() => zetIngangModule(null), []);
+  const registreerBediening = useCallback(
+    (volgende: AssistentPaneelBediening | null) => zetBediening(volgende),
+    []
+  );
+
   return useMemo<AssistentPaneelWaarde>(
     () => ({
       stand,
       aiBeschikbaar,
       ooitGeopend,
       ingangModule,
+      wisIngangModule,
       aanvraag,
       meldAanvraagVerwerkt,
+      bediening,
+      registreerBediening,
       openMet,
       openGeneriek,
       zetStand,
@@ -198,8 +221,11 @@ export function useAssistentPaneelStaat({
       aiBeschikbaar,
       ooitGeopend,
       ingangModule,
+      wisIngangModule,
       aanvraag,
       meldAanvraagVerwerkt,
+      bediening,
+      registreerBediening,
       openMet,
       openGeneriek,
       zetStand,

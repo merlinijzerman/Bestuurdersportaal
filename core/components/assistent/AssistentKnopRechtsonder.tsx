@@ -12,10 +12,29 @@
 //  een knop is die niets doet. `aria-expanded` zegt daarmee de waarheid.
 // ============================================================================
 
+import { usePathname } from "next/navigation";
+import Icoon from "@/core/components/icons/Icoon";
 import { useAssistentPaneel } from "./AssistentPaneelProvider";
 
+/** De generieke knop neemt geen inhoudelijke scope over, maar onthoudt wel
+ * vanuit welke zichtbare module hij is geopend. Zo kan de paneelkop dezelfde
+ * contexttaal gebruiken als het mockup zonder te doen alsof er een document is
+ * geselecteerd. */
+function moduleVanPad(pad: string): string | null {
+  if (pad.startsWith("/bibliotheek")) return "bibliotheek";
+  if (pad.startsWith("/vergaderingen")) return "vergaderingen";
+  if (pad.startsWith("/risicomatrix")) return "risicomatrix";
+  if (pad.startsWith("/procedures")) return "procedures";
+  if (pad.startsWith("/notulen")) return "notulen";
+  if (pad.startsWith("/dashboard")) return "dashboard";
+  if (pad.startsWith("/klantbeeld")) return "klantbeeld";
+  if (pad === "/") return "home";
+  return null;
+}
+
 export default function AssistentKnopRechtsonder() {
-  const { stand, aiBeschikbaar, openGeneriek, sluit } = useAssistentPaneel();
+  const { stand, aiBeschikbaar, openMet, sluit } = useAssistentPaneel();
+  const pad = usePathname();
   if (!aiBeschikbaar) return null;
 
   const open = stand !== "dicht";
@@ -26,7 +45,9 @@ export default function AssistentKnopRechtsonder() {
   return (
     <button
       type="button"
-      onClick={() => (open ? sluit() : openGeneriek())}
+      onClick={() =>
+        open ? sluit() : openMet({ ingangen: [], module: moduleVanPad(pad) })
+      }
       aria-expanded={open}
       aria-controls="assistent-paneel"
       aria-label={open ? "Assistent sluiten" : "Assistent openen"}
@@ -36,7 +57,7 @@ export default function AssistentKnopRechtsonder() {
       // met `--ai-500`: dat token is grafisch (3,85:1) en mag geen tekst dragen.
       className="fixed bottom-4 right-4 z-30 inline-flex items-center gap-2 rounded-full bg-ai px-4 py-2.5 text-sm font-medium text-white shadow-card transition-[filter] hover:brightness-90"
     >
-      <span aria-hidden>{open ? "✕" : "✦"}</span>
+      <Icoon sleutel={open ? "sluiten" : "sprankel"} grootte={17} streek={1.9} />
       <span className="max-sm:hidden">{open ? "Sluiten" : "Assistent"}</span>
     </button>
   );

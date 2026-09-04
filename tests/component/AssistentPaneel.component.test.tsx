@@ -171,6 +171,10 @@ describe("DashboardShell met het paneel", () => {
 
     expect(hoofd.className).toMatch(/assistent-marge-paneel/);
     expect(screen.getByText("gesprek")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Assistent" })).toBeVisible();
+    expect(screen.getByText("Context · Fondsbibliotheek")).toBeVisible();
+    expect(screen.getByText("Fondsbibliotheek")).toBeVisible();
+    expect(screen.getByText("binnen uw rechten")).toBeVisible();
   });
 
   it("laat met module ai uit geen enkele ingang zien", () => {

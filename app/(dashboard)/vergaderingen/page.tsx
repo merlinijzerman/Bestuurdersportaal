@@ -38,18 +38,18 @@ export default async function VergaderingenPage() {
   const lijst = (vergaderingen || []) as VergaderingRij[];
 
   return (
-    <div className="space-y-5 p-4 sm:p-6 lg:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="portal-page">
+      <header className="portal-page-header">
         <div>
-          <h1 className="font-serif text-lg font-bold text-ink">Vergaderingen</h1>
-          <p className="mt-0.5 text-sm text-muted">
+          <h1 className="portal-page-title">Vergaderingen</h1>
+          <p className="portal-page-subtitle">
             Plan, agendeer en bereid bestuursvergaderingen voor.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <NieuweVergaderingForm />
         </div>
-      </div>
+      </header>
 
       <VergaderingenLijst lijst={lijst} />
     </div>

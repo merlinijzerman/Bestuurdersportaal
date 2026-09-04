@@ -24,20 +24,25 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { contextChip } from "@/core/lib/assistent-context";
+import Icoon from "@/core/components/icons/Icoon";
 import { useAssistentContext } from "./AssistentContextProvider";
 import { useAssistentPaneel, type PaneelStand } from "./AssistentPaneelProvider";
 
 /** De standknoppen delen één vorm; los uitschrijven zou vier keer driften. */
 const KNOP =
-  "rounded-md px-1.5 py-1 text-sm hover:bg-app-zebra hover:text-ink transition-colors";
+  "assistent-kopknop inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors";
 
-/** Het label achter "geopend vanuit" — een slug is geen zin. */
-const MODULE_LABEL: Record<string, string> = {
-  bibliotheek: "de bibliotheek",
-  procedures: "een procesdossier",
-  risicomatrix: "de risicomatrix",
-  vergaderingen: "een agendapunt",
-  home: "het startscherm",
+/** Een generieke opening heeft geen inhoudelijke scope, maar mag wel benoemen
+ * in welke module de bestuurder werkt. Dat is context, geen bronclaim. */
+const MODULE_CONTEXT: Record<string, { label: string; bronbereik: string }> = {
+  bibliotheek: { label: "Fondsbibliotheek", bronbereik: "binnen uw rechten" },
+  procedures: { label: "Processen", bronbereik: "dossier en gekoppelde stukken" },
+  risicomatrix: { label: "Risicomatrix", bronbereik: "risico's en gekoppelde stukken" },
+  vergaderingen: { label: "Vergaderingen", bronbereik: "agenda en gekoppelde stukken" },
+  notulen: { label: "Besluiten & notulen", bronbereik: "binnen uw rechten" },
+  dashboard: { label: "Stuurinformatie", bronbereik: "binnen uw rechten" },
+  klantbeeld: { label: "Klantbeeld", bronbereik: "binnen uw rechten" },
+  home: { label: "Fondsbreed", bronbereik: "binnen uw rechten" },
 };
 
 export default function AssistentPaneel({
@@ -48,8 +53,16 @@ export default function AssistentPaneel({
   navBreedte: string;
   children: ReactNode;
 }) {
-  const { stand, ingangModule, zetStand, sluit, vorigPad, zetVorigPad } =
-    useAssistentPaneel();
+  const {
+    stand,
+    ingangModule,
+    wisIngangModule,
+    bediening,
+    zetStand,
+    sluit,
+    vorigPad,
+    zetVorigPad,
+  } = useAssistentPaneel();
   const context = useAssistentContext();
   const router = useRouter();
   const pad = usePathname();
@@ -107,12 +120,18 @@ export default function AssistentPaneel({
     agendapuntContext: context.agendapuntContext,
     moduleScope: context.moduleScope,
   });
+  const moduleContext = ingangModule ? MODULE_CONTEXT[ingangModule] : null;
+  const getoondeContext =
+    chip.label === "Fondsbreed" && moduleContext
+      ? { ...moduleContext, losTeLaten: ingangModule !== "home" }
+      : chip;
 
   function laatLos() {
     context.zetDocumentScope(null);
     context.zetAgendapuntContext(null);
     context.zetModuleScope(null);
     context.zetRisicoLijst([]);
+    wisIngangModule();
   }
 
   return (
@@ -126,89 +145,124 @@ export default function AssistentPaneel({
       className="assistent-paneel"
       style={{ "--nav-breedte": navBreedte } as React.CSSProperties}
     >
-      <div className="border-b border-line px-3 py-2.5">
-        <div className="flex items-start justify-between gap-2">
-          {/* Assistent-accent (0202): `--ai` op `--ai-tint` haalt 4,95:1, en
-              `--ai-line` is de decoratieve rand waar hij voor bedoeld is. */}
-          <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-ai-line bg-ai-tint px-2.5 py-1 text-xs font-medium text-ai">
-            <span className="truncate">{chip.label}</span>
-            {chip.losTeLaten && (
-              <button
-                type="button"
-                onClick={laatLos}
-                title="Laat deze context los en vraag fondsbreed verder"
-                aria-label={`Context loslaten: ${chip.label}`}
-                className="-mr-1 shrink-0 rounded-full px-1 text-ai hover:bg-ai/10"
-              >
-                <span aria-hidden>✕</span>
-              </button>
-            )}
+      <header className="assistent-paneel-kop">
+        <div className="assistent-identiteit">
+          <span className="assistent-identiteit-icoon">
+            <Icoon sleutel="sprankel" grootte={19} streek={1.8} />
           </span>
-
-          <div className="flex shrink-0 items-center gap-0.5 text-muted">
-            {stand === "paneel" && (
-              <button
-                type="button"
-                onClick={() => zetStand("vergroot")}
-                aria-label="Paneel vergroten"
-                title="Vergroten"
-                className={KNOP}
-              >
-                <span aria-hidden>⟨</span>
-              </button>
-            )}
-            {stand === "vergroot" && (
-              <button
-                type="button"
-                onClick={() => zetStand("paneel")}
-                aria-label="Paneel verkleinen"
-                title="Verkleinen"
-                className={KNOP}
-              >
-                <span aria-hidden>⟩</span>
-              </button>
-            )}
-            {stand !== "volledig" ? (
-              <button
-                type="button"
-                onClick={naarVolledig}
-                aria-label="Volledig scherm"
-                title="Volledig scherm"
-                className={KNOP}
-              >
-                <span aria-hidden>⛶</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => uitVolledig("vergroot")}
-                aria-label="Terug naar het paneel"
-                title="Terug naar het paneel"
-                className={KNOP}
-              >
-                <span aria-hidden>⤡</span>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                if (stand === "volledig" && pad === "/ai") router.push(vorigPad || "/");
-                sluit();
-              }}
-              aria-label="Assistent sluiten"
-              title="Sluiten"
-              className={KNOP}
-            >
-              <span aria-hidden>✕</span>
-            </button>
+          <div className="min-w-0">
+            <h2 className="truncate font-serif text-[17px] font-medium leading-tight text-white">
+              Assistent
+            </h2>
+            <p className="assistent-kopstatus mt-0.5 flex items-center gap-1.5 text-[11px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden />
+              <span className="truncate">Context · {getoondeContext.label}</span>
+            </p>
           </div>
         </div>
 
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">
-          {chip.bronbereik}
-          {ingangModule && MODULE_LABEL[ingangModule]
-            ? ` · geopend vanuit ${MODULE_LABEL[ingangModule]}`
-            : null}
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={bediening?.nieuwGesprek}
+            disabled={!bediening?.nieuwGesprekBeschikbaar}
+            aria-label="Nieuw gesprek"
+            title="Nieuw gesprek"
+            className={`${KNOP} disabled:cursor-not-allowed disabled:opacity-35`}
+          >
+            <Icoon sleutel="plus" grootte={18} />
+          </button>
+          <button
+            type="button"
+            onClick={bediening?.openInstellingen}
+            disabled={!bediening}
+            aria-label="Gespreksinstellingen"
+            title="Gespreksinstellingen"
+            className={`${KNOP} disabled:opacity-35`}
+          >
+            <Icoon sleutel="tandwiel" grootte={17} />
+          </button>
+          {stand === "paneel" && (
+            <button
+              type="button"
+              onClick={() => zetStand("vergroot")}
+              aria-label="Paneel vergroten"
+              title="Vergroten"
+              className={KNOP}
+            >
+              <Icoon sleutel="chevron-links" grootte={17} />
+            </button>
+          )}
+          {stand === "vergroot" && (
+            <button
+              type="button"
+              onClick={() => zetStand("paneel")}
+              aria-label="Paneel verkleinen"
+              title="Verkleinen"
+              className={KNOP}
+            >
+              <Icoon sleutel="chevron-rechts" grootte={17} />
+            </button>
+          )}
+          {stand !== "volledig" ? (
+            <button
+              type="button"
+              onClick={naarVolledig}
+              aria-label="Volledig scherm"
+              title="Volledig scherm"
+              className={KNOP}
+            >
+              <Icoon sleutel="maximaliseren" grootte={17} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => uitVolledig("vergroot")}
+              aria-label="Terug naar het paneel"
+              title="Terug naar het paneel"
+              className={KNOP}
+            >
+              <Icoon sleutel="minimaliseren" grootte={17} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (stand === "volledig" && pad === "/ai") router.push(vorigPad || "/");
+              sluit();
+            }}
+            aria-label="Assistent sluiten"
+            title="Sluiten"
+            className={KNOP}
+          >
+            <Icoon sleutel="sluiten" grootte={17} />
+          </button>
+        </div>
+      </header>
+
+      <div className="assistent-contextbalk">
+        {/* Assistent-accent (0202): `--ai` op `--ai-tint` haalt 4,95:1, en
+            `--ai-line` is de decoratieve rand waar hij voor bedoeld is. */}
+        <span className="assistent-contextchip inline-flex min-w-0 shrink-0 items-center gap-2 border border-ai-line bg-ai-tint px-3 py-1.5 text-xs font-semibold text-ai">
+          <Icoon sleutel="menu" grootte={14} streek={1.9} />
+          <span className="truncate">{getoondeContext.label}</span>
+          {getoondeContext.losTeLaten && (
+            <button
+              type="button"
+              onClick={laatLos}
+              title="Laat deze context los en vraag fondsbreed verder"
+              aria-label={`Context loslaten: ${getoondeContext.label}`}
+              className="-mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ai hover:bg-ai/10"
+            >
+              <Icoon sleutel="sluiten" grootte={12} streek={2} />
+            </button>
+          )}
+        </span>
+        <p
+          className="ml-auto min-w-0 truncate text-[11px] leading-relaxed text-muted"
+          title={getoondeContext.bronbereik}
+        >
+          {getoondeContext.bronbereik}
         </p>
       </div>
 

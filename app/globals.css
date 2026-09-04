@@ -158,6 +158,18 @@
   --ai-tint-rgb: 231 243 242; --ai-tint: rgb(var(--ai-tint-rgb));
   --ai-line-rgb: 191 220 220; --ai-line: rgb(var(--ai-line-rgb));
 
+  /* De assistent heeft een vaste productidentiteit binnen ieder fondsthema.
+     Anders kleuren de kop, vraagballon, teksthiërarchie en verzendactie mee
+     met het fonds en valt het vastgestelde mockup per module uiteen. */
+  --assistant-chrome-rgb: 15 43 65; --assistant-chrome: rgb(var(--assistant-chrome-rgb));
+  --assistant-action-rgb: 35 78 112; --assistant-action: rgb(var(--assistant-action-rgb));
+  --assistant-copy-rgb: 18 35 59; --assistant-copy: rgb(var(--assistant-copy-rgb));
+  --assistant-canvas-rgb: 248 250 251; --assistant-canvas: rgb(var(--assistant-canvas-rgb));
+  --assistant-on-dark-muted-rgb: 157 180 193; --assistant-on-dark-muted: rgb(var(--assistant-on-dark-muted-rgb));
+  --assistant-on-dark-action-rgb: 169 189 201; --assistant-on-dark-action: rgb(var(--assistant-on-dark-action-rgb));
+  --assistant-secondary-rgb: 139 152 165; --assistant-secondary: rgb(var(--assistant-secondary-rgb));
+  --assistant-placeholder-rgb: 148 160 173; --assistant-placeholder: rgb(var(--assistant-placeholder-rgb));
+
   /* Kaart-elevatie (stuurinformatie-opmaak, T17): subtiele dubbele schaduw —
      ink-getint zodat hij op de lichte achtergrond rustig blijft. */
   --shadow-card: 0 1px 2px rgb(var(--ink-rgb) / 0.04), 0 10px 26px -18px rgb(var(--ink-rgb) / 0.35);
@@ -262,6 +274,210 @@ body {
     font-weight: 600;
     letter-spacing: 0.12em;
     text-transform: uppercase;
+  }
+
+  /* ── Portaalritme ───────────────────────────────────────────────────────
+     De hoofdcontainer is een inline-size container. Daardoor reageert een
+     pagina ook op het geopende assistentpaneel; viewport-breakpoints alleen
+     zagen die 400/740 px smallere werkruimte niet. */
+  .portal-main {
+    container-name: portal-content;
+    container-type: inline-size;
+    font-size: 0.875rem;
+  }
+  .portal-page {
+    width: 100%;
+    padding: clamp(1rem, 2.2vw, 1.75rem);
+  }
+  .portal-page-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .portal-page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .portal-page-title {
+    font-family: var(--font-serif), Georgia, serif;
+    color: var(--ink);
+    font-size: clamp(1.5rem, 2.4vw, 1.75rem);
+    line-height: 1.12;
+    letter-spacing: -0.022em;
+    font-weight: 500;
+  }
+  .portal-page-subtitle {
+    margin-top: 0.35rem;
+    max-width: 66ch;
+    color: var(--muted);
+    font-size: 0.84375rem;
+    line-height: 1.55;
+  }
+  .portal-card {
+    background: var(--app-surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+  }
+  .portal-card-title {
+    font-family: var(--font-serif), Georgia, serif;
+    color: var(--ink);
+    font-size: 1.0625rem;
+    line-height: 1.25;
+    letter-spacing: -0.012em;
+    font-weight: 500;
+  }
+  /* Gedeelde modulegrammatica. Deze classes leggen alleen presentatie vast:
+     routes, handelingen en informatiedichtheid blijven eigendom van de module. */
+  .portal-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0.9rem 1.125rem;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--app-surface), var(--app-zebra));
+  }
+  .portal-card-overline {
+    color: var(--muted);
+    font-size: 0.65625rem;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .portal-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--app-surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+  }
+  .portal-row {
+    position: relative;
+    padding: 0.9rem 1.125rem;
+    background: var(--app-surface);
+  }
+  .portal-row-interactive {
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+  }
+  .portal-row-interactive:hover {
+    background: var(--app-zebra);
+    box-shadow: inset 3px 0 0 var(--phase);
+  }
+  .portal-empty {
+    padding: 2rem 1.25rem;
+    border: 1px dashed var(--app-line-strong);
+    border-radius: 12px;
+    color: var(--muted);
+    background: rgb(var(--app-surface-rgb) / 0.72);
+    text-align: center;
+    font-size: 0.8125rem;
+  }
+  .portal-status-pill {
+    display: inline-flex;
+    min-height: 1.5rem;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.6875rem;
+    line-height: 1.15;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .portal-date-tile {
+    display: inline-flex;
+    width: 2.875rem;
+    height: 2.875rem;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--app-line-strong);
+    border-radius: 10px;
+    color: var(--accent-ink);
+    background: var(--accent-tint);
+  }
+  .portal-ai-action {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--app-line-control);
+    border-radius: 9px;
+    color: var(--ai);
+    background: var(--ai-tint);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    transition: filter 160ms ease, box-shadow 160ms ease;
+  }
+  .portal-ai-action:hover {
+    filter: brightness(0.97);
+    box-shadow: 0 3px 10px rgb(var(--ai-rgb) / 0.12);
+  }
+  .portal-hero {
+    position: relative;
+    overflow: hidden;
+    min-height: 126px;
+    padding: clamp(1.25rem, 3vw, 1.75rem);
+    border-radius: 14px;
+    color: rgb(var(--nav-text-active-rgb));
+    background:
+      radial-gradient(circle at 92% -20%, rgb(var(--nav-rail-rgb) / 0.26), transparent 42%),
+      linear-gradient(125deg, var(--nav), rgb(var(--nav-line-rgb)));
+    box-shadow: 0 18px 42px -28px rgb(var(--ink-rgb) / 0.72);
+  }
+  .portal-hero-title {
+    max-width: 760px;
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: clamp(1.45rem, 3vw, 1.85rem);
+    line-height: 1.16;
+    letter-spacing: -0.022em;
+    font-weight: 500;
+  }
+  .portal-hero-copy {
+    margin-top: 0.55rem;
+    max-width: 760px;
+    color: rgb(var(--nav-text-rgb));
+    font-size: 0.84375rem;
+    line-height: 1.55;
+  }
+  .portal-hero-copy a {
+    color: rgb(var(--nav-text-active-rgb));
+  }
+  .portal-hero-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgb(var(--nav-text-active-rgb) / 0.24);
+    border-radius: 9px;
+    color: rgb(var(--nav-text-active-rgb));
+    background: rgb(var(--nav-text-active-rgb) / 0.08);
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: background-color 160ms ease, border-color 160ms ease;
+  }
+  .portal-hero-action:hover {
+    border-color: rgb(var(--nav-text-active-rgb) / 0.48);
+    background: rgb(var(--nav-text-active-rgb) / 0.14);
+  }
+  .portal-two-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.875rem;
   }
 
   /* ── Kaart ── rustige rand + subtiele elevatie ─────────────────────────── */
@@ -506,10 +722,16 @@ body {
     flex-direction: column;
     width: var(--assistent-paneel-breedte, 400px);
     max-width: 100vw;
-    background: var(--card);
+    background: var(--assistant-canvas);
     border-left: 1px solid var(--line);
     box-shadow: var(--shadow-card);
     outline: none;
+    font-size: 0.875rem;
+    font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    container-name: assistant-panel;
+    container-type: inline-size;
   }
   /* De components-laag zet hierboven expliciet `display: flex`. Zonder deze
      specifiekere regel wint dat van de globale `[hidden]`-reset en blijft een
@@ -532,6 +754,293 @@ body {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    background: var(--assistant-canvas);
+  }
+  .assistent-paneel-kop {
+    min-height: 74px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 0.9rem 0.8rem 1rem;
+    color: rgb(var(--nav-text-active-rgb));
+    background:
+      radial-gradient(circle at 15% -35%, rgb(var(--nav-rail-rgb) / 0.22), transparent 52%),
+      var(--assistant-chrome);
+    border-bottom: 1px solid rgb(var(--nav-text-active-rgb) / 0.08);
+  }
+  .assistent-kopstatus {
+    color: var(--assistant-on-dark-muted);
+  }
+  .assistent-identiteit {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .assistent-identiteit-icoon {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    color: rgb(var(--nav-text-active-rgb));
+    background: rgb(var(--ai-rgb) / 0.22);
+    border: 1px solid rgb(var(--nav-text-active-rgb) / 0.16);
+  }
+  .assistent-kopknop:hover {
+    color: rgb(var(--nav-text-active-rgb));
+    background: rgb(var(--nav-text-active-rgb) / 0.1);
+  }
+  .assistent-kopknop {
+    color: var(--assistant-on-dark-action);
+  }
+  .assistent-kopknop:focus-visible {
+    outline: 2px solid rgb(var(--nav-text-active-rgb));
+    outline-offset: 1px;
+  }
+  .assistent-contextbalk {
+    min-height: 45px;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.5rem 0.85rem;
+    background: var(--app-surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .assistent-contextchip {
+    border-radius: 10px;
+  }
+
+  /* Binnenwerk van de assistent: de chat begint direct na de contextbalk. De
+     uitgebreide instellingen openen als kaart boven het gesprek en nemen in de
+     normale stand dus geen permanente leesruimte in. */
+  .assistent-oppervlak {
+    position: relative;
+    overflow: hidden;
+    background: var(--assistant-canvas);
+  }
+  .assistent-instellingenpaneel {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 30;
+    width: min(360px, calc(100% - 1.5rem));
+    overflow: visible;
+    border: 1px solid var(--app-line-strong);
+    border-radius: 13px;
+    background: var(--app-surface);
+    box-shadow: var(--shadow-card-hover);
+  }
+  .assistent-instellingenkop {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .assistent-instellingenkop h3 {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+  .assistent-instellingenkop p {
+    margin-top: 0.15rem;
+    color: var(--muted);
+    font-size: 0.6875rem;
+  }
+  .assistent-werkbalk {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+    padding: 0.9rem;
+    background: var(--app-surface);
+  }
+  .assistent-werkbalk-instellingen,
+  .assistent-werkbalk-acties {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+  .assistent-werkbalk-acties {
+    justify-content: flex-start;
+  }
+  .assistent-governance {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--ok-ink);
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+  .assistent-governance::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ok);
+  }
+  .assistent-gesprek {
+    overflow-x: hidden;
+    padding: clamp(1rem, 2.5vw, 1.5rem);
+    background: var(--assistant-canvas);
+  }
+  .assistent-antwoordrol {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.2rem 0 0.7rem;
+    color: var(--ai);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .assistent-gebruikersvraag {
+    color: white;
+    background: var(--assistant-action);
+    border-radius: 14px 14px 4px 14px;
+    font-size: 0.84375rem;
+    font-weight: 400;
+    line-height: 1.55;
+  }
+  .assistent-antwoord {
+    color: var(--assistant-copy);
+    font-size: 0.8625rem;
+    font-weight: 400;
+    line-height: 1.68;
+    letter-spacing: 0;
+  }
+  .assistent-antwoord .ai-lees {
+    max-width: 100%;
+  }
+  .assistent-antwoord ul > li::marker,
+  .assistent-antwoord ol > li::marker {
+    color: var(--ai-500);
+  }
+  /* AI-uitkomsten die in een module blijven staan — zoals "Mijn voorbereiding"
+     bij een agendapunt — gebruiken dezelfde rustige kaartgrammatica als het
+     referentieprototype. De antwoordtekst zelf blijft de generieke
+     `.assistent-antwoord`, zodat lettertype, kleur en regelafstand niet opnieuw
+     per module worden uitgeschreven. */
+  .assistent-resultaatkaart {
+    padding: 0.75rem 0.8125rem;
+    border: 1px solid var(--ai-line);
+    border-radius: 10px;
+    background: var(--ai-tint);
+    font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .assistent-resultaatkop {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    color: var(--ai);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .assistent-resultaatvoet {
+    margin-top: 0.6875rem;
+    padding-top: 0.5625rem;
+    border-top: 1px dashed var(--ai-line);
+  }
+  .assistent-voorbereidingsstand {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding-top: 0.8rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    border-top: 1px solid var(--line);
+  }
+  .assistent-voorbereidingsstand strong,
+  .assistent-voorbereidingsstand small {
+    display: block;
+  }
+  .assistent-voorbereidingsstand strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .assistent-voorbereidingsstand small {
+    margin-top: 0.1rem;
+    font-size: 0.6875rem;
+  }
+  .assistent-invoerbalk {
+    position: relative;
+    padding: 0.75rem;
+    background: var(--app-surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -10px 30px -26px rgb(var(--ink-rgb) / 0.45);
+  }
+  .assistent-composer {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    min-height: 52px;
+    overflow: hidden;
+    border: 1px solid rgb(var(--app-line-control-rgb));
+    border-radius: 13px;
+    background: var(--app-surface);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .assistent-composer:focus-within {
+    border-color: var(--ai);
+    box-shadow: 0 0 0 3px rgb(var(--ai-rgb) / 0.12);
+  }
+  .assistent-composer textarea {
+    width: 100%;
+    min-height: 50px;
+    padding: 0.75rem 3.6rem 0.7rem 0.85rem;
+    border: 0;
+    outline: 0;
+    resize: none;
+    color: var(--assistant-copy);
+    background: transparent;
+    font-size: 0.84375rem;
+    line-height: 1.45;
+  }
+  .assistent-composer textarea::placeholder {
+    color: var(--assistant-placeholder);
+  }
+  .assistent-verstuurknop {
+    position: absolute;
+    right: 0.45rem;
+    bottom: 0.45rem;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    color: white;
+    background: var(--assistant-action);
+    transition: transform 150ms ease, opacity 150ms ease;
+  }
+  .assistent-verstuurknop:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .assistent-verstuurknop:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+  .assistent-disclaimer {
+    margin: 0.55rem auto 0;
+    max-width: 54ch;
+    color: var(--assistant-secondary);
+    font-size: 0.65625rem;
+    line-height: 1.45;
+    text-align: center;
   }
 
   /* ── Vult de contentkolom ────────────────────────────────────────────────
@@ -579,5 +1088,60 @@ body {
     .assistent-marge-vergroot {
       margin-right: 740px;
     }
+  }
+}
+
+@container portal-content (max-width: 760px) {
+  .portal-two-column {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .portal-hero > div {
+    align-items: flex-start;
+  }
+  .portal-hero-action {
+    margin-top: 0.25rem;
+  }
+}
+
+@container assistant-panel (max-width: 520px) {
+  .assistent-werkbalk {
+    padding: 0.85rem;
+  }
+  .assistent-werkbalk-instellingen {
+    overflow: visible;
+    flex-wrap: wrap;
+  }
+  .assistent-werkbalk-instellingen > .assistent-governance,
+  .assistent-werkbalk-instellingen > span.text-xs,
+  .assistent-werkbalk-instellingen > span + span {
+    flex: 0 0 auto;
+  }
+  .assistent-modi {
+    order: 10;
+    flex: 0 0 100%;
+  }
+  .assistent-modi button {
+    flex: 1 1 0;
+  }
+  .assistent-gesprek {
+    padding: 0.9rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .assistent-paneel-kop {
+    min-height: 66px;
+    padding-left: 0.75rem;
+  }
+  .assistent-identiteit-icoon {
+    width: 34px;
+    height: 34px;
+  }
+  .assistent-contextbalk {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .assistent-contextbalk p {
+    white-space: normal;
   }
 }
