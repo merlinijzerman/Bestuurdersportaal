@@ -9,6 +9,7 @@ const migratie = lees("supabase/migrations/2026_09_04_microsoft_fase1_connectorf
 const connector = lees("core/lib/microsoft-connector.ts");
 const vault = lees("core/lib/microsoft-vault.ts");
 const callback = lees("app/auth/microsoft/callback/route.ts");
+const connectorFouten = lees("core/lib/microsoft-connector-error-core.ts");
 
 test("Microsoft F1 gebruikt exact de vier goedgekeurde delegated scopes", () => {
   const config = lees("core/lib/microsoft-config.ts");
@@ -43,9 +44,15 @@ test("nieuwe fondsen krijgen fail-safe profiel eigen en pilot uit", () => {
 test("callback valideert bestaande sessie en registreert veilige fouten", () => {
   assert.match(callback, /supabase\.auth\.getUser\(\)/);
   assert.match(callback, /microsoftPilotActief/);
-  assert.match(callback, /registreerKoppelfout\(auditContext\)/);
+  assert.match(callback, /microsoftKoppelfoutcategorie\(fout\)/);
+  assert.match(callback, /registreerKoppelfout\(auditContext, categorie\)/);
   assert.match(callback, /Cache-Control": "no-store"/);
   assert.doesNotMatch(callback, /accessToken|idToken|refreshToken/);
+  assert.match(connectorFouten, /"token_exchange"/);
+  assert.match(connectorFouten, /"identity_validation"/);
+  assert.match(connectorFouten, /"graph_me"/);
+  assert.match(connectorFouten, /"vault_save"/);
+  assert.match(connector, /nonce: geheim\.nonce/);
 });
 
 test("rollback schakelt vaultlogin uit en verwijdert beide schemaonderdelen", () => {
