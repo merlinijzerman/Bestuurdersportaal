@@ -171,7 +171,9 @@ test("antwoordmodus → retrieval-scope mapping", () => {
   assert.equal(retrievalModusVoor("duiding"), "actueel");
   assert.equal(retrievalModusVoor("sparring"), "actueel");
   assert.equal(retrievalModusVoor("bronoverzicht"), "actueel");
-  assert.equal(retrievalModusVoor("persoonlijke_voorbereiding"), "actueel");
+  // T2 (#304): de voorbereiding gaat over stukken die nog VÓÓRliggen; onder
+  // 'actueel' vallen die (status 'concept') vóór de ranking weg.
+  assert.equal(retrievalModusVoor("persoonlijke_voorbereiding"), "besluitvorming");
   assert.equal(retrievalModusVoor("historisch"), "historisch");
   assert.equal(retrievalModusVoor("besluitrijpheid"), "besluitvorming");
 });

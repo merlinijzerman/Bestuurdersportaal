@@ -391,17 +391,70 @@ export default function AssistentOppervlak() {
   // is; `sleutel` maakt twee klikken op dezelfde knop onderscheidbaar.
   const aanvraag = paneel.aanvraag;
   const meldAanvraagVerwerkt = paneel.meldAanvraagVerwerkt;
+  const meldProductBijgewerkt = paneel.meldProductBijgewerkt;
+  // Verse verwijzing naar de verzender, zonder hem een dependency te maken.
+  // Bijwerken in een effect en niet tijdens de render: een ref beschrijven
+  // tijdens render is niet concurrent-veilig (react-hooks/refs). Dit effect
+  // staat bewust VÓÓR het aanvraag-effect hieronder — effecten draaien in
+  // declaratievolgorde, dus de ref is bij gebruik altijd de verse.
+  const stuurBerichtRef = useRef(stuurBericht);
+  useEffect(() => {
+    stuurBerichtRef.current = stuurBericht;
+  });
+  // De sleutel van de laatst uitgevoerde startbeurt (0 = nog geen).
+  const startbeurtGedaanRef = useRef(0);
   useEffect(() => {
     if (!aanvraag) return;
     let afgebroken = false;
     void (async () => {
-      await pasIngangToe(aanvraag.ingangen);
-      if (!afgebroken) meldAanvraagVerwerkt(aanvraag.sleutel);
+      const patch = await pasIngangToe(aanvraag.ingangen);
+      if (afgebroken) return;
+      meldAanvraagVerwerkt(aanvraag.sleutel);
+
+      // ── T2 (#304) — de startbeurt ─────────────────────────────────────────
+      // Alleen een ingang die er zélf om vraagt stuurt iets; elke andere
+      // module-knop en elke deeplink blijven wachten op de bestuurder. De
+      // bestaande regel "er wordt nooit automatisch een bericht verstuurd" gold
+      // het HERSTEL van een gesprek (r. 770) en de reflectieflow — daar zou de
+      // gebruiker een beurt krijgen die hij niet vroeg. Hier drukte hij op de
+      // knop; het alternatief zou zijn dat hij de vraag zelf moet overtypen.
+      //
+      // PAS NA `pasIngangToe`: de agendapuntcontext moet in de payload zitten,
+      // anders loopt de beurt als gewone bibliotheekvraag. De modus gaat als
+      // per-beurt-override mee, zodat een vervolgvraag gewoon weer een
+      // vervolgvraag is.
+      const start = aanvraag.startbeurt;
+      if (!start) return;
+      // Eén keer per sleutel, en geen keer meer. Dit is een kostendragende beurt
+      // (AI-poort + retrieval + generatie); een dubbele uitvoering door een
+      // her-render is hier duurder dan een gemiste. `stuurBericht` krijgt bij elke
+      // render een nieuwe identiteit en staat daarom NIET in de dependency-lijst
+      // maar in een ref — anders draait dit effect opnieuw vóórdat de aanvraag is
+      // afgemeld.
+      if (startbeurtGedaanRef.current === aanvraag.sleutel) return;
+      startbeurtGedaanRef.current = aanvraag.sleutel;
+      await stuurBerichtRef.current(start.vraag, {
+        antwoordmodusOverride: start.antwoordmodus,
+        // De zojuist OPGELOSTE context, niet de state: `pasIngangToe` zet die
+        // via een setter en wij versturen in dezelfde tick, dus de gespreksstaat
+        // wijst hier nog naar de vorige waarde. Zonder deze override loopt de
+        // voorbereiding als gewone bibliotheekvraag — andere prompt-tak, geen
+        // toelichtingsseed, geen gekoppelde stukken. Zelfde val als
+        // `persistScope` bij "doorgronden".
+        agendapuntContextOverride: patch.agendapuntContext ?? null,
+      });
+      if (afgebroken || !start.productVoorAgendapunt) return;
+      // De route heeft het product nu (bij een geslaagde beurt) weggeschreven;
+      // de kaart mag opnieuw inlezen. Het signaal is een teller, geen inhoud:
+      // de kaart haalt de waarheid uit de database.
+      meldProductBijgewerkt(start.productVoorAgendapunt);
     })();
     return () => {
       afgebroken = true;
     };
-  }, [aanvraag, pasIngangToe, meldAanvraagVerwerkt]);
+    // `stuurBericht` staat bewust niet in deze lijst; zie de ref hierboven.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aanvraag, pasIngangToe, meldAanvraagVerwerkt, meldProductBijgewerkt]);
 
   // De knoppen leven visueel in de vaste paneelkop, terwijl hun gedrag bij de
   // gespreklaag hoort. Registratie houdt die architectuurgrens intact en maakt

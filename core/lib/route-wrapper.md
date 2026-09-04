@@ -120,7 +120,7 @@ niet stilzwijgend de wrapper-tekst overnemen.
 |---|---|---|
 | **`/api/profiel`** | leest 10 profielkolommen | wrapper voor auth; route doet zelf de brede select met `ctx.gebruikerId` |
 | Routes met een `profielen`-select met **extra** kolommen (>4) | `haalProfiel` levert er maar 4 | eigen aanvullende query in de handler |
-| **2 SSE-routes** (`chat`, `agendapunten/[id]/voorbereiding`) | streamen; niet in het harnas | met de hand, W5 |
+| **SSE-route** (`chat`) | streamt; niet in het harnas | met de hand, W5 |
 | **8 niet-JSON-responders** (bytes-download, 307-redirect, sjablonen) | respons is geen JSON | migreer auth, laat de responsopbouw ongemoeid; `--verify` dekt bytes (sha256) en redirect (`location_pad`) |
 | Machine-/cron-routes (`CRON_SECRET`, `cron-auth.ts`, `withPlatformRead`) | geen `getUser`-preamble | **niet** migreren; buiten scope van deze wrapper |
 | Publieke route (`contact`) | bewust geen auth | niet migreren |

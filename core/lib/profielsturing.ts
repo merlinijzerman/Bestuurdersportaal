@@ -7,11 +7,7 @@
 //  alleen de presentatie/nadruk schuift mee met de expertise, gremia,
 //  focusgebieden en voorkeuren van de lezer.
 //
-//  Twee afnemers:
-//   - AI-assistent (app/api/chat/route.ts) — vrije-tekst-antwoord.
-//   - Agenda-voorbereiding (app/api/agendapunten/[id]/voorbereiding/route.ts) —
-//     gestructureerde lenzen/vragen (JSON).
-//  De data-ophaling is gedeeld; de instructietekst verschilt per afnemer.
+//  Afnemer: AI-assistent (app/api/chat/route.ts) — vrije-tekst-antwoord.
 // ============================================================================
 
 import type { createServerSupabase } from "@/core/lib/supabase-server";
@@ -218,31 +214,6 @@ ${vInstructies.map((r) => `- ${r}`).join("\n")}
 Ook hier geldt: de vorm en de lengte veranderen, de feitelijke dekking en de bronvermelding niet.`
       : ""
   }`;
-
-  return { tekst, aspecten: aspectenVan(v) };
-}
-
-// ── Afnemer 2: Agenda-voorbereiding (gestructureerde lenzen/vragen) ───────────
-// Geeft een prompt-blok dat de lenskeuze en vraagformulering kleurt naar de
-// expertise/focusgebieden van de lezer, ZONDER de collectieve dekking te
-// versmallen: de gedeelde lenzen en vragen blijven volledig, het profiel voegt
-// een persoonlijke nadruk toe. Retourneert ook de aspecten voor herleidbaarheid.
-export async function bouwProfielsturingAgenda(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<{ tekst: string; aspecten: ProfielsturingAspecten } | null> {
-  const v = await haalProfielVoorkeuren(supabase, userId);
-  if (!v) return null;
-
-  const pRegels = profielRegels(v);
-  const vRegels = voorkeurRegels(v);
-  if (pRegels.length === 0 && vRegels.length === 0) return null;
-
-  const tekst = `=== PERSOONLIJK PROFIEL VAN DEZE BESTUURDER — VOOR NADRUK, NIET VOOR INPERKING ===
-Profiel: ${pRegels.join("; ") || "geen specifieke aandachtsgebieden opgegeven"}.${
-    vRegels.length ? ` Voorkeuren: ${vRegels.join(", ")}.` : ""
-  }
-Laat dit profiel de SELECTIE en SCHERPTE van de lenzen en vragen kleuren: geef extra gewicht aan invalshoeken die raken aan de expertise, gremia en kritische focusgebieden van deze bestuurder, en formuleer minstens één lens of vergadervraag die expliciet vanuit die focus vertrekt. Maar versmal de dekking NIET tot alleen het profiel: de bestuurlijk noodzakelijke lenzen (stakeholder-impact, financierbaarheid, uitvoerbaarheid, beheerst besluitvormingsproces, evenwichtige belangenafweging) blijven leidend waar het stuk daarom vraagt — ook als ze buiten het profiel van deze lezer vallen. Verwijs in de output NIET expliciet naar "het profiel"; verwerk de nadruk in de inhoud.`;
 
   return { tekst, aspecten: aspectenVan(v) };
 }

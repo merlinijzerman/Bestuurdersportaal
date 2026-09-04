@@ -35,6 +35,7 @@ import {
   type ReactNode,
 } from "react";
 import type { AssistentUrlIngang } from "@/core/lib/assistent-url-ingang";
+import type { Antwoordmodus } from "@/core/lib/vraagtype";
 import type { PortaalContext } from "@/core/lib/portaalcontext-afleiding";
 
 /**
@@ -45,10 +46,33 @@ import type { PortaalContext } from "@/core/lib/portaalcontext-afleiding";
  */
 export type PaneelStand = "dicht" | "paneel" | "vergroot" | "volledig";
 
+/**
+ * Een beurt die de ingang zélf al meebrengt (T2, #304). De knop "Bereid dit punt
+ * voor" opent niet alleen het paneel met de juiste context; hij stelt ook meteen
+ * de vraag. Zo loopt de voorbereiding door dezelfde payloadbouwer, dezelfde
+ * stroomverwerking en hetzelfde auditspoor als elke andere beurt.
+ *
+ * Net als `module` is dit UITSLUITEND clientstaat: het veld gaat niet als veld
+ * de payload in. `vraag` wordt de gewone gebruikersbeurt en `antwoordmodus` gaat
+ * als per-beurt-override mee (niet als vastgezette gespreksmodus — anders zou
+ * elke vervolgvraag in voorbereidingsmodus blijven hangen).
+ */
+export interface PaneelStartbeurt {
+  vraag: string;
+  antwoordmodus: Antwoordmodus;
+  /**
+   * Het agendapunt waarvan deze beurt het product bijwerkt. De kaart luistert
+   * hierop om de bewaarde voorbereiding opnieuw in te lezen; zonder dat signaal
+   * zou de bestuurder het resultaat pas na een herlaadbeurt in de kaart zien.
+   */
+  productVoorAgendapunt?: string;
+}
+
 /** Wat een ingang aanvraagt. `sleutel` maakt twee gelijke klikken onderscheidbaar. */
 export interface PaneelAanvraag {
   ingangen: AssistentUrlIngang[];
   module: string | null;
+  startbeurt?: PaneelStartbeurt;
   sleutel: number;
 }
 
@@ -77,8 +101,20 @@ export interface AssistentPaneelWaarde {
   /** Registreert gespreksacties die de paneelkop mag aanbieden. */
   bediening: AssistentPaneelBediening | null;
   registreerBediening: (bediening: AssistentPaneelBediening | null) => void;
+  /**
+   * Teller die ophoogt zodra een startbeurt een agendapuntproduct heeft
+   * bijgewerkt. De agendapuntkaart leest daarop opnieuw in. Bewust een teller en
+   * geen payload: de kaart haalt de waarheid uit de database, niet uit een
+   * boodschap die onderweg kan verschralen.
+   */
+  productSignaal: { agendapuntId: string; teller: number } | null;
+  meldProductBijgewerkt: (agendapuntId: string) => void;
   /** Opent het paneel met een context-aanvraag (de zes module-ingangen). */
-  openMet: (aanvraag: { ingangen: AssistentUrlIngang[]; module: string | null }) => void;
+  openMet: (aanvraag: {
+    ingangen: AssistentUrlIngang[];
+    module: string | null;
+    startbeurt?: PaneelStartbeurt;
+  }) => void;
   /** Opent het paneel zonder aanvraag (de knop rechtsonder). */
   openGeneriek: () => void;
   zetStand: (stand: PaneelStand) => void;
@@ -126,6 +162,9 @@ export function useAssistentPaneelStaat({
   const [bediening, zetBediening] = useState<AssistentPaneelBediening | null>(null);
   const [startpuntContext, zetStartpuntContext] = useState<PortaalContext | null>(null);
   const [vorigPad, zetVorigPad] = useState<string | null>(null);
+  const [productSignaal, zetProductSignaal] = useState<
+    { agendapuntId: string; teller: number } | null
+  >(null);
   // Waar de focus vandaan kwam. Bij sluiten keert hij daarheen terug; anders
   // valt de focus terug op <body> en is de bestuurder zijn plek kwijt.
   const openerRef = useRef<HTMLElement | null>(null);
@@ -149,14 +188,16 @@ export function useAssistentPaneelStaat({
     ({
       ingangen,
       module,
+      startbeurt,
     }: {
       ingangen: AssistentUrlIngang[];
       module: string | null;
+      startbeurt?: PaneelStartbeurt;
     }) => {
       if (!aiBeschikbaar) return;
       onthoudOpener();
       sleutelRef.current += 1;
-      zetAanvraag({ ingangen, module, sleutel: sleutelRef.current });
+      zetAanvraag({ ingangen, module, startbeurt, sleutel: sleutelRef.current });
       zetIngangModule(module);
       zetOoitGeopend(true);
       // Staat het paneel al vergroot of volledig open, dan verandert alleen de
@@ -189,6 +230,13 @@ export function useAssistentPaneelStaat({
     zetAanvraag((huidig) => (huidig && huidig.sleutel === sleutel ? null : huidig));
   }, []);
 
+  const meldProductBijgewerkt = useCallback((agendapuntId: string) => {
+    zetProductSignaal((h) => ({
+      agendapuntId,
+      teller: (h?.agendapuntId === agendapuntId ? h.teller : 0) + 1,
+    }));
+  }, []);
+
   const wisIngangModule = useCallback(() => zetIngangModule(null), []);
   const registreerBediening = useCallback(
     (volgende: AssistentPaneelBediening | null) => zetBediening(volgende),
@@ -206,6 +254,8 @@ export function useAssistentPaneelStaat({
       meldAanvraagVerwerkt,
       bediening,
       registreerBediening,
+      productSignaal,
+      meldProductBijgewerkt,
       openMet,
       openGeneriek,
       zetStand,
@@ -226,6 +276,8 @@ export function useAssistentPaneelStaat({
       meldAanvraagVerwerkt,
       bediening,
       registreerBediening,
+      productSignaal,
+      meldProductBijgewerkt,
       openMet,
       openGeneriek,
       zetStand,
