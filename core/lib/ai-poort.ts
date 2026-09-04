@@ -15,20 +15,15 @@
 //
 //  FAIL-CLOSED. Een onbereikbare poort betekent GEEN providercall.
 //
-//  WAAROM DE CLIENT NIET WORDT GEËXPORTEERD
-//  `bewaakteAnthropic()` geeft de Anthropic-client uitsluitend BINNEN de
-//  callback, ná een geslaagde controle. Er is geen exported accessor waarmee je
-//  hem eromheen kunt bemachtigen. Dat maakt de poort niet omzeilbaar door
-//  vergeetachtigheid, alleen door hem bewust te slopen — en dát vangt
-//  tests/cross-tenant/ai-poort.test.ts af.
+//  Providerclients worden uitsluitend door de centrale AI-gateway aangeroepen.
+//  Deze module exporteert alleen de live controle en de providerneutrale wrapper
+//  voor OCR/embeddings; tests bewaken dat er geen kale client beschikbaar komt.
 //
 //  Besluit 0180.
 // ============================================================================
 
-import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Provider } from "./ai-preflight";
-import { maakAnthropicClient } from "./ai-gateway/adapters/anthropic";
 
 export type { Provider };
 
@@ -107,56 +102,6 @@ export async function poortCheck(
 
   const reden = typeof rec.reden === "string" ? (rec.reden as PoortReden) : "poort_onbereikbaar";
   throw new AiPoortGeslotenError(provider, reden);
-}
-
-// ── Anthropic ───────────────────────────────────────────────────────────────
-
-/**
- * Overgangspad (#311 T3→T4). De client komt uit de gateway-adapter — de enige
- * module die de SDK-client construeert — met de platformsleutel uit de omgeving. Niet
- * geëxporteerd: alleen bereikbaar binnen de callback van `bewaakteAnthropic`,
- * ná de poortcontrole. De resterende aanroepers (samenvatting, context-prefix,
- * semantische extractie, afschrift-/besluitconcept, AQLab-judge) migreren in T4
- * naar de gateway; daarna verdwijnen `bewaakteAnthropic*` en deze functie.
- */
-function client(): Anthropic {
-  return maakAnthropicClient({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
-}
-
-/**
- * Voert één Anthropic-call uit achter de poort.
- *
- * ```ts
- * const bericht = await bewaakteAnthropic(ctx, AI_MODEL, (anthropic) =>
- *   anthropic.messages.create({ model: AI_MODEL, ... })
- * );
- * ```
- *
- * Het model wordt MEEGEGEVEN aan de poort en niet uit de callback afgeleid: een
- * route mag de controle niet omzeilen door in de callback een andere
- * modelstring te zetten. `tests/cross-tenant/ai-poort.test.ts` bewaakt dat er
- * geen tweede weg naar de provider ontstaat.
- */
-export async function bewaakteAnthropic<T>(
-  ctx: PoortContext,
-  model: string,
-  fn: (anthropic: Anthropic) => Promise<T>
-): Promise<T> {
-  await poortCheck(ctx, "anthropic", model);
-  return fn(client());
-}
-
-/**
- * Variant voor het streamingpad, waar de SDK een stream-object teruggeeft in
- * plaats van een promise-resultaat.
- */
-export async function bewaakteAnthropicStream<T>(
-  ctx: PoortContext,
-  model: string,
-  fn: (anthropic: Anthropic) => T
-): Promise<T> {
-  await poortCheck(ctx, "anthropic", model);
-  return fn(client());
 }
 
 // ── Mistral en OpenAI (rauwe fetch, geen SDK) ───────────────────────────────

@@ -39,6 +39,7 @@ export type SignaalId =
   | "ingest_doorlooptijd_p95"
   | "rate_limit_incidenten"
   | "rate_limit_fail_open"
+  | "gateway_log_fouten"
   | "audit_volledigheid"
   | "ai_latency_p95"
   | "lege_antwoord_ratio"
@@ -333,6 +334,28 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
     opvolgactie: OPVOLGACTIE.beveiliging_audit,
     dekkingsniveau: "gedeeltelijk",
   },
+  gateway_log_fouten: {
+    signaal: "gateway_log_fouten",
+    label: "AI-gateway auditlogfouten",
+    eenheid: "aantal",
+    intervalMinuten: 15,
+    vensterMinuten: 1440,
+    drempelOranje: 1,
+    drempelRood: 2,
+    richting: "hoger_is_slechter",
+    nDrempel: null,
+    actief: true,
+    toelichting:
+      "Aantal providercalls waarvan de inhoudsvrije gateway-auditregel niet kon worden opgeslagen in de afgelopen 24 uur.",
+    platformbreed: true,
+    dekkingsvoorbehoud:
+      "Meet de gestructureerde foutmelding in app_errors. Een gelijktijdige storing van zowel het private gatewaylog als app_errors blijft alleen in het serverlog zichtbaar.",
+    domein: "beveiliging_audit",
+    betekenis: "Of elke AI-providercall een inhoudsvrije auditregel heeft gekregen.",
+    eigenaar: EIGENAAR.beveiliging_audit,
+    opvolgactie: OPVOLGACTIE.beveiliging_audit,
+    dekkingsniveau: "gedeeltelijk",
+  },
   audit_volledigheid: {
     signaal: "audit_volledigheid",
     label: "Audit-volledigheid (attempt zonder result)",
@@ -428,6 +451,7 @@ export const SIGNAAL_VOLGORDE: SignaalId[] = [
   "ingest_doorlooptijd_p95",
   "rate_limit_incidenten",
   "rate_limit_fail_open",
+  "gateway_log_fouten",
   "ai_latency_p95",
   "lege_antwoord_ratio",
   "tokenverbruik",

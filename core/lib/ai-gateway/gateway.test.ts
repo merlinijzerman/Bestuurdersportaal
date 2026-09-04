@@ -16,7 +16,7 @@ import { test } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { maakGateway, type GatewayDeps } from "./gateway";
 import { GatewayFout, isGatewayFout } from "./fout";
-import type { GatewayContext, GenereerVerzoek } from "./contract";
+import { TAAKGROEP_VAN_TAAKTYPE, type GatewayContext, type GenereerVerzoek } from "./contract";
 import type { ConfigUitkomst, GatewayDb, GatewayLogRegel, PlatformProfielUitkomst } from "./config-db";
 import type { AdapterResultaat, AdapterVerzoek, ProviderAdapter } from "./adapters/types";
 import { maakUsage } from "./adapters/types";
@@ -344,6 +344,12 @@ test("platformbrede taak: fonds moet null zijn, override verplicht, platformprof
   assert.deepEqual(d.poortAanroepen, ["openai:gpt-5"]);
   assert.equal(d.db.logboek.at(-1)?.taakgroep, null);
   assert.equal(d.db.logboek.at(-1)?.proces, "aqlab");
+});
+
+test("T4-taaktypen: semantische extractie volgt fondsconfig; generieke prefix is platformbreed", () => {
+  assert.equal(TAAKGROEP_VAN_TAAKTYPE.semantische_extractie, "hulp_snel");
+  assert.equal(TAAKGROEP_VAN_TAAKTYPE.context_prefix, "hulp_snel");
+  assert.equal(TAAKGROEP_VAN_TAAKTYPE.generiek_context_prefix, null);
 });
 
 test("onbekend taaktype en ongeldig tokenbudget falen gesloten", async () => {

@@ -12,7 +12,7 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { bewaakteAnthropic } from "@/core/lib/ai-poort";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import {
   preflight,
   rondAf,
@@ -29,7 +29,7 @@ import type { DecisionDossierView } from "@/core/lib/decision-view";
 import { bouwFeitenkaart } from "@/core/lib/afschrift-feitenkaart";
 import { bouwSjabloonProza } from "@/core/lib/afschrift-docx";
 import { toetsLeeswijzerTegenFeitenkaart } from "@/core/lib/afschrift-guardrail";
-import { AFSCHRIFT_AI_MODEL, AFSCHRIFT_PROMPTVERSIE } from "@/core/lib/afschrift-ai-config";
+import { AFSCHRIFT_PROMPTVERSIE } from "@/core/lib/afschrift-ai-config";
 import type {
   AfschriftBron,
   ProcedureLogEntry,
@@ -121,17 +121,6 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
     // Deterministisch sjabloon = altijd de terugval.
     const sjabloon = bouwSjabloonProza(feitenkaart);
 
-    // Geen key → sjabloon, geen fout richting gebruiker (AC fase-2 2).
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({
-        tekst: sjabloon,
-        aiGebruikt: false,
-        model: null,
-        promptversie: AFSCHRIFT_PROMPTVERSIE,
-        reden: "Geen AI-sleutel geconfigureerd; deterministisch sjabloon gebruikt.",
-      });
-    }
-
     // AI-BEGRENZING (besluit 0180): één conceptleeswijzer = één AI-actie.
     // Blokkeert de begrenzing, dan valt deze route terug op het DETERMINISTISCHE
     // sjabloon — dat bestaat hier al als volwaardig alternatief, dus een
@@ -145,8 +134,8 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
     }
     const pf = await preflight(supabase, {
       actietype: "afschrift_concept",
-      provider: "anthropic",
-      model: AFSCHRIFT_AI_MODEL,
+      provider: null,
+      model: null,
       idempotentie,
       vingerafdruk: vingerafdruk({ procedureId }),
     });
@@ -154,27 +143,31 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
       return NextResponse.json({
         tekst: sjabloon,
         aiGebruikt: false,
-        model: AFSCHRIFT_AI_MODEL,
+        model: null,
         promptversie: AFSCHRIFT_PROMPTVERSIE,
         reden:
           "AI-generatie is op dit moment niet beschikbaar; deterministisch sjabloon gebruikt.",
       });
     }
     const aiActieId = pf.actieId;
+    const gateway = productieGateway();
+    const gatewayCtx = {
+      supabase,
+      fondsId: ctx.fondsId,
+      actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
+      actieId: aiActieId,
+      correlatieId: ctx.requestId,
+      label: "procedures.afschrift-concept",
+    };
 
     try {
-      const respons = await bewaakteAnthropic(
-        { supabase, label: "procedures.afschrift-concept" },
-        AFSCHRIFT_AI_MODEL,
-        (client) => client.messages.create({
-        model: AFSCHRIFT_AI_MODEL,
-        max_tokens: 1500,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: JSON.stringify(feitenkaart) }],
-        })
-      );
-      const blok = respons.content.find((c) => c.type === "text");
-      const ruw = blok && blok.type === "text" ? blok.text : "";
+      const respons = await gateway.genereer(gatewayCtx, {
+        taaktype: "afschrift_concept",
+        maxTokens: 1500,
+        systeem: SYSTEM_PROMPT,
+        berichten: [{ role: "user", content: JSON.stringify(feitenkaart) }],
+      });
+      const ruw = respons.tekst;
       const schoon = ruw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
       const parsed = JSON.parse(schoon) as {
         hoeVerlopen?: string;
@@ -191,10 +184,11 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
       const geheel = `${tekst.hoeVerlopen}\n${tekst.watVastgelegd}\n${tekst.bijzonderheden}`;
       const toets = toetsLeeswijzerTegenFeitenkaart(geheel, feitenkaart);
       if (!toets.ok || !tekst.hoeVerlopen.trim()) {
+        await rondAf(supabase, aiActieId, "mislukt");
         return NextResponse.json({
           tekst: sjabloon,
           aiGebruikt: false,
-          model: AFSCHRIFT_AI_MODEL,
+          model: respons.model,
           promptversie: AFSCHRIFT_PROMPTVERSIE,
           reden: toets.ok
             ? "AI leverde lege tekst; deterministisch sjabloon gebruikt."
@@ -206,15 +200,16 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
       return NextResponse.json({
         tekst,
         aiGebruikt: true,
-        model: AFSCHRIFT_AI_MODEL,
+        model: respons.model,
         promptversie: AFSCHRIFT_PROMPTVERSIE,
       });
     } catch (aiFout) {
+      await rondAf(supabase, aiActieId, "mislukt");
       console.error("Afschrift-concept AI-call mislukt (terugval sjabloon):", aiFout);
       return NextResponse.json({
         tekst: sjabloon,
         aiGebruikt: false,
-        model: AFSCHRIFT_AI_MODEL,
+        model: null,
         promptversie: AFSCHRIFT_PROMPTVERSIE,
         reden: "AI-generatie mislukte; deterministisch sjabloon gebruikt.",
       });

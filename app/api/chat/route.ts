@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type Anthropic from "@anthropic-ai/sdk";
 // #311 — de centrale AI-gateway: provider/model komen server-side uit fonds +
 // taaktype (ai_gateway_private), de poort (kill switch/allowlist) draait vlak
 // vóór iedere call en elke call krijgt een inhoudsvrije auditregel.
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import { isVoorNetwerkGestopt } from "@/core/lib/ai-gateway/fout";
-import type { GatewayContext } from "@/core/lib/ai-gateway/contract";
+import type { GatewayContext, TekstBlok } from "@/core/lib/ai-gateway/contract";
 import {
   preflight,
   preflightRespons,
@@ -87,7 +86,6 @@ import { productieDeps, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/ve
 // (streamt) en importeert die kern hier terug — de assemblage is byte-identiek
 // (bewaakt door lib/generatie-kern.sanity.ts).
 import {
-  AI_MODEL,
   MAX_TOKENS,
   MAX_TOKENS_BESTUURLIJK,
   BESTUURLIJKE_STIJL,
@@ -660,8 +658,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     }
     const pf = await preflight(supabase, {
       actietype: "chat",
-      provider: "anthropic",
-      model: AI_MODEL,
+      provider: null,
+      model: null,
       idempotentie,
       // De vingerafdruk bindt de sleutel aan de INHOUD: dezelfde sleutel met een
       // andere vraag wordt geweigerd, zodat een hergebruikte sleutel geen
@@ -917,7 +915,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           const timer = setTimeout(() => ctrl.abort(), CONTEXTRESOLVER_TIMEOUT_MS);
           const start = Date.now();
           // Expliciete runtimewaarde: pas true zodra de PROVIDERCALL echt start.
-          // Een poortweigering (bewaakteAnthropic) draait de callback niet en telt
+          // Een poortweigering draait de providercall niet en telt
           // dus NIET als modelcall; een timeout ná start telt wél.
           let providercallGestart = false;
           try {
@@ -2734,7 +2732,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       portaalDelen.length > 0 ? `${portaalDelen.join("\n\n")}\n\n---\n\n` : "";
 
     // Bouw prompt op basis van modus, met persoonlijke context
-    let systeemBlokken: Anthropic.Messages.TextBlockParam[];
+    let systeemBlokken: TekstBlok[];
     let gebruikersPrompt: string;
 
     if (reflectieActief) {

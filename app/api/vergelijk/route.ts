@@ -117,8 +117,8 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
     }
     const pf = await preflight(supabase, {
       actietype: "vergelijken",
-      provider: "anthropic",
-      model: VERGELIJK_VERSIES.model,
+      provider: null,
+      model: null,
       idempotentie,
       vingerafdruk: vingerafdruk({ bronId, doelId, extraDimensies: extraDimensies ?? null }),
     });

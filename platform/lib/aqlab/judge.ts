@@ -18,8 +18,7 @@
 //   - no_forbidden_claim            → {pass:bool, violated:string[]}
 // -----------------------------------------------------------------------------
 
-import type Anthropic from "@anthropic-ai/sdk";
-import { bewaakteAnthropic, type PoortContext } from "@/core/lib/ai-poort";
+import type { GatewayAanroep } from "@/core/lib/ai-gateway/contract";
 
 /** Apart gepind judge-model (≠ generatiemodel, anti-self-grading). */
 export const JUDGE_MODEL = "claude-opus-4-8";
@@ -180,9 +179,7 @@ export function normaliseerJudgeOutput(
 }
 
 /** Type voor een injecteerbare model-client (test/mocks). */
-export type JudgeClient = {
-  messages: Pick<Anthropic["messages"], "create">;
-};
+export type JudgeGenereerder = (prompt: string) => Promise<string>;
 
 // AI-BEGRENZING (besluit 0180). Geen eigen client: de judge-call loopt door de
 // centrale poort. AQLab draait op synthetische data maar kost wél echt geld, en
@@ -196,25 +193,20 @@ export type JudgeClient = {
 export async function beoordeelMetJudge(
   criterium: JudgeCriterium,
   input: JudgeInput,
-  client?: JudgeClient,
-  poort?: PoortContext
+  opties?: { gateway?: GatewayAanroep; genereer?: JudgeGenereerder }
 ): Promise<JudgeResultaat> {
   const prompt = bouwJudgePrompt(criterium, input);
-  // Zonder injecteerbare client (productiepad) is een poortcontext verplicht.
-  if (!client && !poort) return normaliseerJudgeOutput(criterium, null);
+  if (!opties?.gateway && !opties?.genereer) return normaliseerJudgeOutput(criterium, null);
   try {
-    const params = {
-      model: JUDGE_MODEL,
-      max_tokens: JUDGE_MAX_TOKENS,
-      messages: [{ role: "user" as const, content: prompt }],
-    };
-    const resp = client
-      ? await client.messages.create(params)
-      : await bewaakteAnthropic(poort!, JUDGE_MODEL, (a) => a.messages.create(params));
-    const tekst = resp.content
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("")
-      .trim();
+    const tekst = opties.genereer
+      ? await opties.genereer(prompt)
+      : (await opties.gateway!.gateway.genereer(opties.gateway!.ctx, {
+          taaktype: "aqlab_judge",
+          maxTokens: JUDGE_MAX_TOKENS,
+          systeem: "",
+          berichten: [{ role: "user", content: prompt }],
+          modelOverride: { provider: "anthropic", model: JUDGE_MODEL },
+        })).tekst;
     return normaliseerJudgeOutput(criterium, parseJsonObject(tekst));
   } catch {
     return normaliseerJudgeOutput(criterium, null);

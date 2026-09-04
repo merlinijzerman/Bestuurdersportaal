@@ -13,12 +13,11 @@
 // -----------------------------------------------------------------------------
 
 import type { ModelProvider, ProviderRequest, ProviderResultaat } from "./types";
-import { poortCheck, type PoortContext } from "../ai-poort";
 import { maakAnthropicAdapter, type AnthropicStreamClient } from "../ai-gateway/adapters/anthropic";
 import { maakOpenAIAdapter } from "../ai-gateway/adapters/openai";
 import { maakMistralAdapter } from "../ai-gateway/adapters/mistral";
 import type { AdapterVerzoek } from "../ai-gateway/adapters/types";
-import { resolveerCredentials, type Credentials } from "../ai-gateway/secrets";
+import type { Credentials } from "../ai-gateway/secrets";
 
 export type { ModelProvider, ProviderRequest, ProviderResultaat } from "./types";
 export { systeemBlokkenNaarTekst } from "./types";
@@ -29,20 +28,7 @@ export interface ProviderOpties {
   anthropicClient?: AnthropicStreamClient;
   /** Injecteerbare fetch (hermetische tests voor OpenAI/Mistral). */
   fetchImpl?: typeof fetch;
-  /**
-   * AI-BEGRENZING (besluit 0180). Verplicht op het productiepad: de kill switch
-   * en de modelallowlist worden live getoetst. Alleen met een geïnjecteerde
-   * client/fetch (hermetische tests) mag hij ontbreken.
-   */
-  poort?: PoortContext;
 }
-
-/** Dezelfde platformreferenties als de seed van ai_gateway_private.provider_profiel. */
-const PLATFORM_REFS: Record<ModelProvider, { secretRef: string; endpointRef?: string }> = {
-  anthropic: { secretRef: "ANTHROPIC_API_KEY" },
-  openai: { secretRef: "OPENAI_API_KEY", endpointRef: "OPENAI_BASE_URL" },
-  mistral: { secretRef: "MISTRAL_API_KEY", endpointRef: "MISTRAL_CHAT_URL" },
-};
 
 function naarAdapterVerzoek(req: ProviderRequest): AdapterVerzoek {
   return {
@@ -69,12 +55,9 @@ export async function genereerViaProvider(
 ): Promise<ProviderResultaat> {
   const geinjecteerd = Boolean(opts?.anthropicClient || opts?.fetchImpl);
   if (!geinjecteerd) {
-    if (!opts?.poort) {
-      throw new Error(`${provider}: poortcontext ontbreekt (AI-begrenzing, besluit 0180)`);
-    }
-    await poortCheck(opts.poort, provider, req.model);
+    throw new Error(`${provider}: directe providerlaag is uitsluitend voor hermetische tests; gebruik de AI-gateway`);
   }
-  const credentials: Credentials = geinjecteerd ? { apiKey: "test-key" } : resolveerCredentials(PLATFORM_REFS[provider]);
+  const credentials: Credentials = { apiKey: "test-key" };
   const verzoek = naarAdapterVerzoek(req);
 
   switch (provider) {

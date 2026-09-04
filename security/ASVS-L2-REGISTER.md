@@ -46,10 +46,10 @@ Level 1/2-vereiste uit de canonieke CSV als afzonderlijke bewijsregel opnemen.
 | V10 OAuth and OIDC | Deels | Microsoft 365 fase 1: authorization code + PKCE, state/nonce, tenant-specifieke authority en callbackrunbook | Preview-negatieve tests, Entra-configexport zonder geheimen en callback-/replaybewijs |
 | V11 Cryptography | Deels | TLS bij providers; HMAC-integriteitszegel voor auditinhoud | Sleutelregister, rotatie, algoritme-/lengtecontrole en secret-lifecycle aantoonbaar maken |
 | V12 Secure Communication | Deels | Vercel TLS, HSTS/securityheaders | TLS-/certificaatconfig, interne providerverbindingen en redirect naar HTTPS periodiek toetsen |
-| V13 Configuration | Deels | Security-CI, boundarylint, service-role scanner, fail-closed deploymentdetectie | Preview/Productie-secrets isoleren; dependency/SBOM/secretscan; providerconfig als bewijs vastleggen |
-| V14 Data Protection | Open/Deels | RLS en Preview zonder Productiedata als doelarchitectuur | Dataclassificatie, bewaartermijnen, export/verwijdering, back-up/restore en logredactie sluiten |
+| V13 Configuration | Deels | Security-CI, boundarylint, service-role scanner, fail-closed deploymentdetectie; #311 private fondsconfiguratie en code-allowlist voor secret-/endpointreferenties | Preview/Productie-secrets isoleren; dependency/SBOM/secretscan; wijzigingsbewijs van providerconfig periodiek exporteren |
+| V14 Data Protection | Open/Deels | RLS; private, inhoudsvrije gateway-audit (geen prompt/antwoord/secret) en geredigeerde `app_errors`; Preview zonder Productiedata als doelarchitectuur | Dataclassificatie, bewaartermijnen, export/verwijdering en back-up/restore sluiten |
 | V15 Secure Coding and Architecture | Deels | Decision records, codegrenzen, dit dreigingsmodel | Security-architectuurreview per wijziging; SAST/SCA en misbruikcases als CI-poorten |
-| V16 Security Logging and Error Handling | Deels | Governance-/platformaudit en app-errorregistratie | Securityeventcatalogus, PII-redactie, alarmen, integriteit en atomische audit compleet maken |
+| V16 Security Logging and Error Handling | Deels | Governance-/platformaudit, app-errorregistratie en `gateway_log_fouten` voor uitgevallen AI-callaudit | Securityeventcatalogus, externe alerting, integriteit en atomische audit compleet maken |
 | V17 WebRTC | Waarschijnlijk N.v.t. | Geen WebRTC-functionaliteit gevonden | Repo- en runtimecontrole vastleggen; daarna formeel N.v.t. accorderen |
 
 ## Technische werkpakketten

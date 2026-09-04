@@ -29,10 +29,10 @@ export const ANTHROPIC_MAX_RETRIES = 1;
 const clients = new Map<string, Anthropic>();
 
 /**
- * Eén client per (sleutel, base-URL). Ook core/lib/ai-poort.ts haalt zijn client
- * hier vandaan (overgangspad T3/T4), zodat `new Anthropic(` nergens anders staat.
+ * Eén client per (sleutel, base-URL). De gateway is de enige productieaanroeper,
+ * zodat `new Anthropic(` nergens anders staat.
  */
-export function maakAnthropicClient(credentials: Credentials): Anthropic {
+function maakAnthropicClient(credentials: Credentials): Anthropic {
   const baseURL = resolveAnthropicBaseUrl() ?? credentials.baseUrl;
   const sleutel = createHash("sha256").update(`${credentials.apiKey}\n${baseURL ?? ""}`).digest("hex");
   let client = clients.get(sleutel);

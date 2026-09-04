@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 //  De DURE, onzuivere helft: per (bronchunk, actief concept) één geforceerde
 //  Haiku-tool-call (temperature 0, verbatim evidence) — exact het S1-patroon
-//  (scripts/spike-s1/extract.ts), nu productie. De PURE verwerking (normalisatie,
+//  uit de S1-proef, nu productie. De PURE verwerking (normalisatie,
 //  verbatim-check, negatie-guard, ontdubbeling) leeft in core/lib/semantische-
 //  concepten.ts en wordt hier alleen aangeroepen, zodat die los toetsbaar blijft.
 //
@@ -15,9 +15,8 @@
 // ============================================================================
 
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
-import { bewaakteAnthropic, type PoortContext } from "./ai-poort";
-import { HAIKU_MODEL } from "./llm-modellen";
+import type { GatewayAanroep, NeutraleTool } from "./ai-gateway/contract";
+import { isGatewayFout } from "./ai-gateway/fout";
 import {
   bouwKandidaatUnits,
   ontdubbel,
@@ -35,12 +34,13 @@ const MAX_CHUNK_TEKST = 12000;
 // Geforceerde-tool-schema (S1): het model geeft ALLEEN value_raw + verbatim
 // evidence + optionele sectie + grof confidence-signaal. Nooit de genormaliseerde
 // waarde (dat doen wij) of het paginanummer (dat is de bron-chunk).
-const TOOL: Anthropic.Tool = {
-  name: "leg_voorkomens_vast",
-  description:
+const TOOL: NeutraleTool = {
+  soort: "functie",
+  naam: "leg_voorkomens_vast",
+  beschrijving:
     "Leg alle voorkomens van het gevraagde concept in deze tekst vast. " +
     "Geef een lege lijst als het concept hier niet voorkomt.",
-  input_schema: {
+  schema: {
     type: "object",
     properties: {
       voorkomens: {
@@ -63,6 +63,7 @@ const TOOL: Anthropic.Tool = {
     },
     required: ["voorkomens"],
   },
+  verplicht: true,
 };
 
 const SYSTEEM =
@@ -85,26 +86,30 @@ export type VoorkomenExtractor = (
 // de poortcontext mee en elke tool-call loopt daar doorheen. De extractie draait
 // in de ingest-worker, waar het quotum al is gereserveerd; hier wordt alleen de
 // kill switch en de modelallowlist getoetst — live, per call.
-export function maakHaikuVoorkomenExtractor(poort: PoortContext): VoorkomenExtractor {
+export function maakGatewayVoorkomenExtractor(
+  aanroep: GatewayAanroep,
+  registreerModel?: (model: string) => void
+): VoorkomenExtractor {
   return async (fragment, conceptOmschrijving) => {
-  const resp = await bewaakteAnthropic(poort, HAIKU_MODEL, (anthropic) =>
-    anthropic.messages.create({
-    model: HAIKU_MODEL,
-    max_tokens: 1024,
+  const resp = await aanroep.gateway.genereer(aanroep.ctx, {
+    taaktype: "semantische_extractie",
+    maxTokens: 1024,
     temperature: 0, // reproduceerbaarheid (besluit 0139-lijn)
-    system: SYSTEEM,
+    systeem: SYSTEEM,
     tools: [TOOL],
-    tool_choice: { type: "tool", name: TOOL.name },
-    messages: [
+    berichten: [
       {
         role: "user",
         content: `Doelconcept:\n${conceptOmschrijving}\n\nTekst:\n"""\n${fragment}\n"""`,
       },
     ],
-    })
+  });
+  registreerModel?.(resp.model);
+  const blok = resp.inhoud.find(
+    (b): b is { type: "tool_use"; input: unknown } =>
+      typeof b === "object" && b !== null && (b as { type?: unknown }).type === "tool_use"
   );
-  const blok = resp.content.find((b) => b.type === "tool_use");
-  if (!blok || blok.type !== "tool_use") return [];
+  if (!blok) return [];
   const input = blok.input as { voorkomens?: RawVoorkomen[] };
   return Array.isArray(input.voorkomens) ? input.voorkomens : [];
   };
@@ -123,7 +128,7 @@ export async function extraheerUnits(
   concepten: ActiefConcept[],
   documentStatus: string | null,
   // Geen default-extractor meer: de aanroeper MOET er een meegeven, en de enige
-  // productie-implementatie is maakHaikuVoorkomenExtractor(poort). Zo kan er
+  // productie-implementatie is maakGatewayVoorkomenExtractor(aanroep). Zo kan er
   // geen ongemeten providercall ontstaan door het argument te vergeten.
   extractor: VoorkomenExtractor
 ): Promise<{ units: KandidaatUnit[]; meting: ExtractieMeting }> {
@@ -140,6 +145,9 @@ export async function extraheerUnits(
         voorkomens = await extractor(fragment, concept.omschrijving);
         meting.calls += 1;
       } catch (e) {
+        if (isGatewayFout(e) && (e.categorie === "configuratie" || e.categorie === "poort_gesloten")) {
+          throw e;
+        }
         meting.callFouten += 1;
         console.error(
           `[semantische-extractie] call mislukt (chunk ${chunk.id}, concept ${concept.key}):`,

@@ -75,13 +75,13 @@ test("AFS-2 — aanmaken, concept en downloaden weigeren de bureau-rol server-si
   }
 });
 
-test("AFS-9 — de concept-route valt terug op het sjabloon bij lege key/guardrail (geen fout naar gebruiker)", () => {
+test("AFS-9 — de concept-route valt terug op het sjabloon bij gateway-/guardrailfout", () => {
   const bron = lees("app", "api", "procedures", "[id]", "afschrift", "concept", "route.ts");
   assert.ok(bron.includes("bouwSjabloonProza"), "geen sjabloonterugval");
   assert.ok(bron.includes("toetsLeeswijzerTegenFeitenkaart"), "guardrail niet toegepast");
-  assert.ok(bron.includes("process.env.ANTHROPIC_API_KEY"), "geen lege-key-afhandeling");
-  // Bij lege key: sjabloon + aiGebruikt=false, geen throw.
-  assert.match(bron, /!process\.env\.ANTHROPIC_API_KEY[\s\S]{0,200}?aiGebruikt: false/);
+  assert.ok(bron.includes("productieGateway"), "centrale gateway ontbreekt");
+  // Configuratie-, secret- en providerfouten landen in dezelfde veilige terugval.
+  assert.match(bron, /catch \(aiFout\)[\s\S]{0,500}?tekst: sjabloon,[\s\S]{0,100}?aiGebruikt: false/);
 });
 
 // ── (3) De host↔fonds-guard staat op de muterende/gevoelige routes ──────────
