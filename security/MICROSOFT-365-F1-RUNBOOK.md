@@ -74,6 +74,8 @@ Een productvariant mag pas naar `microsoft` wanneer alle ingeschakelde Microsoft
 
 Controleer op `https://pgb.preview.bestuurdersportaal.com` normale Supabase-login, start koppelen, exact vier scopes, veilige statusmetadata, server-side test, replay/weigering van state en lokaal ontkoppelen. Controleer daarnaast dat de kaart bij een fonds zonder pilotflag niet zichtbaar is. Leg geen authorization codes, state, tokens, cacheblobs, secrets of volledige tenant/accountnamen vast.
 
+Bij een mislukte callback registreert de applicatie uitsluitend een vaste fasecode: `oauth_transactie`, `oauth_decryptie`, `token_exchange`, `identity_validation`, `graph_me`, `vault_save` of `onverwachte_fout`. Zoek in de Preview-runtime-log op `[MICROSOFT] OAuth-callback mislukt` en verifieer dezelfde categorie in `microsoft_private.audit_log`. Neem de onderliggende providerfout niet over in logs of auditvelden. De tokenuitwisseling krijgt de oorspronkelijke nonce mee, zodat MSAL de ID-tokennonce vóór verdere verwerking controleert.
+
 Rol eerst uit naar `preview-stable`, activeer daarna de PGB-flag en voer de smoke uit. Bij een blokkerende fout gaat eerst de PGB-flag terug naar `false`; pas daarna wordt de deployment teruggezet. Productie blijft in fase 1 ongewijzigd.
 
 ## Lokaal databasebewijs 2026-09-04

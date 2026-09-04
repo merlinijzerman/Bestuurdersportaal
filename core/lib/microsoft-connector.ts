@@ -4,12 +4,34 @@ import { createHash, randomBytes } from "node:crypto";
 import { microsoftConfig, MICROSOFT_SCOPES } from "@/core/lib/microsoft-config";
 import { ontsleutelMicrosoftGeheim, versleutelMicrosoftGeheim, type VersleuteldBlob } from "@/core/lib/microsoft-crypto";
 import { microsoftIdentiteitGeldig } from "@/core/lib/microsoft-identity-core";
+import {
+  MicrosoftConnectorError,
+  type MicrosoftKoppelFoutcategorie,
+} from "@/core/lib/microsoft-connector-error-core";
 import * as vault from "@/core/lib/microsoft-vault";
 
 export type ConnectorContext = { fondsId: string; gebruikerId: string };
 const aad = (fondsId: string, gebruikerId: string, soort: string) => `m365:v1:${fondsId}:${gebruikerId}:${soort}`;
 const b64url = (bytes: number) => randomBytes(bytes).toString("base64url");
 const challenge = (verifier: string) => createHash("sha256").update(verifier).digest("base64url");
+
+async function koppelStap<T>(categorie: MicrosoftKoppelFoutcategorie, actie: () => Promise<T>): Promise<T> {
+  try {
+    return await actie();
+  } catch (fout) {
+    if (fout instanceof MicrosoftConnectorError) throw fout;
+    throw new MicrosoftConnectorError(categorie, fout);
+  }
+}
+
+function koppelStapSync<T>(categorie: MicrosoftKoppelFoutcategorie, actie: () => T): T {
+  try {
+    return actie();
+  } catch (fout) {
+    if (fout instanceof MicrosoftConnectorError) throw fout;
+    throw new MicrosoftConnectorError(categorie, fout);
+  }
+}
 
 function client() {
   const cfg = microsoftConfig();
@@ -27,19 +49,38 @@ export async function startKoppeling(ctx: ConnectorContext, returnTo: string) {
 }
 function mask(username: string | undefined) { if (!username) return null; const [left, right] = username.split("@"); return `${left.slice(0, 1)}***${right ? `@${right}` : ""}`; }
 export async function voltooiKoppeling(args: ConnectorContext & { state: string; code: string }) {
-  const tx = await vault.consumeerOAuthTransactie(args.state);
-  if (!tx || tx.fonds_id !== args.fondsId || tx.gebruiker_id !== args.gebruikerId) throw new Error("Ongeldige of verlopen Microsoft-koppeling.");
-  const geheim = JSON.parse(ontsleutelMicrosoftGeheim({ sleutelVersie: tx.sleutel_versie, iv: tx.iv, tag: tx.tag, ciphertext: tx.ciphertext }, aad(args.fondsId, args.gebruikerId, "oauth"))) as { nonce: string; verifier: string; returnTo: string };
+  const tx = await koppelStap("oauth_transactie", () => vault.consumeerOAuthTransactie(args.state));
+  if (!tx || tx.fonds_id !== args.fondsId || tx.gebruiker_id !== args.gebruikerId) {
+    throw new MicrosoftConnectorError("oauth_transactie");
+  }
+  const geheim = koppelStapSync("oauth_decryptie", () => {
+    const waarde = JSON.parse(ontsleutelMicrosoftGeheim({ sleutelVersie: tx.sleutel_versie, iv: tx.iv, tag: tx.tag, ciphertext: tx.ciphertext }, aad(args.fondsId, args.gebruikerId, "oauth"))) as Record<string, unknown>;
+    if (typeof waarde.nonce !== "string" || typeof waarde.verifier !== "string" || typeof waarde.returnTo !== "string") {
+      throw new Error("OAuth-transactie is onvolledig.");
+    }
+    return { nonce: waarde.nonce, verifier: waarde.verifier, returnTo: waarde.returnTo };
+  });
   const cfg = microsoftConfig();
   const msal = client();
-  const result = await msal.acquireTokenByCode({ code: args.code, scopes: [...MICROSOFT_SCOPES], redirectUri: cfg.callbackUrl, codeVerifier: geheim.verifier });
+  const result = await koppelStap("token_exchange", () => msal.acquireTokenByCode({
+    code: args.code,
+    scopes: [...MICROSOFT_SCOPES],
+    redirectUri: cfg.callbackUrl,
+    codeVerifier: geheim.verifier,
+    nonce: geheim.nonce,
+  }));
   const claims = (result.idTokenClaims ?? {}) as Record<string, unknown>;
-  if (!microsoftIdentiteitGeldig(claims, { tenantId: cfg.tenantId, clientId: cfg.clientId, nonce: geheim.nonce, homeAccountId: result.account?.homeAccountId })) throw new Error("Microsoft-identiteit kon niet veilig worden gevalideerd.");
-  const me = await fetch("https://graph.microsoft.com/v1.0/me?$select=id,displayName,userPrincipalName", { headers: { Authorization: `Bearer ${result.accessToken}`, Accept: "application/json" }, cache: "no-store" });
-  if (!me.ok) throw new Error("Microsoft-profiel kon niet worden gecontroleerd.");
-  const profiel = await me.json() as { id?: string; displayName?: string; userPrincipalName?: string };
-  if (!profiel.id) throw new Error("Microsoft-profiel is onvolledig.");
-  await vault.bewaarKoppeling({ fonds_id: args.fondsId, gebruiker_id: args.gebruikerId, tenant_id: cfg.tenantId, microsoft_object_id: profiel.id, home_account_id: result.account!.homeAccountId, display_name: profiel.displayName?.slice(0, 160) ?? null, masked_username: mask(profiel.userPrincipalName), scopes: [...MICROSOFT_SCOPES], cache: versleutelMicrosoftGeheim(msal.getTokenCache().serialize(), aad(args.fondsId,args.gebruikerId,"cache")) });
+  if (!microsoftIdentiteitGeldig(claims, { tenantId: cfg.tenantId, clientId: cfg.clientId, nonce: geheim.nonce, homeAccountId: result.account?.homeAccountId })) {
+    throw new MicrosoftConnectorError("identity_validation");
+  }
+  const profiel = await koppelStap("graph_me", async () => {
+    const response = await fetch("https://graph.microsoft.com/v1.0/me?$select=id,displayName,userPrincipalName", { headers: { Authorization: `Bearer ${result.accessToken}`, Accept: "application/json" }, cache: "no-store" });
+    if (!response.ok) throw new Error("Graph /me gaf geen succesvolle status.");
+    const waarde = await response.json() as { id?: string; displayName?: string; userPrincipalName?: string };
+    if (!waarde.id) throw new Error("Graph /me-profiel is onvolledig.");
+    return waarde;
+  });
+  await koppelStap("vault_save", () => vault.bewaarKoppeling({ fonds_id: args.fondsId, gebruiker_id: args.gebruikerId, tenant_id: cfg.tenantId, microsoft_object_id: profiel.id!, home_account_id: result.account!.homeAccountId, display_name: profiel.displayName?.slice(0, 160) ?? null, masked_username: mask(profiel.userPrincipalName), scopes: [...MICROSOFT_SCOPES], cache: versleutelMicrosoftGeheim(msal.getTokenCache().serialize(), aad(args.fondsId,args.gebruikerId,"cache")) }));
   return geheim.returnTo;
 }
 export async function testKoppeling(ctx: ConnectorContext) {
@@ -62,5 +103,5 @@ export async function testKoppeling(ctx: ConnectorContext) {
   }
 }
 export async function statusKoppeling(ctx: ConnectorContext) { return vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId); }
-export async function registreerKoppelfout(ctx: ConnectorContext) { await vault.registreerKoppelfout(ctx.fondsId, ctx.gebruikerId); }
+export async function registreerKoppelfout(ctx: ConnectorContext, categorie: MicrosoftKoppelFoutcategorie) { await vault.registreerKoppelfout(ctx.fondsId, ctx.gebruikerId, categorie); }
 export async function ontkoppelKoppeling(ctx: ConnectorContext) { await vault.ontkoppel(ctx.fondsId, ctx.gebruikerId); }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { haalProfiel } from "@/core/lib/profiel";
 import { microsoftPilotActief, registreerKoppelfout, voltooiKoppeling } from "@/core/lib/microsoft-connector";
+import { microsoftKoppelfoutcategorie } from "@/core/lib/microsoft-connector-error-core";
 import { veiligeMicrosoftReturnUrl } from "@/core/lib/microsoft-config";
 export const dynamic = "force-dynamic";
 /** OAuth-uitzondering: Entra initieert deze navigatie. De callback herleidt de
@@ -22,8 +23,10 @@ export async function GET(req: NextRequest) {
     const bestemming = new URL(returnTo, req.url);
     bestemming.searchParams.set("microsoft", "gekoppeld");
     return NextResponse.redirect(bestemming, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    if (auditContext) await registreerKoppelfout(auditContext).catch(() => undefined);
+  } catch (fout) {
+    const categorie = microsoftKoppelfoutcategorie(fout);
+    console.error(`[MICROSOFT] OAuth-callback mislukt: ${categorie}`);
+    if (auditContext) await registreerKoppelfout(auditContext, categorie).catch(() => undefined);
     return NextResponse.redirect(fallback, { headers: { "Cache-Control": "no-store" } });
   }
 }

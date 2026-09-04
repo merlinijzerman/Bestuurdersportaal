@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { createHash } from "node:crypto";
 import type { VersleuteldBlob } from "@/core/lib/microsoft-crypto";
 import { microsoftVaultDbConfig } from "@/core/lib/microsoft-vault-config-core";
+import type { MicrosoftKoppelFoutcategorie } from "@/core/lib/microsoft-connector-error-core";
 
 type Verbinding = { id: string; fonds_id: string; gebruiker_id: string; tenant_id: string; microsoft_object_id: string; home_account_id: string; display_name: string | null; masked_username: string | null; status: "gekoppeld" | "fout" | "ontkoppeld"; scopes: string[]; laatst_getest_op: string | null; gekoppeld_op: string | null };
 let pool: Pool | undefined;
@@ -45,8 +46,8 @@ export async function bewaarCache(args: { fondsId: string; gebruikerId: string; 
 export async function markeerTest(fondsId: string, gebruikerId: string, ok: boolean, foutcategorie: string | null) {
   await db().query("select microsoft_private.registreer_test($1,$2,$3,$4)", [fondsId, gebruikerId, ok, foutcategorie]);
 }
-export async function registreerKoppelfout(fondsId: string, gebruikerId: string) {
-  await db().query("select microsoft_private.registreer_koppelfout($1,$2,$3)", [fondsId, gebruikerId, "oauth_callback_fout"]);
+export async function registreerKoppelfout(fondsId: string, gebruikerId: string, categorie: MicrosoftKoppelFoutcategorie) {
+  await db().query("select microsoft_private.registreer_koppelfout($1,$2,$3)", [fondsId, gebruikerId, categorie]);
 }
 export async function ontkoppel(fondsId: string, gebruikerId: string) {
   await db().query("select microsoft_private.ontkoppel($1,$2)", [fondsId, gebruikerId]);
