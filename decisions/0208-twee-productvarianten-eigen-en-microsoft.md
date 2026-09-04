@@ -23,6 +23,15 @@ Het uitgangspunt is:
 
 ## Twee volwaardige productvarianten
 
+## Fase 1-connectorgrens (2026-09-04)
+
+De eerste koppeling gebruikt uitsluitend een single-tenant, delegated Microsoft Graph-profielproef.
+De bestaande Supabase-login blijft leidend. Token-cache, OAuth-transacties en gezaghebbende
+koppelstatus staan in een private database-schema achter een afzonderlijke, minimale
+server-only database-rol; de bestaande service-roleclient wordt niet in tenant-routes gebruikt.
+Alle fondsen blijven `eigen`; de Preview-pilotflag ontsluit alleen de koppeling en schakelt geen
+bronlaag om.
+
 | Onderdeel | Eigen variant | Microsoftvariant |
 |---|---|---|
 | Vergaderplanning | In het portaal, opgeslagen in Supabase | Outlook van de klant, read-only gesynchroniseerd |

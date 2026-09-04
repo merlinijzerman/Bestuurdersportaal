@@ -2,16 +2,16 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 100,
+    "aantalHandlers": 102,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 23,
+    "zonderSpoor": 25,
     "klasseTelling": {
       "domein": 39,
       "geen": 9,
       "bewijsketen": 38,
       "machine": 6,
-      "operationeel": 8
+      "operationeel": 10
     },
     "ketengebeurtenisVereist": [],
     "spoorVereist": [],
@@ -844,6 +844,30 @@
       "klasse": "machine",
       "ketengebeurtenisVereist": false,
       "declaredAudit": null,
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "DELETE app/api/microsoft/connectie/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/microsoft/test/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],

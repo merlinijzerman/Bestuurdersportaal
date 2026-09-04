@@ -137,7 +137,7 @@ const SPLIT_KLASSE = {
   //    `sluiten` staat hier ook niet meer: de stemmingen-trigger levert zijn
   //    `stemming_gesloten`-event bovenop procedure_log (KETEN_SLUITEN-markering vervalt
   //    zodra het bewijsketen-spoor meet). ketengebeurtenis_vereist is daarmee 0.
-  // B. operationele handeling → handelingen_log — 8
+  // B. operationele handeling → handelingen_log — 10
   "PATCH app/api/documents/[id]/ai-markering/route.ts": "operationeel",
   "POST app/api/documents/[id]/her-extract/route.ts": "operationeel", // gebonden aan pijplijngedrag; zie 0191
   "POST app/api/documents/[id]/opnieuw-verwerken/route.ts": "operationeel", // idem
@@ -146,6 +146,8 @@ const SPLIT_KLASSE = {
   "DELETE app/api/gesprekken/[id]/route.ts": "operationeel",
   "POST app/api/reflectie/transitie/route.ts": "operationeel",
   "PATCH app/api/profiel/route.ts": "operationeel", // fonds_id/rol-tabel (C-01), goedkope verzekering
+  "DELETE app/api/microsoft/connectie/route.ts": "operationeel", // lokaal tokenmateriaal beëindigen; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/test/route.ts": "operationeel", // externe verbindingstest; wrapper-audit + private connectoraudit
   // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",

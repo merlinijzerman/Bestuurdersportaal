@@ -53,6 +53,8 @@
 | R-17 | Externe Preview-account blijft onbeperkt actief of krijgt beheerrechten | Hoog | Nog in te richten | Open — invite-only, minimale rol, MFA, einddatum en periodieke accountcontrole |
 | R-18 | Foutieve DNS/domain-koppeling of dangling domain maakt takeover/phishing mogelijk | Hoog | Vercel domeinvalidatie | Deels — `horizon.*` niet herintroduceren, ongebruikte records verwijderen en periodiek controleren |
 | R-19 | Fondsgerichte Preview-host resolveert naar de verkeerde Preview-tenant of een extern account ziet een ander previewfonds | Kritiek | Exacte hostmapping, RLS, host↔fonds fail-closed | Deels — host×account-matrix en directe REST/Storage/RPC-tests voor ieder previewfonds |
+| R-20 | Aanvaller koppelt zijn Microsoft-account aan de portaalaccount van een ander, replayt callback/state of wisselt tenant | Kritiek | Bestaande Supabase-sessie, eenmalige 10-minutentransactie, PKCE, nonce, tenant-/audiencevalidatie en exact callbackpad | Deels — Preview-smoke en negatieve route-tests uitvoeren |
+| R-21 | Token/cache, code of secret lekt naar browser, log, audit of directe PostgREST-toegang | Kritiek | AES-256-GCM, private schema, minimale database-rol, no-store en inhoudsarme audit | Deels — grantscontrole, ciphertext-tampertest en loginspectie uitvoeren |
 
 ## AI-specifieke grenzen voor Preview
 

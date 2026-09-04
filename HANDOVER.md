@@ -1,5 +1,7 @@
 # Bestuurdersportaal MVP — Handover
 
+> **2026-09-04 — Microsoft 365 fase 1:** Preview-only single-tenant connectorfundament toegevoegd: Supabase-login blijft leidend; alleen delegated `User.Read` en Graph `/me`; koppeling, test en lokaal ontkoppelen onder `/api/microsoft/*`. Token-cache/OAuth-materiaal leeft encrypted in `microsoft_private` achter een aparte minimale database-rol. Vereist vóór Preview: migratie toepassen, database-rol provisionen en de geheimen/pilotflag volgens `security/MICROSOFT-365-F1-RUNBOOK.md` instellen. Geen agenda-, SharePoint- of bronwisselfunctionaliteit.
+
 > **Voor toekomstige Claude-sessies**: dit document is de samenvatting van wat is gebouwd, hoe het in elkaar zit, en wat de logische volgende stappen zijn. Lees dit eerst voordat je aan iets nieuws begint, zodat je niet de hele code hoeft te scannen.
 
 > **As-built documentatieset (2026-07-04) is leidend voor inhoud.** Naast dit handover-document staat in de projectmap (één niveau boven `mvp/`) een volledige as-built documentatieset in de mappen `00 Overzicht en status` t/m `09 Objectenmodel`, opgesteld op basis van code, migraties en configuratie. Voor architectuur, objectmodel, datadictionary, security en status is díe set leidend; HANDOVER.md blijft leidend voor werkwijze, ontwerpkeuzes-context en release-historie. **Verplicht bij elke release:** de documentatie bijwerken volgens `00 Overzicht en status/release-template.md` — zie §"Documentatie bijwerken bij elke release" onder Werkwijze. Een release is pas af als die stap is gedaan.

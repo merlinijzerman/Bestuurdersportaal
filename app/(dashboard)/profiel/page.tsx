@@ -16,6 +16,7 @@ import {
   ANTWOORDMODUS_LABEL,
 } from "@/core/lib/vraagtype";
 import OrganisatieprofielTab from "./_components/OrganisatieprofielTab";
+import MicrosoftKoppelingKaart from "./_components/MicrosoftKoppelingKaart";
 
 const MAX_SECUNDAIRE = 3;
 const MIN_FOCUS = 3;
@@ -282,6 +283,7 @@ export default function ProfielPage() {
         <OrganisatieprofielTab />
       ) : (
         <div className="max-w-3xl">
+          <MicrosoftKoppelingKaart />
           <p className="text-sm text-muted mb-6">
             Uw profiel personaliseert de AI-voorbereiding (welke aandachtspunten en kritische
             vragen vóórkomen).

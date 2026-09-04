@@ -2379,3 +2379,15 @@ create table if not exists public.procedure_afschriften (
 -- Schrijven loopt uitsluitend via fn_schrijf_handeling(text,text,text,int,uuid),
 -- die gebruiker en fonds server-side uit auth.uid() afleidt. De wrapper roept deze
 -- RPC pas aan bij ENFORCE_AUDIT=on; de code-deploy is daarom apart van deze DDL.
+
+-- ── Microsoft 365 fase 1 — connectorfundament ─────────────────────────────
+-- Bron van waarheid: supabase/migrations/2026_09_04_microsoft_fase1_connectorfundament.sql.
+-- public.fonds_integratie_profielen: exact één profiel per fonds, expliciet
+-- `eigen|microsoft`; bestaande fondsen zijn `eigen`. authenticated kan uitsluitend
+-- het eigen profiel lezen; de Preview-pilotflag is niet via de browser schrijfbaar.
+-- Een AFTER INSERT-trigger maakt voor ieder nieuw fonds fail-safe profiel `eigen`.
+-- microsoft_private.oauth_transacties, verbindingen, token_cache en audit_log zijn
+-- RLS-on/private en hebben geen anon/authenticated-grants. Alleen de loginrol
+-- microsoft_vault mag de benoemde SECURITY DEFINER-functies aanroepen. Cache en
+-- OAuth-materiaal zijn AES-256-GCM-ciphertext; er zijn geen browser-toegankelijke
+-- decryptie- of cachefuncties.
