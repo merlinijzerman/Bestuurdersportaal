@@ -1,6 +1,6 @@
 # AI-gateway — inventarisatie en uitvoeringsplan (M365 fase 2B, issue #311)
 
-- **Status:** plan ter review; fase 1 (inventarisatie + karakterisatie) uitgevoerd op branch `feat/311-ai-gateway`
+- **Status:** plan **gereviewd en akkoord** (opdrachtgever, 2026-09-04, zie §6) met twee verplichte beveiligingsaanpassingen (§3.3a, §3.3b); T1 uitgevoerd op branch `feat/311-ai-gateway`
 - **Datum:** 2026-09-04
 - **Context:** besluit 0208 (twee productvarianten, AI-provider als aparte configuratiedimensie), issue #311
 - **Leidend principe:** het bestaande gedrag blijft standaard Anthropic; deze fase levert het uitbreidingspunt, geen klant-eigen provider.
@@ -89,16 +89,16 @@ route/worker
   │  preflight(actietype)             ← bestaand: quotum + idempotentie, één keer per actie
   ▼
 AI-gateway  core/lib/ai-gateway/
-  │  1. resolveConfig(fonds, taakgroep)   ← NIEUW: fn_ai_gateway_config(_systeem) → {profiel, provider, model, versie}
+  │  1. resolveConfig(fonds, taakgroep)   ← NIEUW: ai_gateway_private.lees_config via de aparte rol ai_gateway (§3.3a)
   │  2. poortCheck(provider, model)       ← bestaand: kill switch + allowlist, live per call
   │  3. adapter.genereer / .stream        ← adapterlaag; enige plek met provider-SDK/endpoint
   │  4. normaliseer (tekst, usage, stopreden, foutcategorie)
-  │  5. fn_ai_gateway_log_schrijf(...)    ← NIEUW: append-only operationele auditregel per call
+  │  5. ai_gateway_private.schrijf_log    ← NIEUW: append-only auditregel per call, zelfde rol; best-effort met gestructureerde foutregistratie (R3)
   ▼
 provider
 ```
 
-Elke beveiligings- en quotacontrole zit vóór stap 3; stap 1 en 2 falen gesloten zonder fallback. De browser levert nooit provider, model, endpoint of fonds: fonds komt uit `withFondsRoute`-context (sessie) of de job-rij (service), taaktype is een code-constante op de call-site.
+Elke beveiligings- en quotacontrole zit vóór stap 3; stap 1 en 2 falen gesloten zonder fallback. Stap 1 en 5 lopen over een eigen, minimale databaseverbinding (rol `ai_gateway`, §3.3a) die alleen de server-side gateway heeft; de RLS-client van de route blijft voor alles wat tenantdata raakt. De browser levert nooit provider, model, endpoint of fonds: fonds komt uit `withFondsRoute`-context (sessie) of de job-rij (service), taaktype is een code-constante op de call-site.
 
 ### 3.2 Contract (`core/lib/ai-gateway/contract.ts`) — provider-neutraal, geen SDK-types
 
@@ -176,12 +176,13 @@ Vier **taakgroepen** in plaats van vijftien losse rijen per fonds; elke groep bu
 
 AQLab (`aqlab_generatie`, `aqlab_judge`) is platformbreed (fonds = null) en blijft caller-supplied binnen de DB-allowlist; de judge houdt zijn gepinde model als code-constante met een eigen platformprofiel-rij (geen fonds).
 
-Tabellen (allemaal deny-by-default RLS, `revoke all … from anon, authenticated`, alleen `service_role`-grants; patroon `fonds_licentie`):
+Tabellen — in het private schema `ai_gateway_private` (§3.3a), RLS aan zonder policies, `revoke all … from public, anon, authenticated, service_role`; alleen de functies van het schema raken ze (eigenaar `postgres`):
 
 ```sql
 -- Platformprofielen: welke provider, met welke server-side secret-REFERENTIE. Nooit een key of URL.
-create table public.ai_provider_profiel (
+create table ai_gateway_private.provider_profiel (
   id            text primary key,                          -- 'platform-anthropic'
+  eigenaar_fonds_id uuid references public.fondsen(id) on delete cascade,  -- null = platform; anders klant-eigen (§3.3b)
   provider      text not null check (provider in ('anthropic','openai','mistral')),
   secret_ref    text not null,                             -- sleutelnaam in de servergeheimen, bv. 'ANTHROPIC_API_KEY'
   endpoint_ref  text,                                      -- optionele sleutelnaam (bv. 'OPENAI_BASE_URL'); code mapt ref → env, nooit een vrije URL
@@ -192,19 +193,19 @@ create table public.ai_provider_profiel (
 );
 
 -- Productbeleid-default per taakgroep (bron voor nieuwe fondsen).
-create table public.ai_taakgroep_default (
+create table ai_gateway_private.taakgroep_default (   -- alleen platformprofielen (trigger)
   taakgroep     text primary key check (taakgroep in ('generatie','hulp_sterk','concept','hulp_snel')),
-  profiel_id    text not null references public.ai_provider_profiel(id),
+  profiel_id    text not null references ai_gateway_private.provider_profiel(id),
   provider      text not null, model text not null,
   foreign key (provider, model) references public.ai_model_allowlist(provider, model),
   versie integer not null default 1, bijgewerkt timestamptz not null default now(), bijgewerkt_door uuid
 );
 
 -- De fondsconfiguratie zelf.
-create table public.fonds_ai_configuratie (
+create table ai_gateway_private.fonds_configuratie (
   fonds_id      uuid not null references public.fondsen(id) on delete cascade,
   taakgroep     text not null check (taakgroep in ('generatie','hulp_sterk','concept','hulp_snel')),
-  profiel_id    text not null references public.ai_provider_profiel(id),
+  profiel_id    text not null references ai_gateway_private.provider_profiel(id),  -- trigger: platform óf eigen fonds (§3.3b)
   provider      text not null, model text not null,
   foreign key (provider, model) references public.ai_model_allowlist(provider, model),
   actief        boolean not null default true,
@@ -214,21 +215,41 @@ create table public.fonds_ai_configuratie (
   bijgewerkt_door uuid, reden text,
   primary key (fonds_id, taakgroep)
 );
--- trigger: profiel.provider = provider (consistentie), versie++ bij update, append-only log
-create table public.fonds_ai_configuratie_log ( … oud/nieuw jsonb, versie, gewijzigd_door, gewijzigd_op … );  -- append-only (fn_log_append_only)
+-- triggers: profiel.provider = provider, profiel-eigenaar = platform of dit fonds, versie++ bij update, append-only log
+create table ai_gateway_private.fonds_configuratie_log ( … oud/nieuw jsonb, versie, gewijzigd_door, gewijzigd_op … );  -- append-only (fn_log_append_only)
 
--- Nieuwe fondsen: expliciete default-rijen via AFTER INSERT ON fondsen (G9: er is geen creatieroute).
--- Resolutie zonder rij = 'config_ontbreekt' → fail-closed, géén fallback naar de default-tabel.
+-- Nieuwe fondsen: AFTER INSERT ON public.fondsen maakt de VIER rijen transactioneel aan uit
+-- taakgroep_default (G9: er is geen creatieroute; patroon trg_fonds_integratieprofiel_standaard).
+-- Ontbrekende of ongeldige default → de trigger raist en de fondscreatie FAALT (reviewbesluit R6);
+-- resolutie zonder rij = 'config_ontbreekt' → fail-closed, géén fallback naar de default-tabel.
 ```
 
-RPC's (`security definer`, `set search_path = public, pg_temp`, `revoke … from public, anon`, gerichte grants; gate H):
+### 3.3a Toegangspad: aparte minimale DB-rol `ai_gateway` (reviewvoorwaarde)
 
-- `fn_ai_gateway_config(p_taakgroep)` → `authenticated`; leidt `fonds_id` uit `profielen`/`auth.uid()`; retourneert `{ok, profiel_id, provider, model, secret_ref, endpoint_ref, versie}` of `{ok:false, reden}` met `reden ∈ config_ontbreekt | config_inactief | profiel_inactief | model_niet_toegestaan`.
-- `fn_ai_gateway_config_systeem(p_fonds_id, p_taakgroep)` → `service_role`; weigert `p_fonds_id = null` voor fondsgebonden groepen.
-- `fn_ai_gateway_log_schrijf(…)` en `_systeem(…)` → append-only insert in `ai_gateway_log` (zie 3.5); de tenantvariant leidt het fonds zelf af en negeert een meegegeven fonds.
-- Beheer (wijzigen van fondsconfiguratie/profielen) **niet** in deze fase via UI: uitsluitend via migratie/beheerprocedure met vier-ogen-achtige reden-verplichting (CHECK `length(reden) >= 10`), zoals `fn_ai_allowlist_wijzigen`. Reviewvraag R4.
+De configuratie- en log-RPC's zijn **niet** bereikbaar voor `authenticated` (en niet voor `anon`/`service_role`). Ze leven in een privaat schema `ai_gateway_private` en zijn uitsluitend uitvoerbaar door een aparte, minimale loginrol `ai_gateway`, naar het patroon van `microsoft_vault` (`supabase/migrations/2026_09_04_microsoft_fase1_connectorfundament.sql`, `core/lib/microsoft-vault.ts`, `security/MICROSOFT-365-F1-RUNBOOK.md`):
 
-Gates/registraties: `allowlist-grants.tsv` (nieuwe objecten), gate A1 voor de twee tabellen zonder `fonds_id`, gate B voor `fonds_ai_configuratie` (geen policies → deny), `2026_07_31_r1_structurele_gates.sql` A–H, V3-grants, rollbackbestand, en een gedragssuite `supabase/checks/<datum>_ai_gateway.sql` (backfill-volledigheid, fail-closed zonder rij, cross-tenant: fonds A leest B niet, spoofing van `p_fonds_id` in de tenant-RPC, append-only log).
+- **Rol:** `ai_gateway` met `NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`, lage connection limit, wachtwoord interactief geprovisioned (runbook); de migratie faalt gesloten als de rol ontbreekt. Rechten: `USAGE` op `ai_gateway_private` en `EXECUTE` op precies de benoemde functies — **geen** tabelrechten, geen `public`-rechten. De testketen maakt de rol zelf aan (`scripts/testdb-apply-migrations.sh`, zoals voor `microsoft_vault`).
+- **Verbinding:** alleen de server-side gateway (`core/lib/ai-gateway/config-db.ts`, `import "server-only"`, `pg.Pool` via Supavisor transaction pooler, TLS met vastgepinde CA, `rejectUnauthorized: true`) gebruikt `AI_GATEWAY_DATABASE_URL` + `AI_GATEWAY_CA_CERT_BASE64`. Tenantroutes blijven op de RLS-client; er komt **geen** service-roleclient in tenantroutes.
+- **Functies in `ai_gateway_private`** (`security definer`, `set search_path = ai_gateway_private, public, pg_temp`, `revoke all … from public, anon, authenticated, service_role`, daarna `grant execute … to ai_gateway`):
+  - `lees_config(p_fonds_id uuid, p_taakgroep text)` → `{ok, profiel_id, provider, model, secret_ref, endpoint_ref, versie, eigenaar_fonds_id}` of `{ok:false, reden}`; het fonds-id komt van de server (sessiecontext via `withFondsRoute`, of de job-rij), nooit van de browser. De functie weigert een profiel dat niet platform is én niet van het fonds (§3.3b).
+  - `schrijf_log(…)` → append-only insert in `ai_gateway_private.gateway_log`; `fonds_id` is een verplicht argument dat door de gateway uit dezelfde servercontext komt als bij `lees_config`.
+  - `lees_log_platform(p_fonds_id, p_limiet)` → uitsluitend voor de platformlaag (beheerscherm #317), via dezelfde rol; geen `authenticated`-pad.
+- **Wat de browser dus nooit ziet:** `secret_ref`, `endpoint_ref`, profiel-id's, configuratieversies van andere fondsen, de logfunctie. Een ingelogde sessie heeft geen enkele executable in dit schema; `supabase/checks/<datum>_ai_gateway.sql` bewijst dat (`has_function_privilege('authenticated', …) = false` voor élke functie, `has_schema_privilege('authenticated','ai_gateway_private','USAGE') = false`, en `ai_gateway` heeft exact N executes en nul tabelrechten — patroon `2026_09_04_microsoft_fase1_connectorfundament.sql`).
+- **Configuratietabellen** verhuizen mee naar `ai_gateway_private` (`provider_profiel`, `taakgroep_default`, `fonds_configuratie`, `fonds_configuratie_log`, `gateway_log`); alleen `ai_model_allowlist` blijft in `public` (bestaand, deny-by-default). De FK vanuit het private schema naar `public.ai_model_allowlist` blijft mogelijk.
+- **Secret- en endpointreferenties** zijn sleutelnamen die de adapter via een **code-allowlist** vertaalt naar `process.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `OPENAI_BASE_URL`, `MISTRAL_CHAT_URL`); een onbekende referentie faalt gesloten (`configuratie`). Geen vrije URL uit de database (SSRF), geen key in de database.
+- **Fail-closed zonder verbinding:** ontbreekt `AI_GATEWAY_DATABASE_URL` of faalt de pool, dan `GatewayFout("configuratie","gateway_db_onbereikbaar")` — geen fallback naar code-constanten. Lokale E2E/karakterisering krijgt de rol uit de testketen en de URL uit `.env.local`.
+
+### 3.3b Eigenaarschap van providerprofielen (reviewvoorwaarde)
+
+`provider_profiel` krijgt `eigenaar_fonds_id uuid null references public.fondsen(id) on delete cascade`: `null` = platformprofiel, anders fondsgebonden (toekomstige klant-eigen Azure OpenAI/Copilot-configuratie). Afdwinging op drie plekken, zodat de configuratie van klant A nooit aan klant B kan hangen:
+
+1. **CHECK/trigger op `fonds_configuratie`:** `profiel.eigenaar_fonds_id is null or profiel.eigenaar_fonds_id = fonds_configuratie.fonds_id` — een insert/update die daarvan afwijkt faalt (trigger `bewaak_profiel_eigenaar`, ook bij een latere wijziging van het profiel zelf).
+2. **`lees_config`** herhaalt de toets bij het lezen en geeft `{ok:false, reden:'profiel_niet_van_fonds'}` als de rij toch inconsistent is (defense-in-depth).
+3. **`taakgroep_default`** mag alleen naar platformprofielen verwijzen (CHECK via trigger): een nieuw fonds kan nooit een klantprofiel erven.
+
+De gedragssuite bewijst: fonds A met een eigen profiel → ok; fonds B dat A's profiel selecteert → insert geweigerd; platformprofiel voor beide → ok; default-tabel met klantprofiel → geweigerd.
+
+Gates/registraties: `allowlist-grants.tsv` (nieuwe objecten in `ai_gateway_private`, rol `ai_gateway`), `2026_07_31_r1_structurele_gates.sql` A–H (privaat schema: geen `authenticated`-executes, gate H), V3-grants, rollbackbestand (zet `ai_gateway` op `nologin`, trekt executes in; de logtabel faalt gesloten bij bestaande regels), en een gedragssuite `supabase/checks/<datum>_ai_gateway.sql` (rolcontrole en exact-N-executes, backfill-volledigheid ×4 per fonds, fail-closed zonder rij, profiel-eigenaarschap §3.3b, `authenticated`/`anon`/`service_role` zonder enige toegang, append-only log, trigger nieuwe fondsen incl. falen bij ontbrekende default).
 
 ### 3.4 Adapters en convergentie met AQLab (`platform/lib/aqlab/generate-adapter.ts`)
 
@@ -248,7 +269,7 @@ Nieuwe append-only tabel `ai_gateway_log` (deny-by-default; lezen alleen via pla
 
 `id, aangemaakt, fonds_id (null bij globaal), actor_soort ('gebruiker'|'systeem'), actor_id, proces, taaktype, taakgroep, provider, model, profiel_id, config_versie, poort_config_versie, resultaat ('ok'|'configuratiefout'|'poort_gesloten'|'providerfout'|'timeout'|'rate_limit'|'geannuleerd'), stop_reden, latency_ms, tokens_in, tokens_out, tokens_cache_lezen, tokens_cache_creatie, tokens_totaal, correlatie_id, actie_id, label`
 
-Geen prompt, geen documentinhoud, geen secrets, geen providerrespons. Schrijven gebeurt ná de call, best-effort met serverlog bij falen (zelfde afweging als `rondAf`: een antwoord dat de bestuurder al heeft mag niet alsnog stukgaan op een administratieve schrijfactie) — **reviewvraag R3**. `governance_log.retrieval_meta.tokens` blijft de bron voor de bestaande dashboards (`monitoring-queries.ts`, `verbruik-bundel-lees.ts`), ongewijzigd; het chat-auditrecord krijgt additief `gateway: {provider, model, profiel_id, config_versie}` in `META_BASIS` (sanity-pin bijwerken). `p_model: AI_MODEL` in `schrijf_ai_interactie` wordt het **effectieve** model uit de gateway.
+Geen prompt, geen documentinhoud, geen secrets, geen providerrespons. De tabel heet `ai_gateway_private.gateway_log` en is alleen via `schrijf_log`/`lees_log_platform` bereikbaar (§3.3a). Schrijven gebeurt ná de call, **best-effort** (reviewbesluit R3): een mislukte insert blokkeert een al gegenereerd antwoord niet, maar wordt **gestructureerd geregistreerd** via `logAppFout({label, categorie:"retrieval_ai", severity:"hoog", correlatieId, …})` in `app_errors` mét correlatie-id, taaktype en fonds, en telt mee in een nieuw monitoringssignaal "gateway-logfouten" (`platform/lib/monitoring-signalen.ts`) zodat een stille uitval zichtbaar is. `governance_log.retrieval_meta.tokens` blijft de bron voor de bestaande dashboards (`monitoring-queries.ts`, `verbruik-bundel-lees.ts`), ongewijzigd; het chat-auditrecord krijgt additief `gateway: {provider, model, profiel_id, config_versie}` in `META_BASIS` (sanity-pin bijwerken). `p_model: AI_MODEL` in `schrijf_ai_interactie` wordt het **effectieve** model uit de gateway.
 
 Onderscheid in foutcategorieën (`GatewayFout.categorie` + `resultaat`): configuratiefout, providerfout, timeout, rate limit, poort (kill switch/allowlist), quota (preflight, vóór de gateway), guardrail (route-eigen, vóór de gateway: PII-gate, bronintentie/verduidelijking, chat-invoer), gebruikersannulering (`signal`).
 
@@ -283,24 +304,32 @@ Bewijs vóór de verplaatsing, in de repo-idioom (byte-identieke snapshots):
 | Tranche | Inhoud | Gates | Rollback |
 |---|---|---|---|
 | **T1** (deze branch) | inventarisatie, dit ontwerp, karakterisatie, stub-uitbreiding, CI-stub | harnas 3×, xtenant, e2e-guard, schema-niet-strenger | n.v.t. (alleen tests/docs) |
-| **T2** DB | migratie `…_ai_gateway_config.sql`: 4 tabellen + log, RPC's, trigger nieuwe fondsen, **backfill alle fondsen** (per omgeving: verifieer vooraf de effectieve `AI_MODEL` op Vercel — geen stille modelwissel), gedragssuite, allowlist-tsv, rollback (`…_ROLLBACK.sql`; log-tabel faalt gesloten bij bestaande regels) | r1-gates A–H, V3-grants, `2026_08_16_ai_begrenzing.sql`, nieuwe suite, xtenant DB-laag | rollbackbestand; code raakt de tabellen nog niet |
-| **T3** Gateway + chat | `core/lib/ai-gateway/*`, Anthropic-adapter (stream + non-stream), foutnormalisatie, timeouts/annulering, gateway-log; chatroute C1–C7 en `vraagrouter-model`/`rerank`/`vergelijk-productie` over; `llm-providers` → adapters; boundarytest; unit-contracttests (gemockte adapter: spoofing van provider/model genegeerd, verkeerd fonds → weigering, ontbrekende config/adapter/secret → fail-closed zonder call, kill switch/quota/guardrail vóór de gemockte netwerkcall, stream/non-stream/timeout/cancel/rate-limit/fout-categorieën) | alles van T1 + `npm test`, typecheck, sanity (nieuwe prompt-pin alleen indien bewust), lint:boundaries, lint:quality, xtenant, security:secrets, build; **harnas byte-identiek** | code-revert; DB-tabellen blijven onschadelijk staan |
+| **T2** DB | runbook + provisioning van loginrol `ai_gateway` (per omgeving, interactief wachtwoord); migratie `…_ai_gateway_config.sql`: privaat schema `ai_gateway_private`, 4 tabellen + log, functies met executes uitsluitend voor `ai_gateway`, profiel-eigenaarschap, trigger nieuwe fondsen (faalt bij ontbrekende default), **backfill alle fondsen** (per omgeving: verifieer vooraf de effectieve `AI_MODEL` op Vercel — geen stille modelwissel), gedragssuite, allowlist-tsv, rollback (`…_ROLLBACK.sql`; log-tabel faalt gesloten bij bestaande regels) | r1-gates A–H, V3-grants, `2026_08_16_ai_begrenzing.sql`, nieuwe suite, xtenant DB-laag | rollbackbestand; code raakt de tabellen nog niet |
+| **T3** Gateway + chat | `core/lib/ai-gateway/*` incl. `config-db.ts` (`pg.Pool` op `AI_GATEWAY_DATABASE_URL`, patroon `microsoft-vault.ts`), Anthropic-adapter (stream + non-stream), foutnormalisatie, timeouts/annulering, gateway-log; chatroute C1–C7 en `vraagrouter-model`/`rerank`/`vergelijk-productie` over; `llm-providers` → adapters; boundarytest; unit-contracttests (gemockte adapter: spoofing van provider/model genegeerd, verkeerd fonds → weigering, ontbrekende config/adapter/secret → fail-closed zonder call, kill switch/quota/guardrail vóór de gemockte netwerkcall, stream/non-stream/timeout/cancel/rate-limit/fout-categorieën) | alles van T1 + `npm test`, typecheck, sanity (nieuwe prompt-pin alleen indien bewust), lint:boundaries, lint:quality, xtenant, security:secrets, build; **harnas byte-identiek** | code-revert; DB-tabellen blijven onschadelijk staan |
 | **T4** Overige taken | P1, P2, P4–P8 over; `bewaakteAnthropic*` + client uit `ai-poort.ts`; G1/G2 actietypes; G3 verplicht; G5 opgelost door verwijdering van de client-parameter; spike-s1 weg; `ai-poort.test.ts` allowlist krimpt | idem + `aqlab:smoke` | code-revert |
-| **T5** Docs + smoke | besluit **0209** (eerstvolgende vrije nummer; 0208 staat op PR #309), 0208 bijwerken met de implementatiekeuze, `security/DREIGINGSMODEL.md` (grens 4: gateway als enige uitgang; R-06/R-15), `security/ASVS-L2-REGISTER.md` (V13 providerconfig als bewijs, V14 logredactie), `HANDOVER.md`, `AI-GOVERNANCE-ONTWERP.md`, `SETUP.md` (env-refs); **Preview-smoke** met echte Anthropic: regulier gesprek, gestreamd antwoord met broncontext, geblokkeerde input (PII-gate), quota/kill switch, veilige providerfout; controle dat geen secret/prompt in respons, log of audit zit | — | — |
+| **T5** Docs + smoke | besluit met het dan eerstvolgende vrije nummer (in T5 opnieuw bepalen; niet vooraf gereserveerd), 0208 bijwerken met de implementatiekeuze, `security/DREIGINGSMODEL.md` (grens 4: gateway als enige uitgang; R-06/R-15), `security/ASVS-L2-REGISTER.md` (V13 providerconfig als bewijs, V14 logredactie), `HANDOVER.md`, `AI-GOVERNANCE-ONTWERP.md`, `SETUP.md` (env-refs); **Preview-smoke** met echte Anthropic: regulier gesprek, gestreamd antwoord met broncontext, geblokkeerde input (PII-gate), quota/kill switch, veilige providerfout; controle dat geen secret/prompt in respons, log of audit zit | — | — |
 
 Volgorde per omgeving: T2-migratie eerst in Supabase (Preview, daarna Productie), dán T3-code — code zonder tabellen faalt gesloten (`config_ontbreekt`), tabellen zonder code zijn inert.
 
-## 6. Reviewvragen (beslissen vóór T2)
+## 6. Reviewbesluiten (opdrachtgever, 2026-09-04)
 
-- **R1 — Taakgroepen (4) i.p.v. rijen per taaktype (15).** Voorstel: 4 groepen; het taaktype blijft de identificatie in de log. Alternatief: per taaktype (fijnmaziger, 15 rijen × fonds, meer beheer).
-- **R2 — `AI_MODEL`-env-override.** Voorstel: na T3 beslist de DB voor productiepaden; `AI_MODEL` blijft alleen de seed-/backfill-default en de AQLab-baseline-constante. Consequentie: wie op Vercel `AI_MODEL` heeft gezet, moet dat vóór T2 melden (anders backfillt de migratie een ander model dan wat er draait).
-- **R3 — Gateway-log best-effort of blokkerend.** Voorstel: best-effort met serverfout (patroon `rondAf`); `governance_log` blijft het blokkerende auditspoor voor de chat. Alternatief: blokkerend (antwoord faalt bij logfout), consistent met `schrijf_ai_interactie`.
-- **R4 — Beheer van fondsconfiguratie in deze fase.** Voorstel: alleen via migratie/beheerprocedure (geen UI, geen route); een platformscherm onder `platform.config.manage` is een vervolgticket.
-- **R5 — G1/G2 in T4 meenemen.** Voorstel: ja (twee actietypes + quota-seed), omdat de gateway anders een `actieId`-loze weg moet toestaan.
-- **R6 — Nieuwe fondsen.** Voorstel: `AFTER INSERT`-trigger op `fondsen` zet expliciete rijen uit `ai_taakgroep_default`; resolutie zonder rij faalt gesloten. Alternatief: resolutie valt terug op de default-tabel (minder expliciet, wel robuuster bij handmatige inserts).
+| # | Besluit | Voorwaarde / consequentie |
+|---|---|---|
+| R1 | **Akkoord:** vier taakgroepen | het afzonderlijke taaktype blijft in de gateway-log staan, zodat latere verfijning mogelijk is |
+| R2 | **Akkoord:** de database is na T3 leidend | Vercel gecontroleerd: er bestaat geen `AI_MODEL`-variabele (ook niet gedeeld); de effectieve backfill-default is `claude-opus-4-8`. Na T3 is `AI_MODEL` geen runtime-override voor productiepaden meer; hij blijft alleen seed-default en AQLab-baseline-constante |
+| R3 | **Akkoord:** best-effort gateway-log | logfouten gestructureerd registreren met correlatie-id (`app_errors`) en als monitoringssignaal zichtbaar maken (§3.5) |
+| R4 | **Akkoord:** beheer via migratie/beheerprocedure, geen UI in 2B | vervolgticket vastgelegd: [#317 Beheerscherm "Integraties en AI-configuratie"](https://github.com/merlinijzerman/Bestuurdersportaal/issues/317) |
+| R5 | **Akkoord:** G1/G2 in T4 | anders blijft een pad bestaan dat quotum/preflight omzeilt |
+| R6 | **Akkoord:** expliciete rijen voor nieuwe fondsen | de trigger maakt de vier regels transactioneel aan; ontbrekende of ongeldige defaults laten de fondscreatie falen, geen stille fallback |
+
+**Twee verplichte aanpassingen vóór T2** (verwerkt in §3.3a en §3.3b): (1) aparte minimale DB-rol `ai_gateway` + privaat schema; geen `authenticated`-execute op configuratie- of log-RPC's; geen service-roleclient in tenantroutes; secret-/endpointreferenties verlaten de server nooit; (2) `provider_profiel.eigenaar_fonds_id` met afdwinging dat een fonds alleen een platformprofiel of zijn eigen profiel kan selecteren.
+
+**Besluitnummer:** niet vooraf gereserveerd; wordt in T5 opnieuw bepaald op het dan eerstvolgende vrije nummer.
+
+**Vervolgvolgorde:** T1 apart mergen na rebase op de actuele `origin/preview` en groene gates; T2 op een nieuwe branch vanaf de dan actuele `preview`; daarna T3.
 
 ## 7. Parallel werk en conflictrisico
 
-- `origin/preview` op 2026-09-04 (40b86d9) is de basis. Open PR's die chat-/assistentbestanden raken: geen (PR #309 Microsoft fase 1 raakt ze niet; #138 raakt alleen een AQLab-auditroute).
+- `origin/preview` op 2026-09-04 (377d781, na Microsoft fase 1 #309/#315/#316) is de basis na de rebase van T1. Open PR's die chat-/assistentbestanden raken: geen (PR #309 Microsoft fase 1 raakt ze niet; #138 raakt alleen een AQLab-auditroute).
 - Lokale/remote branches met ongemergede wijzigingen aan `app/api/chat/route.ts`: `feat/v0-eenheidsdimensie-kolommen` (+2, 20-08, geen PR), `codex/sprint-1-preview-security` (+3, 14-08, inhoudelijk gemerged via PR #3). Beide ouder dan de laatste chat-refactors; T3 rebaset vóór merge opnieuw op `origin/preview`.
 - De hoofd-worktree `mvp/` bevat ongecommitte wijzigingen aan `app/api/chat/route.ts` op `feat/p4-status-feitenmatrix` die inhoudelijk overeenkomen met de al gemergde Plateau-1-contextresolutie; niet aangeraakt.
