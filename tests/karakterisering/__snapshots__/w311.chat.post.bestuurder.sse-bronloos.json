@@ -1,0 +1,146 @@
+{
+  "body": {
+    "events": [
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "klaar",
+        "type": "progress",
+        "uitkomst": "uit 0 documenten — 0 passages geselecteerd"
+      },
+      {
+        "fase": "generatie",
+        "label": "Antwoord wordt opgesteld",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "alleen_fondsdocumenten": false,
+        "antwoordmodus": "feitelijk",
+        "antwoordmodus_label": "Feitelijk antwoord",
+        "bron_intent": "algemeen",
+        "bron_intent_bron": null,
+        "bron_intent_herkomst": null,
+        "bron_intent_override": false,
+        "bron_modus_auto": "combineren",
+        "bron_vertrouwen": "zeker",
+        "bronbasis": "Algemene kennis (geen fondsdocumenten gevonden)",
+        "bronkeuze_aanbod": null,
+        "bronnen": [],
+        "chunks_gevonden": 0,
+        "document_gericht": false,
+        "documentdekking": null,
+        "gereformuleerd": false,
+        "inline_meldingen": [
+          {
+            "tekst": "Geen ACTUELE fondsbron gevonden, maar er is wel 1 stuk over dit onderwerp met de status concept of ter bespreking. Die gelden niet als actuele bron en zijn daarom buiten dit antwoord gelaten.",
+            "type": "niet_vastgestelde_stukken"
+          }
+        ],
+        "module_scope": null,
+        "modus": "algemeen",
+        "organisatieprofiel": "geen-profiel",
+        "peildatum": "<datum>",
+        "portaalstand_gebruikt": false,
+        "profielsturing": "geen-profiel",
+        "retrieval_modus": "actueel",
+        "scope": null,
+        "source_summary": {
+          "documenten": 0,
+          "model_kennis": 0,
+          "web": 0,
+          "web_retrieval_actief": false
+        },
+        "sources": [],
+        "transformatie": false,
+        "type": "meta",
+        "verbreding": {
+          "aantal": 1,
+          "label": "Neem dit niet-vastgestelde stuk mee",
+          "titels": [
+            "W1 Document"
+          ],
+          "type": "niet_vastgesteld"
+        },
+        "vraagrouter": null,
+        "web_retrieval_actief": false,
+        "zoekvraag": "Wat is een beleidsdekkingsgraad?"
+      },
+      {
+        "text": "Eerste gestreamde deel: de synthetische uitvoeringsafspraak ",
+        "type": "delta"
+      },
+      {
+        "text": "staat in [Bron 1]. De tweede controlewaarde",
+        "type": "delta"
+      },
+      {
+        "text": " staat in [Bron 2].",
+        "type": "delta"
+      },
+      {
+        "documentdekking": null,
+        "inline_meldingen": [
+          {
+            "tekst": "Geen ACTUELE fondsbron gevonden, maar er is wel 1 stuk over dit onderwerp met de status concept of ter bespreking. Die gelden niet als actuele bron en zijn daarom buiten dit antwoord gelaten.",
+            "type": "niet_vastgestelde_stukken"
+          }
+        ],
+        "log_id": "<uuid:1>",
+        "model_kennis": [],
+        "reflectie": {
+          "beurt": 0,
+          "heeft_bronset": false,
+          "status": "niet_actief"
+        },
+        "source_summary": {
+          "documenten": 0,
+          "model_kennis": 0,
+          "web": 0,
+          "web_retrieval_actief": false
+        },
+        "type": "done",
+        "verbreding": {
+          "aantal": 1,
+          "label": "Neem dit niet-vastgestelde stuk mee",
+          "titels": [
+            "W1 Document"
+          ],
+          "type": "niet_vastgesteld"
+        },
+        "vervolgvragen": [],
+        "volledige_analyse_aanbod": null,
+        "vraagrouter": null,
+        "web_bronnen": [],
+        "web_retrieval_actief": false
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "text/event-stream; charset=utf-8"
+  },
+  "nawerk": {
+    "provider_verzoeken": [
+      {
+        "max_tokens": 5000,
+        "messages_aantal": 1,
+        "messages_sha256": "bff61871c5a52d2619d54f20229d6e3d5689f1a3ccda688845d9941e832640f0",
+        "model": "claude-opus-4-8",
+        "stream": true,
+        "system_sha256": "0da264df93436449dbaa635c2aa50b928ac7773e974c9ef45adb39d99656529c",
+        "system_tekens": 5716,
+        "temperature": null,
+        "tool_choice": null,
+        "tools": null,
+        "top_p": null
+      }
+    ]
+  },
+  "status": 200
+}

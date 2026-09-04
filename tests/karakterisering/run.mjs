@@ -10,7 +10,7 @@
 //    node --env-file=.env.local tests/karakterisering/run.mjs --verify
 //    …--verify --only=profiel.get.bestuurder     (één scenario)
 // ============================================================================
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import http from "node:http";
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -125,6 +125,32 @@ function bodySnapshot(res, verwacht) {
   if (verwacht === "redirect") {
     return { location_vorm: locatieVorm(res.headers.get("location"), ENV.url) };
   }
+  // BESLUIT (#311, fase 2B): `sse` = de VOLLEDIGE eventstroom, als lijst van
+  // genormaliseerde JSON-events in ontvangstvolgorde.
+  //
+  // Tot #311 stond de SSE-route bewust buiten het harnas ("W5-lacune"): de
+  // stroom kwam uit een echte Opus-aanroep en was dus niet deterministisch. Met
+  // de lokale WP4-providerstub (tests/e2e/fixtures/ai-provider-stub.mjs) is de
+  // providerkant vast, en dan is de stroom wél reproduceerbaar: dezelfde
+  // progress-, meta-, delta-, done- en error-events, byte voor byte. Precies
+  // die stroom is het contract dat de gateway-migratie ongewijzigd moet laten.
+  //
+  // Eén `data:`-regel = één event; niet-JSON-regels (er zouden er geen mogen
+  // zijn) blijven als `_niet_json` zichtbaar in plaats van stil weg te vallen.
+  if (verwacht === "sse") {
+    const tekst = res.buffer.toString("utf8");
+    const events = [];
+    for (const regel of tekst.split("\n")) {
+      if (!regel.startsWith("data:")) continue;
+      const ruw = regel.slice("data:".length).trim();
+      try {
+        events.push(normaliseerJson(JSON.parse(ruw)));
+      } catch {
+        events.push({ _niet_json: ruw.slice(0, 200) });
+      }
+    }
+    return { events };
+  }
   // json (met tekst-fallback zodat een niet-JSON-fout leesbaar blijft).
   const tekst = res.buffer.toString("utf8");
   try {
@@ -134,22 +160,45 @@ function bodySnapshot(res, verwacht) {
   }
 }
 
+// #311 — scenario's met een externe vereiste (nu alleen de lokale AI-providerstub)
+// worden ZICHTBAAR overgeslagen als die ontbreekt, nooit stil. In CI staat de
+// stub aan (karakterisering.yml), dus daar draaien ze altijd mee.
+function vereisteAanwezig(scenario) {
+  if (!scenario.vereist) return true;
+  if (scenario.vereist === "ai-stub") return Boolean(ENV.aiStubUrl);
+  throw new Error(`${scenario.slug}: onbekende vereiste '${scenario.vereist}'`);
+}
+
 async function bouwSnapshot(scenario, ctx) {
   if (scenario.preseed) await scenario.preseed(ctx);
   const cookie = scenario.rol === "anon" ? null : await ctx.cookieVoor(scenario.rol);
+  // `idempotentie: true` (#311): een VERSE Idempotency-Key per verzoek. De
+  // AI-preflight bindt de sleutel aan de inhoud en weigert hergebruik; een vaste
+  // sleutel in de scenariotabel zou vanaf verify-ronde 2 een 409 opleveren en
+  // dus niet het pad karakteriseren dat we willen zien. De waarde zelf komt
+  // nooit in het snapshot (header-whitelist).
+  const headers = scenario.idempotentie
+    ? { ...(scenario.headers || {}), "idempotency-key": randomUUID() }
+    : scenario.headers;
   const res = await doeVerzoek({
     method: scenario.method,
     path: scenario.path,
     cookie,
     body: scenario.body,
     rawBody: scenario.rawBody,
-    headers: scenario.headers,
+    headers,
   });
-  return {
+  const snap = {
     status: res.status,
     headers: normaliseerHeaders(res.headers, scenario.headersExtra),
     body: bodySnapshot(res, scenario.verwacht),
   };
+  // `nawerk` (#311): extra, genormaliseerde waarneming NÁ de respons — concreet
+  // de vingerafdruk van wat de providerstub ontving. Zo karakteriseert het
+  // snapshot niet alleen wat de client terugkreeg, maar ook wat er naar de
+  // provider ging (model, tokenbudget, sampling, system-/berichthash).
+  if (scenario.nawerk) snap.nawerk = normaliseerJson(await scenario.nawerk(ctx, res));
+  return snap;
 }
 
 async function main() {
@@ -203,6 +252,10 @@ async function main() {
     for (const s of teDoen) {
       const cel = perSlug.get(s.slug);
       if (!cel) continue; // buiten W7-scope (niet-gewrapt/machineroute) — niet getoetst
+      if (!vereisteAanwezig(s)) {
+        console.log(`  ⤳ ${s.slug}  — overgeslagen (vereist ${s.vereist}: niet geconfigureerd)`);
+        continue;
+      }
       let verwacht;
       if (cel.vlagAan === "403") {
         verwacht = 403;
@@ -304,9 +357,14 @@ async function main() {
   const teDraaien = only ? scenarios.filter((s) => s.slug === only) : scenarios;
   if (only && teDraaien.length === 0) throw new Error(`geen scenario met slug ${only}`);
 
-  let ok = 0, fout = 0;
+  let ok = 0, fout = 0, overgeslagen = 0;
   const mislukt = [];
   for (const s of teDraaien) {
+    if (!vereisteAanwezig(s)) {
+      console.log(`  ⤳ ${s.slug}  — overgeslagen (vereist ${s.vereist}: niet geconfigureerd)`);
+      overgeslagen++;
+      continue;
+    }
     const snap = await bouwSnapshot(s, ctx);
     const tekst = stabielJson(snap);
     const pad = join(SNAP_DIR, `${s.slug}.json`);
@@ -333,7 +391,9 @@ async function main() {
     }
   }
 
-  console.log(`\n[${modus}] ${ok} ok, ${fout} fout (${teDraaien.length} scenario's).`);
+  console.log(
+    `\n[${modus}] ${ok} ok, ${fout} fout${overgeslagen ? `, ${overgeslagen} overgeslagen` : ""} (${teDraaien.length} scenario's).`
+  );
   if (fout > 0) {
     console.log(`mislukt: ${mislukt.join(", ")}`);
     process.exit(1);
