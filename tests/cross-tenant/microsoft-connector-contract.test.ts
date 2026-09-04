@@ -10,6 +10,7 @@ const connector = lees("core/lib/microsoft-connector.ts");
 const vault = lees("core/lib/microsoft-vault.ts");
 const callback = lees("app/auth/microsoft/callback/route.ts");
 const connectorFouten = lees("core/lib/microsoft-connector-error-core.ts");
+const vaultRij = lees("core/lib/microsoft-vault-row-core.ts");
 
 test("Microsoft F1 gebruikt exact de vier goedgekeurde delegated scopes", () => {
   const config = lees("core/lib/microsoft-config.ts");
@@ -33,6 +34,7 @@ test("private vault is browserdicht en alle definers eindigen op pg_temp", () =>
     9,
   );
   assert.match(migratie, /raise exception 'microsoft_vault-login ontbreekt/);
+  assert.match(vaultRij, /sleutelVersie: rij\.sleutel_versie/);
 });
 
 test("nieuwe fondsen krijgen fail-safe profiel eigen en pilot uit", () => {
