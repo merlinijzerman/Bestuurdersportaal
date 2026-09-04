@@ -27,7 +27,10 @@ import {
   bouwAssistentDeeplink,
   type AssistentUrlIngang,
 } from "@/core/lib/assistent-url-ingang";
-import { useAssistentPaneelOptioneel } from "./AssistentPaneelProvider";
+import {
+  useAssistentPaneelOptioneel,
+  type PaneelStartbeurt,
+} from "./AssistentPaneelProvider";
 
 export interface AssistentIngangProps {
   /** Wat deze ingang aanwijst. Leeg = de generieke ingang (fondsbreed). */
@@ -40,6 +43,15 @@ export interface AssistentIngangProps {
   module: string;
   className?: string;
   title?: string;
+  /**
+   * Een beurt die deze ingang meteen laat versturen (T2, #304) — vandaag alleen
+   * "Bereid dit punt voor" / "Opnieuw opstellen". De ingang blijft een <a>: bij
+   * midden-klik of "openen in nieuw tabblad" volgt de browser gewoon de
+   * deeplink, en dan opent /ai mét de context maar ZONDER automatische beurt.
+   * Dat is bewust: een nieuw tabblad dat uit zichzelf een kostendragende
+   * AI-beurt start, is niet wat de bestuurder vroeg.
+   */
+  startbeurt?: PaneelStartbeurt;
   /** Bijwerk van de klik in de module zelf (bijv. een menu sluiten). */
   onClick?: () => void;
   children: ReactNode;
@@ -57,6 +69,7 @@ export default function AssistentIngang({
   module,
   className,
   title,
+  startbeurt,
   onClick,
   children,
 }: AssistentIngangProps) {
@@ -74,7 +87,7 @@ export default function AssistentIngang({
         onClick?.();
         if (!paneel || !isGewoneKlik(e)) return;
         e.preventDefault();
-        paneel.openMet({ ingangen, module });
+        paneel.openMet({ ingangen, module, startbeurt });
       }}
     >
       {children}

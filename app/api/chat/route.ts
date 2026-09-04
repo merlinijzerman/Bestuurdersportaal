@@ -66,6 +66,7 @@ import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel, bouwRegimeKaderBlok } from "@/core/lib/organisatieprofiel";
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
+import { bouwVoorbereidingProduct } from "@/core/lib/voorbereiding-product";
 import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
 import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
 // T5 — Vergelijkmodus. De logica zit volledig in core/lib/vergelijk-* (los
@@ -97,6 +98,7 @@ import {
   SP_DOCUMENT_SCOPE_BREED_REGELS,
   SP_DOCUMENT_BREED_ALG_REGELS,
   SP_TRANSFORMATIE_REGELS,
+  SP_VOORBEREIDING_REGELS,
   SP_REFLECTIE_REGELS,
   SP_REFLECTIE_CONCEPT_REGELS,
   SP_REFLECTIE_TEGENPERSPECTIEF,
@@ -2180,6 +2182,24 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       ? "sparring"
       : vastgezetteModus ?? gedetecteerdeModus;
 
+    // ── T2 (#304) — de BRONLOZE voorbereiding zoekt wél in de bibliotheek ────
+    // Agendapunt-modus retrievet normaal alleen als er gekoppelde stukken zijn:
+    // zonder stukken is de toelichting de enige context, en dat is bewust (ADR
+    // 0028, criterium 5 — nooit een stille terugval op de hele bibliotheek).
+    // Voor de VOORBEREIDING is dat een verlies: de vervallen route doorzocht de
+    // bibliotheek altijd, ook bij een agendapunt zonder stukken. Juist daar heeft
+    // een bestuurder het meest aan een voorbereiding, en juist daar zou hij nu nul
+    // bronnen krijgen. Deze ene conditie herstelt die pariteit, en ze is
+    // UITSLUITEND bereikbaar via de nieuwe modus: voor elke bestaande
+    // agendapuntchat blijft `moetRetrieven` byte-voor-byte wat het was.
+    // De zoektocht is hier geen stille terugval maar precies wat de bestuurder
+    // vroeg — hij drukte op "Bereid dit punt voor", niet op "beantwoord mijn
+    // vraag uit deze stukken".
+    const voorbereidingZonderStukken =
+      agendapuntModusActief &&
+      !agendapuntMetStukken &&
+      antwoordmodus === "persoonlijke_voorbereiding";
+
     // Retrieval-filters volgen de antwoordmodus (peildatum = vandaag) + de
     // bronsoort-weging volgt het vraagtype. Bij een ACTIEVE document-scope laten
     // we de status-/geldigheidsfilter bewust achterwege: de gebruiker koos dat
@@ -2220,7 +2240,15 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     };
 
     const retrievalFilters: RetrievalFilters | undefined =
-      agendapuntModusActief || procesModusInPrompt
+      // T2 (#304): de bronloze voorbereiding heeft geen primair spoor en zoekt
+      // dus als enige spoor in de bibliotheek. Daar hóórt de status-/actualiteits-
+      // filter bij — zonder deze uitzondering zou zij als enige tak de hele
+      // bibliotheek inclusief historische stukken ongefilterd binnenhalen. De
+      // filter staat voor deze modus op 'besluitvorming' (retrievalModusVoor),
+      // exact de correctie die de vervallen route hardcodeerde.
+      voorbereidingZonderStukken
+      ? bibliotheekFilters
+      : agendapuntModusActief || procesModusInPrompt
       ? undefined
       : bibliotheekFilters;
 
@@ -2281,7 +2309,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // criterium 5: nooit een stille terugval naar de hele bibliotheek).
     const moetRetrieven = !reflectieActief && !breedActief && !bronloosBureau && (
       agendapuntModusActief
-        ? agendapuntMetStukken
+        ? agendapuntMetStukken || voorbereidingZonderStukken
         : procesModusInPrompt
         ? procesMetStukken
         : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
@@ -2760,15 +2788,29 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // mee (geen vastgestelde fondsbron → [Toelichting agendapunt]); de eventuele
       // gekoppelde stukken komen als [Bron N] uit de retrieval. Combineren-stijl,
       // geen strict-document "niet aangetroffen"-gedrag.
+      //
+      // T2 (#304) — is dit de PERSOONLIJKE VOORBEREIDING, dan wisselt uitsluitend
+      // de regelset. De toelichtingsseed, het stukkenblok, de bronsentinel en de
+      // rest van deze tak blijven ongewijzigd: de voorbereiding is een andere
+      // OPDRACHT binnen dezelfde modus, geen tiende tak.
       systeemBlokken = bouwSysteemBlokken(
-        SP_AGENDAPUNT_REGELS,
+        antwoordmodus === "persoonlijke_voorbereiding"
+          ? SP_VOORBEREIDING_REGELS
+          : SP_AGENDAPUNT_REGELS,
         ctxBestuurder,
         antwoordmodus,
         chunks.length > 0 ? bronSentinel : null
       );
       const toelichtingBlok = bouwToelichtingBlok(agendapuntSeed!);
       const stukkenBlok =
-        chunks.length > 0
+        // T2 (#304) — de bronloze voorbereiding heeft wél bronnen, maar geen
+        // gekoppelde stukken. Er is dan niets als [gekoppeld stuk] gemarkeerd
+        // (maakContext zet zonder primaire ids geen enkel herkomstlabel), dus de
+        // kop mag die markering ook niet beloven: dat zou het model een
+        // onderscheid laten benoemen dat in de bronkoppen niet bestaat.
+        voorbereidingZonderStukken && chunks.length > 0
+          ? `\n\n=== BRONNEN UIT DE BIBLIOTHEEK ===\nEr zijn geen stukken aan dit agendapunt gekoppeld. De bronnen hieronder komen uit de bibliotheek van het fonds en zijn erbij gezocht op de titel en toelichting van het agendapunt; ze zijn dus GEEN vergaderstukken bij dit punt. Duid ze als zodanig.\n\n${contextTekst}`
+          : chunks.length > 0
           ? `\n\n=== BRONNEN BIJ DIT AGENDAPUNT ===\nDe aan dit agendapunt gekoppelde stukken zijn gemarkeerd met [gekoppeld stuk]. Bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken van het fonds en zijn er ter duiding en vergelijking bij gezocht.\n\n${contextTekst}`
           : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
       // Module-context (risico's/procedures) na de stukken — zie opbouw hierboven.
@@ -3926,6 +3968,63 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             "voltooid",
             logId ? `governance_log:${logId}` : null
           );
+
+          // ── T2 (#304) — de voorbereiding als bewaard product ──────────────
+          // Server-side, uit dezelfde bron als het antwoord en het auditspoor:
+          // zou de client dit schrijven, dan konden de kaart en de governance log
+          // uiteenlopen zonder dat iets dat opmerkt.
+          //
+          // FAALT DIT, DAN SLAAGT DE BEURT TOCH. De bestuurder heeft zijn tekst
+          // al gezien; hem alsnog een fout tonen zou hem iets afnemen dat er is.
+          // De fout gaat naar de serverlog én als inline-melding mee, zodat hij
+          // weet dat de kaart de uitkomst niet bewaart — stil falen zou hem laten
+          // denken dat het punt is voorbereid.
+          if (antwoordmodus === "persoonlijke_voorbereiding" && agendapuntSeed) {
+            try {
+              const product = bouwVoorbereidingProduct({
+                tekst: zichtbaarAntwoord,
+                bronnen,
+                governanceLogId: (logId as string | null) ?? null,
+                gesprekId: gesprekAuditId,
+                nu: new Date().toISOString(),
+              });
+              // Upsert op de unique-constraint (agendapunt_id, gebruiker_id):
+              // opnieuw opstellen overschrijft, er ontstaan geen versies.
+              // Alleen de vier kolommen die dit pad BEZIT gaan mee — PostgREST
+              // zet bij een conflict uitsluitend de meegestuurde kolommen, dus
+              // `eigen_notities` en `vrije_notities` van de notities-route
+              // blijven staan. Dat is geen aanname: het is gepind in
+              // tests/cross-tenant/voorbereiding-product.test.ts.
+              const { error: productFout } = await supabase
+                .from("voorbereidingen")
+                .upsert(
+                  {
+                    agendapunt_id: agendapuntSeed.id,
+                    gebruiker_id: ctx.gebruikerId,
+                    ai_output: product.ai_output,
+                    bronnen_meta: product.bronnen_meta,
+                    gegenereerd_op: product.ai_output.opgesteld_op,
+                    bijgewerkt_op: product.ai_output.opgesteld_op,
+                  },
+                  { onConflict: "agendapunt_id,gebruiker_id" }
+                );
+              if (productFout) throw productFout;
+            } catch (productFout) {
+              console.error(
+                `Voorbereiding bewaren mislukt (agendapunt ${agendapuntSeed.id}):`,
+                productFout
+              );
+              // Ná het schrijven van de auditregel, dus deze melding staat niet
+              // in `retrieval_meta`. Terecht: het auditspoor beschrijft de
+              // AI-interactie, niet een opslagfout erná. Die hoort in de
+              // serverlog (hierboven) en op het scherm (hier).
+              inlineMeldingenFinaal.push({
+                type: "onvoldoende_basis",
+                tekst:
+                  "Uw voorbereiding is opgesteld, maar kon niet bij het agendapunt worden bewaard. De tekst staat wel in dit gesprek.",
+              });
+            }
+          }
 
           // ── Plateau B — de flow naar de conceptweergave brengen ───────────
           // De beurt hierboven TOONDE het concept; de status moet dat nu ook

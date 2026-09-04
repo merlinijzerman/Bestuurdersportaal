@@ -240,8 +240,24 @@ een tabel. N=15 (historie) is de eerste begrenzingsknop als de meting tegenvalt.
   `core/lib/assistent-url-ingang.ts` (de instap, sinds besluit 0201) +
   `app/(dashboard)/ai/_components/DocumentDoorgronden.tsx`.
 - Ontwerp/besluiten: `AI-STARTPUNT-ONTWERP.md`, `WERKOPDRACHT-AI-CONTEXTBESEF.md`; besluit 0071
-  (bronherkenbaarheid), besluit 0145 (risico-logboek), **besluit 0151** (de `module_scope`-soort).
+  (bronherkenbaarheid), besluit 0145 (risico-logboek), **besluit 0151** (de `module_scope`-soort),
+  **besluit 0205** (de voorbereiding als antwoordmodus).
 - Uitvoering: `WERKOPDRACHT-AI-MODULECONTEXT.md`.
+
+### 11.1 Wat T2 (#304) hieraan verandert
+
+`haalModuleContextBlok` had tot 04-09-2026 een tweeling: de agendavoorbereiding bouwde
+dezelfde risico's- en procedureselectie op in een eigen route. Die route is vervallen; de
+voorbereiding is nu de antwoordmodus `persoonlijke_voorbereiding` binnen de agendapunt-tak van
+`/api/chat` en gebruikt daarmee **deze** modulecontext. De duplicatie die dit document al
+signaleerde ("zelfde selecties als de voorbereiding-route") bestaat niet meer; er is nog één
+opbouw.
+
+Eén conditie is voor die modus verbreed: in agendapunt-modus wordt normaal alleen geretrieved
+als er gekoppelde stukken zijn, maar bij een voorbereiding zónder stukken wordt de bibliotheek
+wél doorzocht — met de gewone bibliotheekfilters, en met `retrievalModusVoor` op
+`besluitvorming`, omdat vergaderstukken per definitie nog niet zijn vastgesteld. Zie besluit
+0205 §3.
 
 ## 12. Openstaande punten
 

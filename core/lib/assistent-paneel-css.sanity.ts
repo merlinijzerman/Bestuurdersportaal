@@ -96,9 +96,15 @@ assert.match(
   /className="assistent-resultaatkaart"/,
   "Mijn voorbereiding moet de generieke AI-resultaatkaart gebruiken",
 );
-assert.ok(
-  (voorbereidingKaart.match(/className="assistent-antwoord"/g) ?? []).length >= 2,
-  "lopende en voltooide voorbereiding moeten de generieke antwoordtypografie gebruiken",
+// T2 (#304) — was: ">= 2", voor de LOPENDE en de VOLTOOIDE voorbereiding. De
+// kaart streamt sinds T2 niet meer: het opstellen gebeurt in het paneel en de
+// kaart houdt alleen de uitkomst. Er is dus nog één blok, en dat moet dezelfde
+// typografie dragen. De eis is niet losgelaten maar aangepast aan het feit dat
+// er één toestand minder in dit component woont.
+assert.equal(
+  (voorbereidingKaart.match(/className="assistent-antwoord"/g) ?? []).length,
+  1,
+  "de voltooide voorbereiding moet de generieke antwoordtypografie gebruiken",
 );
 assert.doesNotMatch(
   voorbereidingKaart,
