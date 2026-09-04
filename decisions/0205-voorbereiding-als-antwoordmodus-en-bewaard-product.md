@@ -157,20 +157,21 @@ schrijfmoment.
 
 ### 7. De oude route vervalt in twee stappen
 
-PR 1 laat de route staan (deprecated, zonder aanroeper) zodat de omzetting met één revert terug
-te draaien is, en instrumenteert haar tijdelijk met een tokenregel: zij schrijft geen
-governance_log en `ai_acties` telt acties in plaats van tokens, dus zonder die regel bestaat er
-geen "vóór"-getal en wordt de verbruiksvergelijking een schatting. PR 2 verwijdert de route,
-de `w5.voorbereiding.post.*`-karakteriseringssnapshots **en die meting**. De notities-route
-(`/voorbereiding/notities`) blijft ongemoeid: die gaat over eigen aantekeningen, niet over AI.
+PR 1 liet de route tijdelijk staan (deprecated, zonder aanroeper) en instrumenteerde haar met
+een tokenregel. PR 2 verwijdert nu die route, de `w5.voorbereiding.post.*`-
+karakteriseringssnapshots en de tijdelijke meting. Daarmee bestaat nog maar één AI-pad voor
+voorbereiding: `/api/chat`. De notities-route (`/voorbereiding/notities`) blijft ongemoeid: die
+gaat over eigen aantekeningen, niet over AI.
 
 ## Gevolgen
 
 - Het auditgat is gedicht: elke voorbereiding levert een `governance_log`-regel met
   inhoudszegel op, met `retrieval_meta.antwoordmodus = "persoonlijke_voorbereiding"` en
   `herkomst = "agendapunt:<id>"` als herkenningspunt.
-- Logvolume en verbruik stijgen. Beide zijn gewenst maar niet gratis; ze zijn gemeten (zie de
-  terugkoppeling bij #304) en gaan als invoer naar T4.
+- Logvolume en verbruik stijgen. De Preview-test registreerde twee voorbereidingen op een
+  bronloos agendapunt; een vergelijkbare baseline van de vervallen route is niet meer zinvol
+  reproduceerbaar nadat die route ontkoppeld en verwijderd is. Capaciteitsgrenzen blijven
+  daarom invoer voor T4.
 - `/api/chat` schrijft voor het eerst naar een domeintabel. Daarom is
   `supabase/checks/2026_09_04_t2_voorbereiding_product.sql` aangesloten op
   `scripts/cross-tenant-ci.sh`: die meet onder de echte browserrol dat de bestuurder zijn eigen
@@ -183,7 +184,8 @@ de `w5.voorbereiding.post.*`-karakteriseringssnapshots **en die meting**. De not
   `bouwProfielsturing` (generieke prioritering). Bewust: een eigen variant zou opnieuw een
   aparte tak vragen.
 - De voorbereiding krijgt nu ook inline vervolgvragen. Winst, maar met een aandachtspunt: het
-  derde kopje ("Neem mee de vergadering in") vraagt zélf om drie vragen. Waargenomen in de A/B.
+  derde kopje ("Neem mee de vergadering in") vraagt zélf om drie vragen. Waargenomen in de
+  Preview-smoketest.
 
 ## Openstaande punten
 
@@ -193,3 +195,4 @@ de `w5.voorbereiding.post.*`-karakteriseringssnapshots **en die meting**. De not
 | Opsteller-toon (`AI-ASSISTENT-OPSTELTAAK-VERBETERINGEN.md`) | productowner | Open — bewust niet in T2 gecombineerd, anders is bij een klacht niet te herleiden of het aan de verhuizing lag of aan de nieuwe toon |
 | Verbruikstoename per voorbereiding | T4 | Invoer voor de verbruiksbegrenzing |
 | Stukversie bij de voorbereiding vastleggen (verouderingsmelding) | T4 | Bewust niet gebouwd; beslispunt |
+| Acceptatievarianten met gekoppelde conceptstukken | productowner / QA | Open — Preview-smoketest dekte het bronloze agendapunt; de varianten met conceptstukken zijn apart te toetsen |

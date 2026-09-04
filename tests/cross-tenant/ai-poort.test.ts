@@ -162,7 +162,6 @@ test("AI-begrenzing — elke providermodule importeert de poort", () => {
  */
 const KOSTENDRAGENDE_INGANGEN = [
   "app/api/chat/route.ts",
-  "app/api/agendapunten/[id]/voorbereiding/route.ts",
   "app/api/procedures/[id]/stappen/[stapId]/besluit-concept/route.ts",
   "app/api/procedures/[id]/afschrift/concept/route.ts",
   "app/api/vergelijk/route.ts",

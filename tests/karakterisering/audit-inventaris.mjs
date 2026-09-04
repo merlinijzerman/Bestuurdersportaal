@@ -148,7 +148,6 @@ const SPLIT_KLASSE = {
   "PATCH app/api/profiel/route.ts": "operationeel", // fonds_id/rol-tabel (C-01), goedkope verzekering
   // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
-  "POST app/api/agendapunten/[id]/voorbereiding/route.ts": "geen",
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",
   "POST app/api/notificaties/alles-lezen/route.ts": "geen",
   // P5c/§9.3: bewerkbaar werkverkeer per stap, expliciet geen
