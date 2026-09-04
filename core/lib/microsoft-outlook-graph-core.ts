@@ -92,6 +92,12 @@ export async function graphGet(
       }
       if (response.status === 429) throw new OutlookGraphError("graph_ratelimit");
       if (response.status === 410) throw new OutlookGraphError("delta_verlopen");
+      if (response.status === 400 || response.status === 422) {
+        throw new OutlookGraphError("graph_verzoek_ongeldig");
+      }
+      if (response.status === 404) throw new OutlookGraphError("graph_bron_niet_gevonden");
+      if (response.status === 405) throw new OutlookGraphError("graph_methode_niet_toegestaan");
+      if (response.status >= 500) throw new OutlookGraphError("graph_serverfout");
       throw new OutlookGraphError("graph_response");
     }
     return response;
