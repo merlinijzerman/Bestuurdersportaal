@@ -61,8 +61,8 @@ const SERVERBRONNEN = bronbestanden(["core", "platform", "app"]);
 
 /**
  * Patronen die duiden op een DIRECTE weg naar een betaalde provider.
- * `messages.batches` staat erbij omdat de (nu slapende) Anthropic-batchbaan
- * anders bij activering ongemeten zou draaien.
+ * `messages.batches` staat erbij zodat een nieuwe batchbaan niet ongemerkt
+ * buiten het providerneutrale gatewaycontract kan ontstaan.
  */
 const PROVIDERPATRONEN: { patroon: RegExp; wat: string }[] = [
   { patroon: /new\s+Anthropic\s*\(/, wat: "Anthropic-client" },
@@ -80,8 +80,7 @@ const PROVIDERPATRONEN: { patroon: RegExp; wat: string }[] = [
 const PROVIDERALLOWLIST: Record<string, string> = {
   "core/lib/ai-gateway/adapters/anthropic.ts":
     "De Anthropic-adapter van de centrale AI-gateway (#311): de ENIGE `new Anthropic(` en het enige runtime-" +
-    "SDK-import. Elke aanroep loopt via gateway.ts (fondsconfiguratie → poort → adapter → auditregel) of, " +
-    "in het T3/T4-overgangspad, via bewaakteAnthropic in ai-poort.ts.",
+    "SDK-import. Elke productieaanroep loopt via gateway.ts (fondsconfiguratie → poort → adapter → auditregel).",
   "core/lib/ai-gateway/adapters/openai.ts":
     "OpenAI-adapter van de gateway (rauwe fetch); credentials komen van de gateway via een profielreferentie.",
   "core/lib/ai-gateway/adapters/mistral.ts":
@@ -90,10 +89,6 @@ const PROVIDERALLOWLIST: Record<string, string> = {
     "Mistral-embeddings via rauwe fetch; elke aanroep loopt door bewaakteProviderCall.",
   "core/lib/ocr.ts":
     "Mistral-OCR via rauwe fetch; reserveert pagina's per poging en loopt door de poort.",
-  "core/lib/chunk-ingest.ts":
-    "Anthropic Message Batches voor context-prefixes. De baan slaapt " +
-    "(BATCH_BAAN_AAN = false) maar loopt wél door bewaakteAnthropic, zodat activering niet " +
-    "stilzwijgend een ongemeten kanaal opent.",
   "platform/lib/monitoring-health.ts":
     "Healthcheck op api.anthropic.com/v1/models — metadata-endpoint, NIET token-gefactureerd. " +
     "Bewust buiten de kill switch: anders verblindt een stop de monitoring die de stop moet bewaken.",
@@ -179,6 +174,8 @@ const KOSTENDRAGENDE_INGANGEN = [
   "platform/lib/ingest-orchestrator.ts",
   "platform/lib/generiek-pipeline.ts",
   "platform/lib/aqlab/run-orchestrator.ts",
+  "platform/lib/semantische-extractie-job.ts",
+  "app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts",
 ];
 
 test("AI-begrenzing — elke kostendragende ingang roept de preflight aan", () => {
@@ -301,21 +298,10 @@ test("STUK-1 — ai/stuk-export logt VÓÓR het bouwen en teruggeven van de .doc
 
 /**
  * Runtime-imports van de Anthropic-SDK mogen uitsluitend in de Anthropic-adapter
- * staan. Een `import type` is toegestaan waar alleen typen worden gebruikt
- * (erased bij compilatie, geen runtime-pad naar de provider); die lijst krimpt in
- * T4 tot nul en is daarom apart gepind.
+ * staan. Call-sites gebruiken ook voor typen uitsluitend het neutrale contract.
  */
 const SDK_RUNTIME_ALLOWLIST = new Set(["core/lib/ai-gateway/adapters/anthropic.ts"]);
-const SDK_TYPE_ALLOWLIST = new Set([
-  "core/lib/ai-gateway/adapters/anthropic.ts",
-  "core/lib/ai-poort.ts",
-  "core/lib/generatie-kern.ts",
-  "core/lib/rerank.ts",
-  "core/lib/chunk-ingest.ts",
-  "core/lib/semantische-extractie.ts",
-  "platform/lib/aqlab/judge.ts",
-  "app/api/chat/route.ts",
-]);
+const SDK_TYPE_ALLOWLIST = new Set<string>();
 
 test("AI-gateway — runtime-import van @anthropic-ai/sdk alleen in de adapter", () => {
   const runtime: string[] = [];
@@ -350,6 +336,14 @@ test("AI-gateway — de gateway toetst de poort vóór de adapter en logt na afl
   assert.match(bron, /schrijfLog\(ctx, verzoek, res, \{ ok: true, r \}/, "gateway.ts logt geen geslaagde call");
 });
 
+test("AI-gateway — oude Anthropic-omwegen en kale clientexport zijn verdwenen", () => {
+  const overtredingen = SERVERBRONNEN.filter((bestand) => {
+    const code = lees(bestand).replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    return /bewaakteAnthropic|export\s+(async\s+)?function\s+maakAnthropicClient/.test(code);
+  });
+  assert.deepEqual(overtredingen, [], "Oude provideromweg gevonden:\n" + overtredingen.join("\n"));
+});
+
 test("AI-gateway — geen letterlijke modelstring op fondsgebonden gateway-aanroepen", () => {
   // Provider/model komen uit fonds + taaktype. Een `model: "claude-…"` naast een
   // gateway-aanroep zou die keuze weer naar de call-site verplaatsen.
@@ -364,4 +358,3 @@ test("AI-gateway — geen letterlijke modelstring op fondsgebonden gateway-aanro
   }
   assert.deepEqual(overtredingen, [], "Letterlijke modelstring naast een gateway-aanroep:\n" + overtredingen.join("\n"));
 });
-

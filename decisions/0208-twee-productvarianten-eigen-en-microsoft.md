@@ -2,7 +2,7 @@
 
 - **Status:** Geaccepteerd als productrichting; Microsoftvariant na een geslaagde proef
 - **Datum:** 2026-09-03
-- **Aangevuld:** 2026-09-04 (duaal productmodel, klant-eigen AI, fase 0-pilotkader en Outlook fase 2A)
+- **Aangevuld:** 2026-09-04 (duaal productmodel, klant-eigen AI, fase 0-pilotkader, Outlook fase 2A en centrale AI-gateway)
 - **Betrokkenen:** Merlin (opdrachtgever/productowner), Codex (onderzoek en uitwerking)
 
 ## Besluit in het kort
@@ -55,6 +55,11 @@ De productvariant gaat over de bronlaag van de klant. Onze centrale sectorbiblio
 op onze SharePoint en Azure AI Search draaien zonder dat een klant zijn eigen Microsoftomgeving
 hoeft te koppelen. De generatieve AI-provider is een afzonderlijke keuze en wordt niet stil uit
 het productprofiel afgeleid.
+
+Die keuze is technisch gerealiseerd via besluit 0209: alle generatieve productietaken gebruiken
+één providerneutrale gateway met vier taakgroepen en expliciete fondsconfiguratie. De
+Microsoftvariant schrijft dus niet automatisch Copilot of Azure OpenAI voor; activering van een
+klant-eigen profiel blijft een afzonderlijk, controleerbaar besluit.
 
 Per fonds bestaat één leidend `integratieprofiel`: `eigen` of `microsoft`. Agenda-, document- en
 retrievalproviders worden daaruit als één geteste bundel gekozen. We bieden niet iedere technisch

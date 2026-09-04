@@ -380,17 +380,9 @@ test("model-/budgetconstanten zijn de productiewaarden (parity)", () => {
   // achterhaald sinds commit 00b8d68 (15-07-2026) en latere budgetverhogingen.
   // Ze zijn nooit gevallen omdat de test al eerder in het bestand afbrak.
   //
-  // AI_MODEL is sinds 00b8d68 overschrijfbaar via een env-var (A/B-testen en
-  // terugschakelen). De pin toetst daarom de INGEBOUWDE standaard; staat de
-  // env-var, dan zegt deze test niets over productie en melden we dat expliciet
-  // in plaats van stilzwijgend te slagen.
-  if (process.env.AI_MODEL) {
-    console.log(
-      `    ⚠ AI_MODEL is overschreven via env (${process.env.AI_MODEL}) — modelpin niet getoetst.`
-    );
-  } else {
-    assert.equal(AI_MODEL, "claude-opus-4-8");
-  }
+  // Code-default voor hermetische tests/AQLab. Productieconfiguratie staat per
+  // fonds in de private gatewaylaag en kent geen env-override meer (#311 R2).
+  assert.equal(AI_MODEL, "claude-opus-4-8");
   assert.equal(MAX_TOKENS, 5000);
   assert.equal(MAX_TOKENS_BESTUURLIJK, 8000);
 });

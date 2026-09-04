@@ -13,7 +13,8 @@ import {
 } from "@/core/lib/ai-preflight";
 import { rateLimited } from "@/core/lib/api-errors";
 import { herindexeerDocument } from "@/core/lib/reindex";
-import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
+import { INDEXERING_VERSIE, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 
 // ============================================================================
 //  POST /api/documents/reindex-backfill — gedeelde R1.1+R1.2-re-index (fonds).
@@ -116,15 +117,28 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
     }
     const pf = await preflight(supabase, {
       actietype: "reindex_backfill",
-      provider: "anthropic",
+      provider: null,
+      model: null,
       idempotentie,
       vingerafdruk: vingerafdruk({ documentId: doc.id }),
     });
     const blokkade = preflightRespons("documents.reindex-backfill", pf);
     if (blokkade) return blokkade;
     const actieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
+    const gateway = {
+      gateway: productieGateway(),
+      ctx: {
+        supabase,
+        fondsId: ctx.fondsId,
+        actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
+        actieId,
+        correlatieId: ctx.requestId,
+        label: "documents.reindex-backfill",
+      },
+    };
 
     const res = await herindexeerDocument(supabase, doc, {
+      gateway,
       reserveerOcr: async (paginas, poging) => {
         const uitkomst = await preflight(supabase, {
           actietype: "ocr",
@@ -144,7 +158,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
     const { error: runErr } = await supabase.from("reindex_runs").insert({
       fonds_id: ctx.fondsId,
       bibliotheek: "fonds",
-      prefix_model: PREFIX_MODEL,
+      prefix_model: res.prefixModel,
       prompt_versie: PREFIX_PROMPT_VERSIE,
       indexering_versie: INDEXERING_VERSIE,
       aantal_documenten: res.status === "verwerkt" ? 1 : 0,

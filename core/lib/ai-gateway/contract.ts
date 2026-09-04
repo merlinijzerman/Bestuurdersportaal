@@ -37,6 +37,7 @@ export type Taaktype =
   | "vergelijk_waarde"
   | "samenvatting"
   | "context_prefix"
+  | "generiek_context_prefix"
   | "semantische_extractie"
   | "afschrift_concept"
   | "besluit_concept"
@@ -56,6 +57,7 @@ export const TAAKGROEP_VAN_TAAKTYPE: Readonly<Record<Taaktype, Taakgroep | null>
   rerank: "hulp_snel",
   vergelijk_dimensies: "hulp_snel",
   context_prefix: "hulp_snel",
+  generiek_context_prefix: null,
   semantische_extractie: "hulp_snel",
   aqlab_generatie: null,
   aqlab_judge: null,
@@ -192,4 +194,10 @@ export type Foutcategorie =
 export interface AiGateway {
   genereer(ctx: GatewayContext, verzoek: GenereerVerzoek): Promise<GenereerResultaat>;
   stream(ctx: GatewayContext, verzoek: GenereerVerzoek): Promise<StreamHandle>;
+}
+
+/** Injecteerbare, volledig server-side vastgestelde gateway-aanroep. */
+export interface GatewayAanroep {
+  gateway: AiGateway;
+  ctx: GatewayContext;
 }

@@ -208,6 +208,16 @@ test("Alleen expliciet globale actietypes mogen zonder fonds", () => {
   ]);
 });
 
+test("Semantische extractie is uitsluitend fondsgebonden systeemwerk", () => {
+  assert.deepEqual(ACTIETYPES.semantische_extractie, {
+    bereik: "fonds",
+    aiActies: 1,
+    viaGebruiker: false,
+    viaSysteem: true,
+    leaseSeconden: 900,
+  });
+});
+
 test("Geen enkel sessiegebonden actietype is globaal", () => {
   for (const naam of ACTIETYPE_NAMEN) {
     const spec = ACTIETYPES[naam];

@@ -22,7 +22,6 @@
 //  de Anthropic-client is injecteerbaar voor hermetische tests.
 // ============================================================================
 
-import type Anthropic from "@anthropic-ai/sdk";
 import type { AiGateway, GatewayContext } from "./ai-gateway/contract";
 import { isGatewayFout } from "./ai-gateway/fout";
 import { HAIKU_MODEL } from "./llm-modellen";
@@ -48,7 +47,15 @@ Geef UITSLUITEND een JSON-array terug, exact één object per fragment, in de vo
 Geen toelichting, geen extra tekst.`;
 
 /** Injecteerbare, minimale Anthropic-client (hermetische tests). */
-export type RerankClient = Pick<Anthropic["messages"], "create">;
+export type RerankClient = {
+  create(params: {
+    model: string;
+    max_tokens: number;
+    temperature: number;
+    system: string;
+    messages: { role: "user" | "assistant"; content: string }[];
+  }): Promise<{ content: Array<{ type: string; text?: string }> }>;
+};
 
 // AI-BEGRENZING (besluit 0180). Geen eigen client meer: de call loopt door de
 // centrale poort. Blijft de poort dicht, dan valt de reranker terug op de
@@ -200,14 +207,14 @@ export async function rerankChunks<T extends { id: string }>(
       system: SP_RERANK,
       messages: [
         {
-          role: "user",
+          role: "user" as const,
           content: `Zoekvraag: ${zoekvraag}\n\nFragmenten:\n${genummerd}\n\nJSON:`,
         },
       ],
-    } satisfies Anthropic.Messages.MessageCreateParamsNonStreaming;
+    };
     const call: Promise<{ tekst: string; model: string }> = c
       ? c.create(params).then((r) => ({
-          tekst: r.content[0]?.type === "text" ? r.content[0].text : "",
+          tekst: r.content[0]?.type === "text" ? (r.content[0].text ?? "") : "",
           model,
         }))
       : opties!.gateway!.gateway

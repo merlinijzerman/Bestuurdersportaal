@@ -22,7 +22,7 @@
 1. browser ↔ Vercel/Next.js;
 2. Next.js user-session ↔ Supabase RLS/PostgREST/Storage;
 3. server-/workerroute ↔ Supabase service-role;
-4. Next.js ↔ Anthropic/OpenAI/Mistral en web-retrieval;
+4. Next.js ↔ centrale AI-gateway ↔ Anthropic/OpenAI/Mistral en web-retrieval;
 5. Next.js ↔ e-mailprovider;
 6. Productie ↔ Preview — **geen datastroom toegestaan**;
 7. tenant A ↔ tenant B — alleen gedeelde code/infrastructuur, nooit gedeelde
@@ -57,6 +57,7 @@
 | R-21 | Token/cache, code of secret lekt naar browser, log, audit of directe PostgREST-toegang | Kritiek | AES-256-GCM, private schema, minimale database-rol, no-store en inhoudsarme audit | Deels — grantscontrole, ciphertext-tampertest en loginspectie uitvoeren |
 | R-22 | Outlook-sync mengt agenda/event van andere tenant, mailbox of kalender, of dupliceert een meeting | Kritiek | Private selectie bindt tenant+mailbox+calendar; immutable event-key; unieke actieve run; server verifieert lijstresultaat | Deels — echte Preview-negatieve test en DB-check uitvoeren |
 | R-23 | Delta-run markeert een afspraak onterecht verdwenen of lekt private/Teams/deelnemerdetails | Hoog | Cursor pas na volledige run; `@removed` krijgt de niet-destructieve status `extern_gewijzigd_of_verwijderd`; privacyregel, Teams-hostvalidatie en inhoudsarme audit | Deels — Preview-scenariobewijs voor sensitivity, annulering en foutpad |
+| R-24 | Call-site omzeilt fondsconfiguratie, quotum of live poort; of de private call-audit valt stil | Hoog | Gateway vereist actie-ID en fonds/taaktype; private minimale DB-rol; SDK alleen in adapter; inhoudsvrije append-only log; apart logfoutsignaal | Deels — Preview-smokes voor overige T4-taken en periodieke controle van `gateway_log_fouten` |
 
 ## AI-specifieke grenzen voor Preview
 

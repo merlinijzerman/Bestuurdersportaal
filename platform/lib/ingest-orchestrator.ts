@@ -25,9 +25,6 @@ import { timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   verrijkChunks,
-  startPrefixBatch,
-  pasPrefixBatchToe,
-  embedBestaandeChunks,
   bouwChunkRecordsZonderVerrijking,
 } from "@/core/lib/chunk-ingest";
 import { extractTekstMetOcrFallback } from "@/core/lib/ocr";
@@ -40,9 +37,12 @@ import {
 import { genereerSamenvatting } from "@/core/lib/samenvatting";
 import {
   preflightSysteem,
+  rondAf,
   systeemSleutel,
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import type { GatewayAanroep } from "@/core/lib/ai-gateway/contract";
 import { verwerkSemantischeExtractieJob } from "@/platform/lib/semantische-extractie-job";
 import { valideerUpload } from "@/core/lib/bestand-validatie";
 import { CONTENT_TYPE_PER_BESTANDSTYPE } from "@/core/lib/document-extractie";
@@ -66,14 +66,7 @@ const REAPER_LIMIET = 50; // documenten per invocatie te enqueuen
 // Batch elke cyclus opnieuw pollt en afrondt zodra die klaar is. (De batch zelf
 // heeft z'n eigen 24u-venster aan Anthropic-kant; deze lease is alleen ons
 // re-poll-ritme — NIET de max batch-duur.)
-const BATCH_POLL_SECONDS = 45;
 const BACKOFF_SEC = [30, 120, 480]; // §4b verstoring 1 (30s → 2m → 8m)
-
-// Batch-baan (Message Batches API, besluit D) AAN/UIT. Uit gezet voor de MVP:
-// bij Scale tier (10K RPM Haiku) is het live-budget ruim genoeg, en de live-baan
-// levert bibliotheekdocumenten in minuten i.p.v. de batch-latency (tot ~1u). De
-// batch-code blijft staan; zet dit op true zodra het volume het live-budget raakt.
-const BATCH_BAAN_AAN = false;
 
 // ── Orphan-sweep (F7 direct-to-storage) ─────────────────────────────────────
 // Bij direct-to-storage upload de browser eerst het bestand, en pas de
@@ -401,6 +394,40 @@ async function verwerkJob(
     return await scanEnPromoveer(svc, job, document, oidcToken);
   }
 
+  const generiek = document.bibliotheek === "generiek";
+  const actietype = generiek ? "generiek_curatie" : "document_ingest";
+  const aiPf = await preflightSysteem(svc, {
+    actietype,
+    fondsId: generiek ? null : job.fonds_id ?? null,
+    provider: null,
+    model: null,
+    // Eén reservering per logische ingest-job; yield/backoff hergebruikt dezelfde
+    // actie en maakt dus geen extra quotumregel voor een technische hervatting.
+    idempotentie: systeemSleutel(job.id, actietype, 1),
+    vingerafdruk: vingerafdruk({ documentId: document.id, stap: job.stap }),
+  });
+  if (aiPf.uitkomst === "geweigerd") {
+    return await markeerGeweigerd(svc, job, document.id, `ai_begrenzing_${aiPf.reden}`);
+  }
+  if (
+    (aiPf.uitkomst !== "nieuw" && aiPf.uitkomst !== "duplicaat_in_uitvoering") ||
+    !aiPf.actieId
+  ) {
+    return await backoff(svc, job, `ai_preflight_${aiPf.uitkomst}`);
+  }
+  const actieId = aiPf.actieId;
+  const gateway: GatewayAanroep = {
+    gateway: productieGateway(),
+    ctx: {
+      supabase: svc,
+      fondsId: generiek ? null : job.fonds_id ?? null,
+      actor: { soort: "systeem", proces: generiek ? "generieke-curatie" : "ingest-worker" },
+      actieId,
+      correlatieId: job.id,
+      label: generiek ? "generieke-curatie" : "ingest-worker",
+    },
+  };
+
   // EXTRACTIE-fase (F6): download uit Storage → extractie (+OCR) → kale chunks →
   // AI-samenvatting → verwerkingsstatus='embedding'. Alleen als het document nog
   // vóór de embedding-fase staat.
@@ -414,20 +441,27 @@ async function verwerkJob(
     ) {
       return await backoff(svc, job, "scanbewijs_ontbreekt");
     }
-    const r = await extracteerEnChunk(svc, job, document);
-    if (r !== "door") return r; // mislukt / geweigerd / backoff → klaar voor nu
+    const r = await extracteerEnChunk(svc, job, document, gateway);
+    if (r !== "door") {
+      if (r === "mislukt" || r === "overgeslagen") {
+        await rondAf(svc, actieId, r === "mislukt" ? "mislukt" : "voltooid");
+      }
+      return r;
+    }
     document.verwerkingsstatus = "embedding";
   }
 
   // EMBEDDING-fase. Als het tijdbudget al op is na de (dure) extractie: yield,
   // een volgende invocatie doet de embedding.
   if (Date.now() >= deadline) return await yieldJob(svc, job);
-  // Live-baan voor stukken bij een agendapunt (voorrang/snelheid) én — zolang de
-  // batch-baan uit staat — voor alle documenten (MVP-keuze, zie BATCH_BAAN_AAN).
-  const liveBaan = !BATCH_BAAN_AAN || document.agendapunt_id != null;
-  return liveBaan
-    ? await verwerkLive(svc, job, document, deadline)
-    : await verwerkBatch(svc, job, document, deadline);
+  // Message Batches zijn bewust verwijderd totdat de gateway batch-identiteit,
+  // configuratieversie en actie-ID over start én polling kan binden. Actief gedrag
+  // blijft de bestaande MVP-livebaan.
+  const uitkomst = await verwerkLive(svc, job, document, deadline, gateway);
+  if (uitkomst === "afgerond" || uitkomst === "mislukt" || uitkomst === "overgeslagen") {
+    await rondAf(svc, actieId, uitkomst === "mislukt" ? "mislukt" : "voltooid", `document:${document.id}`);
+  }
+  return uitkomst;
 }
 
 // ── WP3: quarantaine → validatie → scan → promotie ─────────────────────────
@@ -633,7 +667,8 @@ async function securityConflict(
 async function extracteerEnChunk(
   svc: SupabaseClient,
   job: IngestJob,
-  doc: DocumentRij
+  doc: DocumentRij,
+  gateway: GatewayAanroep
 ): Promise<Uitkomst | "door"> {
   if (doc.quarantaine_pad && !doc.opslag_pad) {
     return await backoff(svc, job, "quarantaine_niet_afgerond");
@@ -654,29 +689,6 @@ async function extracteerEnChunk(
   const buffer = Buffer.from(await blob.arrayBuffer());
   const bestandstype = (doc.bestandstype ?? "pdf") as Bestandstype;
 
-  // AI-BEGRENZING (besluit 0180). Eén document-ingest is ÉÉN AI-actie, ongeacht
-  // hoeveel modelcalls (samenvatting, tientallen prefixes, embeddings) eruit
-  // voortkomen. Het fonds komt van de job-rij, niet van een sessie; er is hier
-  // geen gebruiker om tegen af te rekenen. De reservering staat vóór de eerste
-  // providercall en is idempotent op (job, stap): een hervatte job na een
-  // backoff reserveert niet opnieuw zolang dezelfde poging loopt.
-  const ingestPf = await preflightSysteem(svc, {
-    actietype: "document_ingest",
-    fondsId: job.fonds_id ?? null,
-    provider: "anthropic",
-    idempotentie: systeemSleutel(job.id, "document_ingest", (job.retry_count ?? 0) + 1),
-    vingerafdruk: vingerafdruk({ documentId: doc.id, opslagPad: doc.opslag_pad }),
-  });
-  if (ingestPf.uitkomst === "geweigerd") {
-    // Quotum op of kill switch om: parkeren, niet mislukken. Een geweigerde
-    // ingest is een beleidsuitkomst en mag de retries van deze job niet
-    // opbranden — volgende maand of na heractivering kan hij gewoon door.
-    return await markeerGeweigerd(svc, job, doc.id, `ai_begrenzing_${ingestPf.reden}`);
-  }
-  if (ingestPf.uitkomst === "onbereikbaar") {
-    return await backoff(svc, job, "ai_preflight_onbereikbaar");
-  }
-
   const poort = { supabase: svc, label: "ingest-worker" };
 
   // Extractie met OCR-fallback (async, hogere OCR-cap dan het oude sync-pad).
@@ -688,13 +700,14 @@ async function extracteerEnChunk(
       // OCR-pagina's zijn een EIGEN grootheid met een eigen fondsquotum. Elke
       // poging reserveert opnieuw: Mistral factureert een retry ook opnieuw.
       reserveerOcr: async (paginas, poging) => {
+        const ocrActietype = doc.bibliotheek === "generiek" ? "ocr_generiek" : "ocr";
         const uitkomst = await preflightSysteem(svc, {
-          actietype: "ocr",
-          fondsId: job.fonds_id ?? null,
+          actietype: ocrActietype,
+          fondsId: doc.bibliotheek === "generiek" ? null : job.fonds_id ?? null,
           provider: "mistral",
           model: "mistral-ocr-latest",
           ocrPaginas: paginas,
-          idempotentie: systeemSleutel(job.id, "ocr", poging),
+          idempotentie: systeemSleutel(job.id, ocrActietype, poging),
           vingerafdruk: vingerafdruk({ documentId: doc.id, paginas }),
         });
         return uitkomst.uitkomst === "nieuw";
@@ -750,7 +763,7 @@ async function extracteerEnChunk(
   // vóór de verrijking. Best-effort — een mislukte samenvatting blokkeert de
   // ingest niet.
   if (doc.agendapunt_id) {
-    const samenvatting = await genereerSamenvatting(poort, extractie.tekst);
+    const samenvatting = await genereerSamenvatting(gateway, extractie.tekst);
     if (samenvatting) {
       await svc
         .from("documenten")
@@ -814,11 +827,13 @@ async function verwerkLive(
   svc: SupabaseClient,
   job: IngestJob,
   doc: DocumentRij,
-  deadline: number
+  deadline: number,
+  gateway: GatewayAanroep
 ): Promise<Uitkomst> {
   while (Date.now() < deadline) {
     const r = await verrijkChunks(svc, doc.id, {
       titel: doc.titel,
+      gateway,
       prefixConcurrentie: LIVE_PREFIX_CONCURRENTIE,
       limiet: VERRIJK_LIMIET,
       prefixFailClosed: true,
@@ -828,58 +843,6 @@ async function verwerkLive(
     // voortgang geboekt, meer chunks resteren → volgende ronde binnen tijdbudget
   }
   return await yieldJob(svc, job); // tijdbudget op → prompte voortzetting
-}
-
-// ── Batch-baan ───────────────────────────────────────────────────────────────
-async function verwerkBatch(
-  svc: SupabaseClient,
-  job: IngestJob,
-  doc: DocumentRij,
-  deadline: number
-): Promise<Uitkomst> {
-  // Fase 1 — prefixes via Message Batch (stateful over invocaties heen).
-  if (job.extern_batch_id) {
-    const st = await pasPrefixBatchToe(svc, doc.id, job.extern_batch_id);
-    if (st === "bezig") {
-      await svc
-        .from("document_processing_jobs")
-        .update({ lease_expires_at: leaseTijd(BATCH_POLL_SECONDS) })
-        .eq("id", job.id);
-      return "bezig";
-    }
-    if (st === "fout" || st === "verlopen") {
-      await svc
-        .from("document_processing_jobs")
-        .update({ extern_batch_id: null })
-        .eq("id", job.id);
-      return await backoff(svc, job, st === "verlopen" ? "batch_verlopen" : "batch_fout");
-    }
-    // "klaar": prefixes staan; batch-id opruimen en door naar de embedding-fase.
-    await svc.from("document_processing_jobs").update({ extern_batch_id: null }).eq("id", job.id);
-  } else {
-    const start = await startPrefixBatch(svc, doc.id, doc.titel);
-    if (start.soort === "gestart") {
-      await svc
-        .from("document_processing_jobs")
-        .update({ extern_batch_id: start.externBatchId, lease_expires_at: leaseTijd(BATCH_POLL_SECONDS) })
-        .eq("id", job.id);
-      return "bezig";
-    }
-    if (start.soort === "fout") {
-      // Batch-API onbeschikbaar → val terug op de live-baan (synchrone prefixes)
-      // i.p.v. baseline-embeddings zonder situering.
-      return await verwerkLive(svc, job, doc, deadline);
-    }
-    // "leeg": geen units te prefixen (of alle prefixes al gezet) → ga embedden.
-  }
-
-  // Fase 2 — embedding over de (batch-)geschreven prefixes.
-  while (Date.now() < deadline) {
-    const e = await embedBestaandeChunks(svc, doc.id, VERRIJK_LIMIET);
-    if (e.resterend === 0) return await finaliseer(svc, job, doc.id);
-    if (e.verwerkt === 0) return await backoff(svc, job, "provider_tijdelijk");
-  }
-  return await yieldJob(svc, job);
 }
 
 // ── Afronden / backoff / yield ───────────────────────────────────────────────

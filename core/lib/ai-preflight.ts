@@ -287,11 +287,12 @@ export async function rondAf(
 ): Promise<void> {
   if (!actieId) return;
   try {
-    await client.rpc("fn_ai_actie_afronden", {
+    const { error } = await client.rpc("fn_ai_actie_afronden", {
       p_actie_id: actieId,
       p_status: status,
       p_resultaat_ref: resultaatRef ?? null,
     });
+    if (error) console.error("[ai-preflight] afronden mislukt", error.message);
   } catch (e) {
     console.error("[ai-preflight] afronden mislukt", e instanceof Error ? e.message : e);
   }

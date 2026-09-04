@@ -7,12 +7,12 @@
 //  SDK, geen aqlab-registry) zodat elk pad — ingest, chat-route, reranker — dit
 //  goedkoop kan importeren zonder een zware afhankelijkheidsketen mee te trekken.
 //
-//  Voor het GENERATIE-model (chat-antwoorden) geldt AI_MODEL in lib/generatie-
-//  kern.ts als centrale, env-overschrijfbare bron; die blijft daar staan naast de
-//  bijbehorende tokenbudgetten. Dit bestand dekt de gedeelde HULP-modellen.
+//  Het generatiemodel in lib/generatie-kern.ts is alleen een code-default voor
+//  tests/AQLab; productiepaden resolveren provider en model via de AI-gateway.
+//  Dit bestand dekt de gedeelde HULP-modeldefaults voor platformtaken.
 //
 //  LET OP: verifieer elke modelstring tegen het Anthropic-account vóór deploy
-//  (identiek aan de hedging bij AI_MODEL).
+//  voordat een platformtaak het als expliciete modelkeuze gebruikt.
 // ============================================================================
 
 // Goedkoop/snel Haiku-model voor hulptaken: context-prefix bij ingest (R1.2),

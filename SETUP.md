@@ -82,6 +82,11 @@ AI_GATEWAY_DB_SSL=uit
 `AI_MODEL` als omgevingsvariabele wordt sinds #311 **niet meer gelezen** (reviewbesluit R2): het
 model per taakgroep staat in `ai_gateway_private.fonds_configuratie`.
 
+Bij een bestaande omgeving die van fase 2B T3 naar T4/T5 gaat, moeten vóór de code-deploy ook
+`2026_09_04_t4_ai_actietype_semantische_extractie.sql` en de schema-seed
+`2026_09_04_ai_gateway_monitoring_seed.sql` zijn toegepast. De volledige volgorde en rollback
+staan in `security/AI-GATEWAY-RUNBOOK.md`.
+
 **Optioneel — AI Quality Lab multi-provider (AQL-6, alleen voor de providervergelijking).**
 Deze keys zijn **server-side only** (nooit `NEXT_PUBLIC_`) en worden pas gezet nadat de
 governance-poort groen is (decision `0064`, FG/DPO-akkoord). Zonder key blijft de betreffende

@@ -1,7 +1,7 @@
 // ============================================================================
 //  core/lib/semantische-concepten.ts — pure kern van de semantische extractie (T8).
 // ----------------------------------------------------------------------------
-//  De PRODUCTIE-versie van de S1-spike-logica (scripts/spike-s1/{concepts,tekst}.ts),
+//  De PRODUCTIE-versie van de eerder gevalideerde S1-spike-logica,
 //  gepromoveerd naar een dependency-vrije, los toetsbare laag. Bevat GEEN DB, GEEN
 //  Anthropic-SDK, GEEN server-only: alles hier is puur en draait onder tsx
 //  (npm run sanity). De dure/onzuivere delen (modelcall, DB-schrijf) leven in

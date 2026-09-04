@@ -109,6 +109,8 @@ export async function meetSignaal(
       return meetRateLimitIncidenten(ctx);
     case "rate_limit_fail_open":
       return meetRateLimitFailOpen(ctx);
+    case "gateway_log_fouten":
+      return meetGatewayLogFouten(ctx);
     case "audit_volledigheid":
       return meetAuditVolledigheid(ctx);
     case "ai_latency_p95":
@@ -328,6 +330,20 @@ async function meetRateLimitFailOpen(ctx: MetingContext): Promise<Meting[]> {
     if (rij.severity === "hoog") pak(teller, rij.fonds_id).raak += 1;
   }
   return alsAantal(teller, afgekapt);
+}
+
+// Gateway-audit is platformbreed: ook AQLab-calls zonder fondscontext tellen mee.
+// Alleen de vaste label-suffix wordt gelezen; foutmeldingen en contextwaarden
+// verlaten app_errors niet.
+async function meetGatewayLogFouten(ctx: MetingContext): Promise<Meting[]> {
+  const { count, error } = await ctx.svc
+    .from("app_errors")
+    .select("id", { count: "exact", head: true })
+    .eq("categorie", "retrieval_ai")
+    .like("label", "%:ai-gateway-log")
+    .gte("tijdstip", sindsIso(ctx));
+  if (error) throw error;
+  return [{ fondsId: null, waarde: count ?? 0, n: null }];
 }
 
 // ── Blok C — Ingest-stilstand en -doorlooptijd (bron: document_processing_jobs) ─

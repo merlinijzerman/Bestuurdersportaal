@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { bewaakteAnthropic } from "@/core/lib/ai-poort";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import {
   preflight,
   preflightRespons,
@@ -10,12 +10,6 @@ import {
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited, badRequest } from "@/core/lib/api-errors";
-
-// AI-BEGRENZING (besluit 0180): geen eigen client; de call loopt door de poort.
-// Het model stond hier INLINE hardgecodeerd in de aanroep — precies de
-// modelconfig-drift die core/lib/llm-modellen.ts moest voorkomen. Nu één
-// constante; de allowlist in de database is de beslissende laag.
-const BESLUIT_MODEL = "claude-sonnet-4-5";
 
 const SYSTEM_PROMPT = `U bent een ervaren bestuurssecretaris bij een Nederlands pensioenfonds.
 
@@ -156,7 +150,6 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
     const userMessage = contextRegels.filter(Boolean).join("\n");
 
     // AI-BEGRENZING (besluit 0180): één conceptbesluit = één AI-actie.
-    const aiPoort = { supabase, label: "procedures.besluit-concept" };
     const idempotentie = sleutelUitRequest(req, "besluit_concept");
     if (!idempotentie) {
       return badRequest(
@@ -166,8 +159,8 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
     }
     const pf = await preflight(supabase, {
       actietype: "besluit_concept",
-      provider: "anthropic",
-      model: BESLUIT_MODEL,
+      provider: null,
+      model: null,
       idempotentie,
       vingerafdruk: vingerafdruk({ stapId, lengte: userMessage.length }),
     });
@@ -175,18 +168,31 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
     if (aiBlokkade) return aiBlokkade;
     const aiActieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
 
-    const respons = await bewaakteAnthropic(aiPoort, BESLUIT_MODEL, (client) =>
-      client.messages.create({
-      model: BESLUIT_MODEL,
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-      })
-    );
+    let respons;
+    try {
+      respons = await productieGateway().genereer(
+        {
+          supabase,
+          fondsId: ctx.fondsId,
+          actor: { soort: "gebruiker", id: ctx.gebruikerId },
+          actieId: aiActieId,
+          correlatieId: ctx.requestId,
+          label: "procedures.besluit-concept",
+        },
+        {
+          taaktype: "besluit_concept",
+          maxTokens: 1000,
+          systeem: SYSTEM_PROMPT,
+          berichten: [{ role: "user", content: userMessage }],
+        }
+      );
+    } catch (e) {
+      await rondAf(supabase, aiActieId, "mislukt");
+      throw e;
+    }
 
     // Pak de tekst uit het antwoord en parse JSON
-    const blok = respons.content.find((c) => c.type === "text");
-    const ruweTekst = blok && blok.type === "text" ? blok.text.trim() : "";
+    const ruweTekst = respons.tekst.trim();
     let concept: {
       formulering?: string;
       motivering?: string;
@@ -200,6 +206,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
         .replace(/\s*```$/i, "");
       concept = JSON.parse(cleaned);
     } catch {
+      await rondAf(supabase, aiActieId, "mislukt");
       return NextResponse.json(
         {
           error:

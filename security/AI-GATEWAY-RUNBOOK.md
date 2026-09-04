@@ -61,3 +61,34 @@ De trigger dwingt af dat het profiel bestaat en actief is, dat de provider bij h
 ## Lokaal / CI
 
 `scripts/testdb-apply-migrations.sh` maakt in de wegwerp-DB een wachtwoordloze `ai_gateway`-fixture met dezelfde flags (zoals voor `microsoft_vault`), zodat de migratie en de suite in `scripts/cross-tenant-ci.sh` ongewijzigd draaien. Preview en Productie vereisen een echt, beheerd wachtwoord.
+
+## T4/T5 — volledige call-sitecutover
+
+T4 brengt samenvatting, context-prefix, semantische extractie, afschrift-/besluitconcept en
+AQLab generatie/judge onder dezelfde gateway. Voer per omgeving in deze volgorde uit:
+
+1. Controleer dat T2/T3 actief zijn en een gewone chatcall een regel in
+   `ai_gateway_private.gateway_log` schrijft.
+2. Pas `supabase/migrations/2026_09_04_t4_ai_actietype_semantische_extractie.sql` toe. Draai
+   daarna `supabase/checks/2026_08_16_ai_begrenzing.sql`; het nieuwe actietype moet alleen als
+   systeemactie mét fonds kunnen reserveren.
+3. Pas `supabase/seeds/schema/2026_09_04_ai_gateway_monitoring_seed.sql` toe. Controleer dat
+   precies één actieve configrij `gateway_log_fouten` bestaat.
+4. Deploy daarna pas de T4/T5-code. Zonder stap 2 faalt semantische extractie gesloten; zonder
+   stap 3 gebruikt monitoring tijdelijk de codefallback, maar dat is geen geldige eindtoestand.
+5. Smoke op één Preview-fonds: chat met bron, afschriftconcept, besluitconcept, één document-ingest
+   inclusief prefix/samenvatting, semantische extractie en één synthetische AQLab-run. Controleer
+   voor elke uitgevoerde taak `taaktype`, fonds/platformscope, effectief model, `actie_id`,
+   correlatie-id en resultaat; controleer expliciet dat prompt, antwoord, documentinhoud en secrets
+   niet in `gateway_log` of `app_errors` staan.
+6. Laat de monitoringssnapshot draaien en controleer dat `gateway_log_fouten = 0`. Een gecontroleerd
+   veroorzaakte logschrijffout is alleen in een geïsoleerde testomgeving toegestaan.
+
+### Rollback T4/T5
+
+Rol eerst de code terug. Draai daarna
+`supabase/rollbacks/2026_09_04_ai_gateway_monitoring_seed_ROLLBACK.sql` en pas uitsluitend wanneer
+geen lopende semantische-extractiejob bestaat
+`supabase/rollbacks/2026_09_04_t4_ai_actietype_semantische_extractie_ROLLBACK.sql` toe. De T2/T3-
+gatewaytabellen en auditregels blijven staan; gebruik hun destructieve rollback alleen bij een
+volledige terugname van fase 2B.

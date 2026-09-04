@@ -143,6 +143,7 @@ export const ACTIETYPES = {
   // job-rij (document_processing_jobs.fonds_id), niet van een sessie; er is
   // dus geen gebruiker om tegen af te rekenen, wel een fonds.
   document_ingest: { bereik: "fonds", aiActies: 1, viaGebruiker: false, viaSysteem: true, leaseSeconden: 900 },
+  semantische_extractie: { bereik: "fonds", aiActies: 1, viaGebruiker: false, viaSysteem: true, leaseSeconden: 900 },
 
   // ── OCR: eigen grootheid, nul AI-acties ──────────────────────────────────
   // Reserveert het aantal pagina's dat WERKELIJK aan de OCR-provider wordt

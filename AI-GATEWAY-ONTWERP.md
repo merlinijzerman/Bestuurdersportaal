@@ -328,6 +328,21 @@ Volgorde per omgeving: T2-migratie eerst in Supabase (Preview, daarna Productie)
 | R2 | `AI_MODEL` zonder env-override | — |
 | Tests (§5 T3) | `gateway.test.ts` (13), `secrets.test.ts` (3), `ai-gateway-config-db.sanity.ts`, AQLab-smoke 7/7, karakterisering 378/378 byte-identiek | — |
 
+## 5b. Aansluittabel T4/T5 — gerealiseerd
+
+| Onderdeel | Gerealiseerd | Bewuste grens |
+|---|---|---|
+| Overige teksttaken | samenvatting, fonds-/generieke context-prefix, semantische extractie, afschriftconcept, besluitconcept, AQLab generatie en judge via `AiGateway` | embeddings/OCR houden hun eigen providerneutrale poort en reservering |
+| Quota G1/G2/G3 | `semantische_extractie` toegevoegd; `generiek_curatie` aangesloten; OCR-poort en reservering verplichte argumenten | één actie-ID per logische job, hergebruikt bij workerhervatting |
+| Providergrens | SDK-import uitsluitend in de Anthropic-adapter; `bewaakteAnthropic*` verwijderd | directe providerlaag bestaat alleen nog als injecteerbare testseam |
+| Batchbaan | ongebruikte Anthropic Message Batches-code en S1-spike verwijderd | herintroductie vraagt een apart providerneutraal batchcontract |
+| Provenance | re-indexrun bewaart het effectieve prefixmodel (`mixed` bij meerdere modellen) | geen vaste modelclaim meer vanuit de call-site |
+| Monitoring | `gateway_log_fouten` telt gestructureerde auditlogschrijffouten platformbreed | dubbele uitval van gatewaylog én `app_errors` blijft een serverlog-restrisico |
+| Besluit | `decisions/0209-centrale-ai-gateway-per-fonds.md` | beheer-UI blijft issue #317 |
+
+Uitrol en rollback staan in `security/AI-GATEWAY-RUNBOOK.md`. T4/T5 veranderen geen
+SharePoint-, Outlook- of bronwisselfunctionaliteit.
+
 ## 6. Reviewbesluiten (opdrachtgever, 2026-09-04)
 
 | # | Besluit | Voorwaarde / consequentie |
