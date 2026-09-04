@@ -1,0 +1,44 @@
+{
+  "body": {
+    "meta": {
+      "geselecteerd": 2,
+      "methode": "fts_dutch_ranked",
+      "modus": "alles",
+      "opgehaald": 2
+    },
+    "procesinstanties": [],
+    "resultaten": [
+      {
+        "bibliotheek": "fonds",
+        "bron": "Intern",
+        "bronorganisatie": null,
+        "bronstatus": null,
+        "document_id": "<uuid:1>",
+        "documentdatum": null,
+        "documentstatus": "concept",
+        "extern_url": null,
+        "geldig_tot": null,
+        "heeft_origineel": true,
+        "normgewicht": null,
+        "procesinstantie_id": null,
+        "titel": "W1 Document",
+        "treffers": [
+          {
+            "fragment": "De premie voor het komende jaar is vastgesteld op 24 procent van de pensioengrondslag. Het premiebeleid volgt de kostendekkende premie en wordt door het bestuur jaarlijks herijkt.",
+            "pagina": 5,
+            "paragraaf": null
+          },
+          {
+            "fragment": "Het herstelplan beschrijft de maatregelen bij een reservetekort. Het premiebeleid en het indexatiebeleid worden jaarlijks getoetst aan de uitgangspunten van het herstelplan.",
+            "pagina": 3,
+            "paragraaf": null
+          }
+        ]
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

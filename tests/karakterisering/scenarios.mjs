@@ -1771,6 +1771,73 @@ export const scenarios = [
           nawerk: async () => ({ provider_verzoeken: await stubVerzoeken() }),
         },
 
+  // ── #322 F4-T1 — retrieval-golden vóór verplaatsing achter het contract ────
+  //  Twee waarnemingspunten die samen de huidige Supabase-RAG karakteriseren:
+  //   (a) /api/zoeken: de KANDIDATENSET met volgorde, treffers per document,
+  //       fragmentvorm en retrieval_meta (methode, opgehaald/geselecteerd) op
+  //       het FTS-pad — het lokale pad zonder Mistral-sleutel;
+  //   (b) /api/chat: dezelfde beurt als w311 sse-met-bron, maar het nawerk leest
+  //       de retrieval_meta uit governance_log en projecteert uitsluitend de
+  //       deterministische velden (geen duur/tokens/ttft).
+  //  Deze snapshots zijn de acceptatiegrens van F4-T2: byte-/structuuridentiek
+  //  na de verplaatsing, zonder ze bij te werken.
+  ...[
+    ["renteafdekking", "q=renteafdekking"],
+    ["renteafdekking-actueel", "q=renteafdekking&modus=actueel"],
+    ["renteafdekking-generiek", "q=renteafdekking&bronsoort=generiek"],
+    ["premiebeleid", "q=premiebeleid"],
+    ["premiebeleid-herstelplan", "q=premiebeleid%20herstelplan"],
+    ["onbestaand", "q=xq9onbestaandeterm"],
+  ].map(([naam, query]) => ({
+    slug: `w322.zoeken.get.bestuurder.${naam}`,
+    method: "GET",
+    path: `/api/zoeken?${query}`,
+    rol: "bestuurder",
+    verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, LIMIET_ZOEKEN_ENDPOINT),
+  })),
+  {
+    vereist: "ai-stub",
+    slug: "w322.chat.post.bestuurder.retrieval-meta",
+    method: "POST", path: "/api/chat", rol: "bestuurder",
+    body: {
+      vraag: "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?",
+      neem_niet_vastgestelde_mee: true,
+    },
+    verwacht: "sse", idempotentie: true,
+    preseed: async ({ admin }) => {
+      await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+      await wisStubVerzoeken();
+    },
+    nawerk: async ({ admin, users }) => {
+      const { data, error } = await admin
+        .from("governance_log")
+        .select("retrieval_meta, modus")
+        .eq("gebruiker_id", users.bestuurder.userId)
+        .order("aangemaakt", { ascending: false })
+        .limit(1);
+      if (error) throw new Error(`governance_log(322): ${error.message}`);
+      const meta = data?.[0]?.retrieval_meta ?? null;
+      if (!meta) return { retrieval_meta: null };
+      // Alleen de reproduceerbare velden; timing en tokens zijn per run anders.
+      const {
+        methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+        fondsdiscipline_gedropt, body_fonds_id_genegeerd, embedding_query_success, fallback_reason,
+        retrieval_pogingen, poging_herkomst, bronversie_audit, citaties, rerank, drempel, parent,
+        selectie, filters, antwoordmodus, bronbasis, gereformuleerd,
+      } = meta;
+      return {
+        modus: data[0].modus,
+        retrieval_meta: {
+          methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+          fondsdiscipline_gedropt, body_fonds_id_genegeerd, embedding_query_success, fallback_reason,
+          retrieval_pogingen, poging_herkomst, bronversie_audit, citaties, rerank, drempel, parent,
+          selectie, filters, antwoordmodus, bronbasis, gereformuleerd,
+        },
+      };
+    },
+  },
+
   // ── 2. /api/ai/stuk-export — docx-download ────────────────────────────────
   //  De invariant van deze route is de VOLGORDE: `log_word_export` moet slagen
   //  vóór het bestand teruggaat (B-4/G16).

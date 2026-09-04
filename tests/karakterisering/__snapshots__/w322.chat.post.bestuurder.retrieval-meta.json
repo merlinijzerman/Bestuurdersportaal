@@ -1,0 +1,213 @@
+{
+  "body": {
+    "events": [
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "klaar",
+        "type": "progress",
+        "uitkomst": "uit 1 document — 1 passage geselecteerd"
+      },
+      {
+        "fase": "generatie",
+        "label": "Antwoord wordt opgesteld",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "alleen_fondsdocumenten": false,
+        "antwoordmodus": "feitelijk",
+        "antwoordmodus_label": "Feitelijk antwoord",
+        "bron_intent": "fonds",
+        "bron_intent_bron": null,
+        "bron_intent_herkomst": null,
+        "bron_intent_override": false,
+        "bron_modus_auto": "combineren",
+        "bron_vertrouwen": "zeker",
+        "bronbasis": "Fondsdocumenten, aangevuld met algemene kennis",
+        "bronkeuze_aanbod": null,
+        "bronnen": [
+          {
+            "bestandstype": "pdf",
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "documenttype": null,
+            "extern_url": null,
+            "fragment": "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "normgewicht": null,
+            "pagina": 1,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          }
+        ],
+        "chunks_gevonden": 1,
+        "document_gericht": false,
+        "documentdekking": null,
+        "gereformuleerd": false,
+        "inline_meldingen": [],
+        "module_scope": null,
+        "modus": "combineren",
+        "organisatieprofiel": "geen-profiel",
+        "peildatum": "<datum>",
+        "portaalstand_gebruikt": false,
+        "profielsturing": "geen-profiel",
+        "retrieval_modus": "alles",
+        "scope": null,
+        "source_summary": {
+          "documenten": 1,
+          "model_kennis": 0,
+          "web": 0,
+          "web_retrieval_actief": false
+        },
+        "sources": [
+          {
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "extern_url": null,
+            "fragment": "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "kind": "document",
+            "normgewicht": null,
+            "pagina": 1,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          }
+        ],
+        "transformatie": false,
+        "type": "meta",
+        "verbreding": null,
+        "vraagrouter": null,
+        "web_retrieval_actief": false,
+        "zoekvraag": "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?"
+      },
+      {
+        "text": "Eerste gestreamde deel: de synthetische uitvoeringsafspraak ",
+        "type": "delta"
+      },
+      {
+        "text": "staat in [Bron 1]. De tweede controlewaarde",
+        "type": "delta"
+      },
+      {
+        "text": " staat in [Bron 2].",
+        "type": "delta"
+      },
+      {
+        "documentdekking": null,
+        "inline_meldingen": [],
+        "log_id": "<uuid:1>",
+        "model_kennis": [],
+        "reflectie": {
+          "beurt": 0,
+          "heeft_bronset": false,
+          "status": "niet_actief"
+        },
+        "source_summary": {
+          "documenten": 1,
+          "model_kennis": 0,
+          "web": 0,
+          "web_retrieval_actief": false
+        },
+        "type": "done",
+        "verbreding": null,
+        "vervolgvragen": [],
+        "volledige_analyse_aanbod": null,
+        "vraagrouter": null,
+        "web_bronnen": [],
+        "web_retrieval_actief": false
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "text/event-stream; charset=utf-8"
+  },
+  "nawerk": {
+    "modus": "combineren",
+    "retrieval_meta": {
+      "antwoordmodus": "feitelijk",
+      "body_fonds_id_genegeerd": false,
+      "bronbasis": "Fondsdocumenten, aangevuld met algemene kennis",
+      "bronversie_audit": [
+        {
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronstatus": null,
+          "document_id": "<uuid:1>",
+          "documentdatum": null,
+          "documentstatus": "concept",
+          "fonds_id": "<uuid:2>"
+        }
+      ],
+      "chunks": [
+        {
+          "document_id": "<uuid:1>",
+          "fts_rang": null,
+          "id": "<uuid:3>",
+          "rang": 0.3,
+          "vec_rang": null
+        }
+      ],
+      "citaties": {
+        "ongeldig": 1,
+        "totaal": 2
+      },
+      "filters": {
+        "bronsoort": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "modus": "alles",
+        "peildatum": "<datum>",
+        "procesinstantie_ids": null
+      },
+      "fondsdiscipline_gedropt": 0,
+      "gereformuleerd": false,
+      "geselecteerd": 1,
+      "methode": "fts_dutch_terugval",
+      "namespace_conventie": "bibliotheek",
+      "opgehaald": 1,
+      "selectie": {
+        "afgevallen_telling": {
+          "budget": 0,
+          "dedup": 0,
+          "quotum": 0,
+          "weging": 0,
+          "zwak_generiek": 0
+        },
+        "constraints": {
+          "fondsMin": 0,
+          "generiekMin": 0,
+          "maxPerSource": 5,
+          "maxTotal": 10,
+          "perSourceMin": 0
+        },
+        "geselecteerd_per_bibliotheek": {
+          "fonds": 1,
+          "generiek": 0
+        },
+        "intent": "fonds",
+        "regime": "alles"
+      },
+      "toegepaste_fonds_filter": "<uuid:2>"
+    }
+  },
+  "status": 200
+}
