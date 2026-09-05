@@ -47,6 +47,16 @@ er ongehinderd doorheen. Gerepareerd en op een echte PR geverifieerd; zie
 De scanner is de uitzondering: `bestuurdersportaal-scanner` heeft geen
 `preview-stable` en valt dus wél onder `Preview – …`.
 
+Voor Productie draait daarnaast een echte Vercel Production-deployment van de
+scanner. `bestuurdersportaal-beheer` Production mag via Trusted Sources alleen
+deze overeenkomstige Production-environment bereiken; verruim dit niet naar
+Production → Preview. De vaste scannerhealth is
+`https://project-pnkzy.vercel.app/health`. De workflow
+`.github/workflows/scanner-signatures-production.yml` bouwt deze deployment
+dagelijks zonder cache en controleert daarna signatureleeftijd, imageleeftijd,
+readiness en de EICAR-buildpoort. Een mislukte refresh is een productie-incident:
+de upload blijft dan fail-closed in quarantaine.
+
 ### Preview-hosts volgen de environment, geen losse deployment
 
 De vijf Preview-apphosts zijn **domeinen van `preview-stable`**. Dit is de
