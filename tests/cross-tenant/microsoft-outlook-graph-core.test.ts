@@ -40,7 +40,7 @@ test("Graph-client accepteert uitsluitend Microsoft Graph v1.0 en gebruikt immut
   const prefer = new Headers(headers).get("Prefer") ?? "";
   assert.equal(new Headers(headers).get("Content-Type"), "application/json");
   assert.match(prefer, /IdType="ImmutableId"/);
-  assert.match(prefer, /outlook\.timezone="UTC"/);
+  assert.doesNotMatch(prefer, /outlook\.timezone|odata\.maxpagesize/);
 });
 
 test("Graph-client respecteert Retry-After en begrenst retries", async () => {
@@ -80,6 +80,20 @@ test("Graph-client classificeert HTTP-fouten zonder response-inhoud te lekken", 
         && !fout.message.includes("gevoelige"),
     );
   }
+});
+
+test("Graph-client duidt een begrensde allowlisted 400 zonder Graph-tekst te bewaren", async () => {
+  await assert.rejects(
+    graphGet("test-token", "https://graph.microsoft.com/v1.0/me/calendarView/delta", {
+      fetchImpl: async () => new Response(JSON.stringify({
+        error: { code: "ErrorInvalidParameter", message: "endDateTime bevat gevoelige-context" },
+      }), { status: 400, headers: { "Content-Type": "application/json" } }),
+      maxRetries: 0,
+    }),
+    (fout: unknown) => fout instanceof OutlookGraphError
+      && fout.categorie === "graph_tijdvenster_ongeldig"
+      && !fout.message.includes("gevoelige-context"),
+  );
 });
 
 test("UTC-normalisatie behoudt instanten over de Amsterdamse zomertijdovergang", () => {

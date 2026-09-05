@@ -20,7 +20,66 @@ export class OutlookGraphError extends Error {
 }
 
 const MAX_RETRY_WACHTTIJD_MS = 30_000;
+const MAX_GRAPH_FOUT_BYTES = 8_192;
 const GRAPH_V1 = "https://graph.microsoft.com/v1.0";
+
+async function leesBegrensdeGraphFout(
+  response: Response,
+): Promise<{ code?: string; message?: string } | undefined> {
+  const reader = response.body?.getReader();
+  if (!reader) return undefined;
+  const delen: Uint8Array[] = [];
+  let totaal = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      totaal += value.byteLength;
+      if (totaal > MAX_GRAPH_FOUT_BYTES) {
+        await reader.cancel();
+        return undefined;
+      }
+      delen.push(value);
+    }
+    const bytes = new Uint8Array(totaal);
+    let positie = 0;
+    for (const deel of delen) { bytes.set(deel, positie); positie += deel.byteLength; }
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as {
+      error?: { code?: unknown; message?: unknown };
+    };
+    return {
+      code: typeof parsed.error?.code === "string" ? parsed.error.code : undefined,
+      message: typeof parsed.error?.message === "string" ? parsed.error.message : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function graphFoutcategorie(response: Response): Promise<string> {
+  if (response.status === 401 || response.status === 403) return "toestemming_of_token";
+  if (response.status === 429) return "graph_ratelimit";
+  if (response.status === 410) return "delta_verlopen";
+  if (response.status === 404) return "graph_bron_niet_gevonden";
+  if (response.status === 405) return "graph_methode_niet_toegestaan";
+  if (response.status >= 500) return "graph_serverfout";
+  if (response.status === 400 || response.status === 422) {
+    const fout = await leesBegrensdeGraphFout(response);
+    const bericht = fout?.message ?? "";
+    if (/startdatetime|enddatetime|time interval|date range/i.test(bericht)) {
+      return "graph_tijdvenster_ongeldig";
+    }
+    if (/prefer|header/i.test(bericht)) return "graph_header_ongeldig";
+    if (/odata|query/i.test(bericht)) return "graph_query_ongeldig";
+    const code = fout?.code?.toLowerCase();
+    if (code === "errorinvalidrequest") return "graph_code_errorinvalidrequest";
+    if (code === "errorinvalidparameter") return "graph_code_errorinvalidparameter";
+    if (code === "invalidargument") return "graph_code_invalidargument";
+    if (code === "invalidrequest") return "graph_code_invalidrequest";
+    return "graph_verzoek_ongeldig";
+  }
+  return "graph_response";
+}
 
 export function bouwStandaardAgendaDeltaUrl(
   vensterStart: string,
@@ -76,7 +135,7 @@ export async function graphGet(
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/json",
         "Content-Type": "application/json",
-        Prefer: 'IdType="ImmutableId", outlook.timezone="UTC", odata.maxpagesize=50',
+        Prefer: 'IdType="ImmutableId"',
       },
       cache: "no-store",
     });
@@ -88,18 +147,7 @@ export async function graphGet(
       continue;
     }
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new OutlookGraphError("toestemming_of_token");
-      }
-      if (response.status === 429) throw new OutlookGraphError("graph_ratelimit");
-      if (response.status === 410) throw new OutlookGraphError("delta_verlopen");
-      if (response.status === 400 || response.status === 422) {
-        throw new OutlookGraphError("graph_verzoek_ongeldig");
-      }
-      if (response.status === 404) throw new OutlookGraphError("graph_bron_niet_gevonden");
-      if (response.status === 405) throw new OutlookGraphError("graph_methode_niet_toegestaan");
-      if (response.status >= 500) throw new OutlookGraphError("graph_serverfout");
-      throw new OutlookGraphError("graph_response");
+      throw new OutlookGraphError(await graphFoutcategorie(response));
     }
     return response;
   }
