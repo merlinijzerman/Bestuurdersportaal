@@ -6,6 +6,7 @@ import { microsoftVaultDbConfig } from "@/core/lib/microsoft-vault-config-core";
 import type { MicrosoftConnectorFoutcategorie } from "@/core/lib/microsoft-connector-error-core";
 import {
   normaliseerMicrosoftCacheRij,
+  normaliseerPostgresDatum,
   type MicrosoftCacheDatabaseRij,
 } from "@/core/lib/microsoft-vault-row-core";
 
@@ -68,7 +69,16 @@ export async function ontkoppel(fondsId: string, gebruikerId: string) {
 }
 export async function leesOutlookConfiguratie(fondsId: string, gebruikerId: string): Promise<OutlookConfiguratie | undefined> {
   const r = await db().query("select * from microsoft_private.outlook_lees_configuratie($1,$2)", [fondsId, gebruikerId]);
-  return r.rows[0] as OutlookConfiguratie | undefined;
+  const rij = r.rows[0] as (Omit<OutlookConfiguratie, "venster_start" | "venster_eind"> & {
+    venster_start: unknown;
+    venster_eind: unknown;
+  }) | undefined;
+  if (!rij) return undefined;
+  return {
+    ...rij,
+    venster_start: normaliseerPostgresDatum(rij.venster_start),
+    venster_eind: normaliseerPostgresDatum(rij.venster_eind),
+  };
 }
 export async function configureerOutlookAgenda(args: { fondsId: string; gebruikerId: string; tenantId: string; mailboxId: string; calendarId: string; naam: string; vensterStart: string; vensterEind: string }) {
   const r = await db().query("select microsoft_private.outlook_configureer_agenda($1,$2,$3,$4,$5,$6,$7,$8) as id", [args.fondsId,args.gebruikerId,args.tenantId,args.mailboxId,args.calendarId,args.naam,args.vensterStart,args.vensterEind]);
@@ -76,7 +86,16 @@ export async function configureerOutlookAgenda(args: { fondsId: string; gebruike
 }
 export async function startOutlookRun(fondsId: string, gebruikerId: string, correlationId: string): Promise<OutlookRun | undefined> {
   const r = await db().query("select * from microsoft_private.outlook_start_run($1,$2,$3)", [fondsId, gebruikerId, correlationId]);
-  return r.rows[0] as OutlookRun | undefined;
+  const rij = r.rows[0] as (Omit<OutlookRun, "venster_start" | "venster_eind"> & {
+    venster_start: unknown;
+    venster_eind: unknown;
+  }) | undefined;
+  if (!rij) return undefined;
+  return {
+    ...rij,
+    venster_start: normaliseerPostgresDatum(rij.venster_start),
+    venster_eind: normaliseerPostgresDatum(rij.venster_eind),
+  };
 }
 export async function verwerkOutlookEvent(args: { runId: string; eventId: string; iCalUId: string | null; changeKey: string | null; serieMasterId: string | null; titel: string; start: string; eind: string; tijdzone: string; locatie: string; teamsLink: string; sensitivity: string; geannuleerd: boolean; lokaleDeelnemers: string[]; onbekendeDeelnemers: number }) {
   const r = await db().query("select microsoft_private.outlook_verwerk_event($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) as resultaat", [args.runId,args.eventId,args.iCalUId ?? "",args.changeKey ?? "",args.serieMasterId ?? "",args.titel,args.start,args.eind,args.tijdzone,args.locatie,args.teamsLink,args.sensitivity,args.geannuleerd,args.lokaleDeelnemers,args.onbekendeDeelnemers]);
