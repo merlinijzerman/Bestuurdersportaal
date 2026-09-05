@@ -97,7 +97,16 @@ export async function synchroniseerOutlookAgenda(ctx: ConnectorContext & { corre
     for (let paginaNummer = 0; volgende; paginaNummer += 1) {
       if (paginaNummer >= 1_000 || bezocht.has(volgende)) throw new OutlookGraphError("graph_paginering");
       bezocht.add(volgende);
-      const response = await graphGet(accessToken, volgende);
+      let response: Response;
+      try {
+        response = await graphGet(accessToken, volgende);
+      } catch (fout) {
+        if (fout instanceof OutlookGraphError) {
+          const fase = paginaNummer === 0 ? "delta_start" : "delta_vervolg";
+          throw new OutlookGraphError(`${fase}_${fout.categorie}`, fout);
+        }
+        throw fout;
+      }
       const pagina = await response.json() as GraphDelta;
       for (const event of pagina.value ?? []) {
         gelezen += 1;

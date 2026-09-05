@@ -26,6 +26,8 @@ test("delta-sync bewaart alleen een volledig afgehandelde deltaLink en markeert 
   assert.match(graphCore, /IdType="ImmutableId"/);
   assert.match(graphCore, /Retry-After/);
   assert.match(outlook, /await vault\.voltooiOutlookRun/);
+  assert.match(outlook, /delta_start/);
+  assert.match(outlook, /delta_vervolg/);
   assert.match(outlook, /markeerOutlookEventExternGewijzigd/);
   assert.match(migratie, /outlook_sync_een_actief_per_agenda/);
   assert.match(migratie, /unique \(tenant_id, mailbox_id, calendar_id, immutable_event_id\)/);
