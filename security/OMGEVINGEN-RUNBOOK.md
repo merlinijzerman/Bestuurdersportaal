@@ -57,6 +57,12 @@ dagelijks zonder cache en controleert daarna signatureleeftijd, imageleeftijd,
 readiness en de EICAR-buildpoort. Een mislukte refresh is een productie-incident:
 de upload blijft dan fail-closed in quarantaine.
 
+Ook een geïsoleerde operationele promotie naar `main` behoudt de bestaande
+deploymentpoort: zowel `preview-stable – bestuurdersportaal` als
+`preview-stable – bestuurdersportaal-beheer` moet voor de exacte PR-head groen
+zijn. Maak die status nooit handmatig na; laat beide Preview-deployments werkelijk
+draaien voordat Productie wordt gemerged.
+
 ### Preview-hosts volgen de environment, geen losse deployment
 
 De vijf Preview-apphosts zijn **domeinen van `preview-stable`**. Dit is de
