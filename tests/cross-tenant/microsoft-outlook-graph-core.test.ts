@@ -107,6 +107,29 @@ test("Graph-client duidt een begrensde allowlisted 400 zonder Graph-tekst te bew
   );
 });
 
+test("Graph-client onderscheidt veilige tijdvenstercategorieën zonder fouttekst", async () => {
+  const gevallen = [
+    ["startDateTime and endDateTime parameters are required", "graph_tijdvenster_ontbreekt"],
+    ["The startDateTime value has an invalid ISO 8601 format", "graph_startdatum_ongeldig"],
+    ["The endDateTime value is not valid", "graph_einddatum_ongeldig"],
+    ["startDateTime must be earlier than endDateTime", "graph_tijdvenster_volgorde"],
+    ["The date range exceeds the maximum limit", "graph_tijdvenster_te_ruim"],
+  ] as const;
+  for (const [message, categorie] of gevallen) {
+    await assert.rejects(
+      () => graphGet("token", "https://graph.microsoft.com/v1.0/me/calendarView/delta", {
+        maxRetries: 0,
+        fetchImpl: async () => new Response(JSON.stringify({
+          error: { code: "ErrorInvalidParameter", message },
+        }), { status: 400, headers: { "Content-Type": "application/json" } }),
+      }),
+      (fout: unknown) => fout instanceof OutlookGraphError
+        && fout.categorie === categorie
+        && !fout.message.includes(message),
+    );
+  }
+});
+
 test("UTC-normalisatie behoudt instanten over de Amsterdamse zomertijdovergang", () => {
   const voor = normaliseerGraphUtc({ dateTime: "2026-03-29T00:30:00.0000000", timeZone: "UTC" });
   const na = normaliseerGraphUtc({ dateTime: "2026-03-29T01:30:00.0000000", timeZone: "UTC" });

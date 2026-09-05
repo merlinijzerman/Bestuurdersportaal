@@ -8,4 +8,6 @@
 6. Herhaal de sync zonder duplicaat; wijzig daarna tijd, locatie en Teams-link; test een annulering, een private/personal afspraak, confidential afspraak, terugkerende occurrence, zomertijd en een 429 met `Retry-After`. Een afgebroken run is na vijftien minuten opnieuw startbaar en wordt veilig als `run_afgebroken` geaudit.
 7. Test negatief: gewone bestuurder krijgt 403 op consent/selectie/sync; verkeerd fonds, andere gekoppelde mailbox, niet-opgesomde kalender-ID en gemanipuleerd event-ID worden geweigerd. Trek consent in en controleer herstelbare fout zonder geheimlek.
 
+Bij een mislukte Graph-deltacall bevat de foutcategorie alleen de fase (`delta_start` of `delta_vervolg`) en een vaste allowlisted technische categorie. De Microsoft-response, datumwaarden, tokens en afspraakinhoud worden nooit gelogd of teruggegeven.
+
 `@removed` krijgt de zichtbare, niet-destructieve status `extern_gewijzigd_of_verwijderd`; Graph maakt hier geen betrouwbaar onderscheid tussen verwijderen en verplaatsen buiten het vaste venster. Controleer na een mislukte run dat bestaande vergaderingen ongewijzigd blijven. Bij `delta_verlopen` wordt uitsluitend de onbruikbare cursor gewist, zodat de volgende handmatige run een nieuwe volledige baseline kan opbouwen.

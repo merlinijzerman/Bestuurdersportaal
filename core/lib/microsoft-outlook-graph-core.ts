@@ -80,6 +80,26 @@ async function graphFoutcategorie(response: Response): Promise<string> {
   if (response.status === 400 || response.status === 422) {
     const fout = await leesBegrensdeGraphFout(response);
     const bericht = fout?.message ?? "";
+    if (
+      /startdatetime.{0,120}enddatetime.{0,120}(required|missing|specified|provided)/i.test(bericht)
+      || /enddatetime.{0,120}startdatetime.{0,120}(required|missing|specified|provided)/i.test(bericht)
+    ) return "graph_tijdvenster_ontbreekt";
+    if (
+      /startdatetime.{0,120}(invalid|not valid|iso.?8601|format)/i.test(bericht)
+      || /(invalid|not valid).{0,120}startdatetime/i.test(bericht)
+    ) return "graph_startdatum_ongeldig";
+    if (
+      /enddatetime.{0,120}(invalid|not valid|iso.?8601|format)/i.test(bericht)
+      || /(invalid|not valid).{0,120}enddatetime/i.test(bericht)
+    ) return "graph_einddatum_ongeldig";
+    if (
+      /(startdatetime|start date).{0,120}(before|earlier|less than).{0,120}(enddatetime|end date)/i.test(bericht)
+      || /(enddatetime|end date).{0,120}(after|later|greater than).{0,120}(startdatetime|start date)/i.test(bericht)
+    ) return "graph_tijdvenster_volgorde";
+    if (
+      /(time interval|date range).{0,120}(too large|too long|exceed|maximum|limit)/i.test(bericht)
+      || /(maximum|limit).{0,120}(time interval|date range)/i.test(bericht)
+    ) return "graph_tijdvenster_te_ruim";
     if (/startdatetime|enddatetime|time interval|date range/i.test(bericht)) {
       return "graph_tijdvenster_ongeldig";
     }
