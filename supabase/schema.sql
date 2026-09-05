@@ -2429,3 +2429,12 @@ create table if not exists public.procedure_afschriften (
 -- registreer_controle, ontkoppel_bron) zijn alleen voor de loginrol
 -- microsoft_vault. Site-, drive- en item-id's zijn niet browserleesbaar.
 -- Fondsvlag: fonds_feature_flags.microsoft_sharepoint_fase3 (JSON true).
+
+-- ── Microsoft 365 — SharePoint fase 3B (documentreferenties, #321) ──────────
+-- Bron van waarheid: supabase/migrations/2026_09_04_microsoft_sharepoint_fase3b_documenten.sql.
+-- microsoft_private.sharepoint_documenten vertaalt een lokale uuid naar
+-- (bron, drive, item) met minimale metadata en eTag/cTag; geen inhoud, tekst,
+-- chunks, embeddings of preview-URL. Eén rij per (bron, item). Vier extra
+-- SECURITY DEFINER-functies alleen voor microsoft_vault; de audit-functie
+-- weigert details met URL's, tokens of externe id's. Zichtbaarheid en preview
+-- worden per request live via Graph met het token van de gebruiker bepaald.

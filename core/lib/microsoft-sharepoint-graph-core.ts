@@ -49,6 +49,43 @@ export const GRAPH_MAX_PAGINAS = 30;
 export const GRAPH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
+async function leesBegrensdeJson<T>(response: Response): Promise<T> {
+  if (!response.body) throw new SharePointGraphError("graph_response");
+  const reader = response.body.getReader();
+  const delen: Uint8Array[] = [];
+  let totaal = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totaal += value.byteLength;
+      if (totaal > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new SharePointGraphError("graph_response");
+      }
+      delen.push(value);
+    }
+  } catch (fout) {
+    if (fout instanceof SharePointGraphError) throw fout;
+    throw new SharePointGraphError("graph_response", fout);
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totaal);
+  let offset = 0;
+  for (const deel of delen) {
+    bytes.set(deel, offset);
+    offset += deel.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+  } catch (fout) {
+    throw new SharePointGraphError("graph_response", fout);
+  }
+}
+
 /** Alleen Graph v1.0 over https; alles anders (beta, andere host, http) is een fout. */
 export function veiligeSharePointGraphUrl(url: string): URL {
   let parsed: URL;
@@ -123,11 +160,7 @@ export async function graphJson<T>(accessToken: string, url: string, opties: Gra
     }
     const lengte = Number.parseInt(response.headers.get("Content-Length") ?? "0", 10);
     if (Number.isSafeInteger(lengte) && lengte > MAX_BODY_BYTES) throw new SharePointGraphError("graph_response");
-    try {
-      return await response.json() as T;
-    } catch (fout) {
-      throw new SharePointGraphError("graph_response", fout);
-    }
+    return leesBegrensdeJson<T>(response);
   }
 }
 
@@ -230,4 +263,115 @@ export function kinderenUrl(driveId: string, ouderItemId: string | null): string
   const basis = `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}`;
   const pad = ouderItemId ? `/items/${encodeURIComponent(ouderItemId)}/children` : "/root/children";
   return `${basis}${pad}?$select=id,name,folder,file,size,eTag,cTag,lastModifiedDateTime,parentReference&$top=${GRAPH_PAGINAGROOTTE}`;
+}
+
+// ── Deel B (#321): documentenboom en preview ────────────────────────────────
+
+export const SHAREPOINT_MAX_DOCUMENTEN = 5_000;
+export const SHAREPOINT_MAX_KINDDIEPTE = 10;
+
+/** Bestandstypen die Microsoft Graph als browserpreview kan renderen en die
+ * het portaal toont. Andere typen krijgen een veilige melding, geen download. */
+export const SHAREPOINT_PREVIEW_TYPEN = ["pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls"] as const;
+export type SharePointBestandstype = typeof SHAREPOINT_PREVIEW_TYPEN[number];
+
+export function bestandstypeVanNaam(naam: string): SharePointBestandstype | null {
+  const extensie = naam.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  return extensie && (SHAREPOINT_PREVIEW_TYPEN as readonly string[]).includes(extensie) ? extensie as SharePointBestandstype : null;
+}
+
+export type DocumentProjectie = {
+  itemId: string; naam: string; bestandstype: SharePointBestandstype | null; mimeType: string | null; grootte: number | null;
+  gewijzigdOp: string | null; eTag: string | null; cTag: string | null; ouderItemId: string | null; mappad: string; webUrl: string | null;
+};
+
+export function deltaUrl(driveId: string, rootItemId: string): string {
+  return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/delta?$select=id,name,size,file,folder,eTag,cTag,lastModifiedDateTime,parentReference,deleted,webUrl&$top=${GRAPH_PAGINAGROOTTE}`;
+}
+export function itemUrl(driveId: string, itemId: string): string {
+  return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,name,size,file,folder,eTag,cTag,lastModifiedDateTime,parentReference,webUrl`;
+}
+export function previewActieUrl(driveId: string, itemId: string): string {
+  return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}/preview`;
+}
+
+/** Alleen een https-URL op een SharePoint-host, zonder credentials. Geldt voor
+ * de kortlevende preview-URL én voor de "Openen in Microsoft 365"-link. */
+export function veiligeSharePointUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+    const host = parsed.hostname.toLowerCase();
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*\.sharepoint\.com$/.test(host)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+type GraphDeltaItem = GraphDriveItem & { deleted?: { state?: string } | null };
+
+/** Bouwt uit een (delta- of children-)verzameling de bestanden onder het
+ * rootitem, met een weergavepad dat via de ouderketen tot het rootitem is
+ * herleid. Items waarvan de keten het rootitem niet bereikt, verwijderde
+ * items en items uit een andere drive vallen af. */
+export function bouwDocumentboom(items: GraphDeltaItem[], driveId: string, rootItemId: string): { documenten: DocumentProjectie[]; mappen: string[] } {
+  const mappen = new Map<string, { naam: string; ouder: string | null }>();
+  const bestanden: GraphDeltaItem[] = [];
+  for (const item of items) {
+    if (!item.id || !item.name || item.deleted) continue;
+    if (item.parentReference?.driveId && item.parentReference.driveId !== driveId) continue;
+    if (item.id === rootItemId) continue;
+    if (item.folder) mappen.set(item.id, { naam: item.name, ouder: item.parentReference?.id ?? null });
+    else if (item.file) bestanden.push(item);
+  }
+  const padCache = new Map<string, string | null>();
+  const padVan = (mapId: string | null): string | null => {
+    if (mapId === null) return null;
+    if (mapId === rootItemId) return "";
+    if (padCache.has(mapId)) return padCache.get(mapId)!;
+    padCache.set(mapId, null); // lusbescherming
+    const map = mappen.get(mapId);
+    if (!map) return null;
+    const ouderPad = padVan(map.ouder);
+    const pad = ouderPad === null ? null : (ouderPad ? `${ouderPad}/${map.naam}` : map.naam);
+    padCache.set(mapId, pad);
+    return pad;
+  };
+  const documenten: DocumentProjectie[] = [];
+  const gezien = new Set<string>();
+  for (const bestand of bestanden) {
+    const mappad = padVan(bestand.parentReference?.id ?? null);
+    if (mappad === null || gezien.has(bestand.id!)) continue;
+    gezien.add(bestand.id!);
+    documenten.push({
+      itemId: bestand.id!, naam: bestand.name!.slice(0, 240), bestandstype: bestandstypeVanNaam(bestand.name!),
+      mimeType: bestand.file?.mimeType?.slice(0, 120) ?? null, grootte: typeof bestand.size === "number" && bestand.size >= 0 ? bestand.size : null,
+      gewijzigdOp: bestand.lastModifiedDateTime && !Number.isNaN(Date.parse(bestand.lastModifiedDateTime)) ? new Date(bestand.lastModifiedDateTime).toISOString() : null,
+      eTag: bestand.eTag?.slice(0, 200) ?? null, cTag: bestand.cTag?.slice(0, 200) ?? null,
+      ouderItemId: bestand.parentReference?.id ?? null, mappad: mappad.slice(0, 1000), webUrl: veiligeSharePointUrl(bestand.webUrl),
+    });
+  }
+  documenten.sort((a, b) => a.mappad.localeCompare(b.mappad, "nl") || a.naam.localeCompare(b.naam, "nl"));
+  const mapPaden = [...mappen.keys()].map((id) => padVan(id)).filter((x): x is string => typeof x === "string" && x.length > 0).sort((a, b) => a.localeCompare(b, "nl"));
+  return { documenten, mappen: [...new Set(mapPaden)] };
+}
+
+/** Het pad van het rootitem zoals Graph het in parentReference.path van zijn
+ * kinderen weergeeft. Voor de driveroot ontbreekt een eigen parentReference. */
+export function rootPadVanItem(root: GraphDriveItem, driveId: string): string {
+  if (!root.parentReference?.path || root.name === "root" && !root.parentReference?.id) return `/drives/${driveId}/root:`;
+  return `${root.parentReference.path}/${root.name}`;
+}
+
+const normaliseerPad = (pad: string) => { try { return decodeURIComponent(pad); } catch { return pad; } };
+
+/** Een item mag alleen worden gepreviewd als het nog in dezelfde drive én onder
+ * het rootitem ligt; een verplaatsing erbuiten faalt gesloten. */
+export function itemOnderRoot(item: GraphDriveItem, driveId: string, rootPad: string): boolean {
+  if (!item.id || !item.file || item.parentReference?.driveId !== driveId || !item.parentReference?.path) return false;
+  const pad = normaliseerPad(item.parentReference.path);
+  const root = normaliseerPad(rootPad);
+  return pad === root || pad.startsWith(`${root}/`);
 }

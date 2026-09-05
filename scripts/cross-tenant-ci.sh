@@ -196,6 +196,9 @@ SQL_M365F2A="supabase/checks/2026_09_04_microsoft_outlook_fase2a.sql"
 # Microsoft 365 fase 3A (#321) — fondsgebonden SharePoint-bron, private ACL,
 # geen kandidaat-schrijfpad, cross-fonds dicht, ontkoppelen niet-destructief.
 SQL_M365F3A="supabase/checks/2026_09_04_microsoft_sharepoint_fase3.sql"
+# Microsoft 365 fase 3B (#321) — documentregister zonder inhoud, één referentie
+# per item, fondsgebonden opzoeking en audit-poort tegen URL's/externe id's.
+SQL_M365F3B="supabase/checks/2026_09_04_microsoft_sharepoint_fase3b_documenten.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -398,6 +401,7 @@ echo "-- Microsoft 365 F1 (private vaultrol, grants, secdef-path en fondsprofiel
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F2A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3A"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
 echo
 echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"

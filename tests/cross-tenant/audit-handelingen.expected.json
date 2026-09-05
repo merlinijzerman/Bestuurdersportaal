@@ -52,6 +52,7 @@
     "microsoft.sharepoint.bron-controleren": "POST microsoft/sharepoint/bron/controle",
     "microsoft.sharepoint.bron-kiezen": "POST microsoft/sharepoint/bron",
     "microsoft.sharepoint.bron-ontkoppelen": "DELETE microsoft/sharepoint/bron",
+    "microsoft.sharepoint.documenten.previewen": "POST microsoft/sharepoint/documenten/[ref]/preview",
     "microsoft.sharepoint.toestemming-uitbreiden": "GET microsoft/sharepoint/toestemming",
     "notulen.segmenten.bevestigen": "POST notulen/segmenten/[id]/bevestig",
     "notulen.segmenten.verwijderen": "DELETE notulen/segmenten/[id]",

@@ -2,16 +2,16 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 107,
+    "aantalHandlers": 108,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 30,
+    "zonderSpoor": 31,
     "klasseTelling": {
       "domein": 39,
       "geen": 9,
       "bewijsketen": 38,
       "machine": 6,
-      "operationeel": 15
+      "operationeel": 16
     },
     "ketengebeurtenisVereist": [],
     "spoorVereist": [],
@@ -911,6 +911,18 @@
     },
     {
       "handler": "DELETE app/api/microsoft/sharepoint/bron/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/microsoft/sharepoint/documenten/[ref]/preview/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",

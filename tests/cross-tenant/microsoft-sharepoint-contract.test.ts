@@ -67,3 +67,67 @@ test("rollback verwijdert de fase-3A-objecten en laat fase 1 en 2A staan", () =>
   assert.match(rollback, /drop table if exists microsoft_private\.sharepoint_kandidaatsites/);
   assert.doesNotMatch(rollback, /drop schema|verbindingen|outlook_/);
 });
+
+// ── Deel B: documentenlijst, preview, bibliotheek en CSP ─────────────────────
+const migratieB = lees("supabase/migrations/2026_09_04_microsoft_sharepoint_fase3b_documenten.sql");
+const previewRoute = lees("app/api/microsoft/sharepoint/documenten/[ref]/preview/route.ts");
+const lijstRoute = lees("app/api/microsoft/sharepoint/documenten/route.ts");
+const previewPagina = lees("app/(dashboard)/bibliotheek/sharepoint/[ref]/page.tsx");
+const nextConfig = lees("next.config.ts");
+
+test("lijst en preview lopen met het token van de gebruiker, zonder content-call en met vaste plafonds", () => {
+  assert.match(lijstRoute, /capability: "documents\.view"/);
+  assert.match(previewRoute, /capability: "documents\.view"/);
+  assert.match(previewRoute, /audit: \{ handeling: "microsoft\.sharepoint\.documenten\.previewen" \}/);
+  assert.match(sharepoint, /deltaUrl\(driveId, rootItemId\)/);
+  assert.match(sharepoint, /SHAREPOINT_MAX_DOCUMENTEN/);
+  assert.match(sharepoint, /SHAREPOINT_MAX_KINDDIEPTE/);
+  assert.match(sharepoint, /itemOnderRoot\(item, document\.drive_id, rootPadVanItem\(root, document\.drive_id\)\)/);
+  assert.match(sharepoint, /previewActieUrl\(document\.drive_id, document\.item_id\)/);
+  assert.match(sharepoint, /veiligeSharePointUrl\(preview\.getUrl\)/);
+  assert.doesNotMatch(sharepoint, /\/content|downloadUrl|createLink/);
+});
+
+test("de preview-URL wordt nergens bewaard, gelogd of geaudit", () => {
+  const previewBlok = sharepoint.slice(sharepoint.indexOf("export async function sharepointPreview"));
+  assert.doesNotMatch(previewBlok, /console\.(log|error|warn)/);
+  assert.doesNotMatch(previewBlok, /details: \{[^}]*url/i);
+  assert.match(previewBlok, /details: \{ document_ref: ref, latency_ms/);
+  assert.match(previewRoute, /"Cache-Control": "no-store"/);
+  assert.doesNotMatch(migratieB, /preview_url|get_url|getUrl/);
+  assert.match(migratieB, /p_details::text ~\* '\(https\?:\/\/\|sharepoint\\\.com\|bearer\|token\|drive_id\|item_id\)'/);
+  assert.match(migratieB, /p_versie <> v_bron\.configuratieversie/);
+  assert.match(migratieB, /d\.drive_id = b\.drive_id and d\.configuratieversie = b\.configuratieversie/);
+  assert.doesNotMatch(vault, /console\./);
+});
+
+test("de previewpagina is de enige route met frame-src naar SharePoint en gebruikt een strikte iframe", () => {
+  assert.match(nextConfig, /source: "\/bibliotheek\/sharepoint\/:ref"/);
+  assert.match(nextConfig, /frame-src 'self' https:\/\/challenges\.cloudflare\.com https:\/\/\*\.sharepoint\.com/);
+  // De algemene CSP houdt de oude frame-src; alleen de afgeleide previewvariant voegt SharePoint toe.
+  assert.equal(nextConfig.match(/https:\/\/\*\.sharepoint\.com/g)?.length, 1);
+  assert.match(nextConfig, /const cspDirectivesSharePointPreview = cspDirectives\.replace\(/);
+  assert.match(nextConfig, /"frame-src 'self' https:\/\/challenges\.cloudflare\.com",/);
+  assert.match(nextConfig, /frame-ancestors 'none'/);
+  assert.match(previewPagina, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups"/);
+  assert.match(previewPagina, /referrerPolicy="no-referrer"/);
+  assert.match(previewPagina, /method: "POST", cache: "no-store"/);
+  assert.doesNotMatch(previewPagina, /localStorage|sessionStorage|router\.push\(.*url|history\./);
+});
+
+test("documentregister bewaart geen inhoud en is fondsgebonden; bibliotheek blijft gelijk zonder vlag", () => {
+  assert.match(migratieB, /create table if not exists microsoft_private\.sharepoint_documenten/);
+  assert.match(migratieB, /unique \(bron_id, item_id\)/);
+  assert.match(migratieB, /where d\.fonds_id = p_fonds and b\.fonds_id = p_fonds and d\.id = p_ref/);
+  const tabelBlok = migratieB.slice(migratieB.indexOf("create table if not exists microsoft_private.sharepoint_documenten"), migratieB.indexOf("create index if not exists sharepoint_documenten_fonds_idx"));
+  assert.doesNotMatch(tabelBlok, /bytea|vector\(|inhoud|tekst|chunk|embedding|preview/);
+  assert.equal(migratieB.match(/security definer set search_path = microsoft_private, public, pg_temp/gi)?.length, 4);
+  assert.match(lees("scripts/cross-tenant-ci.sh"), /2026_09_04_microsoft_sharepoint_fase3b_documenten\.sql/);
+  const bibliotheek = lees("app/(dashboard)/bibliotheek/page.tsx");
+  assert.match(bibliotheek, /\{actieveTab === "fonds" && <SharePointDocumentenSectie \/>\}/);
+  const sectie = lees("app/(dashboard)/bibliotheek/_components/SharePointDocumentenSectie.tsx");
+  assert.match(sectie, /if \(!antwoord\?\.beschikbaar\) return null;/);
+  assert.match(sectie, /Openen in Microsoft 365/);
+  assert.match(sectie, /rel="noopener noreferrer"/);
+  assert.match(lijstRoute, /beschikbaar: false/);
+});

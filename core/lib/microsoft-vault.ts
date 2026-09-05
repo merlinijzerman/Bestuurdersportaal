@@ -141,3 +141,23 @@ export async function registreerSharePointControle(fondsId: string, gebruikerId:
 export async function ontkoppelSharePointBron(fondsId: string, gebruikerId: string) {
   await db().query("select microsoft_private.sharepoint_ontkoppel_bron($1,$2)", [fondsId, gebruikerId]);
 }
+export type SharePointDocument = {
+  id: string; bron_id: string; drive_id: string; item_id: string; root_item_id: string; naam: string; bestandstype: string | null;
+  mappad: string; status: string; bron_status: string; site_hostnaam: string; configuratieversie: number;
+};
+export async function upsertSharePointDocumenten(args: { fondsId: string; bronId: string; configuratieversie: number; documenten: Array<{ itemId: string; naam: string; bestandstype: string | null; mimeType: string | null; grootte: number | null; gewijzigdOp: string | null; eTag: string | null; cTag: string | null; ouderItemId: string | null; mappad: string; webUrl: string | null }> }) {
+  if (args.documenten.length === 0) return [] as Array<{ ref: string; item_id: string }>;
+  const r = await db().query("select ref, extern_item_id from microsoft_private.sharepoint_upsert_documenten($1,$2,$3,$4::jsonb)", [args.fondsId, args.bronId, args.configuratieversie, JSON.stringify(args.documenten.map((d) => ({ item_id: d.itemId, naam: d.naam, bestandstype: d.bestandstype, mime_type: d.mimeType, grootte: d.grootte, gewijzigd_op: d.gewijzigdOp, etag: d.eTag, ctag: d.cTag, ouder_item_id: d.ouderItemId, mappad: d.mappad, web_url: d.webUrl })))]);
+  return (r.rows as Array<{ ref: string; extern_item_id: string }>).map((rij) => ({ ref: rij.ref, item_id: rij.extern_item_id }));
+}
+export async function leesSharePointDocument(fondsId: string, ref: string): Promise<SharePointDocument | undefined> {
+  const r = await db().query("select * from microsoft_private.sharepoint_lees_document($1,$2)", [fondsId, ref]);
+  return r.rows[0] as SharePointDocument | undefined;
+}
+export async function markeerSharePointDocument(fondsId: string, ref: string, status: "gezien" | "verwijderd" | "ontoegankelijk") {
+  await db().query("select microsoft_private.sharepoint_markeer_document($1,$2,$3)", [fondsId, ref, status]);
+}
+/** Inhoudsarme private audit: alleen referenties, categorieën, aantallen en latency. Nooit URL's of Graph-bodies. */
+export async function registreerSharePointGebeurtenis(args: { fondsId: string; gebruikerId: string; gebeurtenis: string; correlationId: string; foutcategorie: string | null; details: Record<string, string | number | boolean | null> }) {
+  await db().query("select microsoft_private.sharepoint_registreer_gebeurtenis($1,$2,$3,$4,$5,$6::jsonb)", [args.fondsId, args.gebruikerId, args.gebeurtenis, args.correlationId, args.foutcategorie, JSON.stringify(args.details)]);
+}
