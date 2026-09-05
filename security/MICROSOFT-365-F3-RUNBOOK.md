@@ -35,7 +35,7 @@
 ## Smoke deel A (PGB, synthetische site)
 
 1. Laat een fondsbeheerder op de PGB-previewhost **SharePoint-toestemming verlenen**. Controleer in Entra dat alleen `Sites.Selected` bijkomt en dat een al verleende `Calendars.Read.Shared` behouden blijft (de consent vraagt de unie).
-2. **Scopeverificatie (beslismoment besluit 0209).** Kies **Bron kiezen** en noteer per stap of de call slaagt onder `Sites.Selected`:
+2. **Scopeverificatie (beslismoment besluit 0210).** Kies **Bron kiezen** en noteer per stap of de call slaagt onder `Sites.Selected`:
 
    | Stap | Graph-call | Uitkomst |
    |---|---|---|

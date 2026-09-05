@@ -1,4 +1,4 @@
-# 0209 — SharePoint read-only (fase 3): `Sites.Selected`, per-gebruiker delegatie en server-geregistreerde kandidaatsites
+# 0210 — SharePoint read-only (fase 3): `Sites.Selected`, per-gebruiker delegatie en server-geregistreerde kandidaatsites
 
 - **Status:** Geaccepteerd (deel A gebouwd; scopedekking wordt in de eerste PGB-smoke empirisch bevestigd)
 - **Datum:** 2026-09-04

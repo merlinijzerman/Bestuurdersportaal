@@ -2,7 +2,7 @@
 
 ## Besluit en grens
 
-Fase 3 (#321, besluit 0209) is alleen beschikbaar wanneer het fondsprofiel `microsoft` is, de fase-1-pilotvlag aan staat en de afzonderlijke vlag `microsoft_sharepoint_fase3=true` is gezet. De vlag blijft standaard uit. Graph gebruikt uitsluitend delegated `Sites.Selected` op v1.0; de site-grant wordt buiten het portaal verleend en het portaal kan die alleen toetsen. Fondsen zonder de vlag houden exact hun bestaande UI en gedrag.
+Fase 3 (#321, besluit 0210) is alleen beschikbaar wanneer het fondsprofiel `microsoft` is, de fase-1-pilotvlag aan staat en de afzonderlijke vlag `microsoft_sharepoint_fase3=true` is gezet. De vlag blijft standaard uit. Graph gebruikt uitsluitend delegated `Sites.Selected` op v1.0; de site-grant wordt buiten het portaal verleend en het portaal kan die alleen toetsen. Fondsen zonder de vlag houden exact hun bestaande UI en gedrag.
 
 Deel A (PR-A) levert toestemming en bronselectie; deel B (PR-B) levert documentenlijst, browserpreview, bibliotheek en CSP.
 
