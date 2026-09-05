@@ -45,7 +45,7 @@
    | Mappen | `GET /drives/{driveId}/items/{id}/children` | |
 
    Een 403 op een stap verschijnt als `toestemming_of_token` of `site_niet_toegankelijk` bij de kandidaat. Val niet stil terug op een bredere scope: leg de uitkomst vast en leg het besluit (`Files.Read`, daarna pas `Sites.Read.All`) aan de opdrachtgever voor.
-3. Kies bibliotheek en een map, bevestig. Controleer in `microsoft_private.sharepoint_bronnen` dat fonds, verbinding, tenant, site, drive en rootitem gevuld zijn met `configuratieversie = 1`; kies opnieuw en controleer versie 2 in dezelfde rij.
+3. Kies bibliotheek en een map, bevestig. Controleer in `microsoft_private.sharepoint_bronnen` dat fonds, verbinding, tenant, site, drive en rootitem gevuld zijn met `configuratieversie = 1`; kies opnieuw en controleer versie 2 in dezelfde rij. Een eerder uitgegeven documentreferentie moet daarna 404 geven totdat de nieuwe bron opnieuw is ingelezen.
 4. **Bron controleren** slaagt; trek daarna in Entra of SharePoint de toegang in en controleer dat de status naar `toestemming_nodig` of `fout` gaat zonder geheimlek in log of audit.
 5. Negatief: een gewone bestuurder ziet de toestemmingsknop wel, maar krijgt 403 op kandidaten, drives, mappen, bron en controle. Een gebruiker van een fonds zonder vlag krijgt 404 op alle SharePoint-routes en ziet de kaart niet. Een gemanipuleerd kandidaat-id, drive-id of map-id uit een andere site wordt geweigerd (`kandidaat_onbekend`, `drive_niet_toegankelijk`, `map_niet_toegankelijk`).
 6. **Bron ontkoppelen** zet de status op `ontkoppeld`; de rij en audit blijven bestaan.

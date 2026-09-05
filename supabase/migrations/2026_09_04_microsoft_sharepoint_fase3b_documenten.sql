@@ -41,6 +41,7 @@ declare v_bron sharepoint_bronnen%rowtype;
 begin
   select * into v_bron from sharepoint_bronnen where id = p_bron and fonds_id = p_fonds and status = 'actief';
   if v_bron.id is null then raise exception 'sharepoint bron hoort niet bij dit fonds of is niet actief'; end if;
+  if p_versie <> v_bron.configuratieversie then raise exception 'verouderde sharepoint configuratieversie'; end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 5000 then raise exception 'ongeldige documentenlijst'; end if;
   return query
   with invoer as (
@@ -67,6 +68,7 @@ language sql security definer set search_path = microsoft_private, public, pg_te
   select d.id, d.bron_id, d.drive_id, d.item_id, b.root_item_id, d.naam, d.bestandstype, d.mappad, d.status, b.status, b.site_hostnaam, d.configuratieversie
     from sharepoint_documenten d join sharepoint_bronnen b on b.id = d.bron_id
    where d.fonds_id = p_fonds and b.fonds_id = p_fonds and d.id = p_ref
+     and b.status = 'actief' and d.drive_id = b.drive_id and d.configuratieversie = b.configuratieversie
 $$;
 
 create or replace function microsoft_private.sharepoint_markeer_document(p_fonds uuid, p_ref uuid, p_status text)

@@ -75,6 +75,33 @@ test("graphJson stuurt het token alleen als Bearer-header, volgt geen redirects 
   );
 });
 
+test("graphJson begrenst ook een chunked respons zonder Content-Length", async () => {
+  const geldig = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"ok":'));
+      controller.enqueue(new TextEncoder().encode("true}"));
+      controller.close();
+    },
+  });
+  assert.deepEqual(await graphJson("t", "https://graph.microsoft.com/v1.0/sites/root", {
+    fetchImpl: async () => new Response(geldig, { status: 200, headers: { "Content-Type": "application/json" } }),
+  }), { ok: true });
+
+  const teGroot = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(5 * 1024 * 1024));
+      controller.enqueue(new Uint8Array(1));
+      controller.close();
+    },
+  });
+  await assert.rejects(
+    graphJson("t", "https://graph.microsoft.com/v1.0/sites/root", {
+      fetchImpl: async () => new Response(teGroot, { status: 200, headers: { "Content-Type": "application/json" } }),
+    }),
+    (fout: unknown) => fout instanceof SharePointGraphError && fout.categorie === "graph_response",
+  );
+});
+
 test("graphCollectie pagineert binnen het pad, kapt af op plafond en weigert lussen", async () => {
   const basis = "https://graph.microsoft.com/v1.0/drives/b!d/root/children?$top=200";
   const pagina2 = "https://graph.microsoft.com/v1.0/drives/b!d/root/children?$skiptoken=2";

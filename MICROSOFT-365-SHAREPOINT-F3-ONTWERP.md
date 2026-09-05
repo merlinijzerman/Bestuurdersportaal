@@ -22,7 +22,7 @@ Deel A (PR-A, #323) levert toestemming en bronselectie; deel B (PR-B) levert doc
 
 ## Adapter-contract
 
-`core/lib/microsoft-sharepoint-graph-core.ts` is puur en testbaar: alleen `https://graph.microsoft.com/v1.0`, `redirect: "error"`, `AbortSignal.timeout` per call (10 s), maximaal twee retries op 429/503/504 met begrensde `Retry-After`, plafond op pagina's en items, en een `@odata.nextLink` wordt uitsluitend gevolgd als het pad gelijk is aan de oorspronkelijke opvraag. Fouten worden genormaliseerd naar vaste categorieën (`toestemming_of_token`, `niet_gevonden`, `graph_ratelimit`, `graph_timeout`, `graph_paginering`, `graph_response`, `site_niet_toegankelijk`, `drive_niet_toegankelijk`, `map_niet_toegankelijk`, …). De adapter kent geen `/content`- of `downloadUrl`-pad.
+`core/lib/microsoft-sharepoint-graph-core.ts` is puur en testbaar: alleen `https://graph.microsoft.com/v1.0`, `redirect: "error"`, `AbortSignal.timeout` per call (10 s), maximaal twee retries op 429/503/504 met begrensde `Retry-After`, maximaal 5 MiB responsinhoud óók zonder `Content-Length`, plafond op pagina's en items, en een `@odata.nextLink` wordt uitsluitend gevolgd als het pad gelijk is aan de oorspronkelijke opvraag. Fouten worden genormaliseerd naar vaste categorieën (`toestemming_of_token`, `niet_gevonden`, `graph_ratelimit`, `graph_timeout`, `graph_paginering`, `graph_response`, `site_niet_toegankelijk`, `drive_niet_toegankelijk`, `map_niet_toegankelijk`, …). De adapter kent geen `/content`- of `downloadUrl`-pad.
 
 ## Database
 
@@ -42,7 +42,7 @@ Wrapper-handelingen: `microsoft.sharepoint.toestemming-uitbreiden`, `bron-kiezen
 
 ### Referentieregister
 
-`microsoft_private.sharepoint_documenten` vertaalt een lokale uuid naar `(bron, drive, item)` en bewaart naam, type, mime, grootte, gewijzigd, eTag/cTag, oudermap, weergavepad, `webUrl` (alleen `https://*.sharepoint.com`), status en configuratieversie. Eén referentie per `(bron, item)`: rename, move en versie werken de bestaande rij bij. Het register is nooit een autorisatiebron; de opzoeking is fondsgebonden en zichtbaarheid komt uitsluitend uit de live Graph-respons van de gebruiker. Geen bestand, tekst, chunks, embeddings of preview-URL. Deze velden zijn tevens de minimale documentidentiteit en versie voor later bronbewijs (fase 4/5).
+`microsoft_private.sharepoint_documenten` vertaalt een lokale uuid naar `(bron, drive, item)` en bewaart naam, type, mime, grootte, gewijzigd, eTag/cTag, oudermap, weergavepad, `webUrl` (alleen `https://*.sharepoint.com`), status en configuratieversie. Eén referentie per `(bron, item)`: rename, move en versie werken de bestaande rij bij. Een read of gelijktijdige write met een oudere configuratieversie of andere drive faalt gesloten. Het register is nooit een autorisatiebron; de opzoeking is fondsgebonden en zichtbaarheid komt uitsluitend uit de live Graph-respons van de gebruiker. Geen bestand, tekst, chunks, embeddings of preview-URL. Deze velden zijn tevens de minimale documentidentiteit en versie voor later bronbewijs (fase 4/5).
 
 ### Preview
 

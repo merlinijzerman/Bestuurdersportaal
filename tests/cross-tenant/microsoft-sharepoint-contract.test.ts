@@ -96,6 +96,8 @@ test("de preview-URL wordt nergens bewaard, gelogd of geaudit", () => {
   assert.match(previewRoute, /"Cache-Control": "no-store"/);
   assert.doesNotMatch(migratieB, /preview_url|get_url|getUrl/);
   assert.match(migratieB, /p_details::text ~\* '\(https\?:\/\/\|sharepoint\\\.com\|bearer\|token\|drive_id\|item_id\)'/);
+  assert.match(migratieB, /p_versie <> v_bron\.configuratieversie/);
+  assert.match(migratieB, /d\.drive_id = b\.drive_id and d\.configuratieversie = b\.configuratieversie/);
   assert.doesNotMatch(vault, /console\./);
 });
 

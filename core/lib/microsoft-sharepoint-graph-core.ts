@@ -49,6 +49,43 @@ export const GRAPH_MAX_PAGINAS = 30;
 export const GRAPH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
+async function leesBegrensdeJson<T>(response: Response): Promise<T> {
+  if (!response.body) throw new SharePointGraphError("graph_response");
+  const reader = response.body.getReader();
+  const delen: Uint8Array[] = [];
+  let totaal = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totaal += value.byteLength;
+      if (totaal > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new SharePointGraphError("graph_response");
+      }
+      delen.push(value);
+    }
+  } catch (fout) {
+    if (fout instanceof SharePointGraphError) throw fout;
+    throw new SharePointGraphError("graph_response", fout);
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totaal);
+  let offset = 0;
+  for (const deel of delen) {
+    bytes.set(deel, offset);
+    offset += deel.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+  } catch (fout) {
+    throw new SharePointGraphError("graph_response", fout);
+  }
+}
+
 /** Alleen Graph v1.0 over https; alles anders (beta, andere host, http) is een fout. */
 export function veiligeSharePointGraphUrl(url: string): URL {
   let parsed: URL;
@@ -123,11 +160,7 @@ export async function graphJson<T>(accessToken: string, url: string, opties: Gra
     }
     const lengte = Number.parseInt(response.headers.get("Content-Length") ?? "0", 10);
     if (Number.isSafeInteger(lengte) && lengte > MAX_BODY_BYTES) throw new SharePointGraphError("graph_response");
-    try {
-      return await response.json() as T;
-    } catch (fout) {
-      throw new SharePointGraphError("graph_response", fout);
-    }
+    return leesBegrensdeJson<T>(response);
   }
 }
 

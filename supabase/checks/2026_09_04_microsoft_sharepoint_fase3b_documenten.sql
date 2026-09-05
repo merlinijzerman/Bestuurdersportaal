@@ -86,6 +86,18 @@ begin
   exception when others then v_geweigerd := true; end;
   if not v_geweigerd then raise exception 'FAALT: externe id in audit geaccepteerd'; end if;
 
-  raise notice 'Microsoft SharePoint fase-3B gedrag OK: één referentie per item, cross-fonds dicht, web_url-constraint, audit-poort weigert URL en id.';
+  -- Een herconfiguratie maakt eerder uitgegeven referenties en gelijktijdige
+  -- writes met de oude versie onmiddellijk onbruikbaar.
+  perform microsoft_private.sharepoint_configureer_bron('73300000-0000-4000-8000-000000000001','73300000-0000-4000-8000-0000000000a1','73300000-0000-4000-8000-000000000020','tenant-check','check.sharepoint.com,11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222','Bestuur A','check.sharepoint.com','drive-2','Documenten nieuw','root-2','','Bestuur A · Documenten nieuw');
+  if exists (select 1 from microsoft_private.sharepoint_lees_document('73300000-0000-4000-8000-000000000001', v_ref)) then
+    raise exception 'FAALT: referentie uit oude bronconfiguratie blijft leesbaar';
+  end if;
+  v_geweigerd := false;
+  begin
+    perform microsoft_private.sharepoint_upsert_documenten('73300000-0000-4000-8000-000000000001', v_bron, 1, '[{"item_id":"stale","naam":"stale.pdf"}]'::jsonb);
+  exception when others then v_geweigerd := true; end;
+  if not v_geweigerd then raise exception 'FAALT: write met oude configuratieversie geaccepteerd'; end if;
+
+  raise notice 'Microsoft SharePoint fase-3B gedrag OK: één referentie per item, cross-fonds dicht, web_url-constraint, audit-poort en oude bronconfiguratie dicht.';
 end $gedrag$;
 rollback;
