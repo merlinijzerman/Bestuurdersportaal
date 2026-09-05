@@ -12,7 +12,12 @@ const bronSchema = z.object({
   mapItemIds: z.array(z.string().regex(GRAPH_ID)).max(SHAREPOINT_MAX_ROOTMAP_DIEPTE).default([]),
   weergavenaam: z.string().trim().max(160).optional(),
 });
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "microsoft.sharepoint.bron-kiezen" }, capability: "fonds.config.manage", schema: bronSchema }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "microsoft.sharepoint.bron-kiezen" }, capability: "fonds.config.manage", schema: z.object({
+  kandidaatId: z.string().uuid(),
+  driveId: z.string().regex(/^[A-Za-z0-9!_.-]{1,512}$/),
+  mapItemIds: z.array(z.string().regex(/^[A-Za-z0-9!_.-]{1,512}$/)).max(8).default([]),
+  weergavenaam: z.string().trim().max(160).optional(),
+}) }, async (ctx, req: NextRequest) => {
   if (!rolHeeftCapability(ctx.rol, "fonds.config.manage")) return NextResponse.json({ error: "U heeft geen rechten voor deze actie." }, { status: 403 });
   if (!ctx.fondsId || !(await microsoftSharePointActief(ctx.supabase, ctx.fondsId))) return NextResponse.json({ error: "SharePoint is niet beschikbaar voor dit fonds." }, { status: 404 });
   const geparsed = bronSchema.safeParse(await req.json().catch(() => null));
