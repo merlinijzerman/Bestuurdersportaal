@@ -40,6 +40,15 @@ export const FIX = {
   // documentlijst-snapshots zouden anders omslaan). Chunks staan in geen enkel
   // bestaand snapshot; alleen de SSE-scenario's zien hem via de retrieval.
   document1Chunk: "00000000-0000-4000-8000-0000000d0c11",
+  // #322 F4-T1 — retrieval-golden: vier extra chunks ONDER document1 (zelfde
+  // reden: geen extra document). De teksten vermijden bewust elk woord uit de
+  // #311-chatvragen (dekkingsgraad, fonds, actueel, volgens, …) zodat de
+  // bestaande SSE-snapshots ongewijzigd blijven; alleen de w322-scenario's
+  // zoeken erop. Volgorde/rang/dedup/fragmentvorm worden hiermee gepind.
+  retrievalChunkRente1: "00000000-0000-4000-8000-0000000d0c21",
+  retrievalChunkHerstel: "00000000-0000-4000-8000-0000000d0c22",
+  retrievalChunkRente2: "00000000-0000-4000-8000-0000000d0c23",
+  retrievalChunkPremie: "00000000-0000-4000-8000-0000000d0c24",
   procedure1: "00000000-0000-4000-8000-00000000cd01",
   // Alleen Preview-waarneming: vaste UI-fixtures naast de kale lokale W1-seed.
   previewProcedureStap1: "00000000-0000-4000-8000-0000000cd201",
