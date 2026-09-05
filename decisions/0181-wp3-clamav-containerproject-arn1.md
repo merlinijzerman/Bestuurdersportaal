@@ -1,7 +1,12 @@
 # 0181 — ClamAV als geïsoleerd Vercel-containerproject in arn1
 
-**Status:** geaccepteerd voor Preview; productie vereist afzonderlijk akkoord
+**Status:** geaccepteerd voor Preview en Productie
 **Datum:** 2026-08-17
+
+**Productie-activatie:** 2026-09-05 — afzonderlijk geaccordeerd en end-to-end
+bewezen met een synthetisch PGB-document. De Production-beheerworker en scanner
+gebruiken overeenkomstige Vercel-environments; de Trusted Source-regel blijft
+daardoor beperkt tot matching environments.
 
 ## Besluit
 
@@ -21,3 +26,8 @@ Dit sluit aan op de bestaande Supabase- en Vercelarchitectuur, introduceert geen
 ## Consequenties
 
 Uploads zijn asynchroon en worden pas na een schone, hashgebonden scan leesbaar. Dit voegt meestal seconden toe en kan bij een koude start circa 20–30 seconden kosten. Scanner- en signatureproblemen blokkeren promotie. De rollout gebruikt een featureflag en vereist een database-Previewomgeving of een expliciet, afzonderlijk besluit voor een additieve migratie op productie.
+
+De ClamAV-signatures zitten in de image. Een dagelijkse, cacheloze
+Production-deployment ververst ze; een aansluitende healthcontrole bewijst zowel
+de signatureleeftijd als de herkomst van de nieuw gebouwde image. Productie en
+Preview worden niet via een ruimere OIDC-allowlist aan elkaar gekoppeld.
