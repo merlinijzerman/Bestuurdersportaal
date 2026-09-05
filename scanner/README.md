@@ -27,3 +27,19 @@ Previewcontrole:
 4. Controleer `/health`, regio, geheugen en koude start.
 5. Test geldige en ongeldige OIDC-claims en het SSRF-corpus.
 6. Activeer nog geen productie-uploadpad voordat de cron-OIDC-canary geslaagd is.
+
+## Dagelijkse productie-refresh
+
+De signatures worden tijdens de containerbuild opgehaald en niet in een
+draaiende container bijgewerkt. Daarom voert
+`.github/workflows/scanner-signatures-production.yml` dagelijks om 02:17 UTC
+een cacheloze Production-deployment uit via de Vercel CLI. De workflow gebruikt
+de afgeschermde `VERCEL_TOKEN` en `VERCEL_TEAM_ID` uit de GitHub-environment
+`production-backup`; hij krijgt geen Supabase- of documentcredentials.
+
+Na de deployment controleert de workflow fail-closed de vaste Production-health
+`https://project-pnkzy.vercel.app/health`. De run is alleen groen als ClamAV
+gereed is, de EICAR-buildpoort is geslaagd, de signature maximaal 48 uur oud is
+en de actieve image in de laatste 30 minuten is gebouwd. Een rode run laat de
+bestaande gezonde deployment staan en moet als productie-incident worden
+behandeld. De workflow kan voor herstel ook handmatig worden gestart.
