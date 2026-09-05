@@ -23,6 +23,20 @@ const MAX_RETRY_WACHTTIJD_MS = 30_000;
 const MAX_GRAPH_FOUT_BYTES = 8_192;
 const GRAPH_V1 = "https://graph.microsoft.com/v1.0";
 
+export function berekenVastOutlookVenster(nu = new Date()): {
+  start: string;
+  eind: string;
+} {
+  const start = new Date(nu);
+  const eind = new Date(nu);
+  start.setUTCDate(start.getUTCDate() - 90);
+  eind.setUTCDate(eind.getUTCDate() + 270);
+  return {
+    start: start.toISOString().slice(0, 10),
+    eind: eind.toISOString().slice(0, 10),
+  };
+}
+
 async function leesBegrensdeGraphFout(
   response: Response,
 ): Promise<{ code?: string; message?: string } | undefined> {

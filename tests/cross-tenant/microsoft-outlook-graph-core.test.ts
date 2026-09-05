@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  berekenVastOutlookVenster,
   bouwStandaardAgendaDeltaUrl,
   OutlookGraphError,
   graphGet,
@@ -11,6 +12,16 @@ import {
   veiligeGraphUrl,
   veiligeTeamsLink,
 } from "../../core/lib/microsoft-outlook-graph-core";
+
+test("vast Outlook-venster blijft onder de Graph-grens", () => {
+  const venster = berekenVastOutlookVenster(new Date("2026-09-05T12:00:00Z"));
+  assert.equal(venster.start, "2026-06-07");
+  assert.equal(venster.eind, "2027-06-02");
+  assert.equal(
+    (Date.parse(venster.eind) - Date.parse(venster.start)) / 86_400_000,
+    360,
+  );
+});
 
 test("delta-start gebruikt het gedocumenteerde v1.0-pad van de standaardagenda", () => {
   const url = bouwStandaardAgendaDeltaUrl("2026-06-01", "2027-06-01");

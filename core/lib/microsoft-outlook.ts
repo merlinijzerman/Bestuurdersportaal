@@ -3,6 +3,7 @@ import { MicrosoftConnectorError, microsoftTestFoutcategorie } from "@/core/lib/
 import { outlookAccessToken, type ConnectorContext } from "@/core/lib/microsoft-connector";
 import * as vault from "@/core/lib/microsoft-vault";
 import {
+  berekenVastOutlookVenster,
   bouwStandaardAgendaDeltaUrl,
   OutlookGraphError,
   graphGet,
@@ -57,9 +58,7 @@ export async function kiesOutlookAgenda(ctx: ConnectorContext, calendarId: strin
   // standaardagenda. Een specifieke agenda vereist momenteel het beta-pad;
   // dat gebruiken we niet voor productiegegevens.
   if (!agenda.standaard) throw new OutlookGraphError("agenda_delta_niet_ondersteund");
-  const nu = new Date();
-  const start = new Date(Date.UTC(nu.getUTCFullYear(), nu.getUTCMonth() - 3, nu.getUTCDate())).toISOString().slice(0, 10);
-  const eind = new Date(Date.UTC(nu.getUTCFullYear() + 1, nu.getUTCMonth(), nu.getUTCDate())).toISOString().slice(0, 10);
+  const { start, eind } = berekenVastOutlookVenster();
   await vault.configureerOutlookAgenda({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, tenantId: lijst.tenantId, mailboxId: lijst.mailboxId, calendarId: agenda.id, naam: agenda.naam, vensterStart: start, vensterEind: eind });
 }
 
