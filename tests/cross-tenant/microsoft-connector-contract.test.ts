@@ -12,11 +12,13 @@ const callback = lees("app/auth/microsoft/callback/route.ts");
 const connectorFouten = lees("core/lib/microsoft-connector-error-core.ts");
 const vaultRij = lees("core/lib/microsoft-vault-row-core.ts");
 
-test("Microsoft F1 houdt de basisset klein en 2A voegt alleen Calendars.Read.Shared toe", () => {
+test("Microsoft F1 houdt de basisset klein; 2A voegt alleen Calendars.Read.Shared toe en 3 alleen Sites.Selected", () => {
   const config = lees("core/lib/microsoft-config.ts");
   assert.match(config, /MICROSOFT_SCOPES = \["openid", "profile", "offline_access", "User\.Read"\] as const/);
   assert.match(config, /MICROSOFT_OUTLOOK_SCOPES = \[\.\.\.MICROSOFT_SCOPES, "Calendars\.Read\.Shared"\] as const/);
-  assert.doesNotMatch(config, /Files\.|Sites\.|Mail\.|Calendars\.ReadWrite/);
+  assert.match(config, /MICROSOFT_SHAREPOINT_SCOPES = \[\.\.\.MICROSOFT_SCOPES, "Sites\.Selected"\] as const/);
+  // Bewust verruimd in #321: uitsluitend de Selected-scope; brede lees- of schrijfscopes blijven verboden.
+  assert.doesNotMatch(config, /Files\.|Sites\.Read|Sites\.ReadWrite|Sites\.FullControl|Mail\.|Calendars\.ReadWrite/);
 });
 
 test("Microsoft F1 gebruikt geen Supabase service-role in het tenantpad", () => {

@@ -105,13 +105,16 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // 124: Microsoft fase 1 voegt connect, status, test en lokaal ontkoppelen toe.
   // 127: Microsoft fase 2A voegt Outlook-status, agendaselectie en handmatige
   // synchronisatie toe; de vijf handlers zijn allemaal expliciet gewrapt.
+  // 135: Microsoft fase 3A (#321) voegt acht SharePoint-handlers toe: status en
+  // eigen toestemming op de profiel-capabilities, kandidaten/drives/mappen/bron
+  // (kiezen, ontkoppelen, controleren) op fonds.config.manage.
   // BEDOELDE DIVERGENTIE (geen drift): 124 gewrapte declaraties, maar het aantal
   // OPGENOMEN 403-cellen in authz-matrix.expected.json blijft op de oude set. Het
   // negatieve contract van de afwijking-route (beheerder/bureau → 403) wordt tegen
   // een DRAAIENDE server opgenomen bij de stack-run, niet voorspeld (besluit 0192,
   // contractwaarde-regel). Zie tests/karakterisering/uitgestelde-opnames.json; die
   // lijst moet leeg zijn vóór P6.
-  assert.equal(HANDLERS.length, 127, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  assert.equal(HANDLERS.length, 135, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

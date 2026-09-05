@@ -114,3 +114,30 @@ export async function voltooiOutlookRun(runId: string, deltaLink: string, aantal
 export async function mislukOutlookRun(runId: string, categorie: string) {
   await db().query("select microsoft_private.outlook_misluk_run($1,$2)", [runId,categorie]);
 }
+
+// ── Microsoft 365 fase 3 (#321) — SharePoint read-only ─────────────────────
+export type SharePointKandidaat = { id: string; hostnaam: string; server_relatief_pad: string; weergavenaam: string };
+export type SharePointBron = {
+  id: string; kandidaat_id: string; gebruiker_id: string; tenant_id: string; site_id: string; site_weergavenaam: string; site_hostnaam: string;
+  drive_id: string; drive_weergavenaam: string; root_item_id: string; root_pad: string; weergavenaam: string;
+  status: "actief" | "fout" | "toestemming_nodig" | "ontkoppeld"; configuratieversie: number;
+  laatst_gecontroleerd_op: string | null; laatst_foutcategorie: string | null;
+};
+export async function leesSharePointKandidaten(fondsId: string): Promise<SharePointKandidaat[]> {
+  const r = await db().query("select * from microsoft_private.sharepoint_lees_kandidaten($1)", [fondsId]);
+  return r.rows as SharePointKandidaat[];
+}
+export async function leesSharePointBron(fondsId: string): Promise<SharePointBron | undefined> {
+  const r = await db().query("select * from microsoft_private.sharepoint_lees_bron($1)", [fondsId]);
+  return r.rows[0] as SharePointBron | undefined;
+}
+export async function configureerSharePointBron(args: { fondsId: string; gebruikerId: string; kandidaatId: string; tenantId: string; siteId: string; siteWeergavenaam: string; siteHostnaam: string; driveId: string; driveWeergavenaam: string; rootItemId: string; rootPad: string; weergavenaam: string }) {
+  const r = await db().query("select microsoft_private.sharepoint_configureer_bron($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) as id", [args.fondsId,args.gebruikerId,args.kandidaatId,args.tenantId,args.siteId,args.siteWeergavenaam,args.siteHostnaam,args.driveId,args.driveWeergavenaam,args.rootItemId,args.rootPad,args.weergavenaam]);
+  return r.rows[0]?.id as string | undefined;
+}
+export async function registreerSharePointControle(fondsId: string, gebruikerId: string, ok: boolean, foutcategorie: string | null) {
+  await db().query("select microsoft_private.sharepoint_registreer_controle($1,$2,$3,$4)", [fondsId, gebruikerId, ok, foutcategorie]);
+}
+export async function ontkoppelSharePointBron(fondsId: string, gebruikerId: string) {
+  await db().query("select microsoft_private.sharepoint_ontkoppel_bron($1,$2)", [fondsId, gebruikerId]);
+}

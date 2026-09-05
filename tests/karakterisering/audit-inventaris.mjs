@@ -150,6 +150,9 @@ const SPLIT_KLASSE = {
   "POST app/api/microsoft/test/route.ts": "operationeel", // externe verbindingstest; wrapper-audit + private connectoraudit
   "POST app/api/microsoft/outlook/agendas/route.ts": "operationeel", // fondsgebonden bronselectie; wrapper-audit + private connectoraudit
   "POST app/api/microsoft/outlook/sync/route.ts": "operationeel", // read-only synchronisatierun; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/sharepoint/bron/route.ts": "operationeel", // #321 fondsgebonden SharePoint-bronselectie; wrapper-audit + private connectoraudit
+  "DELETE app/api/microsoft/sharepoint/bron/route.ts": "operationeel", // #321 lokaal ontkoppelen van de SharePoint-bron; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/sharepoint/bron/controle/route.ts": "operationeel", // #321 bereikbaarheidscontrole met actuele rechten; wrapper-audit + private connectoraudit
   // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",

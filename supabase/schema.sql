@@ -2418,3 +2418,14 @@ create table if not exists public.procedure_afschriften (
 -- Fase 2A voegt private agenda_configuraties, sync_runs en event_koppelingen toe.
 -- Calendar/event-id's en delta-cursors blijven private; de publieke vergadering
 -- draagt alleen een veilige Outlook-projectie, zonder ruwe deelnemersgegevens.
+
+-- ── Microsoft 365 — SharePoint fase 3A (read-only bronregistratie, #321) ────
+-- Bron van waarheid: supabase/migrations/2026_09_04_microsoft_sharepoint_fase3.sql.
+-- microsoft_private.sharepoint_kandidaatsites (per runbook gevuld, geen
+-- schrijffunctie voor het portaal) en microsoft_private.sharepoint_bronnen
+-- (fonds ↔ verbinding ↔ tenant/site/drive/rootmap, configuratieversie) zijn
+-- RLS-on/private zonder anon/authenticated/vault-tabelrechten. Vijf gepinde
+-- SECURITY DEFINER-functies (lees_kandidaten, lees_bron, configureer_bron,
+-- registreer_controle, ontkoppel_bron) zijn alleen voor de loginrol
+-- microsoft_vault. Site-, drive- en item-id's zijn niet browserleesbaar.
+-- Fondsvlag: fonds_feature_flags.microsoft_sharepoint_fase3 (JSON true).
