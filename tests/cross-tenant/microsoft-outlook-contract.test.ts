@@ -8,6 +8,7 @@ const migratie = lees("supabase/migrations/2026_09_04_microsoft_outlook_fase2a.s
 const outlook = lees("core/lib/microsoft-outlook.ts");
 const graphCore = lees("core/lib/microsoft-outlook-graph-core.ts");
 const connector = lees("core/lib/microsoft-connector.ts");
+const vault = lees("core/lib/microsoft-vault.ts");
 
 test("Outlook 2A is alleen de driedubbele fonds-poort plus beheer-capability", () => {
   assert.match(connector, /integratieprofiel === "microsoft"/);
@@ -28,6 +29,8 @@ test("delta-sync bewaart alleen een volledig afgehandelde deltaLink en markeert 
   assert.match(outlook, /await vault\.voltooiOutlookRun/);
   assert.match(outlook, /delta_start/);
   assert.match(outlook, /delta_vervolg/);
+  assert.match(vault, /normaliseerPostgresDatum\(rij\.venster_start\)/);
+  assert.match(vault, /normaliseerPostgresDatum\(rij\.venster_eind\)/);
   assert.match(outlook, /markeerOutlookEventExternGewijzigd/);
   assert.match(migratie, /outlook_sync_een_actief_per_agenda/);
   assert.match(migratie, /unique \(tenant_id, mailbox_id, calendar_id, immutable_event_id\)/);

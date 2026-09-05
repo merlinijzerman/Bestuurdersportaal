@@ -10,4 +10,6 @@
 
 Bij een mislukte Graph-deltacall bevat de foutcategorie alleen de fase (`delta_start` of `delta_vervolg`) en een vaste allowlisted technische categorie. De Microsoft-response, datumwaarden, tokens en afspraakinhoud worden nooit gelogd of teruggegeven.
 
+De private databasegateway normaliseert PostgreSQL-`date`-waarden expliciet naar `YYYY-MM-DD` voordat de Graph-URL wordt opgebouwd. Een onbekend of ongeldig datumtype faalt gesloten als `ongeldige_postgres_datum`; de JavaScript-runtime mag de kalenderdag niet via een UTC-conversie verschuiven.
+
 `@removed` krijgt de zichtbare, niet-destructieve status `extern_gewijzigd_of_verwijderd`; Graph maakt hier geen betrouwbaar onderscheid tussen verwijderen en verplaatsen buiten het vaste venster. Controleer na een mislukte run dat bestaande vergaderingen ongewijzigd blijven. Bij `delta_verlopen` wordt uitsluitend de onbruikbare cursor gewist, zodat de volgende handmatige run een nieuwe volledige baseline kan opbouwen.
