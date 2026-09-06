@@ -78,7 +78,13 @@ Concreet:
    (a) de gebruiker heeft **precies één** OAuth-identiteit (alles behalve `email`/`phone`) en die
    is `azure`; (b) `provider_id` (= `sub`) én `identity_data.custom_claims.tid`/`oid` van die
    identiteit zijn **exact gelijk** aan de binding met status `active` — of, uitsluitend tijdens
-   het koppelen, een niet-verlopen `pending` — voor deze `user_id`. Anders weigert de hook (403)
+   het koppelen, een niet-verlopen `pending` — voor deze `user_id`; én (c) de **actuele stand**
+   klopt: het profiel bestaat nog en `profielen.fonds_id = binding.fonds_id`, de
+   fondsconfiguratie bestaat, `fonds_microsoft_login.actief = true` en
+   `entra_tenant_id = binding.tid`. Een fondsverplaatsing, flag-uit of tenantwijziging
+   weigert dus direct elke nieuwe tokenuitgifte én refresh, ook bij een rechtstreekse
+   `signInWithIdToken` buiten de T2-callback om; bestaande bindingen blijven staan en een al
+   uitgegeven token leeft hooguit tot zijn `exp` (P8). Anders weigert de hook (403)
    en ontstaat er geen token; bij `link_identity` rolt daarmee ook de identiteit terug. Een
    `pending` voor identiteit A kan dus geen identiteit B binden, een actieve binding voor A staat
    geen token voor B toe, en een andere OAuth-provider wordt geweigerd. Niet-`oauth`-uitgiftes
@@ -86,7 +92,9 @@ Concreet:
    in het `oauth`-pad zijn fail-closed (403). Alleen de kleine private helper
    `login_private.identiteit_toegestaan(user, sub, tid, oid)` heeft verhoogde rechten
    (`SECURITY DEFINER`, eigenaar = minimale NOLOGIN-rol `login_hook_owner` met uitsluitend
-   `SELECT` op de bindingstabel, `search_path = ''`, execute alleen `supabase_auth_admin`),
+   `SELECT` op de bindingstabel plus kolom-`SELECT` op `profielen(id, fonds_id)` en
+   `fonds_microsoft_login(fonds_id, actief, entra_tenant_id)`, elk met een expliciete
+   tenantgebonden leespolicy; `search_path = ''`; execute alleen `supabase_auth_admin`),
    conform het Supabase-advies om Auth-hooks zelf niet als `SECURITY DEFINER` onder een breed
    bevoegde eigenaar te draaien.
 2. **Intrekkingsvenster expliciet.** Een al uitgegeven access-token blijft geldig tot `exp`;
@@ -147,7 +155,9 @@ Concreet:
 9. **Fondsgebonden, standaard uit.** `public.fonds_microsoft_login` (per fonds: `actief`
    standaard `false`, toegestane `entra_tenant_id`, pilotstatus) is in deze tranche alleen via
    migratie/gecontroleerde SQL wijzigbaar; wijzigingen lopen door het bestaande
-   config-audittrigger-patroon.
+   config-audittrigger-patroon. Dezelfde configuratie is de kill switch: `actief = false`
+   laat bindingen bestaan maar de hook weigert nieuwe uitgifte en refresh; `reserveer_identiteit`
+   weigert vroegtijdig met de vaste categorieën `login_uit` en `tenant_mismatch`.
 10. **Eerst een T0.5-spike, inclusief directe datalaagtoegang.** Vóór T1 bewijst een lokale
     spike (CLI-stack met gotrue v2.195.0, prototype-hook, App L, één testaccount) dat route B
     werkt zonder Supabase-callbackregistratie en zonder `email`-scope, dat een onbekende

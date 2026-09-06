@@ -43,6 +43,8 @@ export function isLevend(status: BindingStatus): boolean {
 export const LOGIN_GATEWAY_FOUTCATEGORIEEN = [
   "config_ontbreekt",
   "fonds_mismatch",
+  "login_uit",
+  "tenant_mismatch",
   "binding_conflict",
   "ongeldige_overgang",
   "onbekende_binding",
@@ -61,7 +63,7 @@ export type LoginGatewayFoutcategorie = (typeof LOGIN_GATEWAY_FOUTCATEGORIEEN)[n
 export function gatewayFoutcategorie(fout: unknown): LoginGatewayFoutcategorie {
   const bericht = fout instanceof Error ? fout.message : typeof fout === "string" ? fout : "";
   const code = (fout as { code?: unknown } | null)?.code;
-  if (bericht === "fonds_mismatch" || bericht === "binding_conflict" || bericht === "ongeldige_overgang" || bericht === "onbekende_binding") {
+  if (bericht === "fonds_mismatch" || bericht === "login_uit" || bericht === "tenant_mismatch" || bericht === "binding_conflict" || bericht === "ongeldige_overgang" || bericht === "onbekende_binding") {
     return bericht;
   }
   if (typeof code === "string" && /^(ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|57P|08)/.test(code)) return "gateway_db_onbereikbaar";

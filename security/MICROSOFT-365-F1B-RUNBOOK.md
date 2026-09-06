@@ -40,6 +40,11 @@ select rolname, rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole,
 from pg_roles where rolname in ('login_gateway','login_hook_owner');
 ```
 
+De migratie geeft `login_hook_owner` daarna uitsluitend: `SELECT` op
+`login_private.microsoft_identiteiten`, kolom-`SELECT` op `public.profielen(id, fonds_id)` en
+`public.fonds_microsoft_login(fonds_id, actief, entra_tenant_id)`, elk met een expliciete
+tenantgebonden leespolicy, en `USAGE` (geen `CREATE`) op `public` en `login_private`.
+
 Verwacht: `login_gateway` met `rolcanlogin=true`, alle andere bevoegdheidsvelden `false`,
 `rolinherit=false`, connection limit ≤ 5; `login_hook_owner` met `rolcanlogin=false` en alle
 bevoegdheidsvelden `false`. De migratie faalt gesloten als een van beide ontbreekt.
@@ -115,8 +120,12 @@ onderdeel van de smoke.
 ## 6. Kill switch, rollback en herstel
 
 - **Kill switch:** `update public.fonds_microsoft_login set actief = false where fonds_id = …`.
-  Bestaande `oauth`-sessies blijven tot `exp` geldig (≤ 600 s); nieuwe logins en refreshes
-  falen via de hook zodra de binding wordt ingetrokken (`start_intrekking`/`voltooi_intrekking`).
+  De hook toetst bij elke uitgifte de actuele configuratie: vanaf dat moment weigert hij voor
+  dit fonds élke nieuwe `oauth`-tokenuitgifte én refresh (403), ook bij een rechtstreekse
+  `signInWithIdToken`. Bindingen blijven bestaan (herstel = flag weer aan). Al uitgegeven
+  access-tokens blijven hooguit tot `exp` geldig (≤ 600 s op Preview, besluit 0211 D12).
+  Hetzelfde geldt bij een tenantwijziging (`entra_tenant_id`) en bij een fondsverplaatsing
+  van het profiel: de binding matcht niet meer met de actuele stand en wordt geweigerd.
 - **Noodintrekking van één account:** als `postgres`
   `select login_private.start_intrekking(<fonds>, <user>, <beheerder>, 'incident-…');`
   daarna `unlinkIdentity` (T2) of verwijdering van de `azure`-identiteit via de Auth-admin, en

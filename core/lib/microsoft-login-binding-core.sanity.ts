@@ -39,6 +39,8 @@ test("levende statussen bezetten de unieke slots; eindtoestanden niet", () => {
 test("foutcategorie: alleen de vaste DB-categorieën komen door, de rest wordt generiek", () => {
   assert.equal(gatewayFoutcategorie(new Error("fonds_mismatch")), "fonds_mismatch");
   assert.equal(gatewayFoutcategorie(new Error("binding_conflict")), "binding_conflict");
+  assert.equal(gatewayFoutcategorie(new Error("login_uit")), "login_uit");
+  assert.equal(gatewayFoutcategorie(new Error("tenant_mismatch")), "tenant_mismatch");
   assert.equal(gatewayFoutcategorie(new Error("ongeldige_overgang")), "ongeldige_overgang");
   assert.equal(gatewayFoutcategorie(new Error("onbekende_binding")), "onbekende_binding");
   assert.equal(gatewayFoutcategorie(new Error('duplicate key value violates unique constraint "x"')), "gateway_fout");

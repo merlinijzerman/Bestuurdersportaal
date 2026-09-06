@@ -111,7 +111,10 @@ export async function reserveerIdentiteit(args: { fondsId: string; userId: strin
   );
   const r = rijen[0];
   if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
-  if (!r.id) throw new MicrosoftLoginGatewayError(r.categorie === "fonds_mismatch" || r.categorie === "binding_conflict" ? r.categorie : "gateway_fout");
+  if (!r.id) {
+    const c = r.categorie;
+    throw new MicrosoftLoginGatewayError(c === "fonds_mismatch" || c === "login_uit" || c === "tenant_mismatch" || c === "binding_conflict" ? c : "gateway_fout");
+  }
   return r.id;
 }
 

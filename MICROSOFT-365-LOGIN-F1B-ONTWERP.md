@@ -197,9 +197,15 @@ die `auth.identities` sowieso mag lezen; alleen de kleine helper heeft verhoogde
 create function login_private.identiteit_toegestaan(p_user uuid, p_sub text, p_tid text, p_oid text)
 returns boolean language sql security definer set search_path = '' stable as $$
   select exists (select 1 from login_private.microsoft_identiteiten b
+                  join public.profielen p on p.id = b.user_id and p.fonds_id = b.fonds_id            -- actuele fonds
+                  join public.fonds_microsoft_login c on c.fonds_id = b.fonds_id and c.actief = true  -- flag aan
+                       and pg_catalog.lower(c.entra_tenant_id) = pg_catalog.lower(b.tid)             -- tenant gelijk
                   where b.user_id = p_user and b.sub = p_sub and b.tid = p_tid and b.oid = p_oid
                     and (b.status = 'active' or (b.status = 'pending' and b.pending_verloopt_op > pg_catalog.now())));
 $$;
+-- login_hook_owner: kolom-SELECT (id, fonds_id) op profielen en (fonds_id, actief, entra_tenant_id)
+-- op fonds_microsoft_login, elk met een tenantgebonden leespolicy `using (fonds_id is not null)`
+-- (gates B/C verbieden USING (true) op fonds_id-tabellen); USAGE zonder CREATE op public.
 -- Supabase `postgres` heeft CREATEROLE maar is geen superuser; voor de eigendomsoverdracht
 -- zijn tijdelijk SET ROLE-recht en CREATE op het doelschema nodig. Trek beide direct weer in.
 grant create on schema login_private to login_hook_owner;
@@ -240,6 +246,15 @@ end $$;
 revoke execute on function public.fn_access_token_hook(jsonb) from public, anon, authenticated;
 grant  execute on function public.fn_access_token_hook(jsonb) to supabase_auth_admin;
 ```
+
+**Actuele stand (reviewcorrectie T1).** De helper toetst niet alleen de historische binding maar
+ook de huidige profiel↔fonds↔loginconfiguratie: profiel aanwezig en in het fonds van de binding,
+fondsconfiguratie aanwezig, `actief = true`, `entra_tenant_id = binding.tid`. Daarmee is een
+rechtstreekse `signInWithIdToken` na fondsverplaatsing, flag-uit of tenantwijziging fail-closed,
+zonder T2-callback of applicatieguard. Bindingen blijven bij flag-uit bestaan (herstel = flag
+aan); alleen nieuwe uitgifte en refresh worden geweigerd, een uitgegeven token leeft tot `exp`
+(P8). `reserveer_identiteit` dwingt dezelfde eisen vroeg af met de vaste categorieën `login_uit`
+en `tenant_mismatch`.
 
 De `pending`-toets is het koppelvenster (nodig omdat `link_identity` zelf een `oauth`-sessie
 uitgeeft vóór wij kunnen activeren); de reservering bevat al `sub`/`tid`/`oid` uit het door ons
@@ -433,7 +448,7 @@ Foutafhandeling en neutrale meldingen ongewijzigd; correlatie-id als supportcode
 3. Geen `service_role`/`SUPABASE_SERVICE_ROLE_KEY`/`supabase-platform` in login-code; gateway en guard `server-only`.
 4. Geen `accessToken|idToken|refreshToken|email` in log-/auditpaden; `no-store`.
 5. `login_private`: RLS aan; geen tabelrechten voor `anon`, `authenticated`, `service_role`, `login_gateway`, `supabase_auth_admin`; alleen `login_hook_owner` heeft `SELECT` op de bindingstabel; gatewaydefiners op `pg_temp`, helper op `search_path = ''`; execute alleen `login_gateway`, behalve `identiteit_toegestaan` → alleen `supabase_auth_admin`.
-6. `public.fn_access_token_hook`: **niet** `SECURITY DEFINER`; execute alleen `supabase_auth_admin`; retourneert `event` ongewijzigd zonder databaseraadpleging voor niet-`oauth`; 403 voor `oauth` bij ≠ 1 OAuth-identiteit, provider ≠ `azure`, ontbrekende `custom_claims.tid/oid`, of `sub`/`tid`/`oid` ≠ binding; 403 bij exceptie.
+6. `public.fn_access_token_hook`: **niet** `SECURITY DEFINER`; execute alleen `supabase_auth_admin`; retourneert `event` ongewijzigd zonder databaseraadpleging voor niet-`oauth`; 403 voor `oauth` bij ≠ 1 OAuth-identiteit, provider ≠ `azure`, ontbrekende `custom_claims.tid/oid`, `sub`/`tid`/`oid` ≠ binding, profiel weg of in ander fonds dan de binding, fondsconfiguratie ontbrekend/`actief = false`, of `entra_tenant_id ≠ binding.tid`; 403 bij exceptie. `login_hook_owner` heeft buiten de bindingstabel alleen kolom-SELECT op `profielen(id, fonds_id)` en `fonds_microsoft_login(fonds_id, actief, entra_tenant_id)`.
 7. Unieke levende-bindingsindexen werken over fondsen heen; `reserveer_identiteit` weigert fondsmismatch; `activeer_identiteit` weigert andere user.
 8. `audit_log` append-only.
 9. Transactie eenmalig.
