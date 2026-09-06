@@ -20,8 +20,12 @@
 --    * SECURITY DEFINER-gatewayfuncties die UITSLUITEND de minimale loginrol
 --      login_gateway mag uitvoeren (patroon microsoft_vault / ai_gateway);
 --    * de hookhelper login_private.identiteit_toegestaan — de enige verhoogde
---      functie in het hookpad; eigenaar = NOLOGIN-rol login_hook_owner met alleen
---      SELECT op de bindingstabel (RLS-policy) en search_path '';
+--      functie in het hookpad; toetst de exacte identiteit ÉN de actuele stand
+--      (profiel in het fonds van de binding, fondsconfiguratie actief, tenant
+--      gelijk); eigenaar = NOLOGIN-rol login_hook_owner met alleen SELECT op de
+--      bindingstabel en kolom-SELECT (id, fonds_id) op profielen en (fonds_id,
+--      actief, entra_tenant_id) op fonds_microsoft_login, elk met een expliciete
+--      RLS-policy, en search_path '';
 --    * public.fn_access_token_hook — SECURITY INVOKER, draait als
 --      supabase_auth_admin, leest auth.identities binnen de GoTrue-transactie.
 --
@@ -207,8 +211,8 @@ create trigger trg_fonds_microsoft_login_audit
   for each row execute function public.fn_fonds_microsoft_login_audit();
 
 -- ── 5. Gatewayfuncties (execute uitsluitend login_gateway) ──────────────────
--- Foutcategorieën komen als message terug (geen inhoud): fonds_mismatch,
--- binding_conflict, ongeldige_overgang, onbekende_binding.
+-- Foutcategorieën komen als message/categorie terug (geen inhoud): fonds_mismatch,
+-- login_uit, tenant_mismatch, binding_conflict, ongeldige_overgang, onbekende_binding.
 
 create or replace function login_private.lees_config(p_fonds uuid)
 returns table(actief boolean, entra_tenant_id text, pilotstatus text)
@@ -252,6 +256,18 @@ begin
     insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, identiteit_hash, correlatie_id)
     values (p_fonds, p_user, 'koppelen.mislukt', 'fonds_mismatch', v_hash, p_correlatie);
     return query select null::uuid, 'fonds_mismatch'::text; return;
+  end if;
+  -- Vroege, inhoudsvrije weigering op fondsconfiguratie: uit/ontbrekend → login_uit,
+  -- andere tenant dan geconfigureerd → tenant_mismatch (dezelfde eisen als de hook).
+  if not exists (select 1 from public.fonds_microsoft_login c where c.fonds_id = p_fonds and c.actief = true) then
+    insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, identiteit_hash, correlatie_id)
+    values (p_fonds, p_user, 'koppelen.mislukt', 'login_uit', v_hash, p_correlatie);
+    return query select null::uuid, 'login_uit'::text; return;
+  end if;
+  if not exists (select 1 from public.fonds_microsoft_login c where c.fonds_id = p_fonds and lower(c.entra_tenant_id) = lower(p_tid)) then
+    insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, identiteit_hash, correlatie_id)
+    values (p_fonds, p_user, 'koppelen.mislukt', 'tenant_mismatch', v_hash, p_correlatie);
+    return query select null::uuid, 'tenant_mismatch'::text; return;
   end if;
   perform verval_verlopen_reserveringen();
   begin
@@ -436,12 +452,26 @@ grant execute on function login_private.registreer_gebeurtenis(uuid, uuid, text,
 -- De Supabase-`postgres`-rol is geen superuser; zonder lidmaatschap kan hij aan
 -- een functie van een andere eigenaar niets meer verlenen of intrekken.
 grant usage on schema login_private to login_hook_owner;
+grant usage on schema public to login_hook_owner;   -- alleen USAGE (geen CREATE): de helper leest profielen/fonds_microsoft_login
 grant create on schema login_private to login_hook_owner;
 set local role login_hook_owner;
+-- Toetst de EXACTE identiteit én de ACTUELE stand: het profiel bestaat nog en zit
+-- in het fonds van de binding, de fondsconfiguratie bestaat, staat aan en noemt
+-- precies de tenant van de binding. Een fondsverplaatsing, flag-uit of tenant-
+-- wijziging weigert dus direct elke nieuwe tokenuitgifte en refresh, ook via een
+-- rechtstreekse signInWithIdToken buiten de T2-callback om. Bestaande bindingen
+-- blijven staan; een al uitgegeven token leeft hooguit tot zijn exp (P8).
 create or replace function login_private.identiteit_toegestaan(p_user uuid, p_sub text, p_tid text, p_oid text)
 returns boolean language sql security definer set search_path = '' stable as $$
   select exists (
-    select 1 from login_private.microsoft_identiteiten b
+    select 1
+      from login_private.microsoft_identiteiten b
+      join public.profielen p
+        on p.id = b.user_id and p.fonds_id = b.fonds_id
+      join public.fonds_microsoft_login c
+        on c.fonds_id = b.fonds_id
+       and c.actief = true
+       and pg_catalog.lower(c.entra_tenant_id) = pg_catalog.lower(b.tid)
      where b.user_id = p_user
        and b.sub = p_sub and b.tid = p_tid and b.oid = p_oid
        and (b.status = 'active' or (b.status = 'pending' and b.pending_verloopt_op > pg_catalog.now()))
@@ -459,6 +489,17 @@ grant select on login_private.microsoft_identiteiten to login_hook_owner;
 drop policy if exists "hook owner leest bindingen" on login_private.microsoft_identiteiten;
 create policy "hook owner leest bindingen" on login_private.microsoft_identiteiten
   for select to login_hook_owner using (true);
+-- Actuele-standtoets: uitsluitend de kolommen die de helper nodig heeft, met een
+-- expliciete, tenantgebonden leespolicy per tabel (gates B/C: geen USING (true)
+-- op fonds_id-tabellen). Geen andere kolom, geen schrijfrecht, geen andere tabel.
+grant select (id, fonds_id) on public.profielen to login_hook_owner;
+drop policy if exists "hook owner leest profiel fonds" on public.profielen;
+create policy "hook owner leest profiel fonds" on public.profielen
+  for select to login_hook_owner using (fonds_id is not null);
+grant select (fonds_id, actief, entra_tenant_id) on public.fonds_microsoft_login to login_hook_owner;
+drop policy if exists "hook owner leest loginconfig" on public.fonds_microsoft_login;
+create policy "hook owner leest loginconfig" on public.fonds_microsoft_login
+  for select to login_hook_owner using (fonds_id is not null);
 
 -- ── 8. Custom Access Token Hook (SECURITY INVOKER, supabase_auth_admin) ─────
 -- `oauth` is in Supabase de generieke methode voor élke social/OAuth-login; de

@@ -72,6 +72,19 @@ begin
 end $$;
 
 drop function if exists public.fn_access_token_hook(jsonb);
+-- Kolomrechten en policies van login_hook_owner op de publieke tabellen.
+drop policy if exists "hook owner leest profiel fonds" on public.profielen;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'login_hook_owner') then
+    revoke all on public.profielen from login_hook_owner;
+    revoke usage on schema public from login_hook_owner;
+    if to_regclass('public.fonds_microsoft_login') is not null then
+      revoke all on public.fonds_microsoft_login from login_hook_owner;
+    end if;
+  end if;
+end $$;
+drop policy if exists "hook owner leest loginconfig" on public.fonds_microsoft_login;
 drop trigger if exists trg_fonds_microsoft_login_audit on public.fonds_microsoft_login;
 drop function if exists public.fn_fonds_microsoft_login_audit();
 drop trigger if exists trg_fonds_microsoft_login_standaard on public.fondsen;

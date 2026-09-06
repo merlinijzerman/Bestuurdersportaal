@@ -313,5 +313,8 @@ Vier nieuwe publieke objecten, allemaal bewust minimaal:
 
 Het schema `login_private`, de loginrol `login_gateway` (exact dertien executes,
 nul tabelrechten) en de NOLOGIN-eigenaar `login_hook_owner` (alleen `SELECT` +
-RLS-policy op de bindingstabel) vallen buiten de scope van deze gate; hun contract
+RLS-policy op de bindingstabel, plus kolom-`SELECT` op `public.profielen(id, fonds_id)` en
+`public.fonds_microsoft_login(fonds_id, actief, entra_tenant_id)` met tenantgebonden leespolicies —
+rechten van een rol buiten het vocabulaire `anon/authenticated/service_role` van deze gate)
+vallen buiten de scope van deze gate; hun contract
 wordt volledig door `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` bewezen.
