@@ -4,6 +4,16 @@
   "uitgesteld": [],
   "nog_op_te_nemen_bij_stackrun": [
     {
+      "method": "GET",
+      "route": "/auth/callback  ·  /auth/callback?code=<ongeldig>&next=<pad>",
+      "reden": "#335 T2-voorbereiding (karakterisering vóór wijziging; ontwerp §6.13 'wachtwoordpad en /auth/callback byte-identiek'): het W1-harnas kent alleen /api/*-scenario's; run.mjs volgt geen redirects en heeft verwacht:'redirect' + locatieVorm() al klaar, dus twee paginascenario's (zonder code → <origin>/login?error=<geredigeerd>; met ongeldige code én next → dezelfde redirect) zijn klaar om op te nemen — tegen een draaiende wegwerpstack, niet voorspeld (besluit 0192). De lokale stack was op 2026-09-06 door een andere sessie bezet. Rijen staan letterlijk in MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md §2.3 (slugs w335.auth-callback.get.anon.zonder-code / .ongeldige-code). Op te nemen in T2-stap B7, vóór de L4-wijziging aan deze route; daarna moet de T2-PR byte-identiek blijven voor beide."
+    },
+    {
+      "method": "GET",
+      "route": "/login",
+      "reden": "#335 T2-voorbereiding: anonieme GET /login als 'vorm'-snapshot (status + content-type; body bewust niet gekarakteriseerd — de HTML bevat build-hashes). Plus het ingelogde geval (login-layout → 307 naar '/'), dat een vijfde harnasgebruiker ZONDER profielen-rij vergt om ook de platform-identiteitsvariant (blijft op /login) te kunnen opnemen; die seed-uitbreiding hoort bij dezelfde stack-run. Slug w335.login.get.anon; zie MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md §2.3. Op te nemen in T2-stap B7, vóór de Microsoft-knop landt (T2 verandert de body, niet status/content-type)."
+    },
+    {
       "method": "POST",
       "route": "/decisions/[id]/status",
       "reden": "P3/PR-D (#168, 0193): NIEUW gedrag, geen verwijderde dekking. De readiness-gate raakte géén opgenomen scenario (per-scenario nagelopen: anon=401, ongeldige-status=400, niet-gevonden=404 — geen readiness-400). Wél nieuw: een besluit naar besloten/voorwaardelijk_besloten met iets open BOVEN OPTIONEEL VOOR HET BESLUITMOMENT (besluitmoment-scoped, niet dossierbreed) eist een motivering (400) en geeft anders 200 met event/waarschuwing. Dat besluit-met-openstaande-pad heeft nog géén scenario; op te nemen tegen een draaiende server bij de stack-run. Staat NIET in 'uitgesteld' omdat de route al scenario's heeft (de bestaande anon/400/404) — dit is additieve dekking, geen gat in bestaande dekking. De DB-afdwinging zelf (I2 op SQL-berekende open; directe PostgREST-status-update door authenticated → 42501 door de kolom-revoke) is niet route-gebonden en is al bewezen met de gedragstoets 2026_08_28_p3d_besluit_omslag.sql."
