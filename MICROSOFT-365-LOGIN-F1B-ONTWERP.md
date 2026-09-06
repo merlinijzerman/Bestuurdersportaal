@@ -2,7 +2,7 @@
 
 - **Ticket:** [#335](https://github.com/merlinijzerman/Bestuurdersportaal/issues/335)
 - **Besluit:** `decisions/0211-microsoft-login-expliciete-koppeling-tid-oid.md` (voorgesteld, tweede herziening)
-- **Status van dit document:** ontwerp ter akkoord; nog géén productiecode; eerst spike T0.5
+- **Status van dit document:** ontwerp; spike T0.5 hoofdmodus + S6 groen, **S7 open**, S9 rode nulmeting (`SPIKE-335-T0.5.md`). **T1/PR-A gebouwd (2026-09-06, draft)** — migratie `2026_09_06_microsoft_login_fase1b.sql`, rollback, check-suite, gateway, runbook. S7 mag het bouwen en reviewen van T1 niet meer blokkeren, maar blijft een harde voorwaarde vóór het mergen van T1 en vóór iedere activering voor PGB. Microsoft-login en de fondsflag staan standaard uit; niets is extern ingeschakeld.
 - **Branch/worktree:** `feat/335-microsoft-login` vanaf `origin/preview` `259ba44` (merge #324)
 - **Datum:** 2026-09-05 (tweemaal herzien dezelfde dag na review van de opdrachtgever)
 
@@ -551,8 +551,8 @@ callbackserver sluiten.
 | Tranche | Inhoud | Merge-regel |
 |---|---|---|
 | **T0** | karakterisering, 0211, dit ontwerp; na akkoord als voorgestelde ontwerpcommit op de branch | gebruiker akkoord op §10 |
-| **T0.5** | spike §9.1 incl. S10; `SPIKE-335-T0.5.md`; D8/P6/P7 definitief | gebruiker beoordeelt; blokkerend voor T1 |
-| **T1 / PR-A** | migratie (`login_private`, hook, toestandsmodel, config) + rollback + check-SQL (hook-events) + allowlist + gateway + runbook | migratie ⇒ gebruiker merget |
+| **T0.5** | spike §9.1 incl. S10; `SPIKE-335-T0.5.md`; D8/P6/P7 definitief | hoofdmodus + S6 groen; **S7 open** — blokkeert het bouwen/reviewen van T1 niet meer, wél het mergen van T1 en elke PGB-activering; S9 = rode nulmeting, geen implementatiefout |
+| **T1 / PR-A** | migratie (`login_private`, hook, toestandsmodel, config) + rollback + check-SQL (hook-events) + allowlist + gateway + runbook — **gebouwd 2026-09-06 (draft-PR)**; afwijkingen t.o.v. §4.2: `reserveer_identiteit` geeft `(id, categorie)` terug i.p.v. te raisen (auditregel overleeft anders de subtransactie niet), `actieve_binding` heet `levende_binding` (pending/active/revoking), `herstel_koppeling` mag een verlopen `pending` activeren nadat de app de Supabase-identiteit heeft geverifieerd | migratie ⇒ gebruiker merget, pas na groene S7 |
 | **T2 / PR-B** | cores, orchestratie, routes, callback, guard L3, L4, UI, tests, registers | raakt sessieresolutie ⇒ gebruiker merget |
 | **T3** | Entra/Supabase (P1–P8)/Vercel, PGB-activering, smoke, docs-PR | docs additief ⇒ zelf mergen bij groene gates |
 
