@@ -289,3 +289,32 @@ scope van deze gate (die scant `public` en `storage`); hun contract wordt volled
 door `supabase/checks/2026_09_04_ai_gateway.sql` bewezen (exact vier executes, nul
 tabelrechten, nul toegang voor browser- en servicerollen).
 
+
+## #335 T1 — Microsoft-login fase 1B (migratie 2026_09_06_microsoft_login_fase1b.sql)
+
+Vier nieuwe publieke objecten, allemaal bewust minimaal:
+
+- `fonds_microsoft_login` (tabel) — fondsconfiguratie, standaard `actief=false`.
+  `anon -`, `authenticated SELECT` (RLS: alleen het eigen fonds), `service_role`
+  de Supabase-default (backend-rol). Er is **geen** schrijfpolicy: de configuratie
+  wordt uitsluitend via migratie/gecontroleerde SQL gezet; elke wijziging landt via
+  de audittrigger append-only in `login_private.audit_log`.
+- `fn_fonds_microsoft_login_standaard()` — AFTER INSERT-trigger op `public.fondsen`
+  die ieder nieuw fonds een uit-staande configrij geeft. SECURITY INVOKER; `anon -`,
+  `authenticated -`, `service_role EXECUTE` (default; de invoegende backend-rol).
+- `fn_fonds_microsoft_login_audit()` — audittrigger op de configtabel, SECURITY
+  DEFINER met gepinde `search_path` (schrijft in het private schema) en **voor
+  niemand uitvoerbaar**: `anon -`, `authenticated -`, `service_role -`.
+- `fn_access_token_hook(event jsonb)` — de Custom Access Token Hook. **SECURITY INVOKER**,
+  `search_path = ''`, en uitsluitend uitvoerbaar door `supabase_auth_admin`
+  (buiten het vocabulaire van deze gate): `anon -`, `authenticated -`,
+  `service_role -`. De hook toetst bij elke `oauth`-tokenuitgifte de exacte
+  Microsoft-identiteit tegen de private binding (besluit 0211).
+
+Het schema `login_private`, de loginrol `login_gateway` (exact dertien executes,
+nul tabelrechten) en de NOLOGIN-eigenaar `login_hook_owner` (alleen `SELECT` +
+RLS-policy op de bindingstabel, plus kolom-`SELECT` op `public.profielen(id, fonds_id)` en
+`public.fonds_microsoft_login(fonds_id, actief, entra_tenant_id)` met tenantgebonden leespolicies —
+rechten van een rol buiten het vocabulaire `anon/authenticated/service_role` van deze gate)
+vallen buiten de scope van deze gate; hun contract
+wordt volledig door `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` bewezen.
