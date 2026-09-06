@@ -3,9 +3,9 @@
 ## Stand
 
 De hoofdmodus en S6 zijn op 6 september 2026 groen uitgevoerd tegen de lokale
-wegwerp-Supabase-stack. S7 (negatieve e-mailkoppeling met tweede account) en S9 (read-only
-hosted Supabase-configuratie) staan nog open en zijn geen onderdeel van onderstaande groene
-hoofdmeting.
+wegwerp-Supabase-stack. S9 is dezelfde dag als read-only nulmeting tegen Preview uitgevoerd en
+is, zoals vóór uitrol te verwachten, rood. S7 (negatieve e-mailkoppeling met tweede account)
+staat nog open.
 
 - Supabase Auth: v2.195.0
 - Scopes: exact `openid profile`
@@ -36,6 +36,7 @@ hoofdmeting.
 | S10c–d | wachtwoordlogin/refresh/PostgREST bij ingetrokken Microsoft-binding | alle 200 | ✅ |
 | S5 | unlink, daarna nieuwe id-token-grant | unlink 200; daarna 422 `signup_disabled`; tellingen gelijk | ✅ |
 | S6 | generieke Supabase-hosted Azure-flow | Microsoft `AADSTS50011`; Supabase-callback niet geregistreerd; tellingen gelijk | ✅ |
+| S9 | hosted Preview-authconfiguratie | Microsoft-provider, manual linking, Auth-hook en JWT-verkorting nog niet geconfigureerd | ❌ nulmeting |
 | S0 | begin- en eindtelling | 1 user en 0 Azure-identiteiten, zowel voor als na | ✅ |
 
 ## Conclusie hoofdmodus
@@ -48,10 +49,29 @@ De al uitgegeven OAuth-access-token bleef na intrekking nog maximaal de ingestel
 van 600 seconden bruikbaar; een refresh werd wel direct geweigerd. Dit bevestigt het in besluit 0211
 expliciet geaccepteerde Preview-intrekkingsvenster.
 
+## S9 — hosted Preview-nulmeting
+
+De Management API is één keer read-only bevraagd met een tijdelijk persoonlijk token van één
+uur. Alleen de vaste allowlist uit `management-auth-config.mjs` is getoond; de ruwe respons is
+niet opgeslagen. Het token is na de call onmiddellijk bij Supabase ingetrokken en uit
+`.env.spike` verwijderd.
+
+| Invariant | Preview op 6 september 2026 | Vereist vóór Microsoft-loginpilot |
+|---|---|---|
+| Nieuwe Auth-gebruikers uit | `disable_signup = true` | ✅ reeds goed |
+| Handmatig identity linking | `false` | `true` |
+| Azure/App L-provider | uit; tenant-URL leeg | aan met App L en exacte tenant-URL |
+| Access Token Hook | uit; URI leeg | aan met productiehook |
+| JWT-levensduur | 3600 seconden | 600 seconden voor Preview-pilot |
+| OAuth-providers | geen | uitsluitend `azure` |
+| Linking-domaininstelling | geen sleutel in 243 ontvangen configuratiesleutels | niet via Management API beschikbaar; ontwerp mag hier niet primair van afhangen |
+| Site-URL | Preview-platformhost | ✅ passend |
+
+S9 bewijst daarmee de uitgangssituatie, niet een codefout. T1/T3 moeten deze instellingen
+expliciet en in de juiste volgorde provisionen voordat Microsoft-login op PGB wordt geactiveerd.
+
 ## Nog af te ronden
 
 1. S7: drie negatieve e-mailkoppelingruns met het tweede Microsoft-account. Uitgesteld totdat
    de eigenaar van dat account zelf de interactieve aanmelding kan afronden; er is nog geen
    accountidentifier naar Microsoft verstuurd in deze poging.
-2. S9: read-only controle van de hosted Preview-authconfiguratie zodra een Management API-token
-   lokaal beschikbaar is.

@@ -532,6 +532,12 @@ noncemateriaal; alleen de markdown-uitvoer is daarvan vrij.
 | S8 | `GET /auth/v1/health` | `version` ≥ 2.185.0 |
 | S9 | `scripts/spike/management-auth-config.mjs`: read-only `GET /v1/projects/{ref}/config/auth`, verwerkt via vaste allowlist (P1–P4, P7, P8), lijst ingeschakelde OAuth-providers (P9) en aanwezigheid van een linking-domain-sleutel (P6); ruwe respons wordt niet opgeslagen | P9: alleen `azure`; P6: ja/nee vastleggen, anders navraag bij Supabase |
 
+**S9-nulmeting Preview (2026-09-06):** `disable_signup=true` is reeds goed; manual linking,
+Azure-provider en Custom Access Token Hook staan nog uit; `jwt_exp=3600`; er staat geen
+OAuth-provider aan. Geen van de 243 ontvangen configuratiesleutels betreft linking domains.
+Dit is een verwachte rode nulmeting vóór T1/T3 en maakt de provisioningvolgorde blokkerend:
+eerst hook/migratie en App L-provider, dan `jwt_exp=600`, daarna pas de fondsfeatureflag.
+
 Cleanup in `finally`: aangemaakte `azure`-identiteit verwijderen (met nog geldige sessie, anders
 SQL-opruimregel printen), `spike_private.bindingen` leeg, databaseverbinding sluiten,
 callbackserver sluiten.
