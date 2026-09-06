@@ -144,10 +144,26 @@ e-mail. `public.maak_profiel()` maakt bovendien alleen een profiel bij gezet
 
 ### 3.1 Route B (bevestigd)
 
-Eigen OIDC-flow (MSAL, PKCE, `state`, `nonce`, exacte claimvalidatie), daarna
+Eigen directe OIDC-flow (PKCE, `state`, `nonce`, cryptografische handtekening- en exacte
+claimvalidatie), daarna
 `linkIdentity`/`signInWithIdToken` met het geverifieerde ID-token. Vergelijking met de hosted
 redirectflow: zie vorige versie, ongewijzigd; doorslaggevend blijft dat onze code de identiteit
 toetst vóór Supabase iets aanmaakt, en dat de Supabase-callback niet in Entra hoeft te staan.
+De directe uitwisseling is ook nodig voor E2: MSAL-node 6.0 voegt in dit pad automatisch de
+OIDC-defaultscope `offline_access` toe, ook als de aanroep alleen `openid profile` opgeeft.
+Productiecode bouwt daarom zelf de authorize- en tokenrequest, gebruikt geen tokencache en
+weigert een tokenresponse met een `refresh_token`. Discovery en JWKS worden uitsluitend via
+`https://login.microsoftonline.com` geladen; alleen RS256 en exact één passende `kid` zijn
+toegestaan.
+
+**Consent-UX.** In de pilot gebruiken we persoonlijke consent; een beheerder laat daarbij
+`Toestemming namens uw organisatie` uitgevinkt. Microsoft toont die keuze alleen aan voldoende
+bevoegde beheerders en wij kunnen haar niet vanuit de applicatie verbergen. Na persoonlijke
+consent verschijnt de prompt voor die gebruiker niet opnieuw zolang scopes en consent gelijk
+blijven. Voor productie is de voorkeursroute een expliciete, geaudite klant-onboarding waarin
+de klantbeheerder eenmalig tenantbrede consent geeft voor uitsluitend `openid profile`.
+Eindgebruikers zien daarna geen consentprompt. De App L-registratie krijgt vóór productie ook
+herkenbare branding, een geverifieerd domein en waar van toepassing publisher verification.
 
 ### 3.2 Gelaagde afdwinging
 
@@ -184,7 +200,13 @@ returns boolean language sql security definer set search_path = '' stable as $$
                   where b.user_id = p_user and b.sub = p_sub and b.tid = p_tid and b.oid = p_oid
                     and (b.status = 'active' or (b.status = 'pending' and b.pending_verloopt_op > pg_catalog.now())));
 $$;
+-- Supabase `postgres` heeft CREATEROLE maar is geen superuser; voor de eigendomsoverdracht
+-- zijn tijdelijk SET ROLE-recht en CREATE op het doelschema nodig. Trek beide direct weer in.
+grant create on schema login_private to login_hook_owner;
+grant login_hook_owner to postgres;
 alter function login_private.identiteit_toegestaan(uuid,text,text,text) owner to login_hook_owner;
+revoke login_hook_owner from postgres;
+revoke create on schema login_private from login_hook_owner;
 -- RLS staat aan op de bindingstabel; login_hook_owner is geen eigenaar en heeft geen BYPASSRLS,
 -- dus zonder policy ziet de helper nul rijen en wordt óók de juiste binding geweigerd.
 create policy "hook owner leest bindingen" on login_private.microsoft_identiteiten
@@ -405,7 +427,8 @@ Foutafhandeling en neutrale meldingen ongewijzigd; correlatie-id als supportcode
 
 ## 6. Beveiligingsinvarianten (worden tests)
 
-1. Scopes exact `openid profile`; nergens `email`, `offline_access`, Graph-scopes.
+1. Scopes exact `openid profile`; nergens `email`, `offline_access`, Graph-scopes. De authorize-
+   én tokenrequest worden als contract getest; een tokenresponse met `refresh_token` faalt gesloten.
 2. Geen `fetch` naar `graph.microsoft.com`; login-code importeert niets uit `microsoft-vault`/`-connector`/`-config`.
 3. Geen `service_role`/`SUPABASE_SERVICE_ROLE_KEY`/`supabase-platform` in login-code; gateway en guard `server-only`.
 4. Geen `accessToken|idToken|refreshToken|email` in log-/auditpaden; `no-store`.
@@ -482,13 +505,15 @@ url = "https://login.microsoftonline.com/<tid>"
 `scripts/spike/spike-hook.sql` zet een wegwerp-prototype (`spike_private.bindingen`,
 `spike_private.identiteit_toegestaan` onder NOLOGIN-rol `spike_hook_owner`, en de
 `SECURITY INVOKER`-hook `public.spike_access_token_hook`) op de lokale stack;
-`scripts/spike/microsoft-login-spike.mjs` (MSAL-node, callback op `127.0.0.1:3999` met
-timeout, scopes `openid profile`, PKCE + nonce = sha256(N)) meet daarna tegen de lokale
+`scripts/spike/microsoft-login-spike.mjs` (directe OIDC authorization-codeflow, callback op
+`127.0.0.1:3999` met timeout, scopes exact `openid profile`, PKCE + nonce = sha256(N),
+discovery/JWKS/RS256-validatie en weigering van een refresh-token) meet daarna tegen de lokale
 GoTrue/PostgREST. **Let op:** de terminal toont de autorisatie-URL met tijdelijk `state`- en
 noncemateriaal; alleen de markdown-uitvoer is daarvan vrij.
 
 | # | Meting | Verwacht |
 |---|---|---|
+| S1-transport | Authorize- en tokenrequest exact `openid profile`; `offline_access` afwezig; tokenresponse bevat geen `refresh_token`; ID-tokenhandtekening valide | ✅ |
 | S1 | ID-token: exact `iss`, `aud`, `exp` > nu, `ver` = 2.0, `nonce` = sha256(N), `tid` = tenant ≠ MSA, `oid`/`sub` niet-leeg, `acct` = 0, `idp` afwezig; `email`/`xms_edov` **informatief** (verwacht afwezig zonder scope) | ✅ |
 | S2 | id-token-grant zonder sessie, identiteit onbekend | 422 `signup_disabled`; tellingen ongewijzigd |
 | S3a | wachtwoordlogin → `link_identity` **zonder** reservering | 403 (hook) én **geen** identiteit (transactie teruggerold) |

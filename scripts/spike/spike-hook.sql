@@ -53,7 +53,14 @@ returns boolean language sql security definer set search_path = '' stable as $$
        and (b.status = 'active' or (b.status = 'pending' and b.pending_verloopt_op > pg_catalog.now()))
   );
 $$;
+-- De managed/local Supabase-rol `postgres` heeft CREATEROLE maar is geen superuser.
+-- Eigendom overdragen vereist daarom tijdelijk SET ROLE-recht én CREATE op het doelschema
+-- voor de NOLOGIN-owner. Beide worden direct na de overdracht weer ingetrokken.
+grant create on schema spike_private to spike_hook_owner;
+grant spike_hook_owner to postgres;
 alter function spike_private.identiteit_toegestaan(uuid, text, text, text) owner to spike_hook_owner;
+revoke spike_hook_owner from postgres;
+revoke create on schema spike_private from spike_hook_owner;
 revoke all on function spike_private.identiteit_toegestaan(uuid, text, text, text) from public, anon, authenticated;
 grant execute on function spike_private.identiteit_toegestaan(uuid, text, text, text) to supabase_auth_admin;
 

@@ -96,8 +96,13 @@ Concreet:
    beëindigt de portaalsessie eerder, maar dekt de directe toegang niet — dat is de reden dat
    het venster wordt benoemd en niet weggeredeneerd.
 3. **Eigen OIDC-flow, Supabase alleen als sessie-uitgever (route B).** Koppelen en inloggen
-   lopen via onze eigen Authorization Code + PKCE + `state` + `nonce`-flow (MSAL, single-tenant
-   authority, scopes `openid profile`), gespiegeld aan het geharde fase-1-patroon. Het
+   lopen via onze eigen directe OIDC Authorization Code + PKCE + `state` + `nonce`-flow (single-tenant
+   authority, scopes `openid profile`), gespiegeld aan het geharde fase-1-patroon. Hiervoor
+   gebruiken we bewust een directe OIDC-uitwisseling en niet de standaard MSAL-aanvraag:
+   MSAL-node 6.0 voegt in de gebruikte authorization-codeflow automatisch `offline_access`
+   toe. Dat schendt de minimale-scope-invariant en kan een refresh-token opleveren. De eigen
+   flow valideert discovery, JWKS-host, RS256-handtekening, issuer, audience, geldigheid en
+   nonce fail-closed. Het
    geverifieerde ID-token gaat daarna naar `linkIdentity({ provider: "azure", token, nonce })` of
    `signInWithIdToken(...)`. Bij inloggen wordt de binding vóór die aanroep getoetst. Een
    secundaire applicatieguard (`amr ∋ oauth` ⇒ actieve binding, zonder cache) zit in de

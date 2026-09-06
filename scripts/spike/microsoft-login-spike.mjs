@@ -33,11 +33,12 @@
 //
 //  Env: SPIKE_SUPABASE_URL, SPIKE_SUPABASE_ANON_KEY, TEST_DATABASE_URL, MICROSOFT_LOGIN_TENANT_ID,
 //  MICROSOFT_LOGIN_CLIENT_ID, MICROSOFT_LOGIN_CLIENT_SECRET, SPIKE_TEST_EMAIL, SPIKE_TEST_PASSWORD,
-//  optioneel SPIKE_SCOPES, SPIKE_PORT (3999), SPIKE_TIMEOUT_S (300), SPIKE_MODE (hoofd|s7).
+//  optioneel SPIKE_SCOPES, SPIKE_PORT (3999), SPIKE_TIMEOUT_S (300), SPIKE_MODE (hoofd|s7),
+//  SPIKE_PREFLIGHT_ONLY=1 (bouwt en controleert alleen de autorisatieparameters; geen login/netwerk).
 // ============================================================================
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, verify as verifySignature } from "node:crypto";
+import { unlink, writeFile } from "node:fs/promises";
 import http from "node:http";
-import { ConfidentialClientApplication } from "@azure/msal-node";
 import pgModule from "pg";
 
 const env = (naam, verplicht = true) => {
@@ -58,14 +59,28 @@ const TEST_PASSWORD = env("SPIKE_TEST_PASSWORD");
 const SCOPES = (env("SPIKE_SCOPES", false) || "openid profile").split(/\s+/).filter(Boolean);
 const PORT = Number(env("SPIKE_PORT", false) || 3999);
 const TIMEOUT_MS = Number(env("SPIKE_TIMEOUT_S", false) || 300) * 1000;
+const PREFLIGHT_ONLY = env("SPIKE_PREFLIGHT_ONLY", false) === "1";
+const AUTH_URL_FILE = env("SPIKE_AUTH_URL_FILE", false);
 const REDIRECT_URI = `http://localhost:${PORT}/callback`;
 const MSA_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
+const OIDC_BASE = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
+const OIDC_ISSUER = `https://login.microsoftonline.com/${TENANT}/v2.0`;
 
 const sha256hex = (s) => createHash("sha256").update(s).digest("hex");
 const b64url = (n) => randomBytes(n).toString("base64url");
 const challenge = (v) => createHash("sha256").update(v).digest("base64url");
 const decodeJwt = (jwt) => JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
 const nietLeeg = (v) => typeof v === "string" && v.length > 0;
+
+function valideerScopes() {
+  const uniek = [...new Set(SCOPES)];
+  const verwacht = MODE === "s7" ? ["openid", "profile", ...(SCOPES.includes("email") ? ["email"] : [])] : ["openid", "profile"];
+  const exact = uniek.length === SCOPES.length && uniek.length === verwacht.length && verwacht.every((scope) => uniek.includes(scope));
+  if (!exact || uniek.includes("offline_access")) {
+    throw new Error(`ongeldige scopes voor modus ${MODE}; verwacht exact ${verwacht.join(" ")} en nooit offline_access`);
+  }
+}
+valideerScopes();
 
 const regels = [];
 let rood = 0;
@@ -99,6 +114,7 @@ const wachtwoordLogin = () => api("/token?grant_type=password", { method: "POST"
 
 // ── Database ─────────────────────────────────────────────────────────────────
 const pg = new pgModule.Client({ connectionString: DB_URL });
+let dbVerbonden = false;
 async function tel() {
   const u = await pg.query("select count(*)::int as n from auth.users");
   const i = await pg.query("select count(*)::int as n from auth.identities where provider = 'azure'");
@@ -113,20 +129,83 @@ const zetBinding = (userId, status, ident) => pg.query(
   [userId, status, ident.sub, ident.tid, ident.oid]);
 const wisBinding = (userId) => pg.query("delete from spike_private.bindingen where user_id = $1", [userId]);
 
-// ── Eigen OIDC-flow (MSAL, PKCE, state, nonce) ───────────────────────────────
+// ── Eigen OIDC-flow (direct, PKCE, state, nonce) ─────────────────────────────
 let server = null;
+function bouwAutorisatieUrl({ state, nonce, verifier }) {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: "code",
+    redirect_uri: REDIRECT_URI,
+    response_mode: "query",
+    scope: SCOPES.join(" "),
+    state,
+    nonce: sha256hex(nonce),       // GoTrue vergelijkt sha256(nonce-param) met de nonce-claim
+    code_challenge: challenge(verifier),
+    code_challenge_method: "S256",
+    prompt: "select_account",
+  });
+  return new URL(`${OIDC_BASE}/authorize?${params}`);
+}
+
+async function fetchJson(url, opties = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(url, { ...opties, redirect: "error", signal: controller.signal });
+    let json = null;
+    try { json = await res.json(); } catch { /* fout zonder JSON-body */ }
+    return { status: res.status, json };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function verifieerIdToken(idToken, verwachteNonce) {
+  const delen = idToken.split(".");
+  if (delen.length !== 3) throw new Error("ID-token heeft geen geldig JWT-formaat");
+  let header, claims;
+  try {
+    header = JSON.parse(Buffer.from(delen[0], "base64url").toString("utf8"));
+    claims = JSON.parse(Buffer.from(delen[1], "base64url").toString("utf8"));
+  } catch {
+    throw new Error("ID-token bevat ongeldige JSON");
+  }
+  if (header.alg !== "RS256" || !nietLeeg(header.kid)) throw new Error("ID-token gebruikt geen toegestane RS256-sleutel");
+
+  const discoveryUrl = `https://login.microsoftonline.com/${TENANT}/v2.0/.well-known/openid-configuration`;
+  const discovery = await fetchJson(discoveryUrl);
+  if (discovery.status !== 200 || discovery.json?.issuer !== OIDC_ISSUER || !nietLeeg(discovery.json?.jwks_uri)) {
+    throw new Error("OIDC-discovery voldoet niet aan de verwachte tenant/issuer");
+  }
+  const jwksUrl = new URL(discovery.json.jwks_uri);
+  if (jwksUrl.protocol !== "https:" || jwksUrl.hostname !== "login.microsoftonline.com") {
+    throw new Error("OIDC-discovery verwees naar een niet-toegestane JWKS-host");
+  }
+  const jwks = await fetchJson(jwksUrl);
+  const sleutels = (jwks.json?.keys ?? []).filter((key) => key.kid === header.kid && key.kty === "RSA" && (!key.use || key.use === "sig"));
+  if (jwks.status !== 200 || sleutels.length !== 1) throw new Error("exact één passende Microsoft-signingsleutel vereist");
+  const sleutel = createPublicKey({ key: sleutels[0], format: "jwk" });
+  const geldig = verifySignature("RSA-SHA256", Buffer.from(`${delen[0]}.${delen[1]}`), sleutel, Buffer.from(delen[2], "base64url"));
+  if (!geldig) throw new Error("ID-tokenhandtekening is ongeldig");
+
+  const nu = Math.floor(Date.now() / 1000);
+  const audOk = claims.aud === CLIENT_ID || (Array.isArray(claims.aud) && claims.aud.length === 1 && claims.aud[0] === CLIENT_ID);
+  if (claims.iss !== OIDC_ISSUER || !audOk || Number(claims.exp) <= nu || Number(claims.nbf ?? 0) > nu + 60 || claims.nonce !== verwachteNonce) {
+    throw new Error("ID-token faalt op issuer, audience, geldigheid of nonce");
+  }
+  return claims;
+}
+
 async function haalIdToken() {
-  const msal = new ConfidentialClientApplication({
-    auth: { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET, authority: `https://login.microsoftonline.com/${TENANT}` },
-  });
   const state = b64url(32), nonce = b64url(32), verifier = b64url(64);
-  const url = await msal.getAuthCodeUrl({
-    scopes: SCOPES, redirectUri: REDIRECT_URI, state,
-    nonce: sha256hex(nonce),                    // GoTrue vergelijkt sha256(nonce-param) met de nonce-claim
-    codeChallenge: challenge(verifier), codeChallengeMethod: "S256",
-    prompt: "select_account", responseMode: "query",
-  });
-  process.stderr.write(`\n[bevat tijdelijk state-/noncemateriaal — niet delen]\nOpen in de browser en log in met het Microsoft-${MODE === "s7" ? "TWEEDE" : "test"}account:\n${url}\n\n`);
+  const url = bouwAutorisatieUrl({ state, nonce, verifier });
+  if (AUTH_URL_FILE) {
+    if (!/^\/private\/tmp\/mvp-335-[a-z0-9-]+$/i.test(AUTH_URL_FILE)) throw new Error("SPIKE_AUTH_URL_FILE moet een vast mvp-335-pad onder /private/tmp zijn");
+    await writeFile(AUTH_URL_FILE, url.toString(), { encoding: "utf8", mode: 0o600, flag: "wx" });
+    process.stderr.write(`\nAutorisatie-URL staat tijdelijk in een afgeschermd bestand; niet delen.\n`);
+  } else {
+    process.stderr.write(`\n[bevat tijdelijk state-/noncemateriaal — niet delen]\nOpen in de browser en log in met het Microsoft-${MODE === "s7" ? "TWEEDE" : "test"}account:\n${url}\n\n`);
+  }
   const code = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { server?.close(); reject(new Error(`geen callback binnen ${TIMEOUT_MS / 1000} s`)); }, TIMEOUT_MS);
     server = http.createServer((req, res) => {
@@ -140,8 +219,24 @@ async function haalIdToken() {
       clearTimeout(timer); server.close(); resolve(c);
     }).listen(PORT, "127.0.0.1");
   });
-  const result = await msal.acquireTokenByCode({ code, scopes: SCOPES, redirectUri: REDIRECT_URI, codeVerifier: verifier, nonce: sha256hex(nonce) });
-  return { idToken: result.idToken, claims: result.idTokenClaims ?? {}, nonce };
+  const token = await fetchJson(`${OIDC_BASE}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: verifier,
+      scope: SCOPES.join(" "),
+    }),
+  });
+  if (token.status !== 200 || !nietLeeg(token.json?.id_token)) {
+    throw new Error(`OIDC-tokenuitwisseling faalde (${token.status}; ${token.json?.error ?? "geen foutcode"})`);
+  }
+  const claims = await verifieerIdToken(token.json.id_token, sha256hex(nonce));
+  return { idToken: token.json.id_token, claims, nonce, refreshTokenUitgegeven: nietLeeg(token.json.refresh_token) };
 }
 
 function meetClaims(claims, nonce) {
@@ -173,7 +268,10 @@ async function hoofd() {
   if (!hookAanwezig.rows[0].ok) throw new Error("spike_access_token_hook ontbreekt: draai scripts/spike/spike-hook.sql en zet de hook aan in config.toml");
 
   const nul = await tel();
-  const { idToken, claims, nonce } = await haalIdToken();
+  const { idToken, claims, nonce, refreshTokenUitgegeven } = await haalIdToken();
+  meet("S1-transport", "autorisatie- en tokenrequest exact `openid profile`; geen refresh-token", "exacte scopes; geen refresh-token",
+    `scopes=${SCOPES.join("+")}; refresh-token=${refreshTokenUitgegeven ? "JA" : "nee"}`,
+    SCOPES.join(" ") === "openid profile" && !refreshTokenUitgegeven);
   const B = { sub: String(claims.sub), tid: String(claims.tid), oid: String(claims.oid) };
   const A = { sub: `spike-andere-sub-${b64url(8)}`, tid: B.tid, oid: `00000000-0000-4000-8000-${b64url(6).replace(/[^a-z0-9]/gi, "0").slice(0, 12)}` };
   meetClaims(claims, nonce);
@@ -287,7 +385,10 @@ async function s7() {
   if (pw.status !== 200) throw new Error(`wachtwoordlogin faalde: ${pw.status} ${foutcode(pw)}`);
   userId = pw.json.user.id;
   await api("/logout", { method: "POST", bearer: pw.json.access_token });
-  const { idToken, claims, nonce } = await haalIdToken();
+  const { idToken, claims, nonce, refreshTokenUitgegeven } = await haalIdToken();
+  meet("S1-transport", "geen impliciete `offline_access`; refresh-token alleen indien expliciet toegestaan", "offline_access afwezig; geen refresh-token",
+    `scopes=${SCOPES.join("+")}; refresh-token=${refreshTokenUitgegeven ? "JA" : "nee"}`,
+    !SCOPES.includes("offline_access") && !refreshTokenUitgegeven);
   meetClaims(claims, nonce);
   info("S7-0", "modus", `hook moet UIT staan; scopes "${SCOPES.join(" ")}"; tweede account met e-mail gelijk aan het testaccount; verwacht: ${S7_VERWACHT}`);
   const s7a = await idTokenGrant(idToken, nonce);
@@ -306,7 +407,16 @@ async function s7() {
 }
 
 async function main() {
+  if (PREFLIGHT_ONLY) {
+    const url = bouwAutorisatieUrl({ state: b64url(32), nonce: b64url(32), verifier: b64url(64) });
+    const scopes = url.searchParams.get("scope")?.split(" ") ?? [];
+    const exact = scopes.join(" ") === SCOPES.join(" ") && !scopes.includes("offline_access");
+    process.stdout.write(`OIDC-preflight: scopes=${scopes.join("+")}; offline_access=${scopes.includes("offline_access") ? "JA" : "nee"}; ${exact ? "GROEN" : "ROOD"}\n`);
+    if (!exact) process.exitCode = 1;
+    return;
+  }
   await pg.connect();
+  dbVerbonden = true;
   const health = await api("/health");
   versie = String(health.json?.version ?? "?").replace(/^v/, "");
   const [maj, min] = versie.split(".").map(Number);
@@ -336,6 +446,7 @@ main()
   .catch((e) => { process.stderr.write(`SPIKE MISLUKT: ${e.message}\n`); process.exitCode = 1; })
   .finally(async () => {
     try { server?.close(); } catch { /* al dicht */ }
+    if (AUTH_URL_FILE) await unlink(AUTH_URL_FILE).catch(() => undefined);
     try {
       if (azureIdentityId) {
         let opgeruimd = false;
@@ -351,6 +462,6 @@ main()
       }
       if (userId) await wisBinding(userId).catch(() => undefined);
     } finally {
-      await pg.end().catch(() => undefined);
+      if (dbVerbonden) await pg.end().catch(() => undefined);
     }
   });

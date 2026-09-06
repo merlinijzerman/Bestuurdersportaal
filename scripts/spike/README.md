@@ -7,6 +7,12 @@ bij Entra strandt, én dat de Custom Access Token Hook **de exacte identiteit** 
 `oauth`-sessie zonder binding op precies deze `sub`/`tid`/`oid` krijgt geen token — dus ook geen
 directe PostgREST-toegang. Zie `MICROSOFT-365-LOGIN-F1B-ONTWERP.md` §9.1.
 
+De spike gebruikt bewust een directe OIDC authorization-codeflow. MSAL-node 6.0 voegt aan dit
+pad automatisch `offline_access` toe; dat past niet bij de minimale login-app. De spike bouwt
+daarom authorize- en tokenrequests zelf, valideert PKCE/state/nonce plus discovery, JWKS-host,
+RS256-handtekening, issuer, audience en geldigheid, en faalt als Microsoft een refresh-token
+uitgeeft.
+
 ## Vooraf (opdrachtgever)
 
 1. Entra: app-registratie **Bestuurdersportaal Login (spike)** in onze tenant:
@@ -75,6 +81,12 @@ SPIKE_TEST_PASSWORD=<wachtwoord>
 
 ## Hoofdmodus (hook aan)
 
+Controleer eerst zonder browserlogin of de autorisatieparameters exact blijven:
+
+```bash
+SPIKE_PREFLIGHT_ONLY=1 node --env-file=.env.spike scripts/spike/microsoft-login-spike.mjs
+```
+
 ```bash
 node --env-file=.env.spike scripts/spike/microsoft-login-spike.mjs > SPIKE-335-T0.5.md
 ```
@@ -82,6 +94,9 @@ node --env-file=.env.spike scripts/spike/microsoft-login-spike.mjs > SPIKE-335-T
 Het script print op stderr een Microsoft-login-URL (**bevat tijdelijk state-/noncemateriaal;
 niet delen**); open die in de browser en log in met het testaccount. De callbackserver luistert
 op `127.0.0.1:3999`, valideert `state`/`error`/`code` vóór hij sluit en stopt na vijf minuten.
+Als een beheerder de consentprompt ziet, blijft **Toestemming namens uw organisatie** voor deze
+gebruikersspike uitgevinkt. Na persoonlijke consent ziet hetzelfde account de prompt bij volgende
+logins niet opnieuw, tenzij consent wordt ingetrokken of scopes wijzigen.
 Metingen: S8, S1, S2, S3a (geen reservering → 403, geen identiteit), **S3a' (pending voor
 identiteit A → link met token B → 403, volledige rollback)**, S3b, **S3c (custom_claims tid/oid
 = tokenclaims)**, S4, S10e (basislijn oauth-REST), S10a, S10b (venster + refresh 403), S10c,
