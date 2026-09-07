@@ -75,7 +75,9 @@ test.describe("MS-LOGIN — anoniem", () => {
     await stubReset(page);
     const callbackUrl = await loginViaKnop(page);
     await expect(page).toHaveURL(/\/login\?fout=microsoft&sc=[A-Z0-9]{8}$/);
-    const alert = page.getByRole("alert");
+    // Alleen het meldingsblok van het formulier (<div role="alert">); Next injecteert
+    // na een navigatie ook een <p role="alert"> als route-announcer.
+    const alert = page.locator('div[role="alert"]');
     await expect(alert).toContainText(LOGIN_MICROSOFT_MELDING);
     await expect(alert).toContainText(/Supportcode: [A-Z0-9]{8}/);
     await expect(alert).not.toContainText(/tenant|gast|onbekend account|@/i);
@@ -98,7 +100,7 @@ test.describe("MS-LOGIN — anoniem", () => {
     await stubReset(page);
     await page.goto(`${ORIGINS.fondsA}/auth/microsoft-login/callback?code=abc&state=bestaat-niet`);
     await expect(page).toHaveURL(/\/login\?fout=microsoft/);
-    await expect(page.getByRole("alert")).toContainText(LOGIN_MICROSOFT_MELDING);
+    await expect(page.locator('div[role="alert"]')).toContainText(LOGIN_MICROSOFT_MELDING);
     expect((await stubVerzoeken(page)).filter((v) => v.soort === "token")).toHaveLength(0);
   });
 
