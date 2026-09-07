@@ -1934,4 +1934,19 @@ export const scenarios = [
     headers: { "sec-fetch-site": "same-origin" },
     verwacht: "json",
   },
+
+  // ── #335 T2 (B7) — login- en callbackpad als PAGINA-scenario's ────────────
+  //  Ontwerp §6.13: wachtwoordlogin, refresh en /auth/callback voor niet-azure-
+  //  sessies blijven byte-identiek, óók met guard L3/L4 in de layouts en de
+  //  callback. De harnasrollen zijn wachtwoordsessies; de guard raadpleegt de
+  //  gateway dus niet en de snapshots dragen exact het oude gedrag.
+  //  Opgenomen tegen de wegwerpstack (besluit 0192: opnemen, niet voorspellen).
+  //  BESLUIT: `/login` als `vorm` — de HTML draagt build-hashes; status en
+  //  content-type zijn het contract. `/auth/callback` als `redirect` — de query
+  //  wordt door locatieVorm() geredigeerd, het pad `/login` is het contract.
+  { slug: "w335.auth-callback.get.anon.zonder-code", method: "GET", path: "/auth/callback", rol: "anon", verwacht: "redirect" },
+  { slug: "w335.auth-callback.get.anon.ongeldige-code", method: "GET", path: "/auth/callback?code=ongeldig&next=%2Fprofiel", rol: "anon", verwacht: "redirect" },
+  { slug: "w335.login.get.anon", method: "GET", path: "/login", rol: "anon", verwacht: "vorm" },
+  // Ingelogde wachtwoordsessie mét profiel → de login-layout stuurt naar '/' (307).
+  { slug: "w335.login.get.bestuurder.307", method: "GET", path: "/login", rol: "bestuurder", verwacht: "redirect" },
 ];

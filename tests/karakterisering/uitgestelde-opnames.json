@@ -6,17 +6,7 @@
     {
       "method": "GET/DELETE/POST",
       "route": "/microsoft-login/koppelen/start  ·  /microsoft-login/koppeling",
-      "reden": "#335 T2 (B3): vier nieuwe gewrapte handlers zonder W1-scenario. Anon → 401 is het bestaande wrappercontract (gedekt door LK-9 en de wrapper-sanity); de happy paths vergen de lokale login_gateway-rol, MICROSOFT_LOGIN_*-env en een fonds met de flag aan in de W1-seed — op te nemen tegen een draaiende wegwerpstack bij de stack-run (besluit 0192, contractwaarde-regel), niet voorspeld. Staat NIET in 'uitgesteld' omdat de authz-matrix voor deze routes geen bestaand scenario raakt (regeneratie ongewijzigd)."
-    },
-    {
-      "method": "GET",
-      "route": "/auth/callback  ·  /auth/callback?code=<ongeldig>&next=<pad>",
-      "reden": "#335 T2-voorbereiding (karakterisering vóór wijziging; ontwerp §6.13 'wachtwoordpad en /auth/callback byte-identiek'): het W1-harnas kent alleen /api/*-scenario's; run.mjs volgt geen redirects en heeft verwacht:'redirect' + locatieVorm() al klaar, dus twee paginascenario's (zonder code → <origin>/login?error=<geredigeerd>; met ongeldige code én next → dezelfde redirect) zijn klaar om op te nemen — tegen een draaiende wegwerpstack, niet voorspeld (besluit 0192). De lokale stack was op 2026-09-06 door een andere sessie bezet. Rijen staan letterlijk in MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md §2.3 (slugs w335.auth-callback.get.anon.zonder-code / .ongeldige-code). Op te nemen in T2-stap B7, vóór de L4-wijziging aan deze route; daarna moet de T2-PR byte-identiek blijven voor beide."
-    },
-    {
-      "method": "GET",
-      "route": "/login",
-      "reden": "#335 T2-voorbereiding: anonieme GET /login als 'vorm'-snapshot (status + content-type; body bewust niet gekarakteriseerd — de HTML bevat build-hashes). Plus het ingelogde geval (login-layout → 307 naar '/'), dat een vijfde harnasgebruiker ZONDER profielen-rij vergt om ook de platform-identiteitsvariant (blijft op /login) te kunnen opnemen; die seed-uitbreiding hoort bij dezelfde stack-run. Slug w335.login.get.anon; zie MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md §2.3. Op te nemen in T2-stap B7, vóór de Microsoft-knop landt (T2 verandert de body, niet status/content-type)."
+      "reden": "#335 T2 (B3): vier gewrapte handlers zonder W1-scenario. Anon → 401 is het bestaande wrappercontract (gedekt door LK-9, de wrapper-sanity en de E2E-spec); de happy paths vergen een fonds met de flag aan én MICROSOFT_LOGIN_*-env in de W1-omgeving — bewust NIET in karakterisering.yml gezet (de W1-run bewijst juist het wachtwoordpad zonder Microsoft-config). Op te nemen tegen een draaiende wegwerpstack zodra de W1-omgeving die config krijgt (besluit 0192). De vier paginascenario's van B7 (/auth/callback ×2, /login anon, /login ingelogd) zijn op 2026-09-07 WEL opgenomen en 3× stabiel geverifieerd (378/378)."
     },
     {
       "method": "POST",
