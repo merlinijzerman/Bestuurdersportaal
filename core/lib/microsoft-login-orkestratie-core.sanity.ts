@@ -291,7 +291,8 @@ test("tokenresponse met refresh_token wordt geweigerd (E2)", async () => {
     oidc: { ...oidc(w, tokenOpHash()), async wisselCode(_e, body) { const code = new URLSearchParams(body).get("code")!; return { id_token: tokenOpHash()(code), refresh_token: "r" }; } },
     auth: auth(w), config: () => config,
   });
-  await faaltMet(startEnCallback(w, f, "inloggen"), "token_response_ongeldig");
+  const fout = await faaltMet(startEnCallback(w, f, "inloggen"), "token_response_ongeldig");
+  assert.equal(fout.diagnostiek, "refresh_token_aanwezig", "alleen de vaste inhoudsvrije afwijsreden gaat naar de runtime-log");
 });
 
 // ── koppelen ────────────────────────────────────────────────────────────────
