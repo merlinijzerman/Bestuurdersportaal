@@ -212,14 +212,15 @@ function routeBestanden(dir: string): string[] {
   return uit;
 }
 
-test("LK-10 CENSUS — app/auth/** telt precies twee routes; elke nieuwe OAuth-route hoort eerst in een register", () => {
-  // De registergates (route-mechanismen, audit-handelingen) scannen alleen app/api.
-  assert.match(routeMechanismenTest, /const API_DIR = join\(ROOT, "app", "api"\);/);
-  // Zolang die gates app/auth niet dekken, is deze census de grendel: T2 voegt
-  // /auth/microsoft-login/{start,callback} toe en werkt deze lijst BEWUST bij,
-  // samen met de registeruitbreiding uit het T2-ontwerp (stap B0).
+test("LK-10 CENSUS — app/auth/** telt precies vier routes, alle onder de registergate (B0)", () => {
+  // B0 (#335) bracht app/auth/** onder route-mechanismen.test.ts; deze census
+  // blijft als tweede grendel: elke nieuwe OAuth-route is een bewuste wijziging
+  // hier én in route-mechanismen.expected.json.
+  assert.match(routeMechanismenTest, /const AUTH_DIR = join\(ROOT, "app", "auth"\);/);
   assert.deepEqual(routeBestanden(join(ROOT, "app", "auth")).sort(), [
     "app/auth/callback/route.ts",
+    "app/auth/microsoft-login/callback/route.ts",
+    "app/auth/microsoft-login/start/route.ts",
     "app/auth/microsoft/callback/route.ts",
   ]);
 });
