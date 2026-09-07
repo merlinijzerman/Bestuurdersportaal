@@ -93,18 +93,22 @@ test("configdrift: een profiel zonder configuratierij is dicht", () => {
   assert.equal(beoordeelPortaalSessieKern({ isOAuth: false, beleid: null }).toegestaan, true);
 });
 
-test("break-glassverhoging: alleen ná de MFA-stap en alleen als er nog geen venster is", () => {
+test("break-glassverhoging: alleen ná de MFA-stap, mét tijdstip, en alleen zonder lopend venster", () => {
   assert.equal(BREAKGLASS_VENSTER_SECONDEN, 3600);
+  const nu = new Date();
   const bg = beleid({ modus: "verplicht", breakGlass: true });
-  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal2" }), true);
-  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal1" }), false, "MFA-stap nog niet gedaan");
+  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal2", mfaGeverifieerdOp: nu }), true);
+  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal1", mfaGeverifieerdOp: nu }), false, "MFA-stap nog niet gedaan");
+  // Fail-closed zonder amr-tijdstip: er is dan niets om de verhoging aan te hangen.
+  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal2", mfaGeverifieerdOp: null }), false, "geen MFA-tijdstip");
+  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal2" }), false, "amr-tijdstip ontbreekt volledig");
   assert.equal(
-    magBreakglassVerhogen({ beleid: beleid({ modus: "verplicht", breakGlass: true, breakglassVensterTot: new Date(Date.now() + 60_000) }), aal: "aal2" }),
+    magBreakglassVerhogen({ beleid: beleid({ modus: "verplicht", breakGlass: true, breakglassVensterTot: new Date(Date.now() + 60_000) }), aal: "aal2", mfaGeverifieerdOp: nu }),
     false,
     "er loopt al een venster",
   );
-  assert.equal(magBreakglassVerhogen({ beleid: beleid({ modus: "verplicht" }), aal: "aal2" }), false, "geen aanwijzing");
-  assert.equal(magBreakglassVerhogen({ beleid: null, aal: "aal2" }), false);
+  assert.equal(magBreakglassVerhogen({ beleid: beleid({ modus: "verplicht" }), aal: "aal2", mfaGeverifieerdOp: nu }), false, "geen aanwijzing");
+  assert.equal(magBreakglassVerhogen({ beleid: null, aal: "aal2", mfaGeverifieerdOp: nu }), false);
   // De verhogingsroute staat op de smalle allowlist; het portaal niet.
   assert.equal(magBeperkteSessieRoute("/api/microsoft-login/verhoging"), true);
 });

@@ -102,14 +102,35 @@ test("1C: verhogen is een expliciete, geaudite handeling — geen bijwerking van
   // Het openen loopt via één expliciete route, met eigen audithandeling.
   const route = lees("app/api/microsoft-login/verhoging/route.ts");
   assert.match(route, /audit: \{ handeling: "microsoft-login\.breakglass\.verhoging" \}/);
-  assert.match(route, /magBreakglassVerhogen\(\{ beleid, aal \}\)/);
-  assert.match(route, /if \("categorie" in r\)[\s\S]{0,200}?status: 403/, "een mislukte opening wordt niet genegeerd");
+  assert.match(route, /if \("categorie" in r\) \{[\s\S]*?status: 403/, "een mislukte opening wordt niet genegeerd");
   assert.match(beleidCore, /"\/api\/microsoft-login\/verhoging",/);
   // En de echte GoTrue-test hangt in de blokkerende gate.
   assert.match(ci, /node scripts\/breakglass-directe-refresh\.mjs/);
   const bewijs = lees("scripts/breakglass-directe-refresh.mjs");
   assert.match(bewijs, /grant_type=refresh_token/, "de test refresht rechtstreeks bij GoTrue");
   assert.match(bewijs, /een DIRECTE refresh \(app overgeslagen\) geeft géén volledige rol/);
+  assert.match(bewijs, /dezelfde MFA-verificatie opent geen tweede venster/);
+  assert.match(bewijs, /met een NIEUWE verificatie mag het wél/);
+});
+
+test("1C: één verhoging per MFA-verificatie — vers, eenmalig en atomair", () => {
+  // De verhoging hangt aan het amr-tijdstip; anders kan een oude AAL2-sessie na
+  // afloop van het venster eindeloos opnieuw verhogen (reviewbevinding P1, ronde 3).
+  assert.match(migratie, /mfa_geverifieerd_op timestamptz not null/);
+  assert.match(migratie, /create unique index if not exists break_glass_activering_mfa_eenmalig\s*\n\s*on login_private\.break_glass_activeringen \(user_id, mfa_geverifieerd_op\);/,
+    "eenmaligheid komt van een unieke index, niet van applicatielogica");
+  // Fail-closed zonder tijdstip, en een oud of toekomstig tijdstip telt niet.
+  assert.match(migratie, /if p_mfa_op is null then\s*\n\s*return query select null::timestamptz, 'mfa_ontbreekt'::text; return;/);
+  assert.match(migratie, /if p_mfa_op > now\(\) \+ c_max_vooruit or now\(\) - p_mfa_op > c_max_leeftijd then/);
+  assert.match(migratie, /exception when unique_violation then[\s\S]{0,320}?'mfa_hergebruikt'/);
+  // De hook koppelt op EXACT dezelfde verificatie, en weigert zonder tijdstip.
+  assert.match(migratie, /when p_mfa_op is null then 'beperkt'/);
+  assert.match(migratie, /and a\.mfa_geverifieerd_op = p_mfa_op\s*\n\s*and a\.venster_tot > pg_catalog\.now\(\)\) then 'vol'/);
+  // De route leest het tijdstip uit het token en gaat dicht als het ontbreekt.
+  const route = lees("app/api/microsoft-login/verhoging/route.ts");
+  assert.match(route, /mfaVerificatieUitAccessToken\(token\)/);
+  assert.match(route, /magBreakglassVerhogen\(\{ beleid, aal, mfaGeverifieerdOp \}\)/);
+  assert.match(beleidCore, /args\.mfaGeverifieerdOp instanceof Date/);
 });
 
 test("1C: de fondslock gaat in canonieke volgorde (geen deadlock bij A→B en B→A)", () => {

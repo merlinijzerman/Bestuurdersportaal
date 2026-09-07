@@ -1,6 +1,6 @@
 # 0212 — Microsoft-loginbeleid (fase 1C): drie fondsmodi, afdwinging in de Auth-hook, en een beheerde bindingslifecycle met twee begrensde herstelpaden
 
-- **Status:** Voorgesteld (PR-A geïmplementeerd en na reviewrondes 1 en 2 herzien; PR-B — beheer- en profielinterface — volgt)
+- **Status:** Voorgesteld (PR-A geïmplementeerd en na reviewrondes 1, 2 en 3 herzien; PR-B — beheer- en profielinterface — volgt)
 - **Datum:** 2026-09-07
 - **Betrokkenen:** Merlin (opdrachtgever/productowner, vier expliciete keuzes hieronder), Claude (ontwerp en implementatie)
 - **Ticket:** [#344](https://github.com/merlinijzerman/Bestuurdersportaal/issues/344) — M365 fase 1C, organisatiebreed Microsoft-loginbeleid en beheerde ontkoppeling
@@ -151,6 +151,29 @@ asserties (negatieve controle uitgevoerd).
 verplaatsing eerst het oude en dan het nieuwe fonds; twee gelijktijdige wissels A→B en B→A konden
 elkaar zo deadlocken (reviewbevinding P2). De trigger sorteert de betrokken fondsen nu op UUID en
 vergrendelt ze in die volgorde, ongeacht de richting.
+
+## Herziening na reviewronde 3 (7 september 2026)
+
+**D14 — één verhoging per MFA-verificatie: vers, eenmalig en atomair.** Na ronde 2 hing de verhoging
+nog aan "AAL2 én geen lopend venster". Een oude AAL2-sessie behoudt haar AAL na afloop van het
+venster, dus zij kon telkens opnieuw verhogen zónder nieuwe code — het venster was daarmee feitelijk
+onbeperkt heropenbaar (reviewbevinding P1, ronde 3). De activering legt nu het tijdstip van de
+MFA-verificatie vast (`mfa_geverifieerd_op`, uit de `amr`-claim) en:
+
+- **fail-closed zonder tijdstip** — ontbreekt de amr-timestamp, dan is er niets om de verhoging aan
+  te hangen: `mfa_ontbreekt`, zowel in de route als in de database;
+- **alleen vers** — ouder dan vijf minuten (of meer dan een minuut in de toekomst) is
+  `mfa_verlopen`; die marge dekt klokverschil tussen GoTrue en Postgres;
+- **eenmalig, atomair** — een unieke index op `(user_id, mfa_geverifieerd_op)` maakt een tweede
+  venster op dezelfde verificatie onmogelijk (`mfa_hergebruikt`); twee gelijktijdige pogingen kunnen
+  elkaar niet inhalen, want de database beslist, niet de route;
+- **de hook koppelt op exact dezelfde verificatie** — `a.mfa_geverifieerd_op = p_mfa_op` — zodat een
+  venster van een eerdere verificatie een latere sessie niet verhoogt.
+
+Na afloop van het venster is dus een nieuwe `challengeAndVerify` nodig, en die opent een nieuw,
+apart geaudit venster. Dat is in de echte GoTrue-test vastgelegd (dezelfde AAL2-sessie → geweigerd;
+na een nieuwe verificatie → toegestaan, tweede `breakglass.gebruikt`), inclusief negatieve controle:
+zonder de unieke index gaat die test rood op vier asserties.
 
 ## Overwogen alternatieven
 

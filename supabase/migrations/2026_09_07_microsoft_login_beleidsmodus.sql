@@ -252,11 +252,29 @@ create table if not exists login_private.break_glass_activeringen (
   break_glass_id uuid not null references login_private.break_glass(id) on delete cascade,
   fonds_id      uuid not null references public.fondsen(id),
   user_id       uuid not null references auth.users(id) on delete cascade,
+  -- Het tijdstip van de MFA-verificatie waarop deze verhoging rust (amr-claim).
+  -- Zonder deze binding kon een OUDE AAL2-sessie na afloop van het venster
+  -- eindeloos opnieuw verhogen zonder nieuwe code (reviewbevinding P1, ronde 3).
+  mfa_geverifieerd_op timestamptz not null,
   geopend_op    timestamptz not null default now(),
   venster_tot   timestamptz not null,
   correlatie_id text not null,
   constraint break_glass_activering_venster check (venster_tot > geopend_op)
 );
+-- Herhaalbaar over een eerdere toepassing van deze migratie.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema='login_private' and table_name='break_glass_activeringen'
+                    and column_name='mfa_geverifieerd_op') then
+    delete from login_private.break_glass_activeringen;   -- geen betekenisvolle historie: vensters zijn kortlevend
+    alter table login_private.break_glass_activeringen add column mfa_geverifieerd_op timestamptz not null;
+  end if;
+end $$;
+-- Eén verhoging per MFA-verificatie, atomair afgedwongen: een tweede poging met
+-- dezelfde verificatie botst op deze index in plaats van op applicatielogica.
+create unique index if not exists break_glass_activering_mfa_eenmalig
+  on login_private.break_glass_activeringen (user_id, mfa_geverifieerd_op);
 comment on table login_private.break_glass_activeringen is
   '#344: kortlopend activeringsvenster per verhoging naar de normale rol; bron voor `breakglass.gebruikt` en voor het aflopen van de verhoogde sessie.';
 create index if not exists break_glass_activering_user_idx on login_private.break_glass_activeringen (user_id, venster_tot desc);
@@ -573,32 +591,56 @@ begin
   return null;
 end $$;
 
--- Opent (of hergebruikt) het activeringsvenster van een verhoogde break-glass-
--- sessie. De guard roept dit aan bij het eerste serververzoek van een AAL2-sessie;
--- per venster verschijnt precies één `breakglass.gebruikt` in de audit, zodat
--- herhaald gebruik zichtbaar en alarmeerbaar is.
+-- Opent het activeringsvenster van een verhoogde break-glasssessie. De verhoging
+-- hangt aan ÉÉN MFA-verificatie: die moet er zijn (fail-closed bij een ontbrekende
+-- amr-timestamp), vers zijn, en mag maar één keer worden gebruikt. Zonder die drie
+-- eisen kon een oude AAL2-sessie na afloop van het venster telkens opnieuw
+-- verhogen zonder nieuwe code (reviewbevinding P1, ronde 3). De eenmaligheid komt
+-- van een unieke index, dus twee gelijktijdige pogingen kunnen elkaar niet
+-- inhalen. Elke geopende verhoging levert precies één `breakglass.gebruikt`.
+drop function if exists login_private.open_breakglass_venster(uuid, integer, text);
 create or replace function login_private.open_breakglass_venster(
-  p_user uuid, p_venster_seconden integer, p_correlatie text
+  p_user uuid, p_mfa_op timestamptz, p_venster_seconden integer, p_correlatie text
 ) returns table(venster_tot timestamptz, categorie text)
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
-declare r break_glass%rowtype; v_tot timestamptz;
+declare
+  r break_glass%rowtype;
+  v_tot timestamptz;
+  -- Hoe vers moet de MFA-verificatie zijn? Ruim genoeg voor klokverschil tussen
+  -- GoTrue en Postgres, kort genoeg dat een oude sessie er niets aan heeft.
+  c_max_leeftijd constant interval := interval '5 minutes';
+  c_max_vooruit  constant interval := interval '1 minute';
 begin
   if p_venster_seconden is null or p_venster_seconden < 60 or p_venster_seconden > 28800 then
     return query select null::timestamptz, 'ongeldige_geldigheid'::text; return;
+  end if;
+  if p_mfa_op is null then
+    return query select null::timestamptz, 'mfa_ontbreekt'::text; return;
+  end if;
+  if p_mfa_op > now() + c_max_vooruit or now() - p_mfa_op > c_max_leeftijd then
+    return query select null::timestamptz, 'mfa_verlopen'::text; return;
   end if;
   select * into r from break_glass g where g.user_id = p_user and g.ingetrokken_op is null limit 1;
   if not found then
     return query select null::timestamptz, 'onbekende_uitzondering'::text; return;
   end if;
+  -- Idempotent binnen dezelfde verificatie: een tweede aanroep tijdens een lopend
+  -- venster geeft dat venster terug zonder een extra auditregel.
   select a.venster_tot into v_tot from break_glass_activeringen a
-   where a.user_id = p_user and a.venster_tot > now()
-   order by a.venster_tot desc limit 1;
+   where a.user_id = p_user and a.mfa_geverifieerd_op = p_mfa_op and a.venster_tot > now();
   if found and v_tot is not null then
-    return query select v_tot, null::text; return;                        -- venster loopt al
+    return query select v_tot, null::text; return;
   end if;
-  insert into break_glass_activeringen (break_glass_id, fonds_id, user_id, venster_tot, correlatie_id)
-  values (r.id, r.fonds_id, p_user, now() + make_interval(secs => p_venster_seconden), p_correlatie)
-  returning break_glass_activeringen.venster_tot into v_tot;
+  begin
+    insert into break_glass_activeringen (break_glass_id, fonds_id, user_id, mfa_geverifieerd_op, venster_tot, correlatie_id)
+    values (r.id, r.fonds_id, p_user, p_mfa_op, now() + make_interval(secs => p_venster_seconden), p_correlatie)
+    returning break_glass_activeringen.venster_tot into v_tot;
+  exception when unique_violation then
+    -- Deze MFA-verificatie is al eens gebruikt; er moet een nieuwe komen.
+    insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
+    values (r.fonds_id, p_user, 'breakglass.geweigerd', 'mfa_hergebruikt', p_correlatie);
+    return query select null::timestamptz, 'mfa_hergebruikt'::text; return;
+  end;
   insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
   values (r.fonds_id, p_user, 'breakglass.gebruikt', r.reden_categorie, p_correlatie);
   return query select v_tot, null::text;
@@ -837,7 +879,7 @@ revoke all on function login_private.maak_uitnodiging(uuid, uuid, text, integer,
 revoke all on function login_private.activeer_uitnodiging(text, uuid, integer, text)                from public, anon, authenticated, service_role;
 revoke all on function login_private.trek_uitnodiging_in(uuid, uuid, uuid, text)                    from public, anon, authenticated, service_role;
 revoke all on function login_private.sessiebeleid(uuid)                                             from public, anon, authenticated, service_role;
-revoke all on function login_private.open_breakglass_venster(uuid, integer, text)                   from public, anon, authenticated, service_role;
+revoke all on function login_private.open_breakglass_venster(uuid, timestamptz, integer, text)      from public, anon, authenticated, service_role;
 revoke all on function login_private.breakglass_overzicht(uuid)                                     from public, anon, authenticated, service_role;
 
 grant execute on function login_private.lees_config(uuid)                                          to login_gateway;
@@ -852,7 +894,7 @@ grant execute on function login_private.maak_uitnodiging(uuid, uuid, text, integ
 grant execute on function login_private.activeer_uitnodiging(text, uuid, integer, text)            to login_gateway;
 grant execute on function login_private.trek_uitnodiging_in(uuid, uuid, uuid, text)                to login_gateway;
 grant execute on function login_private.sessiebeleid(uuid)                                         to login_gateway;
-grant execute on function login_private.open_breakglass_venster(uuid, integer, text)               to login_gateway;
+grant execute on function login_private.open_breakglass_venster(uuid, timestamptz, integer, text)   to login_gateway;
 grant execute on function login_private.breakglass_overzicht(uuid)                                 to login_gateway;
 
 -- ── 11. Hookhelper voor het wachtwoordpad ───────────────────────────────────
@@ -906,17 +948,18 @@ create or replace function login_private.wachtwoordlogin_niveau(
        where g.user_id = p_user and g.ingetrokken_op is null)
       then case
         when not coalesce(p_aal2, false) then 'beperkt'
-        -- Verhoogd zijn mag UITSLUITEND binnen een reeds bestaand, lopend venster
-        -- dat bij DEZE MFA-verificatie hoort. Bestaat dat venster nog niet, dan
-        -- blijft de sessie beperkt: het openen ervan is een expliciete, geaudite
-        -- handeling (POST /api/microsoft-login/verhoging), geen bijwerking van een
-        -- willekeurig verzoek. Zonder deze regel kon een client de app overslaan en
-        -- rechtstreeks bij GoTrue refreshen — volledige tokens zonder venster en
-        -- zonder auditregel (reviewbevinding P1, 7 september).
+        when p_mfa_op is null then 'beperkt'          -- geen amr-tijdstip = fail-closed
+        -- Verhoogd zijn mag UITSLUITEND binnen een lopend venster dat aan EXACT
+        -- deze MFA-verificatie hangt. Bestaat dat venster niet, dan blijft de
+        -- sessie beperkt: het openen is een expliciete, geaudite handeling
+        -- (POST /api/microsoft-login/verhoging), geen bijwerking van een
+        -- willekeurig verzoek. Zonder deze regel kon een client de app overslaan
+        -- en rechtstreeks bij GoTrue refreshen; zonder de EXACTE binding kon een
+        -- oude AAL2-sessie na afloop eindeloos opnieuw verhogen.
         when exists (
           select 1 from login_private.break_glass_activeringen a
            where a.user_id = p_user
-             and (p_mfa_op is null or a.geopend_op >= p_mfa_op)
+             and a.mfa_geverifieerd_op = p_mfa_op
              and a.venster_tot > pg_catalog.now()) then 'vol'
         else 'beperkt'
       end
@@ -932,7 +975,7 @@ revoke login_hook_owner from postgres;
 -- Leesrechten van de helper: uitsluitend de kolommen die de beslissing dragen.
 grant select (modus) on public.fonds_microsoft_login to login_hook_owner;
 grant select (user_id, fonds_id, ingetrokken_op) on login_private.break_glass to login_hook_owner;
-grant select (user_id, geopend_op, venster_tot) on login_private.break_glass_activeringen to login_hook_owner;
+grant select (user_id, mfa_geverifieerd_op, venster_tot) on login_private.break_glass_activeringen to login_hook_owner;
 drop policy if exists "hook owner leest breakglass-activeringen" on login_private.break_glass_activeringen;
 create policy "hook owner leest breakglass-activeringen" on login_private.break_glass_activeringen
   for select to login_hook_owner using (true);

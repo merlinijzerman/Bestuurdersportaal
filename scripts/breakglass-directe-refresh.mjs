@@ -19,7 +19,9 @@
 //    3. DIRECTE refresh, app overgeslagen         → nog steeds beperkt   ← P1
 //    4. venster geopend (zoals de verhogingsroute) → normale rol
 //    5. venster verlopen, opnieuw refreshen       → weer beperkt
-//    6. PostgREST met een beperkt token           → 403 op documenten
+//    6. DEZELFDE AAL2-sessie probeert opnieuw te verhogen → geweigerd  ← P1 (ronde 3)
+//    7. pas ná een NIEUWE MFA-verificatie mag een volgend venster ontstaan
+//    8. PostgREST met een beperkt token           → 403 op documenten
 //
 //  Draaien:  TEST_DATABASE_URL=… node scripts/breakglass-directe-refresh.mjs
 //  Zonder bereikbare stack stopt de test met een duidelijke melding; in CI
@@ -87,6 +89,23 @@ const json = async (res) => {
   try { return JSON.parse(tekst); } catch { return tekst; }
 };
 const claims = (token) => JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+/** Het MFA-verificatietijdstip uit amr, als ISO-tekst voor psql. */
+const mfaOp = (token) => {
+  const amr = claims(token).amr ?? [];
+  const stempels = amr.filter((e) => ["totp", "mfa", "webauthn"].includes(e?.method)).map((e) => e.timestamp);
+  return stempels.length ? new Date(Math.max(...stempels) * 1000).toISOString() : null;
+};
+/** Opent het venster zoals POST /api/microsoft-login/verhoging dat doet, en geeft
+ *  uitsluitend de uitkomst terug ('ok' of de foutcategorie). psql echoot ook
+ *  BEGIN/SET/COMMIT; die regels filteren we eruit. */
+const verhoog = (uid, op, correlatie) => {
+  const uit = psql(`begin;
+          set local role login_gateway;
+          select coalesce(categorie, 'ok') from login_private.open_breakglass_venster('${uid}', ${op ? `'${op}'::timestamptz` : "null"}, 3600, '${correlatie}');
+        commit;`);
+  const regels = uit.split("\n").map((r) => r.trim()).filter((r) => r && !["BEGIN", "SET", "COMMIT", "ROLLBACK"].includes(r));
+  return regels[regels.length - 1] ?? "";
+};
 
 let fouten = 0;
 function eis(voorwaarde, boodschap) {
@@ -180,11 +199,12 @@ async function main() {
       "en er is nog steeds geen activeringsvenster");
 
   // ── 4. venster geopend (wat de verhogingsroute doet) ─────────────────────
-  psql(`begin;
-          set local role login_gateway;
-          select login_private.open_breakglass_venster('${uid}', 3600, 'refreshtest');
-        commit;`);
+  const eersteMfa = mfaOp(verify.access_token);
+  eis(eersteMfa !== null, "het token draagt een MFA-verificatietijdstip in amr");
+  eis(verhoog(uid, null, "refreshtest-geen-mfa") === "mfa_ontbreekt", "zonder amr-tijdstip weigert de database");
+  eis(verhoog(uid, eersteMfa, "refreshtest") === "ok", "met een verse MFA-verificatie opent het venster");
   sessie = await refresh(sessie.refresh_token);
+  eis(mfaOp(sessie.access_token) === eersteMfa, "een refresh houdt dezelfde MFA-verificatie in amr");
   eis(claims(sessie.access_token).role === "authenticated", "mét venster geeft de refresh de normale rol");
   eis(psql(`select count(*) from login_private.audit_log where user_id = '${uid}' and gebeurtenis = 'breakglass.gebruikt'`) === "1",
       "precies één `breakglass.gebruikt` in de audit");
@@ -196,7 +216,42 @@ async function main() {
   sessie = await refresh(sessie.refresh_token);
   eis(claims(sessie.access_token).role === "portaal_beperkt", "na afloop van het venster zakt de sessie terug");
 
-  // ── 6. PostgREST met een beperkt token ──────────────────────────────────
+  // ── 6. dezelfde AAL2-sessie mag NIET opnieuw verhogen ───────────────────
+  const nogmaals = verhoog(uid, eersteMfa, "refreshtest-herhaal");
+  eis(nogmaals !== "ok", `dezelfde MFA-verificatie opent geen tweede venster (kreeg ${nogmaals})`);
+  sessie = await refresh(sessie.refresh_token);
+  eis(claims(sessie.access_token).role === "portaal_beperkt", "… en de sessie blijft beperkt");
+  eis(psql(`select count(*) from login_private.audit_log where user_id = '${uid}' and gebeurtenis = 'breakglass.gebruikt'`) === "1",
+      "er komt geen tweede `breakglass.gebruikt` bij");
+
+  // ── 7. pas ná een NIEUWE MFA-verificatie mag er weer een venster komen ──
+  const ch2 = await json(await fetch(`${API}/auth/v1/factors/${factorId}/challenge`, {
+    method: "POST", headers: { apikey: ANON, Authorization: `Bearer ${sessie.access_token}`, "Content-Type": "application/json" }, body: "{}",
+  }));
+  // De TOTP-code moet uit een NIEUW tijdvenster komen, anders herkent GoTrue haar
+  // als hergebruik van dezelfde code.
+  await new Promise((r) => setTimeout(r, 31_000));
+  const verify2 = await json(await fetch(`${API}/auth/v1/factors/${factorId}/verify`, {
+    method: "POST", headers: { apikey: ANON, Authorization: `Bearer ${sessie.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ challenge_id: ch2.id, code: maakTotp(SECRET) }),
+  }));
+  if (!verify2?.access_token) stop(`tweede MFA-verificatie mislukt: ${JSON.stringify(verify2).slice(0, 200)}`);
+  const tweedeMfa = mfaOp(verify2.access_token);
+  eis(tweedeMfa !== eersteMfa, "de tweede verificatie draagt een nieuw tijdstip");
+  eis(verhoog(uid, tweedeMfa, "refreshtest-tweede") === "ok", "met een NIEUWE verificatie mag het wél");
+  sessie = await refresh(verify2.refresh_token);
+  eis(claims(sessie.access_token).role === "authenticated", "en de sessie is weer verhoogd");
+  eis(psql(`select count(*) from login_private.audit_log where user_id = '${uid}' and gebeurtenis = 'breakglass.gebruikt'`) === "2",
+      "de tweede verhoging staat als aparte auditregel");
+
+  // Terug naar beperkt voor de PostgREST-controle hieronder.
+  psql(`update login_private.break_glass_activeringen
+           set geopend_op = now() - interval '2 hours', venster_tot = now() - interval '1 hour'
+         where user_id = '${uid}'`);
+  sessie = await refresh(sessie.refresh_token);
+  eis(claims(sessie.access_token).role === "portaal_beperkt", "en zakt na afloop opnieuw terug");
+
+  // ── 8. PostgREST met een beperkt token ──────────────────────────────────
   const rest = await fetch(`${API}/rest/v1/documenten?select=id&limit=1`, {
     headers: { apikey: ANON, Authorization: `Bearer ${sessie.access_token}` },
   });

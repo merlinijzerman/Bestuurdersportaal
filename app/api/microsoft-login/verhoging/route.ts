@@ -20,7 +20,7 @@ import { microsoftLoginGeconfigureerd } from "@/core/lib/microsoft-login-config"
 import { openBreakglassVenster, sessiebeleid } from "@/core/lib/microsoft-login-gateway";
 import { microsoftLoginFoutcategorie } from "@/core/lib/microsoft-login-error-core";
 import { huidigAccessToken } from "@/core/lib/microsoft-login-sessieguard";
-import { aalUitAccessToken } from "@/core/lib/microsoft-login-sessieguard-core";
+import { aalUitAccessToken, mfaVerificatieUitAccessToken } from "@/core/lib/microsoft-login-sessieguard-core";
 import { BREAKGLASS_VENSTER_SECONDEN, magBreakglassVerhogen } from "@/core/lib/microsoft-login-beleid-core";
 
 export const dynamic = "force-dynamic";
@@ -35,19 +35,27 @@ export const POST = withFondsRoute(
       return NextResponse.json({ error: "Noodtoegang is niet beschikbaar." }, { status: 404, headers: NO_STORE });
     }
     try {
-      const aal = aalUitAccessToken(await huidigAccessToken(ctx.supabase));
+      const token = await huidigAccessToken(ctx.supabase);
+      const aal = aalUitAccessToken(token);
+      // De verhoging hangt aan ÉÉN MFA-verificatie. Zonder tijdstip is er niets om
+      // haar aan te hangen; de database weigert dat ook, dit is de vroege poort.
+      const mfaGeverifieerdOp = mfaVerificatieUitAccessToken(token);
       const beleid = await sessiebeleid(ctx.gebruikerId);
-      if (!magBreakglassVerhogen({ beleid, aal })) {
+      if (!magBreakglassVerhogen({ beleid, aal, mfaGeverifieerdOp })) {
         // Geen aanwijzing, nog geen AAL2, of er loopt al een venster: in alle drie
         // de gevallen valt er niets te openen. Eén neutrale melding.
         return NextResponse.json({ error: "Noodtoegang kan nu niet worden geopend." }, { status: 403, headers: NO_STORE });
       }
       const r = await openBreakglassVenster({
         userId: ctx.gebruikerId,
+        mfaGeverifieerdOp: mfaGeverifieerdOp!,
         vensterSeconden: BREAKGLASS_VENSTER_SECONDEN,
         correlatieId: crypto.randomUUID(),
       });
       if ("categorie" in r) {
+        // De database is hier de autoriteit: zij weigert een ontbrekende, verlopen
+        // of reeds gebruikte MFA-verificatie — ook als deze route zou worden omzeild.
+        console.warn(`[MICROSOFT-LOGIN] verhoging geweigerd: ${r.categorie}`);
         return NextResponse.json({ error: "Noodtoegang kan nu niet worden geopend." }, { status: 403, headers: NO_STORE });
       }
       return NextResponse.json({ ok: true, vensterTot: r.vensterTot.toISOString() }, { headers: NO_STORE });

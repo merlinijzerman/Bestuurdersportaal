@@ -151,8 +151,17 @@ export function beoordeelPortaalSessieKern(args: {
 export function magBreakglassVerhogen(args: {
   beleid: Sessiebeleid | null;
   aal?: string | null;
+  /** Tijdstip van de MFA-verificatie uit het token. Ontbreekt het, dan is er
+   *  niets om de verhoging aan te hangen en gaat de poort dicht. */
+  mfaGeverifieerdOp?: Date | null;
 }): boolean {
-  return !!args.beleid && args.beleid.breakGlass && args.aal === "aal2" && args.beleid.breakglassVensterTot === null;
+  return (
+    !!args.beleid &&
+    args.beleid.breakGlass &&
+    args.aal === "aal2" &&
+    args.mfaGeverifieerdOp instanceof Date &&
+    args.beleid.breakglassVensterTot === null
+  );
 }
 
 /** Standaardduur van een break-glassverhoging. Kort en apart geaudit; de
@@ -200,6 +209,9 @@ export const BELEID_FOUTCATEGORIEEN = [
   "ongeldige_geldigheid",
   "ongeldig_token",
   "uitnodiging_ongeldig",
+  "mfa_ontbreekt",
+  "mfa_verlopen",
+  "mfa_hergebruikt",
   "tenant_mismatch",
   "fonds_mismatch",
   "onbekende_binding",
@@ -243,6 +255,10 @@ export function activeringWeigering(categorie: BeleidFoutcategorie | null, onged
       return "Er is geen noodtoegangsaccount met bevestigde tweestapsverificatie.";
     case "breakglass_onverifieerbaar":
       return "De tweestapsverificatie van het noodtoegangsaccount kan niet worden gecontroleerd.";
+    case "mfa_ontbreekt":
+    case "mfa_verlopen":
+    case "mfa_hergebruikt":
+      return "Voer de tweestapsverificatie opnieuw uit om noodtoegang te openen.";
     case "tenant_ontbreekt":
       return "Er is nog geen Microsoft-tenant vastgelegd voor dit fonds.";
     case "config_ontbreekt":

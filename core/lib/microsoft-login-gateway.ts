@@ -269,13 +269,14 @@ export async function sessiebeleid(userId: string): Promise<Sessiebeleid | null>
   };
 }
 
-/** Opent (of hergebruikt) het activeringsvenster van een verhoogde
- *  break-glasssessie en levert daarmee de auditgebeurtenis `breakglass.gebruikt`.
- *  De guard roept dit aan bij het eerste serververzoek van zo'n sessie. */
-export async function openBreakglassVenster(args: { userId: string; vensterSeconden: number; correlatieId: string }): Promise<{ vensterTot: Date } | { categorie: BeleidFoutcategorie }> {
+/** Opent het activeringsvenster van een verhoogde break-glasssessie en levert
+ *  daarmee de auditgebeurtenis `breakglass.gebruikt`. De verhoging hangt aan ÉÉN
+ *  MFA-verificatie: de database eist dat het tijdstip er is, vers is en nog niet
+ *  is gebruikt — dat laatste atomair via een unieke index. */
+export async function openBreakglassVenster(args: { userId: string; mfaGeverifieerdOp: Date; vensterSeconden: number; correlatieId: string }): Promise<{ vensterTot: Date } | { categorie: BeleidFoutcategorie }> {
   const rijen = await roep<{ venster_tot: Date | string | null; categorie: string | null }>(
-    "select venster_tot, categorie from login_private.open_breakglass_venster($1,$2,$3)",
-    [args.userId, args.vensterSeconden, args.correlatieId]
+    "select venster_tot, categorie from login_private.open_breakglass_venster($1,$2,$3,$4)",
+    [args.userId, args.mfaGeverifieerdOp, args.vensterSeconden, args.correlatieId]
   );
   const r = rijen[0];
   if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");

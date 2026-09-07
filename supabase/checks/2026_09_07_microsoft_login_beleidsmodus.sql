@@ -244,7 +244,7 @@ declare
   v_token text := 'geheim-token-voor-de-suite';
   v_hash text;
   v_hash2 text;
-  v_id uuid; v_n integer; v_cat text; v_res jsonb; v_user uuid; v_venster timestamptz;
+  v_id uuid; v_n integer; v_cat text; v_res jsonb; v_user uuid; v_venster timestamptz; v_mfa_op timestamptz;
   v_pre record; v_beleid record;
   ev_pw jsonb; ev_pw2 jsonb; ev_pw2_aal2 jsonb; ev_magic jsonb; ev_recovery jsonb; ev_oauth1 jsonb; ev_refresh1 jsonb;
 begin
@@ -278,9 +278,14 @@ begin
              'claims', jsonb_build_object('sub', v_u1, 'role', 'authenticated', 'amr', jsonb_build_array(jsonb_build_object('method','password','timestamp',0))));
   ev_pw2 := jsonb_build_object('user_id', v_u2, 'authentication_method', 'password',
              'claims', jsonb_build_object('sub', v_u2, 'role', 'authenticated', 'amr', jsonb_build_array(jsonb_build_object('method','password','timestamp',0))));
+  -- Het MFA-tijdstip waaraan de verhoging hangt; het event draagt exact dezelfde
+  -- amr-timestamp, zodat hook en gateway over dezelfde verificatie praten.
+  v_mfa_op := date_trunc('second', now());
   ev_pw2_aal2 := jsonb_build_object('user_id', v_u2, 'authentication_method', 'password',
              'claims', jsonb_build_object('sub', v_u2, 'role', 'authenticated', 'aal', 'aal2',
-               'amr', jsonb_build_array(jsonb_build_object('method','password','timestamp',0), jsonb_build_object('method','totp','timestamp',0))));
+               'amr', jsonb_build_array(
+                 jsonb_build_object('method','password','timestamp', extract(epoch from v_mfa_op)::bigint),
+                 jsonb_build_object('method','totp','timestamp', extract(epoch from v_mfa_op)::bigint))));
   ev_magic := jsonb_build_object('user_id', v_u1, 'authentication_method', 'magiclink',
              'claims', jsonb_build_object('sub', v_u1, 'role', 'authenticated', 'amr', jsonb_build_array(jsonb_build_object('method','magiclink','timestamp',0))));
   ev_recovery := jsonb_build_object('user_id', v_u1, 'authentication_method', 'recovery',
@@ -580,11 +585,20 @@ begin
    where user_id = v_u2 and gebeurtenis = 'breakglass.gebruikt';
   assert v_n = 0, 'M20: … en er is niets geaudit, want er is niets verhoogd';
 
-  -- Pas de expliciete verhoging opent het venster én schrijft één auditregel.
+  -- Pas de expliciete verhoging opent het venster én schrijft één auditregel. Zij
+  -- hangt aan ÉÉN MFA-verificatie: zonder tijdstip, met een oud tijdstip of met een
+  -- reeds gebruikt tijdstip gaat de poort dicht (reviewbevinding P1, ronde 3).
   set local role login_gateway;
-  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, 3600, 'corr-m20') r;
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, null, 3600, 'corr-m20-geen') r;
+  assert v_cat = 'mfa_ontbreekt', 'M20: zonder amr-tijdstip fail-closed';
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, now() - interval '30 minutes', 3600, 'corr-m20-oud') r;
+  assert v_cat = 'mfa_verlopen', 'M20: een oude MFA-verificatie opent niets';
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, now() + interval '10 minutes', 3600, 'corr-m20-toekomst') r;
+  assert v_cat = 'mfa_verlopen', 'M20: een tijdstip uit de toekomst evenmin';
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, v_mfa_op, 3600, 'corr-m20') r;
   assert v_cat is null, 'M20: venster geopend';
-  perform login_private.open_breakglass_venster(v_u2, 3600, 'corr-m20b');   -- hergebruikt
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, v_mfa_op, 3600, 'corr-m20b') r;
+  assert v_cat is null, 'M20: tweede aanroep binnen hetzelfde venster is idempotent';
   reset role;
   select count(*) into v_n from login_private.audit_log
    where user_id = v_u2 and gebeurtenis = 'breakglass.gebruikt';
@@ -597,6 +611,17 @@ begin
      set geopend_op = now() - interval '2 hours', venster_tot = now() - interval '1 hour';
   assert public.fn_access_token_hook(ev_pw2_aal2)->'claims'->>'role' = 'portaal_beperkt',
     'M20: na afloop van het venster zakt de verhoogde sessie terug naar de beperkte rol';
+  -- DEZELFDE (oude) AAL2-sessie mag daarna niet opnieuw verhogen: haar
+  -- MFA-verificatie is verbruikt én te oud. Zonder deze grendel was het venster
+  -- feitelijk onbeperkt heropenbaar (reviewbevinding P1, ronde 3).
+  set local role login_gateway;
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, v_mfa_op, 3600, 'corr-m20-herhaal') r;
+  assert v_cat in ('mfa_hergebruikt','mfa_verlopen'),
+    format('M20: dezelfde MFA-verificatie opent geen tweede venster (kreeg %s)', coalesce(v_cat,'null'));
+  reset role;
+  select count(*) into v_n from login_private.audit_log
+   where user_id = v_u2 and gebeurtenis = 'breakglass.gebruikt';
+  assert v_n = 1, 'M20: en er komt geen tweede breakglass.gebruikt bij';
   -- Een NIEUWE MFA-verificatie (latere amr-timestamp) geeft óók geen volledige rol
   -- zolang er geen bijbehorend venster is — verhogen blijft een expliciete stap.
   assert public.fn_access_token_hook(
@@ -607,7 +632,7 @@ begin
     'M20: ook een verse MFA-verificatie verhoogt niet vanzelf';
   -- Intrekken van de aanwijzing beëindigt lopende verhogingen.
   set local role login_gateway;
-  perform login_private.open_breakglass_venster(v_u2, 3600, 'corr-m20d');
+  perform login_private.open_breakglass_venster(v_u2, now() - interval '10 seconds', 3600, 'corr-m20d');
   reset role;
   select g.id into v_id from login_private.break_glass g where g.user_id = v_u2 and g.ingetrokken_op is null;
   set local role login_gateway;

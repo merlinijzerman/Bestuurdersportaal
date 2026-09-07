@@ -57,8 +57,8 @@ L1  Auth-hook (public.fn_access_token_hook, SECURITY INVOKER als supabase_auth_a
         · koppel-/herstelvenster open                          → 'beperkt'
         · break-glassaanwijzing zonder geverifieerde MFA       → 'geweigerd'
         · break-glass mét MFA, sessie op AAL1                  → 'beperkt'
-        · break-glass mét MFA op AAL2 én een lopend venster    → 'vol'
-        · break-glass mét MFA op AAL2 zonder (lopend) venster  → 'beperkt'
+        · break-glass, AAL2, lopend venster van DEZE MFA-verificatie → 'vol'
+        · break-glass, AAL2, geen amr-tijdstip of geen bijpassend venster → 'beperkt'
       'beperkt' = hetzelfde token met claim `role = portaal_beperkt`; 'geweigerd' = 403.
 
 L2  Startroutes (host → fonds → configuratie → modus)         geen knop, geen flow in `uit`
@@ -139,9 +139,16 @@ als het niet lukt. Pas daarna vernieuwt de client zijn token en volgt de normale
 
 Die volgorde is bewust: zou het venster als bijwerking van een willekeurig verzoek ontstaan, dan kan
 een client de app overslaan en rechtstreeks bij GoTrue refreshen — en volledige tokens houden zonder
-venster en zonder auditregel (besluit 0212 D12). Loopt het venster af, dan zakt de sessie bij de
-eerstvolgende tokenuitgifte terug naar de beperkte rol en zijn een nieuwe MFA-verificatie én een
-nieuwe verhogingsaanroep nodig. Intrekken van de aanwijzing beëindigt lopende verhogingen direct.
+venster en zonder auditregel (besluit 0212 D12).
+
+**Elke verhoging hangt aan één MFA-verificatie** (0212 D14). De activering legt het tijdstip uit de
+`amr`-claim vast; dat tijdstip moet er zijn (anders `mfa_ontbreekt`), vers zijn (ouder dan vijf
+minuten is `mfa_verlopen`) en mag maar één keer worden gebruikt — afgedwongen door een unieke index
+op `(user_id, mfa_geverifieerd_op)`, dus atomair en niet door de route. De hook koppelt op exact
+datzelfde tijdstip. Zonder die binding kon een oude AAL2-sessie, die haar AAL na afloop behoudt,
+telkens opnieuw verhogen zonder nieuwe code. Nu is na afloop een nieuwe `challengeAndVerify` nodig,
+en die opent een nieuw, apart geaudit venster. Intrekken van de aanwijzing beëindigt lopende
+verhogingen direct.
 
 **Verloopbewaking.** `herzien_voor` blokkeert niets, maar preflight (`breakglass_herziening_verlopen`),
 het beheeroverzicht (`breakglass_overzicht`) en het runbook melden dat een aanwijzing herzien moet
@@ -223,7 +230,7 @@ het *fondsbeleid*, niet over het bestaan van een account.
 | Pure beslisregels (modi, uitzonderingen, fail-richting, tokenvorm) | `core/lib/microsoft-login-beleid-core.sanity.ts` |
 | Bron-invarianten (migratie, rollback, gateway, guard, routes, capability, CI) | `tests/cross-tenant/microsoft-login-beleid-contract.test.ts` |
 | DB-structuur en -gedrag (19 scenario's, zelf-seedend, eindigt op `rollback`) | `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql` |
-| **Echte GoTrue + PostgREST** — directe refresh zonder de app, negatieve controle uitgevoerd | `scripts/breakglass-directe-refresh.mjs` (in `cross-tenant-ci.sh`) |
+| **Echte GoTrue + PostgREST** — directe refresh zonder de app, hergebruik van een MFA-verificatie, tweede verificatie; twee negatieve controles uitgevoerd | `scripts/breakglass-directe-refresh.mjs` (in `cross-tenant-ci.sh`) |
 | Bijgewerkt op de veranderde feiten | F1B-suite en -contracttest, R1-gate (uitzondering `login_hook_owner`), karakteriseringssuite `login-keten` |
 
 De gedragssuite bewijst onder meer: de beperkte rol kan géén documenten, fondsen of storage lezen

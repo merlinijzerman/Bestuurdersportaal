@@ -260,7 +260,9 @@ haar nooit iets anders — dat is precies de begrenzing waarop het beleid rust.
   `POST /api/microsoft-login/verhoging`, wat precies één `breakglass.gebruikt` in
   `login_private.audit_log` oplevert. Daarna vernieuwt de client zijn token en volgt de normale rol.
   Loopt het venster (een uur) af, dan zakt de sessie terug en zijn een nieuwe MFA-verificatie én een
-  nieuwe verhoging nodig. Intrekken van de aanwijzing beëindigt lopende verhogingen onmiddellijk.
+  nieuwe verhoging nodig: elke verhoging hangt aan één verificatie, die vers moet zijn (< 5 minuten)
+  en maar één keer bruikbaar is. Dezelfde AAL2-sessie kan het venster dus niet heropenen zonder
+  nieuwe code. Intrekken van de aanwijzing beëindigt lopende verhogingen onmiddellijk.
 - **Monitoring:** meer dan een handvol `breakglass.gebruikt`-regels per maand, of een aanwijzing
   waarvan `herzien_voor` is verstreken, hoort een gesprek te zijn — niet een gewoonte.
 - Controleer vooraf `login_private.activering_preflight(<fonds>)`: `gereed = true` en
@@ -300,7 +302,7 @@ het vast in de audit en houd het venster kort.
 | 8a | Break-glassaccount, alleen wachtwoord | login lukt, maar het token draagt `role = portaal_beperkt`; een rechtstreekse `GET /rest/v1/documenten` met dat token geeft 403 en het portaal stuurt naar `/beperkte-toegang` |
 | 8b | Break-glassaccount, ná MFA-verificatie én verhoging | normale rol; portaal bereikbaar; precies één `breakglass.gebruikt` in de audit |
 | 8b' | Break-glassaccount, ná MFA maar **zonder** verhoging (bijv. rechtstreeks refreshen) | blijft `portaal_beperkt`; geen auditregel — dit is de regressie uit reviewbevinding P1 |
-| 8c | Break-glassaccount ná afloop van het uur | sessie zakt terug naar de beperkte rol; opnieuw verifiëren opent een nieuw venster (nieuwe auditregel) |
+| 8c | Break-glassaccount ná afloop van het uur | sessie zakt terug naar de beperkte rol; een verhoging met dezelfde (oude) MFA-verificatie wordt geweigerd; pas een nieuwe verificatie opent een nieuw venster (nieuwe auditregel) |
 | 9 | Break-glass ingetrokken of MFA-factor onverified | 403 |
 | 10 | Platformbeheerder en een gebruiker van een ander fonds | ongewijzigd (modus is strikt per fonds) |
 
