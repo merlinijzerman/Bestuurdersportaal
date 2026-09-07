@@ -154,7 +154,13 @@ OIDC-defaultscope `offline_access` toe, ook als de aanroep alleen `openid profil
 Productiecode bouwt daarom zelf de authorize- en tokenrequest, gebruikt geen tokencache en
 weigert een tokenresponse met een `refresh_token`. Discovery en JWKS worden uitsluitend via
 `https://login.microsoftonline.com` geladen; alleen RS256 en exact één passende `kid` zijn
-toegestaan.
+toegestaan. [Microsoft documenteert](https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc#successful-token-response)
+dat het `scope`-veld van het meegeleverde access-token ook eerder aan de app verleende
+Graph-scopes kan bevatten. Daarom eist de validator, als het
+veld aanwezig is, minimaal de aangevraagde `openid profile`; extra scopes veranderen de
+loginbeslissing niet. Het access-token wordt onmiddellijk verworpen en nooit opgeslagen,
+gelogd of gebruikt. De aanvraag zelf blijft exact `openid profile` en de appregistratie blijft
+tot die twee OIDC-permissies beperkt.
 
 **Consent-UX.** In de pilot gebruiken we persoonlijke consent; een beheerder laat daarbij
 `Toestemming namens uw organisatie` uitgevinkt. Microsoft toont die keuze alleen aan voldoende
@@ -446,6 +452,8 @@ Foutafhandeling en neutrale meldingen ongewijzigd; correlatie-id als supportcode
 
 1. Scopes exact `openid profile`; nergens `email`, `offline_access`, Graph-scopes. De authorize-
    én tokenrequest worden als contract getest; een tokenresponse met `refresh_token` faalt gesloten.
+   Een aanwezig response-`scope`-veld moet `openid profile` bevatten. Extra scopes op het
+   ongebruikte access-token worden genegeerd; het access-token wordt nooit opgeslagen of gebruikt.
 2. Geen `fetch` naar `graph.microsoft.com`; login-code importeert niets uit `microsoft-vault`/`-connector`/`-config`.
 3. Geen `service_role`/`SUPABASE_SERVICE_ROLE_KEY`/`supabase-platform` in login-code; gateway en guard `server-only`.
 4. Geen `accessToken|idToken|refreshToken|email` in log-/auditpaden; `no-store`.

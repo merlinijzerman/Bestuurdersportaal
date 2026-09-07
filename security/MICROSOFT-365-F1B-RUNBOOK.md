@@ -172,6 +172,14 @@ de Vercel-runtime-log op `[MICROSOFT-LOGIN]` met die code voor de interne catego
 `login_private.audit_log` op `correlatie_id like '<code-in-kleine-letters>%'`. Geen van beide
 bevat tokens, codes, `state`/`nonce`, claims of e-mailadressen.
 
+**Microsoft response-scopes:** de start- en tokenrequest vragen exact `openid profile` en een
+`refresh_token` wordt altijd geweigerd. Het responseveld `scope` beschrijft echter het tegelijk
+uitgegeven access-token en kan volgens [Microsofts OIDC-documentatie](https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc#successful-token-response)
+ook eerder verleende Graph-scopes bevatten.
+Die extra scopes zijn daarom geen callbackfout: het access-token wordt direct verworpen en nooit
+opgeslagen, gelogd of gebruikt. Controleer tijdens onboarding afzonderlijk dat App L zelf alleen
+de twee bedoelde OIDC-permissies heeft.
+
 **Lokaal/E2E:** `tests/e2e/fixtures/oidc-stub.mjs` speelt Entra na (dubbel gegrendeld via
 `MICROSOFT_LOGIN_E2E_OIDC=local` + `SEED_DOELOMGEVING=local` + lokale Supabase-URL). De positieve
 sign-in/link tegen GoTrue vereist de echte Microsoft-JWKS en is alleen met spike T0.5 en de

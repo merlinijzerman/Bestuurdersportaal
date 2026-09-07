@@ -27,7 +27,8 @@ export const TOKEN_RESPONSE_AFWIJSREDENEN = [
   "refresh_token_aanwezig",
   "id_token_ontbreekt",
   "id_token_formaat",
-  "extra_scope",
+  "scope_formaat",
+  "scope_ontbreekt",
 ] as const;
 export type TokenResponseAfwijsreden = (typeof TOKEN_RESPONSE_AFWIJSREDENEN)[number];
 
@@ -160,7 +161,12 @@ export function bouwTokenRequestBody(args: {
 
 /**
  * Tokenresponse: MOET een id_token dragen; MAG GEEN refresh_token dragen (E2);
- * de teruggegeven scope mag niets buiten `openid profile` bevatten.
+ * Als Microsoft een `scope`-veld teruggeeft, moeten `openid profile` aanwezig
+ * zijn. Extra scopes op het access-token zijn toegestaan en worden samen met
+ * dat access-token direct verworpen: Microsoft documenteert dat eerder aan de
+ * app verleende Graph-scopes in dit veld kunnen terugkomen, ook als deze
+ * aanvraag ze niet vroeg. De authorize- en tokenrequest blijven wél exact op
+ * `openid profile` gepind en een refresh-token blijft verboden.
  */
 export function beoordeelTokenResponse(
   json: unknown,
@@ -184,10 +190,13 @@ export function beoordeelTokenResponse(
   if (r.id_token.split(".").length !== 3) {
     return { ok: false, categorie: "token_response_ongeldig", reden: "id_token_formaat" };
   }
+  if ("scope" in r && typeof r.scope !== "string") {
+    return { ok: false, categorie: "token_response_ongeldig", reden: "scope_formaat" };
+  }
   if (typeof r.scope === "string") {
-    const toegestaan = new Set<string>(MICROSOFT_LOGIN_SCOPES);
-    const extra = r.scope.split(/\s+/).filter((s) => s && !toegestaan.has(s));
-    if (extra.length) return { ok: false, categorie: "token_response_ongeldig", reden: "extra_scope" };
+    const ontvangen = new Set(r.scope.split(/\s+/).filter(Boolean));
+    const ontbrekend = MICROSOFT_LOGIN_SCOPES.filter((scope) => !ontvangen.has(scope));
+    if (ontbrekend.length) return { ok: false, categorie: "token_response_ongeldig", reden: "scope_ontbreekt" };
   }
   return { ok: true, idToken: r.id_token };
 }

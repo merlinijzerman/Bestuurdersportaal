@@ -113,7 +113,11 @@ Concreet:
    MSAL-node 6.0 voegt in de gebruikte authorization-codeflow automatisch `offline_access`
    toe. Dat schendt de minimale-scope-invariant en kan een refresh-token opleveren. De eigen
    flow valideert discovery, JWKS-host, RS256-handtekening, issuer, audience, geldigheid en
-   nonce fail-closed. Het
+   nonce fail-closed. De tokenresponse moet een ID-token en, wanneer het veld aanwezig is,
+   de gevraagde scopes `openid profile` bevatten; een refresh-token blijft verboden. Extra
+   scopes op het tegelijk uitgegeven access-token worden niet als inlogrecht geïnterpreteerd:
+   Microsoft kan daar eerder verleende Graph-scopes in teruggeven. Het access-token wordt
+   daarom direct verworpen en nooit opgeslagen, gelogd of gebruikt. Het
    geverifieerde ID-token gaat daarna naar `linkIdentity({ provider: "azure", token, nonce })` of
    `signInWithIdToken(...)`. Bij inloggen wordt de binding vóór die aanroep getoetst. Een
    secundaire applicatieguard (`amr ∋ oauth` ⇒ actieve binding, zonder cache) zit in de
