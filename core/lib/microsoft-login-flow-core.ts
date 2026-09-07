@@ -83,8 +83,22 @@ export function parseTransactieGeheim(tekst: string): TransactieGeheim | null {
  */
 export const MICROSOFT_LOGIN_CALLBACK_PAD = "/auth/microsoft-login/callback";
 
+function isLokaleHost(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost") || /^(localhost|127\.0\.0\.1):\d+$/.test(host) || /\.localhost:\d+$/.test(host);
+}
+
+/**
+ * Eigen origin voor redirects, afgeleid uit de GEVERIFIEERDE fondshost (de host is
+ * al tegen tenant_domains getoetst). `req.url` is hier niet bruikbaar: achter een
+ * proxy of bij `next start` draagt die de luisterhost (`localhost:3000`), niet de
+ * fondshost, zodat een redirect op een andere host — zonder sessiecookie — landt.
+ * HTTPS, behalve lokaal met toestemming (dezelfde grendel als de callback-URI).
+ */
+export function origineVoorHost(host: string, opties: { lokaalToegestaan: boolean }): string {
+  const schema = isLokaleHost(host) && opties.lokaalToegestaan ? "http" : "https";
+  return `${schema}://${host}`;
+}
+
 export function callbackUrlVoorHost(host: string, opties: { lokaalToegestaan: boolean }): string {
-  const lokaal = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost") || /^(localhost|127\.0\.0\.1):\d+$/.test(host) || /\.localhost:\d+$/.test(host);
-  const schema = lokaal && opties.lokaalToegestaan ? "http" : "https";
-  return `${schema}://${host}${MICROSOFT_LOGIN_CALLBACK_PAD}`;
+  return `${origineVoorHost(host, opties)}${MICROSOFT_LOGIN_CALLBACK_PAD}`;
 }

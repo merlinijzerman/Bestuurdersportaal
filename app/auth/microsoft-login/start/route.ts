@@ -21,6 +21,7 @@ import { microsoftLoginActief, microsoftLoginVoorRequest, telStartpoging } from 
 import { MicrosoftLoginFlowFout } from "@/core/lib/microsoft-login-orkestratie-core";
 import { LOGIN_FOUT_PARAM, LOGIN_FOUT_WAARDE, microsoftLoginFoutcategorie, SUPPORTCODE_PARAM, supportcode } from "@/core/lib/microsoft-login-error-core";
 import { clientIpUitHeaders, MICROSOFT_LOGIN_START_LIMIET, startSleutel } from "@/core/lib/microsoft-login-ratelimit-core";
+import { origineVoorHost } from "@/core/lib/microsoft-login-flow-core";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ function naarLogin(origin: string, sc?: string): NextResponse {
 }
 
 export async function GET(req: NextRequest) {
-  const { origin, searchParams } = new URL(req.url);
+  const { searchParams } = new URL(req.url);
   const host = req.headers.get("host")?.trim().toLowerCase() ?? "";
 
   const resolutie = await haalFondsContext(host);
@@ -49,6 +50,8 @@ export async function GET(req: NextRequest) {
   } catch {
     return nietBeschikbaar();
   }
+  // Redirect-origin uit de GEVERIFIEERDE fondshost, niet uit req.url (zie flow-core).
+  const origin = origineVoorHost(host, { lokaalToegestaan: config.lokaalToegestaan });
   const actief = await microsoftLoginActief(resolutie.fondsId).catch(() => ({ actief: false as const }));
   if (!actief.actief) return nietBeschikbaar();
 

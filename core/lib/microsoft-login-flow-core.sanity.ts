@@ -7,6 +7,7 @@ import {
   maakFlowGeheimen,
   MICROSOFT_LOGIN_CALLBACK_PAD,
   nonceHash,
+  origineVoorHost,
   parseTransactieGeheim,
   serialiseerTransactieGeheim,
   stateHash,
@@ -53,6 +54,12 @@ test("transactiegeheim: rondreis en strikte vormcontrole", () => {
   ] as const) {
     assert.equal(parseTransactieGeheim(kapot), null, naam);
   }
+});
+
+test("origin: uit de geverifieerde host; https, lokaal alleen http mét toestemming", () => {
+  assert.equal(origineVoorHost("pgb.preview.bestuurdersportaal.com", { lokaalToegestaan: true }), "https://pgb.preview.bestuurdersportaal.com");
+  assert.equal(origineVoorHost("fonds-a.localhost:3000", { lokaalToegestaan: true }), "http://fonds-a.localhost:3000");
+  assert.equal(origineVoorHost("fonds-a.localhost:3000", { lokaalToegestaan: false }), "https://fonds-a.localhost:3000");
 });
 
 test("callback-URL: vast pad, https, lokaal alleen http mét toestemming", () => {

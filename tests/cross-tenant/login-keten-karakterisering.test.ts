@@ -265,7 +265,7 @@ test("LK-11 PIN — sha256 van de auth-kernbestanden (bewust bijwerken; nieuwe w
     "app/login/layout.tsx": "99e115569a2ef4e835331a0a55d474a07dac24e42bc926b215206392b93ac4ae",
     "app/login/page.tsx": "62e135ae3215872e09a046bb6a438a1db596ab56e0f4c3e33e2b0fa119600fbe",
     "core/lib/redirect-veilig.ts": "e8986ce5c29d7b564ba8e75f0edc6c0913d350daf637d70c61397d2b7b7b97e4",
-    "app/login/_components/LoginForm.tsx": "ab14b4e2ec11cc11394a1ab638437d9e2376fbff515e03df3611c9b63c798b53",
+    "app/login/_components/LoginForm.tsx": "9c25302ff96e1e1e9f8c7c33c16db2b5ea6f0db3124098b1f850554055e29719",
   };
   const afwijkend: string[] = [];
   for (const [pad, verwacht] of Object.entries(pins)) {

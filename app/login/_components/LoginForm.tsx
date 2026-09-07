@@ -78,7 +78,7 @@ export default function LoginForm({ microsoftLogin, melding, supportcode }: Logi
             Log in op uw bestuurdersomgeving
           </h2>
           {melding && (
-            <div role="alert" className="mb-4 bg-err-tint border border-err/30 rounded-lg px-3 py-2 text-sm text-err-ink">
+            <div id="login-melding" role="alert" className="mb-4 bg-err-tint border border-err/30 rounded-lg px-3 py-2 text-sm text-err-ink">
               <p>{melding}</p>
               {supportcode && <p className="mt-1 text-xs">Supportcode: {supportcode}</p>}
             </div>

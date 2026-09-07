@@ -12,7 +12,8 @@
 // ============================================================================
 import { NextRequest, NextResponse } from "next/server";
 import { haalFondsContext } from "@/core/lib/tenant-context";
-import { microsoftLoginGeconfigureerd } from "@/core/lib/microsoft-login-config";
+import { microsoftLoginConfig } from "@/core/lib/microsoft-login-config";
+import { origineVoorHost } from "@/core/lib/microsoft-login-flow-core";
 import { microsoftLoginVoorRequest } from "@/core/lib/microsoft-login";
 import { MicrosoftLoginFlowFout } from "@/core/lib/microsoft-login-orkestratie-core";
 import {
@@ -42,11 +43,21 @@ function naarProfiel(origin: string, params: Record<string, string>): NextRespon
 }
 
 export async function GET(req: NextRequest) {
-  const { origin, searchParams } = new URL(req.url);
+  const { origin: requestOrigin, searchParams } = new URL(req.url);
   const host = req.headers.get("host")?.trim().toLowerCase() ?? "";
 
   const resolutie = await haalFondsContext(host);
-  if (resolutie.type !== "gevonden" || !microsoftLoginGeconfigureerd()) return naarLogin(origin);
+  let config;
+  try {
+    config = microsoftLoginConfig();
+  } catch {
+    config = null;
+  }
+  // Onbekende host of geen config: neutraal terug naar de login op de request-origin
+  // (geen fondshost om op te vertrouwen). Anders: origin uit de GEVERIFIEERDE fondshost,
+  // want req.url draagt achter een proxy/next start de luisterhost (zie flow-core).
+  if (resolutie.type !== "gevonden" || !config) return naarLogin(requestOrigin);
+  const origin = origineVoorHost(host, { lokaalToegestaan: config.lokaalToegestaan });
 
   try {
     const flow = await microsoftLoginVoorRequest();
