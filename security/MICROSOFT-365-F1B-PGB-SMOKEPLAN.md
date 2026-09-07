@@ -1,9 +1,8 @@
 # Microsoft 365 — fase 1B Preview-smokeplan PGB (Microsoft-login, #335 T3)
 
-> Draaiboek, geen uitvoering. Dit document wijzigt niets aan Entra, Supabase of Vercel en
-> activeert geen flag. Stand 2026-09-07: T1/PR-A is gemerged (`40cd5d6`) en spike S7 is
-> groen; T2/PR-B staat als draft-PR. Uitvoering pas na: T2 gemerged en gedeployed op
-> `preview-stable`, de T1-migratie op Preview toegepast, en akkoord van de opdrachtgever.
+> Draaiboek en uitvoeringsbewijs. Stand 2026-09-07: T1 en T2 zijn gemerged en op
+> `preview-stable` geactiveerd voor uitsluitend PGB. De eerste echte koppeling en Microsoft-login
+> zijn groen; de resterende duur- en negatieve smokes staan nog open (zie §8).
 > Ontwerp: `MICROSOFT-365-LOGIN-F1B-ONTWERP.md` §3.3 (invarianten E1–E7, P1–P9, O1), §8;
 > T2-ontwerp: `MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md`. Patroon: `MICROSOFT-365-F1-RUNBOOK.md`.
 
@@ -177,6 +176,21 @@ Leg per stap alleen vast: tijdstip, stapnummer, uitkomst (groen/rood), supportco
 ## 8. Meetblad (in het changebewijs, niet in de repo)
 
 Per stap P1–P10 en N1–N11: datum/tijd, uitvoerder, uitkomst, supportcode, afwijking. Plus: gemeten Auth-versie, gemeten `jwt_exp`, S9-allowlist-uitvoer (geen ruwe respons), N6-venster in seconden, providerlijst (`["azure"]`).
+
+### 8.1 Uitvoeringsstand PGB Preview — 7 september 2026
+
+| Stap | Tijd (CEST) | Uitkomst | Bewijs / bijzonderheid |
+|---|---:|---|---|
+| P2 | vóór 14:22 | Groen | PGB-loginpagina toont wachtwoordformulier en Microsoft-knop; de knop is fondsgebonden |
+| P3/P8 | vóór 14:22 | Groen | PGB-testaccount via wachtwoord geopend; profielkaart bevestigde een wachtwoordsessie |
+| P5 | 14:22 | Groen | Callback eindigde op `/profiel?microsoft_login=gekoppeld`; kaart toont `Gekoppeld`. Een eerder door GoTrue aangemaakte, maar nog niet geactiveerde Azure-identiteit is via PR #342 idempotent hersteld na een verse volledige OIDC-validatie |
+| P6 | 14:23 | Groen | Na uitloggen bracht *Inloggen met Microsoft* de gebruiker zonder nieuwe consentprompt terug naar hetzelfde PGB-profiel; kaart bevestigt een Microsoft-sessie en `laatst_gebruikt_op` is bijgewerkt |
+| P7 | 14:33 | Groen | Na meer dan 600 seconden is `/profiel` volledig herladen. De sessie bleef actief voor hetzelfde PGB-profiel en de kaart bevestigde nog steeds dat dit een Microsoft-sessie is; de tokenrefresh is daarmee door de `active`-binding en de access-tokenhook geaccepteerd |
+| N11 (runtime-deel) | 14:24 | Groen | Runtime-log rond beide callbacks bevat geen Microsoft-loginwaarschuwing en geen token, code, state, nonce, claim of e-mailadres; private auditcontrole blijft onderdeel van de resterende smoke |
+
+Nog open: P4 (refresh van een wachtwoordsessie na >600 s), P9/P10 (ontkoppelen en opnieuw koppelen), de negatieve
+smokes N1–N10 en het private-auditdeel van N11. Deze stand is bewust partieel en mag niet als
+volledige productie-aftekening worden gelezen.
 
 ---
 
