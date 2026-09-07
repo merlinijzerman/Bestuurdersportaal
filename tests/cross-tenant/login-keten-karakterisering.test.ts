@@ -51,11 +51,16 @@ const routeMechanismenTest = lees("tests", "cross-tenant", "route-mechanismen.te
 test("LK-1 INVARIANT — wachtwoordlogin (nu in LoginForm) gaat rechtstreeks via de browserclient met de generieke foutmelding", () => {
   assert.match(loginForm, /^"use client";/, "het formulier is een client-component");
   assert.match(loginForm, /supabase\.auth\.signInWithPassword\(\{\s*email,\s*password: wachtwoord,?\s*\}\)/);
+  // Fase 1C (#344): twee meldingen, maar nog steeds geen orakel. De 403-tak is de
+  // hookweigering in modus `verplicht` en treedt pas ná GELDIGE credentials op;
+  // zij onderscheidt dus geen bestaand van niet-bestaand account. Elke andere fout
+  // — onbekend account én fout wachtwoord — blijft dezelfde generieke tekst.
   assert.match(
     loginForm,
-    /setFout\("Inloggen mislukt\. Controleer uw e-mailadres en wachtwoord\."\)/,
-    "één generieke melding; geen onderscheid onbekend account / fout wachtwoord"
+    /setFout\(error\.status === 403 \? LOGIN_VERPLICHT_MELDING : "Inloggen mislukt\. Controleer uw e-mailadres en wachtwoord\."\)/,
+    "één generieke melding voor elke credentialfout; alleen de hookweigering is apart"
   );
+  assert.match(loginForm, /from "@\/core\/lib\/microsoft-login-meldingen-core"/, "browserveilige tekstmodule, geen node:crypto in de bundel");
   // Redirect na wachtwoordlogin: één volledige navigatie naar "/", géén next-parameter.
   assert.match(loginForm, /window\.location\.replace\("\/"\)/);
   assert.doesNotMatch(loginForm, /useSearchParams|next=|veiligVervolgpad/, "het wachtwoordpad honoreert geen vervolgpad");
@@ -84,9 +89,9 @@ test("LK-2 INVARIANT — login-layout stuurt alleen een sessie MET profielen-rij
   assert.equal((loginLayout.match(/redirect\(/g) ?? []).length, 1, "precies één redirect in de login-layout");
 });
 
-test("LK-2b T2 — login-layout: oauth-sessie zonder actieve binding blijft op de login (beëindigd), geen redirect naar '/'", () => {
-  assert.match(loginLayout, /beoordeelOAuthSessie\(supabase, user\.id\)/);
-  assert.match(loginLayout, /if \(!\(await beoordeelOAuthSessie\(supabase, user\.id\)\)\.toegestaan\) \{\s*await beeindigSessie\(supabase\);\s*\} else \{/);
+test("LK-2b T2/1C — login-layout: een sessie die het fondsbeleid niet toestaat blijft op de login (beëindigd), geen redirect naar '/'", () => {
+  assert.match(loginLayout, /beoordeelPortaalSessie\(supabase, user\.id\)/);
+  assert.match(loginLayout, /if \(!\(await beoordeelPortaalSessie\(supabase, user\.id\)\)\.toegestaan\) \{\s*await beeindigSessie\(supabase\);\s*\} else \{/);
   assert.equal((loginLayout.match(/redirect\(/g) ?? []).length, 1, "nog steeds precies één redirect (naar '/')");
 });
 
@@ -102,7 +107,7 @@ test("LK-3 INVARIANT — /auth/callback: code-exchange, veilig vervolgpad, vaste
 
 test("LK-3b T2 — /auth/callback L4: azure-identiteit zonder actieve binding → unlink + sessie weg + /login?error=auth_callback", () => {
   assert.match(authCallback, /if \(user && heeftAzureIdentiteit\(user\)\) \{/, "alleen bij een azure-identiteit wordt de gateway geraadpleegd");
-  assert.match(authCallback, /beoordeelOAuthSessie\(supabase, user\.id\)/);
+  assert.match(authCallback, /beoordeelPortaalSessie\(supabase, user\.id\)/);
   assert.match(authCallback, /supabase\.auth\.unlinkIdentity\(azure\)/);
   assert.match(authCallback, /await beeindigSessie\(supabase\);/);
   assert.equal((authCallback.match(/\/login\?error=auth_callback/g) ?? []).length, 2, "L4 en het bestaande faalpad delen dezelfde neutrale redirect");
@@ -122,7 +127,7 @@ test("LK-4 INVARIANT — haalFondsSessie: geen user → /login; geen fonds-profi
 });
 
 test("LK-4b T2 — haalFondsSessie: guard L3 direct ná de sessiecontrole, vóór het profiel", () => {
-  const guard = fondsSessie.indexOf("beoordeelOAuthSessie(supabase, user.id)");
+  const guard = fondsSessie.indexOf("beoordeelPortaalSessie(supabase, user.id)");
   assert.ok(guard > fondsSessie.indexOf('if (!user) redirect("/login")'), "guard ná de sessiecontrole");
   assert.ok(guard < fondsSessie.indexOf('.from("profielen")'), "guard vóór de profielresolutie");
   assert.match(fondsSessie, /await beeindigSessie\(supabase\);\s*redirect\(LOGIN_NA_BEEINDIGING\);/);
@@ -162,7 +167,7 @@ test("LK-6 INVARIANT — dashboard-layout: geen user → /login; geen profiel �
 });
 
 test("LK-6b T2 — dashboard-layout: guard L3 ná de sessiecontrole en vóór profiel/host-logica", () => {
-  const guard = dashboardLayout.indexOf("beoordeelOAuthSessie(supabase, user.id)");
+  const guard = dashboardLayout.indexOf("beoordeelPortaalSessie(supabase, user.id)");
   assert.ok(guard > dashboardLayout.indexOf('redirect("/login")'), "guard ná !user");
   assert.ok(guard < dashboardLayout.indexOf('.from("profielen")'), "guard vóór de profielresolutie");
   assert.match(dashboardLayout, /await beeindigSessie\(supabase\);\s*redirect\(LOGIN_NA_BEEINDIGING\);/);
@@ -220,9 +225,9 @@ test("LK-9 INVARIANT — withFondsRoute: geen sessie → exact {error:'Niet inge
 });
 
 test("LK-9b T2 — wrapper: guard L3 als geïnjecteerde dep, direct ná auth, met exact de 401-vorm van 'geen sessie'", () => {
-  assert.match(routeWrapper, /beoordeelOAuthSessie: \(supabase: RlsClient, gebruikerId: string\) => Promise<\{ toegestaan: boolean \}>;/);
-  assert.match(routeWrapper, /if \(!user\) return nietIngelogd\(\);[\s\S]{0,600}?if \(!\(await deps\.beoordeelOAuthSessie\(supabase, user\.id\)\)\.toegestaan\) return nietIngelogd\(\);/);
-  const guard = routeWrapper.indexOf("deps.beoordeelOAuthSessie(supabase, user.id)");
+  assert.match(routeWrapper, /beoordeelPortaalSessie: \(supabase: RlsClient, gebruikerId: string\) => Promise<\{ toegestaan: boolean \}>;/);
+  assert.match(routeWrapper, /if \(!user\) return nietIngelogd\(\);[\s\S]{0,600}?if \(!\(await deps\.beoordeelPortaalSessie\(supabase, user\.id\)\)\.toegestaan\) return nietIngelogd\(\);/);
+  const guard = routeWrapper.indexOf("deps.beoordeelPortaalSessie(supabase, user.id)");
   assert.ok(guard < routeWrapper.indexOf("deps.haalProfiel(supabase, user.id)"), "guard vóór de profielresolutie");
   assert.match(routeWrapper, /await import\("@\/core\/lib\/microsoft-login-sessieguard"\)/, "lazy: de sanity blijft server-loos");
 });
@@ -258,14 +263,19 @@ test("LK-11 PIN — sha256 van de auth-kernbestanden (bewust bijwerken; nieuwe w
   // B4 (#335 T2): fonds-sessie.ts, app/auth/callback/route.ts en app/login/layout.tsx
   // bewust opnieuw gepind na guard L3 / L4. supabase-server.ts, redirect-veilig.ts
   // ongewijzigd. B5: app/login/page.tsx (server-pagina) en LoginForm.tsx gepind.
+  // #344 (besluit 0212): vier pins bewust opnieuw berekend — de guard heet nu
+  // beoordeelPortaalSessie en beoordeelt ook wachtwoordsessies (fonds-sessie,
+  // login-layout, /auth/callback), en LoginForm toont de hookweigering van modus
+  // `verplicht` als eigen, sturende melding. app/login/page.tsx, supabase-server.ts
+  // en redirect-veilig.ts zijn ongewijzigd.
   const pins: Record<string, string> = {
-    "core/lib/fonds-sessie.ts": "6a5385ceb9daac7e28d19a83f1a76fc952f5004d2dff243470f92f08e39c57ec",
-    "app/auth/callback/route.ts": "d94d3c6d7589c20c9e51866fa36e540aed29f66624de0b486a0cf603f236cf57",
+    "core/lib/fonds-sessie.ts": "393b6d70ca5ef7a49faac733b87e606796515fe5fa7ed69b2ecd8140e81227d6",
+    "app/auth/callback/route.ts": "23097717109ba1b31642933453aa4e7034ddf7fcfe5250c4d665772bb67dd328",
     "core/lib/supabase-server.ts": "ff104b6a4bb390ee3563b901dd461fc6e82f2086cb80923816f8ec381a698872",
-    "app/login/layout.tsx": "99e115569a2ef4e835331a0a55d474a07dac24e42bc926b215206392b93ac4ae",
+    "app/login/layout.tsx": "b7ac4b145a3852e003872b0cce93edd640cf0f5b2cfbcfa225b7071c0c59b23c",
     "app/login/page.tsx": "62e135ae3215872e09a046bb6a438a1db596ab56e0f4c3e33e2b0fa119600fbe",
     "core/lib/redirect-veilig.ts": "e8986ce5c29d7b564ba8e75f0edc6c0913d350daf637d70c61397d2b7b7b97e4",
-    "app/login/_components/LoginForm.tsx": "9c25302ff96e1e1e9f8c7c33c16db2b5ea6f0db3124098b1f850554055e29719",
+    "app/login/_components/LoginForm.tsx": "aeee8de8413c28391fe065738a777a7ad4b6e2d6aa314146859589dd7ec1a9db",
   };
   const afwijkend: string[] = [];
   for (const [pad, verwacht] of Object.entries(pins)) {

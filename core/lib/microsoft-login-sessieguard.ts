@@ -1,19 +1,35 @@
 // ============================================================================
-//  core/lib/microsoft-login-sessieguard.ts — guard L3 (server-only), fase 1B #335 T2.
+//  core/lib/microsoft-login-sessieguard.ts — guard L3 (server-only).
+//  Fase 1B (#335 T2): oauth-sessies. Fase 1C (#344): óók wachtwoordsessies.
 // ----------------------------------------------------------------------------
-//  Secundaire afdwinging naast de Auth-hook (L1, T1): een `oauth`-portaalsessie
-//  zonder `active` binding wordt in elk chokepoint direct beëindigd. Zonder cache.
-//  Wachtwoordsessies (amr zonder oauth) passeren ZONDER gateway-aanroep, zodat
-//  het wachtwoordpad byte-identiek blijft (ontwerp §6.11/§6.13).
+//  De Auth-hook (L1) is de primaire afdwinging: hij weigert élke tokenuitgifte
+//  die niet bij het fondsbeleid past, ook een refresh. Deze guard is SECUNDAIR
+//  en sluit het gat van een REEDS uitgegeven access-token: hij beëindigt in elk
+//  chokepoint een sessie die volgens het actuele beleid niet meer mag bestaan.
+//
+//  Wat er in fase 1C verandert (bewust; besluit 0212 vervangt de "byte-identiek
+//  wachtwoordpad"-invariant uit 0211): een niet-oauth-sessie werd voorheen zonder
+//  enige gateway-aanroep doorgelaten. In modus `verplicht` mag zij niet meer
+//  bestaan, dus wordt nu voor ELKE sessie het beleid opgehaald
+//  (login_private.sessiebeleid — één functieaanroep op de bestaande pool).
+//
+//  BEWUST ONGECACHET. Een omslag naar `verplicht`, een ingetrokken break-glass of
+//  een gesloten koppelvenster werkt zo bij het eerstvolgende serververzoek. Een
+//  cache zou het intrekkingsvenster onvoorspelbaar maken; de bovengrens blijft
+//  `jwt_exp` (≤ 600 s op Preview) en dat is precies wat het runbook meet.
 //
 //  Chokepoints: withFondsRoute (401 in dezelfde vorm als "geen sessie"),
 //  haalFondsSessie, tenant-layout, login-layout, platform-layout (R-34) en L4 in
 //  /auth/callback. De gateway is de bron; het token wordt alleen gedecodeerd om
-//  te beslissen óf de gateway wordt geraadpleegd. Gatewayfout = fail-closed.
+//  te bepalen of het een oauth-sessie is. Gatewayfout = fail-closed; ontbrekende
+//  gatewayCONFIGURATIE = het wachtwoordpad zoals het altijd was (zie
+//  microsoft-login-beleid-core: zonder gateway kan geen fonds `verplicht` staan).
 // ============================================================================
 import "server-only";
 import type { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelBindingGuard, sessieIsOAuth, type GuardOordeel } from "@/core/lib/microsoft-login-sessieguard-core";
+import { sessieIsOAuth } from "@/core/lib/microsoft-login-sessieguard-core";
+import { beoordeelPortaalSessieKern, type PortaalSessieOordeel } from "@/core/lib/microsoft-login-beleid-core";
+import { gatewayFoutcategorie } from "@/core/lib/microsoft-login-binding-core";
 
 type Supabase = Awaited<ReturnType<typeof createServerSupabase>>;
 
@@ -28,19 +44,23 @@ export async function huidigAccessToken(supabase: Supabase): Promise<string | nu
 }
 
 /**
- * Beoordeelt de sessie van `gebruikerId`. Alleen bij `amr ∋ oauth` wordt de
- * gateway (levende_binding) geraadpleegd; elke gatewayfout is fail-closed.
+ * Beoordeelt de sessie van `gebruikerId` tegen het actuele fondsbeleid.
+ * Oauth zonder `active` binding → beëindigen (fase 1B). Wachtwoord (of magic
+ * link/herstel) in een fonds op `verplicht` → beëindigen, tenzij er een levende
+ * break-glassuitzondering of een geopende koppel-/herstelsessie is (fase 1C).
  */
-export async function beoordeelOAuthSessie(supabase: Supabase, gebruikerId: string): Promise<GuardOordeel> {
-  const token = await huidigAccessToken(supabase);
-  const isOAuth = sessieIsOAuth(token);
-  if (!isOAuth) return beoordeelBindingGuard({ isOAuth: false, binding: null });
+export async function beoordeelPortaalSessie(supabase: Supabase, gebruikerId: string): Promise<PortaalSessieOordeel> {
+  const isOAuth = sessieIsOAuth(await huidigAccessToken(supabase));
   try {
-    const { levendeBinding } = await import("@/core/lib/microsoft-login-gateway");
-    const binding = await levendeBinding(gebruikerId);
-    return beoordeelBindingGuard({ isOAuth: true, binding: binding ? { status: binding.status } : null });
-  } catch {
-    return beoordeelBindingGuard({ isOAuth: true, binding: null, gatewayFout: true });
+    const { sessiebeleid } = await import("@/core/lib/microsoft-login-gateway");
+    return beoordeelPortaalSessieKern({ isOAuth, beleid: await sessiebeleid(gebruikerId) });
+  } catch (fout) {
+    const categorie = gatewayFoutcategorie(fout);
+    return beoordeelPortaalSessieKern({
+      isOAuth,
+      beleid: null,
+      uitval: categorie === "config_ontbreekt" ? "config" : "fout",
+    });
   }
 }
 
@@ -60,5 +80,5 @@ export function heeftAzureIdentiteit(user: { identities?: Array<{ provider: stri
   return (user?.identities ?? []).some((i) => i.provider === "azure");
 }
 
-/** Doel na een beëindigde oauth-sessie op de tenant-surface. */
+/** Doel na een beëindigde sessie op de tenant-surface. */
 export const LOGIN_NA_BEEINDIGING = "/login?fout=microsoft";

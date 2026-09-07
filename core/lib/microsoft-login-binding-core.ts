@@ -49,6 +49,9 @@ export const LOGIN_GATEWAY_FOUTCATEGORIEEN = [
   "ongeldige_overgang",
   "onbekende_binding",
   "pending_verlopen",
+  // Fase 1C (#344): persoonlijk ontkoppelen is in modus `verplicht` server-side
+  // dicht (login_private.start_intrekking geeft deze categorie terug).
+  "ontkoppelen_verplicht",
   "gateway_db_onbereikbaar",
   "gateway_fout",
 ] as const;
@@ -63,7 +66,7 @@ export type LoginGatewayFoutcategorie = (typeof LOGIN_GATEWAY_FOUTCATEGORIEEN)[n
 export function gatewayFoutcategorie(fout: unknown): LoginGatewayFoutcategorie {
   const bericht = fout instanceof Error ? fout.message : typeof fout === "string" ? fout : "";
   const code = (fout as { code?: unknown } | null)?.code;
-  if (bericht === "fonds_mismatch" || bericht === "login_uit" || bericht === "tenant_mismatch" || bericht === "binding_conflict" || bericht === "ongeldige_overgang" || bericht === "onbekende_binding") {
+  if (bericht === "fonds_mismatch" || bericht === "login_uit" || bericht === "tenant_mismatch" || bericht === "binding_conflict" || bericht === "ongeldige_overgang" || bericht === "onbekende_binding" || bericht === "ontkoppelen_verplicht") {
     return bericht;
   }
   if (typeof code === "string" && /^(ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|57P|08)/.test(code)) return "gateway_db_onbereikbaar";

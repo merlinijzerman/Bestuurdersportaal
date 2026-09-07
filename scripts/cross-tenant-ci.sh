@@ -206,6 +206,11 @@ SQL_M365F1B="supabase/checks/2026_09_06_microsoft_login_fase1b.sql"
 # Microsoft-login fase 1B T2 (#335, V9) — atomische startlimiet in login_private
 # (veertiende gatewayfunctie tel_startpoging; tabel zonder rolrechten).
 SQL_M365F1B_V9="supabase/checks/2026_09_07_microsoft_login_startlimiet.sql"
+# Microsoft-loginbeleid fase 1C (#344, PR-A, besluit 0212) — getypeerde modus
+# uit|optioneel|verplicht met spiegelconstraint, het wachtwoordpad in de Auth-hook,
+# MFA-plichtige break-glass, de eenmalige koppel-/herstelsessie, transactionele
+# activeringspreflight en de server-side geweigerde persoonlijke ontkoppeling.
+SQL_M365F1C="supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -415,6 +420,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
 echo
 echo "-- Microsoft-login F1B T2 (#335, V9): atomische startlimiet tel_startpoging --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B_V9"
+echo
+echo "-- Microsoft-loginbeleid F1C (#344): modi, break-glass, koppel-/herstelsessie, activeringspreflight --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1C"
 echo
 echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"

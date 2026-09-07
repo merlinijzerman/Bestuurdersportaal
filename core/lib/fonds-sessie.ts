@@ -10,7 +10,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beeindigSessie, beoordeelOAuthSessie, LOGIN_NA_BEEINDIGING } from "@/core/lib/microsoft-login-sessieguard";
+import { beeindigSessie, beoordeelPortaalSessie, LOGIN_NA_BEEINDIGING } from "@/core/lib/microsoft-login-sessieguard";
 
 export type FondsSessie = {
   userId: string;
@@ -30,9 +30,10 @@ export async function haalFondsSessie(): Promise<FondsSessie> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Guard L3 (#335 T2): een `oauth`-sessie zonder actieve Microsoft-binding wordt
-  // hier beëindigd; wachtwoordsessies passeren zonder gateway-aanroep.
-  if (!(await beoordeelOAuthSessie(supabase, user.id)).toegestaan) {
+  // Guard L3 (#335 T2, uitgebreid in #344): een `oauth`-sessie zonder actieve
+  // Microsoft-binding wordt hier beëindigd, en in een fonds op modus `verplicht`
+  // óók een wachtwoordsessie zonder levende uitzondering.
+  if (!(await beoordeelPortaalSessie(supabase, user.id)).toegestaan) {
     await beeindigSessie(supabase);
     redirect(LOGIN_NA_BEEINDIGING);
   }

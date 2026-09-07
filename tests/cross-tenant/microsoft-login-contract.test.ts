@@ -31,6 +31,14 @@ const GATEWAY_FUNCTIES = [
   "start_intrekking", "voltooi_intrekking", "zoek_identiteit", "levende_binding", "markeer_gebruikt",
   "maak_transactie", "consumeer_transactie", "registreer_gebeurtenis",
 ] as const;
+// #344 (fase 1C): tien functies erbij, in een eigen additieve migratie. Zij staan
+// hier zodat de allowlist-controle op de gateway compleet blijft; hun eigen
+// invarianten staan in microsoft-login-beleid-contract.test.ts.
+const GATEWAY_FUNCTIES_1C = [
+  "activering_preflight", "zet_modus", "dekkingsrapport", "beheer_intrekking",
+  "verleen_break_glass", "trek_break_glass_in", "maak_uitnodiging", "activeer_uitnodiging",
+  "trek_uitnodiging_in", "sessiebeleid",
+] as const;
 
 test("F1B: rol-grendel, privaat schema en standaard-uit configuratie", () => {
   assert.match(migratie, /raise exception 'login_gateway-login ontbreekt/);
@@ -94,7 +102,8 @@ test("F1B: hook is SECURITY INVOKER met lege search_path; alleen de helper is DE
   assert.match(gates, /not r\.rolcanlogin and not r\.rolbypassrls and not r\.rolsuper/);
   assert.match(gates, /am\.inherit_option or am\.set_option/);
   assert.match(gates, /array\['fonds_id','id'\]/);
-  assert.match(gates, /array\['actief','entra_tenant_id','fonds_id'\]/);
+  // #344: `modus` erbij — de tweede helper leest hem (zie de fase 1C-contracttest).
+  assert.match(gates, /array\['actief','entra_tenant_id','fonds_id','modus'\]/);
   assert.match(gates, /f\.prosecdef and has_function_privilege\('login_hook_owner'/);
   assert.equal((gates.match(/not pg_temp\.hook_owner_uitzondering\(/g) ?? []).length, 2, "gate B én gate C gebruiken de uitzondering");
   assert.match(suite, /login_hook_owner heeft LOGIN, BYPASSRLS/);
@@ -119,7 +128,8 @@ test("F1B: login_gateway mag exact de dertien T1-gatewayfuncties (+ tel_startpog
   }
   assert.equal((migratieT2.match(/grant execute on function login_private\.[a-z_]+\([^)]*\)\s+to login_gateway/g) ?? []).length, GATEWAY_FUNCTIES_T2.length);
   assert.match(migratieT2, /revoke all on login_private\.start_pogingen from public, anon, authenticated, service_role, login_gateway/);
-  assert.match(suite, /v_n <> 14/, "de F1B-suite telt nu veertien executes");
+  // #344: de F1B-suite telt de volledige verzameling — 13 T1 + tel_startpoging + 10 fase 1C.
+  assert.match(suite, /v_n <> 24/, "de F1B-suite telt nu vierentwintig executes");
   for (const f of GATEWAY_FUNCTIES) {
     assert.match(migratie, new RegExp(`grant execute on function login_private\\.${f}\\([^)]*\\)\\s+to login_gateway`), f);
   }
@@ -143,7 +153,7 @@ test("F1B: gateway is server-only, gebruikt alleen login_private-functies en gee
   assert.match(gateway, /max: 2/);
   const aanroepen = [...gateway.matchAll(/login_private\.([a-z_]+)\(/g)].map((m) => m[1]!);
   assert.ok(aanroepen.length >= GATEWAY_FUNCTIES.length);
-  for (const f of aanroepen) assert.ok(([...GATEWAY_FUNCTIES, ...GATEWAY_FUNCTIES_T2] as readonly string[]).includes(f), `gateway roept ${f} aan, niet in de allowlist`);
+  for (const f of aanroepen) assert.ok(([...GATEWAY_FUNCTIES, ...GATEWAY_FUNCTIES_T2, ...GATEWAY_FUNCTIES_1C] as readonly string[]).includes(f), `gateway roept ${f} aan, niet in de allowlist`);
   assert.doesNotMatch(gateway, /from login_private\.[a-z_]+\s+where|insert into login_private|update login_private|delete from login_private/i, "geen directe tabeltoegang");
   assert.doesNotMatch(gateway, /console\.(log|error|warn)/, "de gateway logt niets (categorieën via de aanroeper)");
   assert.match(gateway, /gatewayFoutcategorie\(fout\)/);

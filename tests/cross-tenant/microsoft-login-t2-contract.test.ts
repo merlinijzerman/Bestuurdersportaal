@@ -234,7 +234,10 @@ test("ontkoppelen — server bepaalt of de sessie via Microsoft loopt; oauth-ses
   assert.match(route, /const viaMicrosoft = sessieIsOAuth\(await huidigAccessToken\(ctx\.supabase\)\);/);
   assert.match(route, /await beeindigSessie\(ctx\.supabase\);\s*return NextResponse\.json\(\{ ok: true, uitgelogd: true \}/);
   assert.match(route, /return NextResponse\.json\(\{ ok: true, uitgelogd: false \}/);
-  assert.match(route, /sessieViaMicrosoft, \.\.\.status/);
+  // #344: de statusrespons draagt sinds fase 1C ook de modus en de kaartstand;
+  // `...status` blijft als laatste staan zodat de bestaande velden onveranderd zijn.
+  assert.match(route, /sessieViaMicrosoft,\s*\n\s*modus,/);
+  assert.match(route, /\.\.\.status,/);
   const kaart = lees("app/(dashboard)/profiel/_components/MicrosoftLoginKaart.tsx");
   assert.match(kaart, /if \(uitkomst\.uitgelogd\) \{\s*(\/\/[^\n]*\n\s*)*window\.location\.replace\("\/login"\);/);
   assert.match(kaart, /U bent nu met Microsoft ingelogd\. Ontkoppelen logt u direct uit\./);

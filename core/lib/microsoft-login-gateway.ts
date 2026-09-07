@@ -3,8 +3,8 @@
 //  (Microsoft-login fase 1B, #335, T1; besluit 0211).
 // ----------------------------------------------------------------------------
 //  Eén Pool op de minimale databaserol login_gateway. Die rol mag uitsluitend
-//  de veertien gatewayfuncties uitvoeren (dertien uit T1 + tel_startpoging uit
-//  T2/V9); tabellen zijn onbereikbaar. Geen
+//  de vierentwintig gatewayfuncties uitvoeren (dertien uit T1, tel_startpoging
+//  uit T2/V9 en tien uit fase 1C/#344); tabellen zijn onbereikbaar. Geen
 //  Supabase service-roleclient, geen browserpad. Het toestandsmodel en de fonds-
 //  isolatie worden in de database afgedwongen; deze laag vertaalt alleen typen
 //  en categoriseert fouten inhoudsvrij (nooit een ruwe databasemelding, nooit
@@ -21,6 +21,14 @@ import {
   type BindingStatus,
   type LoginGatewayFoutcategorie,
 } from "@/core/lib/microsoft-login-binding-core";
+import {
+  isBeleidFoutcategorie,
+  loginModus,
+  type BeleidFoutcategorie,
+  type LoginModus,
+  type Preflight,
+  type Sessiebeleid,
+} from "@/core/lib/microsoft-login-beleid-core";
 
 export class MicrosoftLoginGatewayError extends Error {
   readonly categorie: LoginGatewayFoutcategorie;
@@ -32,7 +40,7 @@ export class MicrosoftLoginGatewayError extends Error {
 }
 
 export type MicrosoftIdentiteit = { readonly tid: string; readonly oid: string; readonly sub: string };
-export type LoginConfig = { readonly actief: boolean; readonly entraTenantId: string | null; readonly pilotstatus: string };
+export type LoginConfig = { readonly actief: boolean; readonly entraTenantId: string | null; readonly modus: LoginModus };
 export type LevendeBinding = {
   readonly id: string;
   readonly fondsId: string;
@@ -85,12 +93,12 @@ function eisIdentiteit(identiteit: MicrosoftIdentiteit): void {
 
 // ── Configuratie ────────────────────────────────────────────────────────────
 export async function leesConfig(fondsId: string): Promise<LoginConfig | null> {
-  const rijen = await roep<{ actief: boolean; entra_tenant_id: string | null; pilotstatus: string }>(
-    "select actief, entra_tenant_id, pilotstatus from login_private.lees_config($1)",
+  const rijen = await roep<{ actief: boolean; entra_tenant_id: string | null; modus: string }>(
+    "select actief, entra_tenant_id, modus from login_private.lees_config($1)",
     [fondsId]
   );
   const r = rijen[0];
-  return r ? { actief: r.actief === true, entraTenantId: r.entra_tenant_id, pilotstatus: r.pilotstatus } : null;
+  return r ? { actief: r.actief === true, entraTenantId: r.entra_tenant_id, modus: loginModus(r.modus) } : null;
 }
 
 /** Strikte poort: alleen `actief === true` met een gezette tenant telt (fail-closed). */
@@ -131,14 +139,21 @@ export async function markeerMislukt(args: { bindingId: string; userId: string; 
   await roep("select login_private.markeer_mislukt($1,$2,$3)", [args.bindingId, args.userId, args.categorie]);
 }
 
+/** Persoonlijk ontkoppelen. De DB geeft (id, categorie) terug in plaats van te
+ *  raisen (fase 1C): zo blijft een weigering in modus `verplicht` in de audit
+ *  staan — een raise zou de auditregel met de subtransactie terugrollen. */
 export async function startIntrekking(args: { fondsId: string; userId: string; doorUserId: string; correlatieId: string }): Promise<string> {
-  const rijen = await roep<{ id: string }>(
-    "select login_private.start_intrekking($1,$2,$3,$4) as id",
+  const rijen = await roep<{ id: string | null; categorie: string | null }>(
+    "select id, categorie from login_private.start_intrekking($1,$2,$3,$4)",
     [args.fondsId, args.userId, args.doorUserId, args.correlatieId]
   );
-  const id = rijen[0]?.id;
-  if (!id) throw new MicrosoftLoginGatewayError("gateway_fout");
-  return id;
+  const r = rijen[0];
+  if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
+  if (!r.id) {
+    const c = r.categorie;
+    throw new MicrosoftLoginGatewayError(c === "onbekende_binding" ? "onbekende_binding" : c === "ontkoppelen_verplicht" ? "ontkoppelen_verplicht" : "gateway_fout");
+  }
+  return r.id;
 }
 
 export async function voltooiIntrekking(args: { bindingId: string; userId: string; correlatieId: string }): Promise<void> {
@@ -221,4 +236,157 @@ export async function registreerGebeurtenis(args: {
   await roep("select login_private.registreer_gebeurtenis($1,$2,$3,$4,$5,$6)", [
     args.fondsId, args.userId, args.gebeurtenis, args.foutcategorie ?? null, args.identiteitHash ?? null, args.correlatieId,
   ]);
+}
+
+// ── Fondsbeleid (fase 1C, #344; migratie 2026_09_07_microsoft_login_beleidsmodus) ──
+// Elk van deze wrappers roept exact één gatewayfunctie aan. De autorisatie van
+// de ACTOR (capability login.beleid.manage) hoort in de route; de database toetst
+// fondsconsistentie, de preflight en de toestandsovergangen zelf.
+
+/** Vertaalt een categorie-uit-de-DB naar de vaste beleidscategorie. */
+function beleidCategorie(v: string | null | undefined): BeleidFoutcategorie | null {
+  if (v === null || v === undefined) return null;
+  return isBeleidFoutcategorie(v) ? v : "config_ontbreekt";
+}
+
+/** De stand van één account tegenover het fondsbeleid; `null` = geen fondsprofiel. */
+export async function sessiebeleid(userId: string): Promise<Sessiebeleid | null> {
+  const rijen = await roep<{ fonds_id: string; modus: string; binding_status: string | null; break_glass: boolean; link_only: boolean }>(
+    "select fonds_id, modus, binding_status, break_glass, link_only from login_private.sessiebeleid($1)",
+    [userId]
+  );
+  const r = rijen[0];
+  if (!r) return null;
+  if (r.binding_status !== null && !isBindingStatus(r.binding_status)) throw new MicrosoftLoginGatewayError("gateway_fout");
+  return {
+    fondsId: r.fonds_id,
+    modus: loginModus(r.modus),
+    bindingStatus: (r.binding_status as BindingStatus | null) ?? null,
+    breakGlass: r.break_glass === true,
+    linkOnly: r.link_only === true,
+  };
+}
+
+/** Wat blokkeert de omslag naar `verplicht`? Leesbaar voor het beheerscherm. */
+export async function activeringPreflight(fondsId: string): Promise<Preflight> {
+  const rijen = await roep<{ gereed: boolean; categorie: string | null; ongedekte_accounts: number; breakglass_accounts: number }>(
+    "select gereed, categorie, ongedekte_accounts, breakglass_accounts from login_private.activering_preflight($1)",
+    [fondsId]
+  );
+  const r = rijen[0];
+  if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
+  return {
+    gereed: r.gereed === true,
+    categorie: beleidCategorie(r.categorie),
+    ongedekteAccounts: Number(r.ongedekte_accounts ?? 0),
+    breakglassAccounts: Number(r.breakglass_accounts ?? 0),
+  };
+}
+
+/** Zet de modus. `null` = gelukt; anders de reden waarom niet (fail-closed). */
+export async function zetModus(args: { fondsId: string; modus: LoginModus; actorId: string; correlatieId: string }): Promise<BeleidFoutcategorie | null> {
+  const rijen = await roep<{ categorie: string | null }>(
+    "select login_private.zet_modus($1,$2,$3,$4) as categorie",
+    [args.fondsId, args.modus, args.actorId, args.correlatieId]
+  );
+  return beleidCategorie(rijen[0]?.categorie ?? null);
+}
+
+export type DekkingsRegel = {
+  readonly userId: string;
+  readonly naam: string | null;
+  readonly rol: string | null;
+  readonly bindingStatus: BindingStatus | null;
+  readonly laatstGebruiktOp: Date | null;
+  readonly breakGlass: boolean;
+  readonly uitnodigingOpen: boolean;
+};
+
+/** Beheeroverzicht per gebruiker: koppelstatus en laatste gebruik, meer niet.
+ *  Nooit tid/oid/sub, nooit e-mail, nooit een Microsoft-claim. */
+export async function dekkingsrapport(fondsId: string): Promise<DekkingsRegel[]> {
+  const rijen = await roep<{ user_id: string; naam: string | null; rol: string | null; binding_status: string | null; laatst_gebruikt_op: Date | string | null; break_glass: boolean; uitnodiging_open: boolean }>(
+    "select user_id, naam, rol, binding_status, laatst_gebruikt_op, break_glass, uitnodiging_open from login_private.dekkingsrapport($1)",
+    [fondsId]
+  );
+  return rijen.map((r) => ({
+    userId: r.user_id,
+    naam: r.naam,
+    rol: r.rol,
+    bindingStatus: r.binding_status !== null && isBindingStatus(r.binding_status) ? r.binding_status : null,
+    laatstGebruiktOp: r.laatst_gebruikt_op === null ? null : r.laatst_gebruikt_op instanceof Date ? r.laatst_gebruikt_op : new Date(r.laatst_gebruikt_op),
+    breakGlass: r.break_glass === true,
+    uitnodigingOpen: r.uitnodiging_open === true,
+  }));
+}
+
+/** Beheerintrekking. `afronden` geeft het levende slot direct vrij (vertrokken
+ *  gebruiker); zonder `afronden` blijft de binding `revoking`, zodat de gebruiker
+ *  de GoTrue-identiteit in de eigen sessie nog netjes kan losmaken. */
+export async function beheerIntrekking(args: { fondsId: string; doelUserId: string; actorId: string; afronden: boolean; correlatieId: string }): Promise<{ bindingId: string } | { categorie: BeleidFoutcategorie }> {
+  const rijen = await roep<{ id: string | null; categorie: string | null }>(
+    "select id, categorie from login_private.beheer_intrekking($1,$2,$3,$4,$5)",
+    [args.fondsId, args.doelUserId, args.actorId, args.afronden, args.correlatieId]
+  );
+  const r = rijen[0];
+  if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
+  if (!r.id) return { categorie: beleidCategorie(r.categorie) ?? "config_ontbreekt" };
+  return { bindingId: r.id };
+}
+
+/** Break-glass verlenen. Niet zelf toe te kennen (de DB weigert actor = doel) en
+ *  pas werkzaam met een geverifieerde MFA-factor (de Auth-hook toetst dat). */
+export async function verleenBreakGlass(args: {
+  fondsId: string; doelUserId: string; reden: "entra_storing" | "beheerherstel" | "migratie";
+  actorId: string; geldigSeconden: number; correlatieId: string;
+}): Promise<{ id: string } | { categorie: BeleidFoutcategorie }> {
+  const rijen = await roep<{ id: string | null; categorie: string | null }>(
+    "select id, categorie from login_private.verleen_break_glass($1,$2,$3,$4,$5,$6)",
+    [args.fondsId, args.doelUserId, args.reden, args.actorId, args.geldigSeconden, args.correlatieId]
+  );
+  const r = rijen[0];
+  if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
+  if (!r.id) return { categorie: beleidCategorie(r.categorie) ?? "config_ontbreekt" };
+  return { id: r.id };
+}
+
+export async function trekBreakGlassIn(args: { id: string; fondsId: string; actorId: string; correlatieId: string }): Promise<BeleidFoutcategorie | null> {
+  const rijen = await roep<{ categorie: string | null }>(
+    "select login_private.trek_break_glass_in($1,$2,$3,$4) as categorie",
+    [args.id, args.fondsId, args.actorId, args.correlatieId]
+  );
+  return beleidCategorie(rijen[0]?.categorie ?? null);
+}
+
+/** Uitnodiging voor een beperkte koppel-/herstelsessie. De aanroeper levert
+ *  UITSLUITEND de sha256 van het opake token; het token zelf gaat nooit naar de
+ *  database, het log of de audit. */
+export async function maakUitnodiging(args: { fondsId: string; doelUserId: string; tokenHash: string; geldigSeconden: number; actorId: string; correlatieId: string }): Promise<BeleidFoutcategorie | null> {
+  if (!/^[0-9a-f]{64}$/.test(args.tokenHash)) throw new MicrosoftLoginGatewayError("gateway_fout");
+  const rijen = await roep<{ categorie: string | null }>(
+    "select login_private.maak_uitnodiging($1,$2,$3,$4,$5,$6) as categorie",
+    [args.fondsId, args.doelUserId, args.tokenHash, args.geldigSeconden, args.actorId, args.correlatieId]
+  );
+  return beleidCategorie(rijen[0]?.categorie ?? null);
+}
+
+/** Verzilvert de uitnodiging atomisch en eenmalig en opent het venster. */
+export async function activeerUitnodiging(args: { tokenHash: string; fondsId: string; vensterSeconden: number; correlatieId: string }): Promise<{ userId: string; vensterTot: Date } | { categorie: BeleidFoutcategorie }> {
+  if (!/^[0-9a-f]{64}$/.test(args.tokenHash)) return { categorie: "uitnodiging_ongeldig" };
+  const rijen = await roep<{ user_id: string | null; venster_tot: Date | string | null; categorie: string | null }>(
+    "select user_id, venster_tot, categorie from login_private.activeer_uitnodiging($1,$2,$3,$4)",
+    [args.tokenHash, args.fondsId, args.vensterSeconden, args.correlatieId]
+  );
+  const r = rijen[0];
+  if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
+  if (!r.user_id || !r.venster_tot) return { categorie: beleidCategorie(r.categorie) ?? "uitnodiging_ongeldig" };
+  return { userId: r.user_id, vensterTot: r.venster_tot instanceof Date ? r.venster_tot : new Date(r.venster_tot) };
+}
+
+export async function trekUitnodigingIn(args: { fondsId: string; doelUserId: string; actorId: string; correlatieId: string }): Promise<BeleidFoutcategorie | null> {
+  const rijen = await roep<{ categorie: string | null }>(
+    "select login_private.trek_uitnodiging_in($1,$2,$3,$4) as categorie",
+    [args.fondsId, args.doelUserId, args.actorId, args.correlatieId]
+  );
+  return beleidCategorie(rijen[0]?.categorie ?? null);
 }

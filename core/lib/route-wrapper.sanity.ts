@@ -68,7 +68,7 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
     haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "voorzitter", fondsId: "f-1" }),
     // #335 T2: guard L3 default TOEGESTAAN (= wachtwoordsessie of actieve binding);
     // de weigertak wordt per test expliciet aangezet.
-    beoordeelOAuthSessie: async () => ({ toegestaan: true }),
+    beoordeelPortaalSessie: async () => ({ toegestaan: true }),
     beoordeelRouteHostToegang: async () => ({ toegestaan: true }),
     // W6: default UIT. De vlag-aan-stand is de enige tak die gedrag verandert en
     // wordt per test expliciet aangezet — nooit via process.env.
@@ -130,7 +130,7 @@ async function main() {
     let profielAangeroepen = 0;
     const wrap = maakWithFondsRoute(
       deps({
-        beoordeelOAuthSessie: async () => ({ toegestaan: false }),
+        beoordeelPortaalSessie: async () => ({ toegestaan: false }),
         haalProfiel: async () => {
           profielAangeroepen++;
           return null;
@@ -149,7 +149,7 @@ async function main() {
     const wrap = maakWithFondsRoute(
       deps({
         createServerSupabase: async () => nepSupabase(null),
-        beoordeelOAuthSessie: async () => {
+        beoordeelPortaalSessie: async () => {
           guardAangeroepen++;
           return { toegestaan: true };
         },
@@ -164,7 +164,7 @@ async function main() {
     let gezien: string | null = null;
     const wrap = maakWithFondsRoute(
       deps({
-        beoordeelOAuthSessie: async (_s, gebruikerId) => {
+        beoordeelPortaalSessie: async (_s, gebruikerId) => {
           gezien = gebruikerId;
           return { toegestaan: true };
         },

@@ -11,6 +11,12 @@
 //  kaart stuurt dan naar /login. Een wachtwoordsessie blijft (`uitgelogd: false`).
 //  Mislukt de unlink, dan blijft de binding revoking (hook weigert) en biedt de
 //  kaart "Opnieuw proberen". Herstel is idempotent (pending + azure → active).
+//
+//  Fase 1C (#344): de respons draagt de fondsmodus en de kaartstand, zodat de UI
+//  per modus de juiste actie toont. In modus `verplicht` weigert DELETE hier én in
+//  de database (login_private.start_intrekking) — de UI omzeilen helpt niet. De
+//  uitzondering is een geopende koppel-/herstelsessie: daarbinnen MOET de oude
+//  identiteit juist los kunnen.
 // ============================================================================
 import { NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
@@ -19,6 +25,8 @@ import { microsoftLoginActief, microsoftLoginVoorRequest } from "@/core/lib/micr
 import { microsoftLoginFoutcategorie, PROFIEL_MICROSOFT_LOGIN_MELDINGEN } from "@/core/lib/microsoft-login-error-core";
 import { beeindigSessie, huidigAccessToken } from "@/core/lib/microsoft-login-sessieguard";
 import { sessieIsOAuth } from "@/core/lib/microsoft-login-sessieguard-core";
+import { sessiebeleid } from "@/core/lib/microsoft-login-gateway";
+import { magZelfOntkoppelen, profielkaartStand, type Sessiebeleid } from "@/core/lib/microsoft-login-beleid-core";
 
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store" } as const;
@@ -29,6 +37,12 @@ async function beschikbaar(fondsId: string | null): Promise<boolean> {
   return actief.actief;
 }
 
+/** Het beleid van dit account, of null als het niet te bepalen is (fail-closed
+ *  voor de persoonlijke acties: zonder beleid geen ontkoppeling). */
+async function beleidVoor(gebruikerId: string): Promise<Sessiebeleid | null> {
+  return await sessiebeleid(gebruikerId).catch(() => null);
+}
+
 export const GET = withFondsRoute(
   { hostGuard: "afdwingen", rateLimit: "geen", audit: "geen", capability: "profile.view.own", schema: "geen-body" },
   async (ctx) => {
@@ -37,7 +51,20 @@ export const GET = withFondsRoute(
       const flow = await microsoftLoginVoorRequest();
       const status = await flow.status({ userId: ctx.gebruikerId });
       const sessieViaMicrosoft = sessieIsOAuth(await huidigAccessToken(ctx.supabase));
-      return NextResponse.json({ beschikbaar: true, sessieViaMicrosoft, ...status }, { headers: NO_STORE });
+      const beleid = await beleidVoor(ctx.gebruikerId);
+      const modus = beleid?.modus ?? "optioneel";
+      const linkOnly = beleid?.linkOnly === true;
+      return NextResponse.json(
+        {
+          beschikbaar: true,
+          sessieViaMicrosoft,
+          modus,
+          stand: profielkaartStand(modus, linkOnly),
+          magOntkoppelen: magZelfOntkoppelen(modus, linkOnly),
+          ...status,
+        },
+        { headers: NO_STORE },
+      );
     } catch (e) {
       console.warn(`[MICROSOFT-LOGIN] status mislukt: ${microsoftLoginFoutcategorie(e)}`);
       return NextResponse.json({ beschikbaar: true, status: "onbekend" }, { status: 503, headers: NO_STORE });
@@ -53,6 +80,13 @@ export const DELETE = withFondsRoute(
       return NextResponse.json({ error: "Microsoft-login is niet beschikbaar voor dit fonds." }, { status: 404, headers: NO_STORE });
     }
     try {
+      // Modus `verplicht`: de lifecycle ligt bij het fondsbeheer. De database
+      // weigert dit óók (start_intrekking); deze poort geeft de gebruiker alleen
+      // eerder een bruikbaar antwoord.
+      const beleid = await beleidVoor(ctx.gebruikerId);
+      if (!beleid || !magZelfOntkoppelen(beleid.modus, beleid.linkOnly)) {
+        return NextResponse.json({ error: PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer }, { status: 403, headers: NO_STORE });
+      }
       // Vóór de intrekking bepalen: is DEZE sessie via Microsoft ingelogd?
       const viaMicrosoft = sessieIsOAuth(await huidigAccessToken(ctx.supabase));
       const flow = await microsoftLoginVoorRequest();
@@ -67,6 +101,8 @@ export const DELETE = withFondsRoute(
       const categorie = microsoftLoginFoutcategorie(e);
       console.warn(`[MICROSOFT-LOGIN] ontkoppelen mislukt: ${categorie}`);
       if (categorie === "onbekende_binding") return NextResponse.json({ error: "Er is geen Microsoft-koppeling." }, { status: 404, headers: NO_STORE });
+      // Backstop: de database weigerde de intrekking op grond van het beleid.
+      if (categorie === "ontkoppelen_verplicht") return NextResponse.json({ error: PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer }, { status: 403, headers: NO_STORE });
       return NextResponse.json({ error: PROFIEL_MICROSOFT_LOGIN_MELDINGEN.ontkoppelen }, { status: 409, headers: NO_STORE });
     }
   },

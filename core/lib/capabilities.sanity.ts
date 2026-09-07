@@ -393,7 +393,13 @@ test("nulgrens G23: de drie bestaande rollen zijn alleen met W7-gates uitgebreid
   // dus ook dan wint de strengste. Wat hier wél verandert is de VERZAMELING, en
   // die hoort zichtbaar te veranderen in plaats van stil.
   //
-  // Wijzigt er iets buiten de W7-delta, dan faalt deze test nog steeds luid.
+  // Wijzigt er iets buiten de W7-delta (of de expliciete latere deltas hieronder),
+  // dan faalt deze test nog steeds luid.
+  //
+  // #344 (besluit 0212): `login.beleid.manage` — het organisatiebrede Microsoft-
+  // loginbeleid. Bewust ALLEEN voor de beheerder: deze gate kan een heel fonds
+  // buitensluiten en hoort daarom niet mee te liften op fonds.config.manage.
+  const NA_W7_beheerder = ["login.beleid.manage"];
   const VOOR_W7_beheerder = [
     "catalog.manage",
     "classification.review",
@@ -435,8 +441,8 @@ test("nulgrens G23: de drie bestaande rollen zijn alleen met W7-gates uitgebreid
 
   assert.deepEqual(
     [...ROL_CAPABILITIES.beheerder].sort(),
-    [...VOOR_W7_beheerder, ...W7_PER_ROL.beheerder].sort(),
-    "beheerder: wijziging buiten de W7-delta"
+    [...VOOR_W7_beheerder, ...W7_PER_ROL.beheerder, ...NA_W7_beheerder].sort(),
+    "beheerder: wijziging buiten de W7-delta en de vastgelegde latere deltas"
   );
   assert.deepEqual(
     [...ROL_CAPABILITIES.voorzitter].sort(),
