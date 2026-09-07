@@ -103,7 +103,11 @@ login_private.break_glass                                   -- RLS aan, alle rec
   check (herzien_voor > uitgegeven_op)                      -- bewaking, geen einddatum
 
 login_private.break_glass_activeringen                      -- RLS aan, alle rechten dicht
-  break_glass_id, fonds_id, user_id, geopend_op, venster_tot, correlatie_id
+  break_glass_id, fonds_id, user_id, correlatie_id,
+  mfa_geverifieerd_op                                       -- amr-tijdstip: één venster per verificatie
+  geopend_op, venster_tot
+  check (venster_tot >= geopend_op)                          -- beëindigen mag samenvallen met openen
+  unique (user_id, mfa_geverifieerd_op)                      -- eenmalig, atomair afgedwongen
 
 login_private.herkoppel_uitnodigingen                       -- RLS aan, alle rechten dicht
   token_hash (pk, ^[0-9a-f]{64}$)                           -- ALLEEN de hash
