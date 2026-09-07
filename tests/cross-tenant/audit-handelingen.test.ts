@@ -25,6 +25,10 @@ import { dirname, join, relative } from "node:path";
 const hier = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(hier, "..", "..");
 const API_DIR = join(ROOT, "app", "api");
+// #335 B0 — app/auth/** wordt meegescand: een withFondsRoute-handler die daar zou
+// landen valt onder dezelfde labelregels (vandaag zijn er geen; de OAuth-routes
+// schrijven hun spoor in login_private.audit_log, zie route-mechanismen.expected.json).
+const AUTH_DIR = join(ROOT, "app", "auth");
 
 const register = JSON.parse(
   readFileSync(join(hier, "audit-handelingen.expected.json"), "utf8")
@@ -43,8 +47,8 @@ function routeBestanden(dir: string): string[] {
 /** Alle gemeten `audit: { handeling }`-declaraties uit de code: label → routesleutel(s). */
 function handelingenUitCode(): Map<string, string[]> {
   const uit = new Map<string, string[]>();
-  for (const pad of routeBestanden(API_DIR)) {
-    const rel = relative(ROOT, pad).split("\\").join("/").replace(/^app\/api\//, "").replace(/\/route\.ts$/, "");
+  for (const pad of [...routeBestanden(API_DIR), ...routeBestanden(AUTH_DIR)]) {
+    const rel = relative(ROOT, pad).split("\\").join("/").replace(/^app\/(api|auth)\//, "").replace(/\/route\.ts$/, "");
     const bron = readFileSync(pad, "utf8");
     // RouteSpecs mogen geformatteerd zijn over meerdere regels. Splits eerst
     // per HTTP-export; anders zou een GET de audit van een latere POST lezen.

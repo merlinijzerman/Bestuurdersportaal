@@ -28,6 +28,11 @@ import { dirname, join, relative } from "node:path";
 const hier = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(hier, "..", "..");
 const API_DIR = join(ROOT, "app", "api");
+// #335 B0 — ook de OAuth-routes onder app/auth/** vallen onder de gate. Zij lopen
+// bewust BUITEN withFondsRoute (een identity provider initieert de navigatie; er
+// is bij inloggen nog geen sessie), maar dat is een geregistreerde uitzondering
+// met reden, niet een gat: vóór B0 zag geen enkele gate deze map.
+const AUTH_DIR = join(ROOT, "app", "auth");
 
 const register = JSON.parse(
   readFileSync(join(hier, "route-mechanismen.expected.json"), "utf8")
@@ -49,8 +54,12 @@ function routeBestanden(dir: string): string[] {
 
 /** Het declaratie-mechanisme van een routebestand, uit de bron. Volgorde telt:
  *  het primaire model wint van een toevallig meegeïmporteerde helper. */
-function mechanismeVan(bron: string): string {
+function mechanismeVan(bron: string, rel = ""): string {
   if (/= *withFondsRoute *\(/.test(bron)) return "withFondsRoute";
+  // app/auth/**: elke niet-gewrapte route hier is een OAuth-/OIDC-route. De
+  // DECLARATIE is de registratie in `uitzonderingen` + `bespokeReden` — een
+  // ongeregistreerde app/auth-route valt in gate 1 rood.
+  if (rel.startsWith("app/auth/")) return "oauth-route";
   if (/withMachineRoute *\(/.test(bron)) return "withMachineRoute";
   if (/organen-route/.test(bron)) return "organen-route";
   if (/catalogusContext/.test(bron)) return "catalogusContext";
@@ -58,7 +67,7 @@ function mechanismeVan(bron: string): string {
   return "bespoke";
 }
 
-const alleRoutes = routeBestanden(API_DIR);
+const alleRoutes = [...routeBestanden(API_DIR), ...routeBestanden(AUTH_DIR)];
 const bronVan = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 /** Telt letterlijke voorkomens van `patroon` over alle route.ts. */
@@ -79,7 +88,7 @@ function tel(patroon: string): number {
 test("W13 — geen route buiten élk mechanisme én buiten het register", () => {
   const buitenModel: string[] = [];
   for (const rel of alleRoutes) {
-    const m = mechanismeVan(bronVan(rel));
+    const m = mechanismeVan(bronVan(rel), rel);
     if (m === "withFondsRoute" || m === "withMachineRoute") continue; // primair
     const geregistreerd = register.uitzonderingen[rel];
     if (!geregistreerd) {
@@ -103,7 +112,7 @@ test("W13 — geen route buiten élk mechanisme én buiten het register", () => 
 test("W13 — geen stale uitzondering: elke entry bestaat nog én is nog niet-primair", () => {
   for (const [rel, verwacht] of Object.entries(register.uitzonderingen)) {
     assert.ok(existsSync(join(ROOT, rel)), `register verwijst naar een verdwenen route: ${rel}`);
-    const nu = mechanismeVan(bronVan(rel));
+    const nu = mechanismeVan(bronVan(rel), rel);
     assert.ok(
       nu !== "withFondsRoute" && nu !== "withMachineRoute",
       `${rel} is naar het primaire model (${nu}) gemigreerd — haal hem uit het register`
