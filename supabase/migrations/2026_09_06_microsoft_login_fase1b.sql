@@ -24,8 +24,9 @@
 --      (profiel in het fonds van de binding, fondsconfiguratie actief, tenant
 --      gelijk); eigenaar = NOLOGIN-rol login_hook_owner met alleen SELECT op de
 --      bindingstabel en kolom-SELECT (id, fonds_id) op profielen en (fonds_id,
---      actief, entra_tenant_id) op fonds_microsoft_login, elk met een expliciete
---      RLS-policy, en search_path '';
+--      actief, entra_tenant_id) op fonds_microsoft_login, elk met een eerlijke
+--      `using (true)`-leespolicy (uitzondering in gates B/C op basis van het
+--      volledige rolcontract), en search_path '';
 --    * public.fn_access_token_hook — SECURITY INVOKER, draait als
 --      supabase_auth_admin, leest auth.identities binnen de GoTrue-transactie.
 --
@@ -489,17 +490,25 @@ grant select on login_private.microsoft_identiteiten to login_hook_owner;
 drop policy if exists "hook owner leest bindingen" on login_private.microsoft_identiteiten;
 create policy "hook owner leest bindingen" on login_private.microsoft_identiteiten
   for select to login_hook_owner using (true);
--- Actuele-standtoets: uitsluitend de kolommen die de helper nodig heeft, met een
--- expliciete, tenantgebonden leespolicy per tabel (gates B/C: geen USING (true)
--- op fonds_id-tabellen). Geen andere kolom, geen schrijfrecht, geen andere tabel.
+-- Actuele-standtoets: de helper moet voor élke gebruiker kunnen vaststellen of het
+-- profiel nog in het fonds van de binding zit en of dat fonds Microsoft-login aan
+-- heeft. login_hook_owner mag daarom noodzakelijkerwijs ALLE rijen van deze twee
+-- tabellen beoordelen — maar uitsluitend de genoemde kolommen. De policies zijn
+-- bewust en eerlijk `using (true)`: de beveiliging rust hier niet op tenantselectie
+-- door RLS maar op (1) de afgeschermde NOLOGIN-eigenaar zonder leden, SET ROLE,
+-- BYPASSRLS of schrijfrechten, en (2) het beperkte functiecontract van
+-- identiteit_toegestaan (boolean, alleen aanroepbaar door supabase_auth_admin).
+-- Gates B/C kennen hiervoor een expliciete, volledig getoetste uitzondering
+-- (2026_07_31_r1_structurele_gates.sql, pg_temp.hook_owner_uitzondering); de
+-- F1B-suite toetst hetzelfde rolcontract onafhankelijk.
 grant select (id, fonds_id) on public.profielen to login_hook_owner;
 drop policy if exists "hook owner leest profiel fonds" on public.profielen;
 create policy "hook owner leest profiel fonds" on public.profielen
-  for select to login_hook_owner using (fonds_id is not null);
+  for select to login_hook_owner using (true);
 grant select (fonds_id, actief, entra_tenant_id) on public.fonds_microsoft_login to login_hook_owner;
 drop policy if exists "hook owner leest loginconfig" on public.fonds_microsoft_login;
 create policy "hook owner leest loginconfig" on public.fonds_microsoft_login
-  for select to login_hook_owner using (fonds_id is not null);
+  for select to login_hook_owner using (true);
 
 -- ── 8. Custom Access Token Hook (SECURITY INVOKER, supabase_auth_admin) ─────
 -- `oauth` is in Supabase de generieke methode voor élke social/OAuth-login; de

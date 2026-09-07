@@ -4,8 +4,10 @@
 --
 --  WAT DEZE SUITE BEWIJST
 --    DEEL 1 — STRUCTUUR: minimale loginrol login_gateway (exact 13 executes, nul
---                        tabelrechten), NOLOGIN-eigenaar login_hook_owner (alleen
---                        SELECT + policy op de bindingstabel), privaat schema zonder
+--                        tabelrechten), NOLOGIN-eigenaar login_hook_owner (rolcontract:
+--                        geen LOGIN/BYPASSRLS/leden/SET ROLE/schrijfrecht, exact de
+--                        kolomrechten, geen andere functies; eerlijke using(true)-
+--                        policies waarop de uitzondering in gates B/C rust), privaat schema zonder
 --                        browser-/service-toegang, gepinde search_paths, RLS aan,
 --                        append-only audit, hook SECURITY INVOKER met search_path '',
 --                        helper SECURITY DEFINER onder login_hook_owner, publieke
@@ -126,13 +128,51 @@ begin
      or has_table_privilege('login_hook_owner','public.fonds_microsoft_login','INSERT,UPDATE,DELETE') then
     fouten := fouten || E'\n- login_hook_owner heeft meer of minder dan kolom-SELECT (fonds_id, actief, entra_tenant_id) op fonds_microsoft_login';
   end if;
+  -- Eerlijke policyvorm: exact `true`, alleen voor login_hook_owner, alleen SELECT.
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='profielen' and policyname='hook owner leest profiel fonds'
-                   and cmd='SELECT' and 'login_hook_owner' = any(roles) and qual ~ 'fonds_id') then
-    fouten := fouten || E'\n- tenantgebonden leespolicy voor login_hook_owner op profielen ontbreekt';
+                   and cmd='SELECT' and roles = array['login_hook_owner']::name[] and btrim(qual) = 'true' and with_check is null) then
+    fouten := fouten || E'\n- leespolicy voor login_hook_owner op profielen ontbreekt of heeft niet de vastgelegde vorm (using (true), alleen die rol, SELECT)';
   end if;
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='fonds_microsoft_login' and policyname='hook owner leest loginconfig'
-                   and cmd='SELECT' and 'login_hook_owner' = any(roles) and qual ~ 'fonds_id') then
-    fouten := fouten || E'\n- tenantgebonden leespolicy voor login_hook_owner op fonds_microsoft_login ontbreekt';
+                   and cmd='SELECT' and roles = array['login_hook_owner']::name[] and btrim(qual) = 'true' and with_check is null) then
+    fouten := fouten || E'\n- leespolicy voor login_hook_owner op fonds_microsoft_login ontbreekt of heeft niet de vastgelegde vorm';
+  end if;
+  -- Rolcontract waarop de uitzondering in gates B/C rust: faalt één onderdeel, dan
+  -- faalt deze suite (en gate B/C ziet de policies weer als overtreding).
+  if exists (select 1 from pg_roles where rolname='login_hook_owner' and (rolcanlogin or rolbypassrls or rolsuper or rolcreaterole or rolcreatedb or rolreplication or rolinherit)) then
+    fouten := fouten || E'\n- login_hook_owner heeft LOGIN, BYPASSRLS, SUPERUSER, CREATEROLE, CREATEDB, REPLICATION of INHERIT';
+  end if;
+  if exists (select 1 from pg_auth_members am join pg_roles m on m.oid=am.member where m.rolname='login_hook_owner') then
+    fouten := fouten || E'\n- login_hook_owner is lid van een andere rol';
+  end if;
+  if exists (select 1 from pg_auth_members am join pg_roles r on r.oid=am.roleid where r.rolname='login_hook_owner' and (am.inherit_option or am.set_option)) then
+    fouten := fouten || E'\n- login_hook_owner heeft leden met INHERIT of SET (SET ROLE naar de eigenaar mogelijk)';
+  end if;
+  if has_table_privilege('login_hook_owner','public.profielen','SELECT') or has_table_privilege('login_hook_owner','public.fonds_microsoft_login','SELECT') then
+    fouten := fouten || E'\n- login_hook_owner heeft tabelbrede SELECT (moet kolom-SELECT zijn)';
+  end if;
+  if (select coalesce(array_agg(table_name || '.' || column_name || ':' || privilege_type order by table_name, column_name), '{}')
+        from information_schema.column_privileges where grantee='login_hook_owner' and table_schema='public')
+     <> array['fonds_microsoft_login.actief:SELECT','fonds_microsoft_login.entra_tenant_id:SELECT','fonds_microsoft_login.fonds_id:SELECT','profielen.fonds_id:SELECT','profielen.id:SELECT'] then
+    fouten := fouten || E'\n- kolomrechten van login_hook_owner in public wijken af van exact (profielen: id, fonds_id; fonds_microsoft_login: fonds_id, actief, entra_tenant_id; alleen SELECT)';
+  end if;
+  if exists (select 1 from pg_proc f join pg_namespace n on n.oid=f.pronamespace
+              where f.prosecdef and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
+                and not (n.nspname='login_private' and f.proname='identiteit_toegestaan')) then
+    fouten := fouten || E'\n- login_hook_owner kan een andere SECURITY DEFINER-functie uitvoeren dan de eigen helper';
+  end if;
+  if exists (select 1 from pg_proc f join pg_namespace n on n.oid=f.pronamespace
+              where n.nspname in ('public','login_private') and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
+                and not (n.nspname='login_private' and f.proname='identiteit_toegestaan')
+                and not exists (select 1 from pg_depend d where d.objid=f.oid and d.deptype='e')) then
+    fouten := fouten || E'\n- login_hook_owner kan een applicatiefunctie (niet-extensie) uitvoeren buiten de eigen helper';
+  end if;
+  if exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+              where n.nspname='public' and c.relkind in ('r','p','v','m','f')
+                and c.relname not in ('profielen','fonds_microsoft_login')
+                and (has_table_privilege('login_hook_owner', c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                  or exists (select 1 from information_schema.column_privileges cp where cp.grantee='login_hook_owner' and cp.table_schema='public' and cp.table_name=c.relname))) then
+    fouten := fouten || E'\n- login_hook_owner heeft rechten op een andere publieke relatie dan profielen/fonds_microsoft_login';
   end if;
   if exists (select 1 from pg_policies where 'login_hook_owner' = any(roles) and not (schemaname||'.'||tablename in ('login_private.microsoft_identiteiten','public.profielen','public.fonds_microsoft_login') and cmd='SELECT')) then
     fouten := fouten || E'\n- login_hook_owner heeft een policy buiten de drie toegestane leespolicies';
