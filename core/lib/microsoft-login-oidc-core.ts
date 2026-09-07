@@ -18,6 +18,19 @@ import type { MicrosoftLoginFoutcategorie } from "@/core/lib/microsoft-login-err
 export const MICROSOFT_LOGIN_SCOPES = ["openid", "profile"] as const;
 export const MICROSOFT_LOGIN_SCOPE_STRING = MICROSOFT_LOGIN_SCOPES.join(" ");
 
+/**
+ * Inhoudsvrije, vaste redenen waarom de vorm van een tokenresponse is geweigerd.
+ * Deze waarden mogen in de runtime-log; responsewaarden, tokens en claims nooit.
+ */
+export const TOKEN_RESPONSE_AFWIJSREDENEN = [
+  "geen_object",
+  "refresh_token_aanwezig",
+  "id_token_ontbreekt",
+  "id_token_formaat",
+  "extra_scope",
+] as const;
+export type TokenResponseAfwijsreden = (typeof TOKEN_RESPONSE_AFWIJSREDENEN)[number];
+
 export const STANDAARD_AUTHORITY = "https://login.microsoftonline.com";
 const LOKALE_SUPABASE_URL = "http://127.0.0.1:54321";
 
@@ -151,19 +164,30 @@ export function bouwTokenRequestBody(args: {
  */
 export function beoordeelTokenResponse(
   json: unknown,
-): { ok: true; idToken: string } | { ok: false; categorie: Extract<MicrosoftLoginFoutcategorie, "token_response_ongeldig"> } {
+):
+  | { ok: true; idToken: string }
+  | {
+      ok: false;
+      categorie: Extract<MicrosoftLoginFoutcategorie, "token_response_ongeldig">;
+      reden: TokenResponseAfwijsreden;
+    } {
   const r = json as Record<string, unknown> | null;
-  if (!r || typeof r !== "object") return { ok: false, categorie: "token_response_ongeldig" };
-  if ("refresh_token" in r && r.refresh_token !== undefined && r.refresh_token !== null) {
-    return { ok: false, categorie: "token_response_ongeldig" };
+  if (!r || typeof r !== "object" || Array.isArray(r)) {
+    return { ok: false, categorie: "token_response_ongeldig", reden: "geen_object" };
   }
-  if (typeof r.id_token !== "string" || r.id_token.split(".").length !== 3) {
-    return { ok: false, categorie: "token_response_ongeldig" };
+  if ("refresh_token" in r && r.refresh_token !== undefined && r.refresh_token !== null) {
+    return { ok: false, categorie: "token_response_ongeldig", reden: "refresh_token_aanwezig" };
+  }
+  if (typeof r.id_token !== "string" || !r.id_token) {
+    return { ok: false, categorie: "token_response_ongeldig", reden: "id_token_ontbreekt" };
+  }
+  if (r.id_token.split(".").length !== 3) {
+    return { ok: false, categorie: "token_response_ongeldig", reden: "id_token_formaat" };
   }
   if (typeof r.scope === "string") {
     const toegestaan = new Set<string>(MICROSOFT_LOGIN_SCOPES);
     const extra = r.scope.split(/\s+/).filter((s) => s && !toegestaan.has(s));
-    if (extra.length) return { ok: false, categorie: "token_response_ongeldig" };
+    if (extra.length) return { ok: false, categorie: "token_response_ongeldig", reden: "extra_scope" };
   }
   return { ok: true, idToken: r.id_token };
 }

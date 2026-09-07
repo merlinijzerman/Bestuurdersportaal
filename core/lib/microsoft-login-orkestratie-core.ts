@@ -44,6 +44,7 @@ import {
   verifieerRs256,
   verwachteIssuer,
   type DiscoveryDocument,
+  type TokenResponseAfwijsreden,
 } from "@/core/lib/microsoft-login-oidc-core";
 
 // ── Geïnjecteerde afhankelijkheden ──────────────────────────────────────────
@@ -123,11 +124,17 @@ export type KoppelStatus =
 export class MicrosoftLoginFlowFout extends MicrosoftLoginError {
   readonly intent: FlowIntent | null;
   readonly correlatieId: string;
-  constructor(categorie: MicrosoftLoginFoutcategorie, ctx: { intent: FlowIntent | null; correlatieId: string }, oorzaak?: unknown) {
+  readonly diagnostiek: TokenResponseAfwijsreden | null;
+  constructor(
+    categorie: MicrosoftLoginFoutcategorie,
+    ctx: { intent: FlowIntent | null; correlatieId: string; diagnostiek?: TokenResponseAfwijsreden | null },
+    oorzaak?: unknown,
+  ) {
     super(categorie, oorzaak);
     this.name = "MicrosoftLoginFlowFout";
     this.intent = ctx.intent;
     this.correlatieId = ctx.correlatieId;
+    this.diagnostiek = ctx.diagnostiek ?? null;
   }
 }
 
@@ -251,7 +258,9 @@ export function maakMicrosoftLogin(deps: OrkestratieDeps) {
       throw faal("token_exchange", e);
     }
     const tokenOordeel = beoordeelTokenResponse(tokenJson);
-    if (!tokenOordeel.ok) throw faal(tokenOordeel.categorie);
+    if (!tokenOordeel.ok) {
+      throw new MicrosoftLoginFlowFout(tokenOordeel.categorie, { ...ctx, diagnostiek: tokenOordeel.reden });
+    }
 
     const delen = decodeJwt(tokenOordeel.idToken);
     if (!delen) throw faal("handtekening_ongeldig");

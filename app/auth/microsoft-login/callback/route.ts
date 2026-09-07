@@ -78,7 +78,8 @@ export async function GET(req: NextRequest) {
     const categorie = microsoftLoginFoutcategorie(e);
     if (e instanceof MicrosoftLoginFlowFout) {
       const sc = supportcode(e.correlatieId);
-      console.warn(`[MICROSOFT-LOGIN] callback mislukt: ${categorie} (${e.intent ?? "onbekend"}, ${sc})`);
+      const diagnostiek = e.diagnostiek ? `, ${e.diagnostiek}` : "";
+      console.warn(`[MICROSOFT-LOGIN] callback mislukt: ${categorie} (${e.intent ?? "onbekend"}, ${sc}${diagnostiek})`);
       if (e.intent === "koppelen") return naarProfiel(origin, { microsoft_login: "fout", c: profielCodeVoor(categorie), [SUPPORTCODE_PARAM]: sc });
       return naarLogin(origin, sc);
     }

@@ -58,11 +58,24 @@ test("tokenrequest-body: authorization_code + PKCE + exact openid profile, geen 
 });
 
 test("tokenresponse: refresh_token → weigeren; extra scope → weigeren; id_token verplicht", () => {
-  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", refresh_token: "r" }), { ok: false, categorie: "token_response_ongeldig" });
-  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid profile offline_access" }), { ok: false, categorie: "token_response_ongeldig" });
-  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid profile email" }), { ok: false, categorie: "token_response_ongeldig" });
-  assert.deepEqual(beoordeelTokenResponse({ access_token: "x" }), { ok: false, categorie: "token_response_ongeldig" });
-  assert.deepEqual(beoordeelTokenResponse(null), { ok: false, categorie: "token_response_ongeldig" });
+  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", refresh_token: "r" }), {
+    ok: false, categorie: "token_response_ongeldig", reden: "refresh_token_aanwezig",
+  });
+  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid profile offline_access" }), {
+    ok: false, categorie: "token_response_ongeldig", reden: "extra_scope",
+  });
+  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid profile email" }), {
+    ok: false, categorie: "token_response_ongeldig", reden: "extra_scope",
+  });
+  assert.deepEqual(beoordeelTokenResponse({ access_token: "x" }), {
+    ok: false, categorie: "token_response_ongeldig", reden: "id_token_ontbreekt",
+  });
+  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c.d.e" }), {
+    ok: false, categorie: "token_response_ongeldig", reden: "id_token_formaat",
+  });
+  assert.deepEqual(beoordeelTokenResponse(null), {
+    ok: false, categorie: "token_response_ongeldig", reden: "geen_object",
+  });
   assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid profile", access_token: "x", token_type: "Bearer" }), { ok: true, idToken: "a.b.c" });
 });
 
