@@ -141,7 +141,12 @@ Die volgorde is bewust: zou het venster als bijwerking van een willekeurig verzo
 een client de app overslaan en rechtstreeks bij GoTrue refreshen — en volledige tokens houden zonder
 venster en zonder auditregel (besluit 0212 D12).
 
-**Elke verhoging hangt aan één MFA-verificatie** (0212 D14). De activering legt het tijdstip uit de
+**Elke verhoging hangt aan één aanwijzing én één MFA-verificatie** (0212 D14/D15). De hook koppelt de
+activering aan de aanwijzing (`a.break_glass_id = g.id`, levend), zodat een activering van een
+ingetrokken of vervangen aanwijzing niets verhoogt; `open_breakglass_venster` vergrendelt de
+aanwijzingsrij met `FOR UPDATE` zodat verhogen en intrekken elkaar niet kruisen; en intrekken of
+vervangen béëindigt lopende vensters in plaats van ze te verwijderen — de rij blijft het bewijs dat
+die MFA-verificatie is verbruikt. De activering legt het tijdstip uit de
 `amr`-claim vast; dat tijdstip moet er zijn (anders `mfa_ontbreekt`), vers zijn (ouder dan vijf
 minuten is `mfa_verlopen`) en mag maar één keer worden gebruikt — afgedwongen door een unieke index
 op `(user_id, mfa_geverifieerd_op)`, dus atomair en niet door de route. De hook koppelt op exact

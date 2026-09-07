@@ -5,6 +5,11 @@
 --  binaire `actief` + `pilotstatus`, en een hook die niet-oauth-uitgiftes
 --  onvoorwaardelijk doorlaat.
 --
+--  LET OP  De check-suites in supabase/checks/ horen bij de HUIDIGE repo-stand en
+--    veronderstellen dus dat deze migratie is toegepast. Draai je terug, draai dan
+--    ook de suites van de F1B-commit — de 1C-suite en de bijgewerkte F1B-suite
+--    toetsen op `modus` en zullen terecht falen op een teruggerolde database.
+--
 --  VOLGORDE (blokkerend)
 --    1. Rol EERST de PR-A-code terug (of zet elk fonds op `optioneel`/`uit`).
 --       Draai je deze rollback terwijl een fonds nog `verplicht` is, dan valt de
@@ -86,6 +91,11 @@ end $$;
 -- ── 3. Gatewayfuncties van PR-A weg ─────────────────────────────────────────
 drop function if exists login_private.sessiebeleid(uuid);
 drop function if exists login_private.breakglass_overzicht(uuid);
+-- BEIDE signaturen: de eerste tranche kende (uuid, integer, text), de huidige
+-- migratie (uuid, timestamptz, integer, text). Laat je er één staan, dan blijft de
+-- functie bestaan en faalt het droppen van break_glass_activeringen op de
+-- afhankelijkheid (reviewbevinding P1b, ronde 4).
+drop function if exists login_private.open_breakglass_venster(uuid, timestamptz, integer, text);
 drop function if exists login_private.open_breakglass_venster(uuid, integer, text);
 drop function if exists login_private.trek_uitnodiging_in(uuid, uuid, uuid, text);
 drop function if exists login_private.activeer_uitnodiging(text, uuid, integer, text);

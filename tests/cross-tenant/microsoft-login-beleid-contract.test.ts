@@ -133,6 +133,26 @@ test("1C: één verhoging per MFA-verificatie — vers, eenmalig en atomair", ()
   assert.match(beleidCore, /args\.mfaGeverifieerdOp instanceof Date/);
 });
 
+test("1C: een activering verhoogt uitsluitend HAAR EIGEN aanwijzing", () => {
+  // Zonder deze join kon een activering van een ingetrokken of vervangen
+  // aanwijzing een nieuwe aanwijzing verhogen (reviewbevinding P1, ronde 4).
+  assert.match(migratie, /join login_private\.break_glass g2\s*\n\s*on g2\.id = a\.break_glass_id and g2\.ingetrokken_op is null/,
+    "de hook koppelt de activering aan de levende aanwijzing");
+  assert.match(migratie, /join break_glass g2 on g2\.id = a\.break_glass_id and g2\.ingetrokken_op is null/,
+    "sessiebeleid doet hetzelfde");
+  // Verhogen en intrekken mogen elkaar niet kruisen.
+  assert.match(migratie, /where g\.user_id = p_user and g\.ingetrokken_op is null\s*\n\s*order by g\.uitgegeven_op desc limit 1\s*\n\s*for update;/);
+  // Een beëindigd venster blijft bestaan: de rij is óók het bewijs dat déze
+  // MFA-verificatie is verbruikt.
+  assert.doesNotMatch(migratie, /delete from break_glass_activeringen/, "vensters worden beëindigd, niet verwijderd");
+  assert.equal((migratie.match(/set venster_tot = least\(a\.venster_tot, now\(\)\)/g) ?? []).length, 2,
+    "zowel intrekken als vervangen beëindigt lopende verhogingen");
+  assert.match(migratie, /check \(venster_tot >= geopend_op\)/, "een beëindigd venster mag samenvallen met zijn opening");
+  // De hookeigenaar kan de koppeling ook echt lezen.
+  assert.match(migratie, /grant select \(id, user_id, fonds_id, ingetrokken_op\) on login_private\.break_glass to login_hook_owner;/);
+  assert.match(migratie, /grant select \(break_glass_id, user_id, mfa_geverifieerd_op, venster_tot\) on login_private\.break_glass_activeringen to login_hook_owner;/);
+});
+
 test("1C: de fondslock gaat in canonieke volgorde (geen deadlock bij A→B en B→A)", () => {
   assert.match(migratie, /array_agg\(distinct f order by f\)/, "gesorteerde UUID's, niet de richting van de verplaatsing");
   assert.match(migratie, /for i in 1 \.\. coalesce\(array_length\(v_fondsen, 1\), 0\) loop/);
@@ -152,7 +172,8 @@ test("1C: break-glass is een DUURZAME aanwijzing met korte activeringsvensters",
   // De korte vensters staan apart, met precies één auditregel per verhoging.
   assert.match(migratie, /create table if not exists login_private\.break_glass_activeringen/);
   assert.match(migratie, /'breakglass\.gebruikt'/, "het beloofde auditgebeurtenis bestaat");
-  assert.match(migratie, /delete from break_glass_activeringen a where a\.break_glass_id = p_id and a\.venster_tot > now\(\)/);
+  assert.match(migratie, /update break_glass_activeringen a set venster_tot = least\(a\.venster_tot, now\(\)\)\s*\n\s*where a\.break_glass_id = p_id/,
+    "intrekken beëindigt lopende verhogingen");
   assert.match(beleidCore, /export const BREAKGLASS_VENSTER_SECONDEN = 60 \* 60;/);
 });
 

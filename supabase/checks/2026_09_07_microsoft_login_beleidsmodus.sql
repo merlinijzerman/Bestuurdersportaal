@@ -95,13 +95,15 @@ begin
   ) then fouten := fouten || E'\n- een rol heeft directe tabelrechten op break_glass of herkoppel_uitnodigingen'; end if;
 
   -- login_hook_owner: uitsluitend de kolommen die de beslissing dragen.
-  if not has_column_privilege('login_hook_owner','login_private.break_glass','user_id','SELECT')
+  if not has_column_privilege('login_hook_owner','login_private.break_glass','id','SELECT')
+     or not has_column_privilege('login_hook_owner','login_private.break_glass','user_id','SELECT')
      or not has_column_privilege('login_hook_owner','login_private.break_glass','ingetrokken_op','SELECT')
      or has_column_privilege('login_hook_owner','login_private.break_glass','reden_categorie','SELECT')
      or has_column_privilege('login_hook_owner','login_private.break_glass','correlatie_id','SELECT') then
     fouten := fouten || E'\n- kolomrechten van login_hook_owner op break_glass wijken af';
   end if;
   if not has_column_privilege('login_hook_owner','login_private.break_glass_activeringen','venster_tot','SELECT')
+     or not has_column_privilege('login_hook_owner','login_private.break_glass_activeringen','break_glass_id','SELECT')
      or has_column_privilege('login_hook_owner','login_private.break_glass_activeringen','correlatie_id','SELECT') then
     fouten := fouten || E'\n- kolomrechten van login_hook_owner op break_glass_activeringen wijken af';
   end if;
@@ -244,7 +246,8 @@ declare
   v_token text := 'geheim-token-voor-de-suite';
   v_hash text;
   v_hash2 text;
-  v_id uuid; v_n integer; v_cat text; v_res jsonb; v_user uuid; v_venster timestamptz; v_mfa_op timestamptz;
+  v_id uuid; v_n integer; v_cat text; v_res jsonb; v_user uuid; v_venster timestamptz;
+  v_mfa_op timestamptz; v_mfa_op2 timestamptz; ev_m22 jsonb;
   v_pre record; v_beleid record;
   ev_pw jsonb; ev_pw2 jsonb; ev_pw2_aal2 jsonb; ev_magic jsonb; ev_recovery jsonb; ev_oauth1 jsonb; ev_refresh1 jsonb;
 begin
@@ -641,6 +644,46 @@ begin
   select count(*) into v_n from login_private.break_glass_activeringen where user_id = v_u2 and venster_tot > now();
   assert v_n = 0, 'M20: intrekking ruimt lopende verhogingen op';
   assert (public.fn_access_token_hook(ev_pw2_aal2)->'error'->>'http_code') = '403', 'M20: na intrekking geen noodtoegang';
+
+  -- ── M22 — een activering verhoogt alleen HAAR EIGEN aanwijzing ───────────
+  -- Reviewbevinding P1 (ronde 4): de hook toetste "ergens een levende aanwijzing"
+  -- en "ergens een lopende activering" los van elkaar. Wordt aanwijzing A dan
+  -- vervangen door B, dan verhoogde de oude activering van A ineens B — zonder
+  -- nieuwe MFA en zonder expliciete verhoging.
+  -- Eigen, nog ongebruikte MFA-verificatie (die van M20 is verbruikt).
+  v_mfa_op2 := v_mfa_op - interval '7 seconds';
+  ev_m22 := jsonb_set(ev_pw2_aal2, '{claims,amr}', jsonb_build_array(
+    jsonb_build_object('method','password','timestamp', extract(epoch from v_mfa_op2)::bigint),
+    jsonb_build_object('method','totp','timestamp', extract(epoch from v_mfa_op2)::bigint)));
+  set local role login_gateway;
+  select r.id, r.categorie into v_id, v_cat
+    from login_private.verleen_break_glass(v_fonds, v_u2, 'entra_storing', v_u1, 90, 'corr-m22a') r;
+  assert v_cat is null, 'M22: aanwijzing A verleend';
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, v_mfa_op2, 3600, 'corr-m22b') r;
+  assert v_cat is null, format('M22: venster op A geopend (kreeg %s)', coalesce(v_cat,'null'));
+  reset role;
+  assert public.fn_access_token_hook(ev_m22) = ev_m22, 'M22: met A verhoogd';
+
+  -- Vervangen door B; A wordt ingetrokken en haar venster beëindigd.
+  set local role login_gateway;
+  select r.categorie into v_cat
+    from login_private.verleen_break_glass(v_fonds, v_u2, 'beheerherstel', v_u1, 90, 'corr-m22c') r;
+  assert v_cat is null, 'M22: aanwijzing B verleend, A vervangen';
+  reset role;
+  assert public.fn_access_token_hook(ev_m22)->'claims'->>'role' = 'portaal_beperkt',
+    'M22: de nieuwe aanwijzing begint zonder verhoging';
+
+  -- En zelfs als het oude venster kunstmatig weer zou lopen, telt het niet mee:
+  -- het hangt aan de INGETROKKEN aanwijzing. Dit is de kern van de bevinding.
+  update login_private.break_glass_activeringen a
+     set venster_tot = now() + interval '1 hour'
+   where a.break_glass_id = v_id;
+  assert public.fn_access_token_hook(ev_m22)->'claims'->>'role' = 'portaal_beperkt',
+    'M22: een activering van een ingetrokken aanwijzing verhoogt niets';
+  set local role login_gateway;
+  select count(*) into v_n from login_private.sessiebeleid(v_u2) b where b.breakglass_venster_tot is not null;
+  assert v_n = 0, 'M22: sessiebeleid telt dat venster evenmin mee';
+  reset role;
 
   -- ── M21 — fondslock in canonieke volgorde (reviewbevinding P2) ───────────
   -- Twee gelijktijdige verplaatsingen A→B en B→A mogen elkaar niet deadlocken;

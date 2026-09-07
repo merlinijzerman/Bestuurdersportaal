@@ -259,11 +259,21 @@ create table if not exists login_private.break_glass_activeringen (
   geopend_op    timestamptz not null default now(),
   venster_tot   timestamptz not null,
   correlatie_id text not null,
-  constraint break_glass_activering_venster check (venster_tot > geopend_op)
+  -- `>=` en niet `>`: een venster dat wordt BEËINDIGD (intrekking of vervanging)
+  -- krijgt `venster_tot = now()`, en binnen één transactie is dat exact gelijk aan
+  -- `geopend_op`. Openen gebeurt altijd met een positieve duur.
+  constraint break_glass_activering_venster check (venster_tot >= geopend_op)
 );
 -- Herhaalbaar over een eerdere toepassing van deze migratie.
 do $$
 begin
+  -- Herhaalbaar over de strengere `>`-variant uit een eerdere toepassing.
+  if exists (select 1 from pg_constraint where conname = 'break_glass_activering_venster'
+               and pg_get_constraintdef(oid) like '%>%' and pg_get_constraintdef(oid) not like '%>=%') then
+    alter table login_private.break_glass_activeringen drop constraint break_glass_activering_venster;
+    alter table login_private.break_glass_activeringen
+      add constraint break_glass_activering_venster check (venster_tot >= geopend_op);
+  end if;
   if not exists (select 1 from information_schema.columns
                   where table_schema='login_private' and table_name='break_glass_activeringen'
                     and column_name='mfa_geverifieerd_op') then
@@ -563,7 +573,12 @@ begin
     values (p_fonds, p_user, 'breakglass.geweigerd', 'fonds_mismatch', p_correlatie);
     return query select null::uuid, 'fonds_mismatch'::text; return;
   end if;
-  -- Eén levende aanwijzing per account: een nieuwe vervangt de vorige expliciet.
+  -- Eén levende aanwijzing per account: een nieuwe vervangt de vorige expliciet,
+  -- inclusief haar lopende verhogingen (beëindigd, niet verwijderd — zie
+  -- trek_break_glass_in). De nieuwe aanwijzing begint dus zonder verhoging.
+  update break_glass_activeringen a set venster_tot = least(a.venster_tot, now())
+   where a.venster_tot > now()
+     and a.break_glass_id in (select g.id from break_glass g where g.user_id = p_user and g.ingetrokken_op is null);
   update break_glass set ingetrokken_op = now(), ingetrokken_door = p_actor
    where user_id = p_user and ingetrokken_op is null;
   insert into break_glass (fonds_id, user_id, reden_categorie, uitgegeven_door, herzien_voor, correlatie_id)
@@ -584,8 +599,12 @@ begin
   if not found then return 'onbekende_uitzondering'; end if;
   if r.ingetrokken_op is not null then return null; end if;              -- idempotent
   update break_glass set ingetrokken_op = now(), ingetrokken_door = p_actor where id = p_id;
-  -- Lopende verhogingen vervallen onmiddellijk mee.
-  delete from break_glass_activeringen a where a.break_glass_id = p_id and a.venster_tot > now();
+  -- Lopende verhogingen vervallen onmiddellijk mee. Beëindigen, niet verwijderen:
+  -- de rij is óók het bewijs dat déze MFA-verificatie al is gebruikt, en dat mag
+  -- een intrekking niet wegnemen (anders opent dezelfde code straks een nieuw
+  -- venster op een volgende aanwijzing).
+  update break_glass_activeringen a set venster_tot = least(a.venster_tot, now())
+   where a.break_glass_id = p_id and a.venster_tot > now();
   insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
   values (r.fonds_id, r.user_id, 'breakglass.ingetrokken', null, p_correlatie);
   return null;
@@ -620,14 +639,21 @@ begin
   if p_mfa_op > now() + c_max_vooruit or now() - p_mfa_op > c_max_leeftijd then
     return query select null::timestamptz, 'mfa_verlopen'::text; return;
   end if;
-  select * into r from break_glass g where g.user_id = p_user and g.ingetrokken_op is null limit 1;
+  -- FOR UPDATE: verhogen en intrekken mogen elkaar niet kruisen. Zonder deze
+  -- vergrendeling kan een intrekking tussen de controle en de insert vallen
+  -- (reviewbevinding P1, ronde 4).
+  select * into r from break_glass g
+   where g.user_id = p_user and g.ingetrokken_op is null
+   order by g.uitgegeven_op desc limit 1
+   for update;
   if not found then
     return query select null::timestamptz, 'onbekende_uitzondering'::text; return;
   end if;
-  -- Idempotent binnen dezelfde verificatie: een tweede aanroep tijdens een lopend
-  -- venster geeft dat venster terug zonder een extra auditregel.
+  -- Idempotent binnen dezelfde verificatie ÉN dezelfde aanwijzing: een tweede
+  -- aanroep tijdens een lopend venster geeft dat venster terug zonder extra
+  -- auditregel.
   select a.venster_tot into v_tot from break_glass_activeringen a
-   where a.user_id = p_user and a.mfa_geverifieerd_op = p_mfa_op and a.venster_tot > now();
+   where a.break_glass_id = r.id and a.mfa_geverifieerd_op = p_mfa_op and a.venster_tot > now();
   if found and v_tot is not null then
     return query select v_tot, null::text; return;
   end if;
@@ -769,6 +795,7 @@ language sql security definer set search_path = login_private, public, pg_temp s
          exists (select 1 from break_glass g
                   where g.user_id = p.id and g.fonds_id = p.fonds_id and g.ingetrokken_op is null),
          (select max(a.venster_tot) from break_glass_activeringen a
+            join break_glass g2 on g2.id = a.break_glass_id and g2.ingetrokken_op is null
            where a.user_id = p.id and a.venster_tot > now()),
          exists (select 1 from herkoppel_uitnodigingen u
                   where u.user_id = p.id and u.fonds_id = p.fonds_id
@@ -956,8 +983,14 @@ create or replace function login_private.wachtwoordlogin_niveau(
         -- willekeurig verzoek. Zonder deze regel kon een client de app overslaan
         -- en rechtstreeks bij GoTrue refreshen; zonder de EXACTE binding kon een
         -- oude AAL2-sessie na afloop eindeloos opnieuw verhogen.
+        -- De activering moet bij de ACTUELE aanwijzing horen. Zonder deze join kon
+        -- een activering van een ingetrokken of vervangen aanwijzing een nieuwe
+        -- aanwijzing verhogen, zonder nieuwe MFA en zonder expliciete verhoging
+        -- (reviewbevinding P1, ronde 4).
         when exists (
           select 1 from login_private.break_glass_activeringen a
+            join login_private.break_glass g2
+              on g2.id = a.break_glass_id and g2.ingetrokken_op is null
            where a.user_id = p_user
              and a.mfa_geverifieerd_op = p_mfa_op
              and a.venster_tot > pg_catalog.now()) then 'vol'
@@ -974,8 +1007,8 @@ revoke login_hook_owner from postgres;
 
 -- Leesrechten van de helper: uitsluitend de kolommen die de beslissing dragen.
 grant select (modus) on public.fonds_microsoft_login to login_hook_owner;
-grant select (user_id, fonds_id, ingetrokken_op) on login_private.break_glass to login_hook_owner;
-grant select (user_id, mfa_geverifieerd_op, venster_tot) on login_private.break_glass_activeringen to login_hook_owner;
+grant select (id, user_id, fonds_id, ingetrokken_op) on login_private.break_glass to login_hook_owner;
+grant select (break_glass_id, user_id, mfa_geverifieerd_op, venster_tot) on login_private.break_glass_activeringen to login_hook_owner;
 drop policy if exists "hook owner leest breakglass-activeringen" on login_private.break_glass_activeringen;
 create policy "hook owner leest breakglass-activeringen" on login_private.break_glass_activeringen
   for select to login_hook_owner using (true);

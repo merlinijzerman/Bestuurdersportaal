@@ -1,6 +1,6 @@
 # 0212 — Microsoft-loginbeleid (fase 1C): drie fondsmodi, afdwinging in de Auth-hook, en een beheerde bindingslifecycle met twee begrensde herstelpaden
 
-- **Status:** Voorgesteld (PR-A geïmplementeerd en na reviewrondes 1, 2 en 3 herzien; PR-B — beheer- en profielinterface — volgt)
+- **Status:** Voorgesteld (PR-A geïmplementeerd en na vier reviewrondes herzien; PR-B — beheer- en profielinterface — volgt)
 - **Datum:** 2026-09-07
 - **Betrokkenen:** Merlin (opdrachtgever/productowner, vier expliciete keuzes hieronder), Claude (ontwerp en implementatie)
 - **Ticket:** [#344](https://github.com/merlinijzerman/Bestuurdersportaal/issues/344) — M365 fase 1C, organisatiebreed Microsoft-loginbeleid en beheerde ontkoppeling
@@ -174,6 +174,33 @@ Na afloop van het venster is dus een nieuwe `challengeAndVerify` nodig, en die o
 apart geaudit venster. Dat is in de echte GoTrue-test vastgelegd (dezelfde AAL2-sessie → geweigerd;
 na een nieuwe verificatie → toegestaan, tweede `breakglass.gebruikt`), inclusief negatieve controle:
 zonder de unieke index gaat die test rood op vier asserties.
+
+## Herziening na reviewronde 4 (7 september 2026)
+
+**D15 — een activering hoort bij één aanwijzing, en verhogen kruist geen intrekking.** De hook toetste
+"is er érgens een levende aanwijzing?" en "is er érgens een lopende activering met dit MFA-tijdstip?"
+onafhankelijk van elkaar. Werd aanwijzing A ingetrokken of vervangen door B, dan verhoogde de oude
+activering van A ineens B — zonder nieuwe MFA-verificatie en zonder expliciete verhoging
+(reviewbevinding P1, ronde 4). Drie correcties:
+
+- de hook én `sessiebeleid` koppelen de activering aan de aanwijzing
+  (`a.break_glass_id = g.id`, en die aanwijzing moet levend zijn);
+- `open_breakglass_venster` vergrendelt de aanwijzingsrij met `FOR UPDATE`, zodat verhogen en
+  intrekken elkaar niet kunnen kruisen;
+- intrekken en vervangen **beëindigen** lopende vensters (`venster_tot = now()`) in plaats van ze te
+  verwijderen: die rij is óók het bewijs dat déze MFA-verificatie al is verbruikt, en dat mag een
+  intrekking niet wegnemen — anders opent dezelfde code straks een venster op de vólgende aanwijzing.
+  De CHECK op de vensterduur is daarvoor verruimd naar `venster_tot >= geopend_op`.
+
+Het regressiescenario staat als M22 in de gedragssuite, met negatieve controle: haal je de join weg,
+dan faalt precies de assertie "een activering van een ingetrokken aanwijzing verhoogt niets".
+
+**Rollback getest tegen de actuele migratie.** De rollback dropte nog de eerste signatuur van
+`open_breakglass_venster (uuid, integer, text)`; de huidige is `(uuid, timestamptz, integer, text)`.
+Daardoor bleef de functie staan en faalde het droppen van `break_glass_activeringen` op de
+afhankelijkheid. Beide signaturen worden nu idempotent verwijderd, en de rollback is opnieuw
+uitgevoerd tegen de actuele migratie: nul resterende functies, nul resterende tabellen,
+`pilotstatus` terug en `modus` weg.
 
 ## Overwogen alternatieven
 
