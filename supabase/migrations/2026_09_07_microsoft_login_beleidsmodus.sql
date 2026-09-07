@@ -28,10 +28,17 @@
 --
 --  TWEE UITZONDERINGEN OP HET GESLOTEN WACHTWOORDPAD (beide privé en geaudit)
 --    * login_private.break_glass — minimaal, expliciet, NIET zelf toe te kennen
---      (`check (user_id <> uitgegeven_door)`), tijdgebonden, en pas werkzaam met
---      een GEVERIFIEERDE MFA-factor: de hook leest auth.mfa_factors zelf (hij
---      draait als supabase_auth_admin) en geeft dat als argument aan de helper.
---      Bedoeld voor een Microsoft-/Entra-storing, niet voor dagelijks gebruik.
+--      (`check (user_id <> uitgegeven_door)`) en pas werkzaam met een
+--      GEVERIFIEERDE MFA-factor: de hook leest auth.mfa_factors zelf (hij draait
+--      als supabase_auth_admin) en geeft dat als argument aan de helper.
+--      De AANWIJZING is DUURZAAM (geldig tot intrekking): een noodpad dat na een
+--      week vanzelf verdampt is bij een Entra-storing juist géén noodpad meer
+--      (reviewbevinding 4). Wat kort is, zijn de ACTIVERINGSVENSTERS: elke
+--      verhoging naar de normale rol opent een venster van een uur in
+--      login_private.break_glass_activeringen en levert één audit-gebeurtenis
+--      `breakglass.gebruikt`. `herzien_voor` draagt de verloopbewaking: de
+--      aanwijzing blijft werken, maar preflight en beheeroverzicht melden dat
+--      zij herzien moet worden.
 --    * login_private.herkoppel_uitnodigingen — de beperkte koppel-/herstelsessie.
 --      Het token authenticeert NIET: het identificeert het vooraf door de
 --      beheerder geselecteerde portaalaccount en opent voor ten hoogste één kort
@@ -41,14 +48,23 @@
 --      fonds, gebruiker, tenant en doel; het venster sluit onmiddellijk zodra
 --      tid+oid actief gekoppeld is (activeer_identiteit/herstel_koppeling).
 --
---  FAIL-CLOSED-RICHTING (bewust)
---    Ontbreekt de configuratierij of het profiel, dan is het WACHTWOORDPAD OPEN en
---    het MICROSOFT-pad dicht. Alleen een expliciete `verplicht` sluit wachtwoord.
---    Anders zou een ontbrekende configrij een heel fonds buitensluiten — een
---    afwezig beleid mag nooit als het strengste beleid worden gelezen.
---    Binnen `verplicht` is elke twijfel wél dicht: de helper geeft alleen `true`
---    bij een aantoonbaar levende uitzondering, en een fout in het hookpad blijft
---    een 403 (bestaande exception-handler).
+--  DRIE UITGIFTENIVEAUS (login_private.wachtwoordlogin_niveau)
+--    'vol'       — het gewone `authenticated`-token; ongewijzigd gedrag.
+--    'beperkt'   — hetzelfde token maar met claim `role = portaal_beperkt`: een
+--                  rol die NIETS mag behalve de eigen profielrij lezen. Zo bereikt
+--                  een break-glasssessie op AAL1 of een koppel-/herstelsessie niet
+--                  rechtstreeks PostgREST, Storage of Realtime (reviewbevinding 1).
+--                  Pas ná AAL2 (break-glass) of een geldige Microsoft-koppeling
+--                  wordt de normale rol uitgegeven.
+--    'geweigerd' — 403.
+--
+--  FAIL-CLOSED-RICHTING (bewust, en aangescherpt na review)
+--    Een account ZONDER profielrij (platformidentiteit) valt buiten het
+--    fondsbeleid en houdt het gewone wachtwoordpad. Maar een account MÉT profiel
+--    in een fonds ZONDER configuratierij is drift — elke fonds krijgt zo'n rij uit
+--    de migratie en de trigger — en wordt daarom geweigerd (reviewbevinding 3).
+--    Binnen `verplicht` is elke twijfel dicht: alleen een aantoonbaar levende
+--    uitzondering geeft toegang, en een fout in het hookpad blijft een 403.
 --
 --  WAT NIET
 --    * geen HTTP-routes en geen UI: die zitten in PR-B (#344);
@@ -68,8 +84,9 @@
 --               niet van vorm. login_private valt buiten V3 en wordt getoetst door
 --               supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql.
 --               De F1B-suite telt nu 24 gateway-executes (was 14).
---  VOLGORDE     1. deze migratie; 2. beide suites; 3. code-deploy (PR-A);
---               4. pas daarna een moduswijziging via het beheerpad (PR-B).
+--  VOLGORDE     1. rol portaal_beperkt provisionen (security/MICROSOFT-365-F1B-RUNBOOK.md
+--               §1C.0); 2. deze migratie; 3. beide suites; 4. code-deploy (PR-A);
+--               5. pas daarna een moduswijziging via het beheerpad (PR-B).
 --  IDEMPOTENT   create … if not exists / or replace / drop … if exists; de
 --               eenmalige backfill draait alleen zolang de spiegelconstraint
 --               ontbreekt, zodat een herhaalde run een gezette `verplicht` niet
@@ -90,6 +107,18 @@ begin
   end if;
   if not exists (select 1 from pg_roles where rolname = 'login_hook_owner' and not rolcanlogin) then
     raise exception 'login_hook_owner (NOLOGIN) ontbreekt; provision volgens security/MICROSOFT-365-F1B-RUNBOOK.md';
+  end if;
+  -- De beperkte portaalrol waarnaar de hook een uitzonderingssessie afschaalt.
+  -- PostgREST doet `set role <claims.role>`, dus de rol moet bestaan én lid zijn
+  -- van authenticator; zonder dat weigert PostgREST het token (fail-closed).
+  if not exists (select 1 from pg_roles where rolname = 'portaal_beperkt' and not rolcanlogin) then
+    raise exception 'portaal_beperkt (NOLOGIN) ontbreekt; provision volgens security/MICROSOFT-365-F1B-RUNBOOK.md §1C.0';
+  end if;
+  if not exists (select 1 from pg_auth_members am
+                   join pg_roles r on r.oid = am.roleid
+                   join pg_roles m on m.oid = am.member
+                  where r.rolname = 'portaal_beperkt' and m.rolname = 'authenticator') then
+    raise exception 'portaal_beperkt is geen lid van authenticator; PostgREST kan de beperkte rol dan niet aannemen';
   end if;
 end $$;
 
@@ -168,7 +197,12 @@ revoke all on function public.fn_fonds_microsoft_login_audit() from public, anon
 
 alter table public.fonds_microsoft_login drop column if exists pilotstatus;
 
--- ── 3. Break-glass (privé, minimaal, niet zelf toe te kennen) ───────────────
+-- ── 3. Break-glass: duurzame aanwijzing + korte activeringsvensters ─────────
+-- De AANWIJZING kent geen einddatum: een noodpad dat na een week vanzelf
+-- verdwijnt, is bij een Entra-storing geen noodpad (reviewbevinding 4). Zij
+-- eindigt door intrekking. `herzien_voor` is de verloopBEWAKING: verstrijkt die
+-- datum, dan blijft het pad werken maar melden preflight en beheeroverzicht dat
+-- de aanwijzing herzien moet worden.
 create table if not exists login_private.break_glass (
   id              uuid primary key default gen_random_uuid(),
   fonds_id        uuid not null references public.fondsen(id),
@@ -176,20 +210,58 @@ create table if not exists login_private.break_glass (
   reden_categorie text not null check (reden_categorie in ('entra_storing','beheerherstel','migratie')),
   uitgegeven_door uuid not null,
   uitgegeven_op   timestamptz not null default now(),
-  geldig_tot      timestamptz not null,
+  herzien_voor    timestamptz not null,
   ingetrokken_op  timestamptz,
   ingetrokken_door uuid,
   correlatie_id   text not null,
   -- Niet zelf toe te kennen: de uitgever is nooit de begunstigde.
   constraint break_glass_niet_zelf check (user_id <> uitgegeven_door),
-  constraint break_glass_geldigheid check (geldig_tot > uitgegeven_op)
+  constraint break_glass_herziening check (herzien_voor > uitgegeven_op)
 );
 comment on table login_private.break_glass is
-  '#344: minimale, tijdgebonden wachtwoorduitzondering in modus verplicht. Werkzaam alleen met geverifieerde MFA-factor; geen vrije tekst, geen e-mail als sleutel.';
+  '#344: duurzame noodtoegangsaanwijzing in modus verplicht. Geldig tot intrekking; werkzaam alleen met geverifieerde MFA-factor. herzien_voor draagt de verloopbewaking, niet de geldigheid.';
+
+-- Herhaalbaar over een eerdere toepassing van deze migratie, die de aanwijzing nog
+-- als tijdgebonden `geldig_tot` modelleerde. De aanwijzing is nu duurzaam; de
+-- datum verhuist naar de bewaking.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema='login_private' and table_name='break_glass' and column_name='geldig_tot') then
+    alter table login_private.break_glass add column if not exists herzien_voor timestamptz;
+    update login_private.break_glass set herzien_voor = coalesce(herzien_voor, uitgegeven_op + interval '90 days');
+    alter table login_private.break_glass alter column herzien_voor set not null;
+    alter table login_private.break_glass drop column geldig_tot;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'break_glass_herziening') then
+    alter table login_private.break_glass
+      add constraint break_glass_herziening check (herzien_voor > uitgegeven_op);
+  end if;
+  alter table login_private.break_glass drop constraint if exists break_glass_geldigheid;
+end $$;
 create index if not exists break_glass_fonds_idx on login_private.break_glass (fonds_id);
 create index if not exists break_glass_user_idx on login_private.break_glass (user_id);
 alter table login_private.break_glass enable row level security;
 revoke all on login_private.break_glass from public, anon, authenticated, service_role, login_gateway;
+
+-- Elke verhoging naar de normale rol (AAL2) opent hier een kort venster. Het
+-- venster begrenst de SESSIE, niet de aanwijzing: het maakt elk gebruik zichtbaar
+-- en afdwingbaar aflopend, terwijl het herstelpad zelf blijft bestaan.
+create table if not exists login_private.break_glass_activeringen (
+  id            uuid primary key default gen_random_uuid(),
+  break_glass_id uuid not null references login_private.break_glass(id) on delete cascade,
+  fonds_id      uuid not null references public.fondsen(id),
+  user_id       uuid not null references auth.users(id) on delete cascade,
+  geopend_op    timestamptz not null default now(),
+  venster_tot   timestamptz not null,
+  correlatie_id text not null,
+  constraint break_glass_activering_venster check (venster_tot > geopend_op)
+);
+comment on table login_private.break_glass_activeringen is
+  '#344: kortlopend activeringsvenster per verhoging naar de normale rol; bron voor `breakglass.gebruikt` en voor het aflopen van de verhoogde sessie.';
+create index if not exists break_glass_activering_user_idx on login_private.break_glass_activeringen (user_id, venster_tot desc);
+alter table login_private.break_glass_activeringen enable row level security;
+revoke all on login_private.break_glass_activeringen from public, anon, authenticated, service_role, login_gateway;
 
 -- ── 4. Beperkte koppel-/herstelsessie ───────────────────────────────────────
 create table if not exists login_private.herkoppel_uitnodigingen (
@@ -218,6 +290,41 @@ create index if not exists herkoppel_fonds_idx on login_private.herkoppel_uitnod
 alter table login_private.herkoppel_uitnodigingen enable row level security;
 revoke all on login_private.herkoppel_uitnodigingen from public, anon, authenticated, service_role, login_gateway;
 
+-- ── 4b. Eén fondslock voor álles wat de dekking beïnvloedt ──────────────────
+-- Reviewbevinding 2: alleen zet_modus nam de lock, dus een gelijktijdige
+-- intrekking, break-glassintrekking of nieuw profiel kon tussen preflight en
+-- commit glippen. Elke mutatie die de dekking van een fonds kan veranderen neemt
+-- nu DEZELFDE lock — één lock, altijd in dezelfde volgorde, dus geen deadlock.
+create or replace function login_private.fondslock(p_fonds uuid) returns void
+language sql set search_path = login_private, public, pg_temp as $$
+  select pg_advisory_xact_lock(hashtext('microsoft_login_beleid'), hashtext(p_fonds::text));
+$$;
+revoke all on function login_private.fondslock(uuid) from public, anon, authenticated, service_role;
+
+-- Een nieuw of verplaatst profiel verandert de dekking zonder door een van onze
+-- functies te lopen. Deze trigger neemt daarom dezelfde lock, zodat een insert
+-- of fondswissel nooit tussen preflight en omslag valt.
+create or replace function public.fn_profiel_fondslock() returns trigger
+language plpgsql security definer set search_path = login_private, public, pg_temp as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.fonds_id is not null then perform login_private.fondslock(new.fonds_id); end if;
+  elsif tg_op = 'UPDATE' then
+    if new.fonds_id is distinct from old.fonds_id then
+      if old.fonds_id is not null then perform login_private.fondslock(old.fonds_id); end if;
+      if new.fonds_id is not null then perform login_private.fondslock(new.fonds_id); end if;
+    end if;
+  else
+    if old.fonds_id is not null then perform login_private.fondslock(old.fonds_id); end if;
+  end if;
+  return coalesce(new, old);
+end $$;
+revoke all on function public.fn_profiel_fondslock() from public, anon, authenticated, service_role;
+drop trigger if exists trg_profiel_fondslock on public.profielen;
+create trigger trg_profiel_fondslock
+  before insert or update of fonds_id or delete on public.profielen
+  for each row execute function public.fn_profiel_fondslock();
+
 -- ── 5. Gatewayfuncties (execute uitsluitend login_gateway) ──────────────────
 -- Vaste, inhoudsvrije foutcategorieën: config_ontbreekt, tenant_ontbreekt,
 -- ongeldige_modus, dekking_onvolledig, breakglass_ontbreekt,
@@ -229,25 +336,29 @@ revoke all on login_private.herkoppel_uitnodigingen from public, anon, authentic
 -- is die tabel voor de functie-eigenaar niet leesbaar, dan is het pad NIET
 -- aantoonbaar en faalt de activering gesloten (categorie breakglass_onverifieerbaar)
 -- in plaats van op een aanname door te gaan.
+-- Retourvorm gewijzigd t.o.v. een eerdere toepassing van deze migratie: eerst weg.
+drop function if exists login_private.activering_preflight(uuid);
 create or replace function login_private.activering_preflight(p_fonds uuid)
-returns table(gereed boolean, categorie text, ongedekte_accounts integer, breakglass_accounts integer)
+returns table(gereed boolean, categorie text, ongedekte_accounts integer,
+              breakglass_accounts integer, breakglass_herziening_verlopen integer)
 language plpgsql security definer set search_path = login_private, public, pg_temp stable as $$
 declare
   v_tenant text;
   v_ongedekt integer := 0;
   v_bg integer := 0;
+  v_herzien integer := 0;
   v_verifieerbaar boolean;
 begin
   select c.entra_tenant_id into v_tenant from public.fonds_microsoft_login c where c.fonds_id = p_fonds;
   if not found then
-    return query select false, 'config_ontbreekt'::text, 0, 0; return;
+    return query select false, 'config_ontbreekt'::text, 0, 0, 0; return;
   end if;
   if v_tenant is null then
-    return query select false, 'tenant_ontbreekt'::text, 0, 0; return;
+    return query select false, 'tenant_ontbreekt'::text, 0, 0, 0; return;
   end if;
 
   -- Dekking: elk profiel in het fonds heeft óf een actieve binding, óf een
-  -- levende break-glassuitzondering. Een account zonder beide kan na de omslag
+  -- levende break-glassaanwijzing. Een account zonder beide kan na de omslag
   -- niet meer inloggen en blokkeert de activering.
   select count(*) into v_ongedekt
     from public.profielen p
@@ -257,27 +368,31 @@ begin
         where b.user_id = p.id and b.fonds_id = p_fonds and b.status = 'active')
      and not exists (
        select 1 from break_glass g
-        where g.user_id = p.id and g.fonds_id = p_fonds
-          and g.ingetrokken_op is null and g.geldig_tot > now());
+        where g.user_id = p.id and g.fonds_id = p_fonds and g.ingetrokken_op is null);
 
   v_verifieerbaar := to_regclass('auth.mfa_factors') is not null
                  and has_table_privilege(current_user, 'auth.mfa_factors', 'select');
   if not v_verifieerbaar then
-    return query select false, 'breakglass_onverifieerbaar'::text, v_ongedekt, 0; return;
+    return query select false, 'breakglass_onverifieerbaar'::text, v_ongedekt, 0, 0; return;
   end if;
   execute $q$
-    select count(*) from login_private.break_glass g
-     where g.fonds_id = $1 and g.ingetrokken_op is null and g.geldig_tot > now()
-       and exists (select 1 from auth.mfa_factors f where f.user_id = g.user_id and f.status = 'verified')
-  $q$ into v_bg using p_fonds;
+    select count(*) filter (where waar),
+           count(*) filter (where waar and g.herzien_voor <= now())
+      from login_private.break_glass g
+      cross join lateral (select exists (
+        select 1 from auth.mfa_factors f where f.user_id = g.user_id and f.status = 'verified') as waar) m
+     where g.fonds_id = $1 and g.ingetrokken_op is null
+  $q$ into v_bg, v_herzien using p_fonds;
 
   if v_bg < 1 then
-    return query select false, 'breakglass_ontbreekt'::text, v_ongedekt, 0; return;
+    return query select false, 'breakglass_ontbreekt'::text, v_ongedekt, 0, 0; return;
   end if;
   if v_ongedekt > 0 then
-    return query select false, 'dekking_onvolledig'::text, v_ongedekt, v_bg; return;
+    return query select false, 'dekking_onvolledig'::text, v_ongedekt, v_bg, v_herzien; return;
   end if;
-  return query select true, null::text, 0, v_bg;
+  -- Een verlopen herziening blokkeert NIET: het pad moet blijven bestaan. Het
+  -- telveld draagt de bewaking naar preflight, beheeroverzicht en runbook.
+  return query select true, null::text, 0, v_bg, v_herzien;
 end $$;
 
 -- Zet de modus. Naar `verplicht` gaat de preflight ÍN dezelfde transactie, achter
@@ -296,7 +411,7 @@ begin
   if p_modus is null or p_modus not in ('uit','optioneel','verplicht') then
     return 'ongeldige_modus';
   end if;
-  perform pg_advisory_xact_lock(hashtext('microsoft_login_beleid'), hashtext(p_fonds::text));
+  perform fondslock(p_fonds);
   select c.modus, c.entra_tenant_id into v_oud, v_tenant
     from public.fonds_microsoft_login c where c.fonds_id = p_fonds for update;
   if not found then return 'config_ontbreekt'; end if;
@@ -337,8 +452,7 @@ language sql security definer set search_path = login_private, public, pg_temp s
            where b.user_id = p.id and b.fonds_id = p_fonds and b.status in ('pending','active','revoking')
            limit 1),
          exists (select 1 from break_glass g
-                  where g.user_id = p.id and g.fonds_id = p_fonds
-                    and g.ingetrokken_op is null and g.geldig_tot > now()),
+                  where g.user_id = p.id and g.fonds_id = p_fonds and g.ingetrokken_op is null),
          exists (select 1 from herkoppel_uitnodigingen u
                   where u.user_id = p.id and u.fonds_id = p_fonds
                     and u.ingetrokken_op is null and u.voltooid_op is null and u.verloopt_op > now())
@@ -359,6 +473,7 @@ create or replace function login_private.beheer_intrekking(
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
 declare r microsoft_identiteiten%rowtype;
 begin
+  perform fondslock(p_fonds);
   if not exists (select 1 from public.profielen p where p.id = p_doel and p.fonds_id = p_fonds) then
     insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
     values (p_fonds, p_doel, 'beheer.geweigerd', 'fonds_mismatch', p_correlatie);
@@ -392,12 +507,18 @@ begin
 end $$;
 
 -- ── 6. Break-glass ──────────────────────────────────────────────────────────
+-- De aanwijzing is duurzaam; `p_herzien_over_dagen` zet alleen de herzieningsdatum
+-- voor de bewaking. Zelf toekennen is uitgesloten en de MFA-eis wordt door de
+-- hook afgedwongen (auth.mfa_factors is voor deze functie niet nodig).
+-- Parameternaam gewijzigd (geldigheid → herzieningstermijn): eerst weg.
+drop function if exists login_private.verleen_break_glass(uuid, uuid, text, uuid, integer, text);
 create or replace function login_private.verleen_break_glass(
-  p_fonds uuid, p_user uuid, p_reden text, p_actor uuid, p_geldig_seconden integer, p_correlatie text
+  p_fonds uuid, p_user uuid, p_reden text, p_actor uuid, p_herzien_over_dagen integer, p_correlatie text
 ) returns table(id uuid, categorie text)
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
 declare v_id uuid;
 begin
+  perform fondslock(p_fonds);
   if p_user = p_actor then
     insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
     values (p_fonds, p_actor, 'breakglass.geweigerd', 'zelf_toekennen', p_correlatie);
@@ -406,7 +527,7 @@ begin
   if p_reden is null or p_reden not in ('entra_storing','beheerherstel','migratie') then
     return query select null::uuid, 'ongeldige_reden'::text; return;
   end if;
-  if p_geldig_seconden is null or p_geldig_seconden < 60 or p_geldig_seconden > 604800 then
+  if p_herzien_over_dagen is null or p_herzien_over_dagen < 1 or p_herzien_over_dagen > 365 then
     return query select null::uuid, 'ongeldige_geldigheid'::text; return;
   end if;
   if not exists (select 1 from public.profielen p where p.id = p_user and p.fonds_id = p_fonds) then
@@ -414,11 +535,11 @@ begin
     values (p_fonds, p_user, 'breakglass.geweigerd', 'fonds_mismatch', p_correlatie);
     return query select null::uuid, 'fonds_mismatch'::text; return;
   end if;
-  -- Eén levende uitzondering per account: een nieuwe vervangt de vorige expliciet.
+  -- Eén levende aanwijzing per account: een nieuwe vervangt de vorige expliciet.
   update break_glass set ingetrokken_op = now(), ingetrokken_door = p_actor
-   where user_id = p_user and ingetrokken_op is null and geldig_tot > now();
-  insert into break_glass (fonds_id, user_id, reden_categorie, uitgegeven_door, geldig_tot, correlatie_id)
-  values (p_fonds, p_user, p_reden, p_actor, now() + make_interval(secs => p_geldig_seconden), p_correlatie)
+   where user_id = p_user and ingetrokken_op is null;
+  insert into break_glass (fonds_id, user_id, reden_categorie, uitgegeven_door, herzien_voor, correlatie_id)
+  values (p_fonds, p_user, p_reden, p_actor, now() + make_interval(days => p_herzien_over_dagen), p_correlatie)
   returning break_glass.id into v_id;
   insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
   values (p_fonds, p_user, 'breakglass.verleend', p_reden, p_correlatie);
@@ -430,14 +551,63 @@ returns text
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
 declare r break_glass%rowtype;
 begin
+  perform fondslock(p_fonds);
   select * into r from break_glass where id = p_id and fonds_id = p_fonds for update;
   if not found then return 'onbekende_uitzondering'; end if;
   if r.ingetrokken_op is not null then return null; end if;              -- idempotent
   update break_glass set ingetrokken_op = now(), ingetrokken_door = p_actor where id = p_id;
+  -- Lopende verhogingen vervallen onmiddellijk mee.
+  delete from break_glass_activeringen a where a.break_glass_id = p_id and a.venster_tot > now();
   insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
   values (r.fonds_id, r.user_id, 'breakglass.ingetrokken', null, p_correlatie);
   return null;
 end $$;
+
+-- Opent (of hergebruikt) het activeringsvenster van een verhoogde break-glass-
+-- sessie. De guard roept dit aan bij het eerste serververzoek van een AAL2-sessie;
+-- per venster verschijnt precies één `breakglass.gebruikt` in de audit, zodat
+-- herhaald gebruik zichtbaar en alarmeerbaar is.
+create or replace function login_private.open_breakglass_venster(
+  p_user uuid, p_venster_seconden integer, p_correlatie text
+) returns table(venster_tot timestamptz, categorie text)
+language plpgsql security definer set search_path = login_private, public, pg_temp as $$
+declare r break_glass%rowtype; v_tot timestamptz;
+begin
+  if p_venster_seconden is null or p_venster_seconden < 60 or p_venster_seconden > 28800 then
+    return query select null::timestamptz, 'ongeldige_geldigheid'::text; return;
+  end if;
+  select * into r from break_glass g where g.user_id = p_user and g.ingetrokken_op is null limit 1;
+  if not found then
+    return query select null::timestamptz, 'onbekende_uitzondering'::text; return;
+  end if;
+  select a.venster_tot into v_tot from break_glass_activeringen a
+   where a.user_id = p_user and a.venster_tot > now()
+   order by a.venster_tot desc limit 1;
+  if found and v_tot is not null then
+    return query select v_tot, null::text; return;                        -- venster loopt al
+  end if;
+  insert into break_glass_activeringen (break_glass_id, fonds_id, user_id, venster_tot, correlatie_id)
+  values (r.id, r.fonds_id, p_user, now() + make_interval(secs => p_venster_seconden), p_correlatie)
+  returning break_glass_activeringen.venster_tot into v_tot;
+  insert into audit_log (fonds_id, user_id, gebeurtenis, foutcategorie, correlatie_id)
+  values (r.fonds_id, p_user, 'breakglass.gebruikt', r.reden_categorie, p_correlatie);
+  return query select v_tot, null::text;
+end $$;
+
+-- Beheeroverzicht van de aanwijzingen, inclusief de verloopbewaking. Geen
+-- e-mailadres, geen MFA-geheim — alleen wat het beheer moet zien.
+create or replace function login_private.breakglass_overzicht(p_fonds uuid)
+returns table(id uuid, user_id uuid, naam text, reden_categorie text, uitgegeven_op timestamptz,
+              herzien_voor timestamptz, herziening_verlopen boolean, laatst_gebruikt_op timestamptz)
+language sql security definer set search_path = login_private, public, pg_temp stable as $$
+  select g.id, g.user_id, p.naam, g.reden_categorie, g.uitgegeven_op, g.herzien_voor,
+         g.herzien_voor <= now(),
+         (select max(a.geopend_op) from break_glass_activeringen a where a.break_glass_id = g.id)
+    from break_glass g
+    left join public.profielen p on p.id = g.user_id
+   where g.fonds_id = p_fonds and g.ingetrokken_op is null
+   order by g.herzien_voor
+$$;
 
 -- ── 7. Beperkte koppel-/herstelsessie ───────────────────────────────────────
 create or replace function login_private.maak_uitnodiging(
@@ -446,6 +616,7 @@ create or replace function login_private.maak_uitnodiging(
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
 declare v_tenant text;
 begin
+  perform fondslock(p_fonds);
   if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$' then return 'ongeldig_token'; end if;
   if p_geldig_seconden is null or p_geldig_seconden < 60 or p_geldig_seconden > 86400 then
     return 'ongeldige_geldigheid';
@@ -478,6 +649,7 @@ create or replace function login_private.activeer_uitnodiging(
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
 declare r herkoppel_uitnodigingen%rowtype;
 begin
+  perform fondslock(p_fonds);
   if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$' then
     return query select null::uuid, null::timestamptz, 'uitnodiging_ongeldig'::text; return;
   end if;
@@ -515,6 +687,7 @@ returns text
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
 declare v_n integer;
 begin
+  perform fondslock(p_fonds);
   update herkoppel_uitnodigingen
      set ingetrokken_op = now(), ingetrokken_door = p_actor
    where fonds_id = p_fonds and user_id = p_user
@@ -531,16 +704,20 @@ end $$;
 -- heeft dit account een levende binding, en staat er een uitzondering open?
 -- Bewust ONGECACHET: een ingetrokken uitzondering of een omslag naar `verplicht`
 -- moet bij het eerstvolgende verzoek werken, niet na een TTL.
+drop function if exists login_private.sessiebeleid(uuid);
 create or replace function login_private.sessiebeleid(p_user uuid)
-returns table(fonds_id uuid, modus text, binding_status text, break_glass boolean, link_only boolean)
+returns table(fonds_id uuid, modus text, config_ontbreekt boolean, binding_status text,
+              break_glass boolean, breakglass_venster_tot timestamptz, link_only boolean)
 language sql security definer set search_path = login_private, public, pg_temp stable as $$
   select p.fonds_id,
          coalesce(c.modus, 'uit'),
+         c.fonds_id is null,                       -- drift: profiel zonder configrij
          (select b.status from microsoft_identiteiten b
            where b.user_id = p.id and b.status in ('pending','active','revoking') limit 1),
          exists (select 1 from break_glass g
-                  where g.user_id = p.id and g.fonds_id = p.fonds_id
-                    and g.ingetrokken_op is null and g.geldig_tot > now()),
+                  where g.user_id = p.id and g.fonds_id = p.fonds_id and g.ingetrokken_op is null),
+         (select max(a.venster_tot) from break_glass_activeringen a
+           where a.user_id = p.id and a.venster_tot > now()),
          exists (select 1 from herkoppel_uitnodigingen u
                   where u.user_id = p.id and u.fonds_id = p.fonds_id
                     and u.ingetrokken_op is null and u.voltooid_op is null
@@ -607,6 +784,7 @@ returns table(id uuid, categorie text)
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
 declare r microsoft_identiteiten%rowtype;
 begin
+  perform fondslock(p_fonds);
   if exists (
     select 1 from public.fonds_microsoft_login c
      where c.fonds_id = p_fonds and c.modus = 'verplicht'
@@ -649,6 +827,8 @@ revoke all on function login_private.maak_uitnodiging(uuid, uuid, text, integer,
 revoke all on function login_private.activeer_uitnodiging(text, uuid, integer, text)                from public, anon, authenticated, service_role;
 revoke all on function login_private.trek_uitnodiging_in(uuid, uuid, uuid, text)                    from public, anon, authenticated, service_role;
 revoke all on function login_private.sessiebeleid(uuid)                                             from public, anon, authenticated, service_role;
+revoke all on function login_private.open_breakglass_venster(uuid, integer, text)                   from public, anon, authenticated, service_role;
+revoke all on function login_private.breakglass_overzicht(uuid)                                     from public, anon, authenticated, service_role;
 
 grant execute on function login_private.lees_config(uuid)                                          to login_gateway;
 grant execute on function login_private.start_intrekking(uuid, uuid, uuid, text)                    to login_gateway;
@@ -662,49 +842,88 @@ grant execute on function login_private.maak_uitnodiging(uuid, uuid, text, integ
 grant execute on function login_private.activeer_uitnodiging(text, uuid, integer, text)            to login_gateway;
 grant execute on function login_private.trek_uitnodiging_in(uuid, uuid, uuid, text)                to login_gateway;
 grant execute on function login_private.sessiebeleid(uuid)                                         to login_gateway;
+grant execute on function login_private.open_breakglass_venster(uuid, integer, text)               to login_gateway;
+grant execute on function login_private.breakglass_overzicht(uuid)                                 to login_gateway;
 
 -- ── 11. Hookhelper voor het wachtwoordpad ───────────────────────────────────
 -- Zelfde constructie als F1B: aangemaakt ALS login_hook_owner, uitsluitend
--- uitvoerbaar door supabase_auth_admin, search_path '' en een boolean-contract.
+-- uitvoerbaar door supabase_auth_admin, search_path '' en een smal tekstcontract.
 grant usage on schema login_private to login_hook_owner;
 grant usage on schema public to login_hook_owner;
 grant create on schema login_private to login_hook_owner;
 grant login_hook_owner to postgres;
 set local role login_hook_owner;
--- true = deze uitgifte mag doorgaan. De enige blokkerende situatie is een profiel
--- in een fonds met modus `verplicht` zonder levende uitzondering. Geen profiel of
--- geen configrij → true: een afwezig beleid is nooit het strengste beleid, en een
--- platformaccount (geen profielen-rij) valt buiten het fondsbeleid.
-create or replace function login_private.wachtwoordlogin_toegestaan(p_user uuid, p_heeft_mfa boolean)
-returns boolean language sql security definer set search_path = '' stable as $$
-  select not exists (
-    select 1
-      from public.profielen p
-      join public.fonds_microsoft_login c on c.fonds_id = p.fonds_id
-     where p.id = p_user
-       and c.modus = 'verplicht'
-       and not (
-         (coalesce(p_heeft_mfa, false) and exists (
-            select 1 from login_private.break_glass g
-             where g.user_id = p.id and g.fonds_id = p.fonds_id
-               and g.ingetrokken_op is null and g.geldig_tot > pg_catalog.now()))
-         or exists (
-            select 1 from login_private.herkoppel_uitnodigingen u
-             where u.user_id = p.id and u.fonds_id = p.fonds_id
-               and u.ingetrokken_op is null and u.voltooid_op is null
-               and u.geactiveerd_op is not null and u.venster_tot > pg_catalog.now())
-       )
-  );
+-- Een eerdere toepassing kan nog de boolean-variant hebben; alleen de eigenaar
+-- mag die verwijderen, dus dat gebeurt hier binnen de rolwissel.
+drop function if exists login_private.wachtwoordlogin_toegestaan(uuid, boolean);
+-- Drie niveaus in plaats van ja/nee (reviewbevinding 1): 'vol' = het gewone
+-- authenticated-token, 'beperkt' = hetzelfde token met claim role=portaal_beperkt
+-- (een rol die niets mag behalve de eigen profielrij), 'geweigerd' = 403.
+--
+-- Geen profielrij → platformidentiteit, valt buiten het fondsbeleid → 'vol'.
+-- Wél een profiel maar GEEN configrij → drift, en drift is dicht (bevinding 3).
+--
+-- In `verplicht`:
+--   * open koppel-/herstelvenster                      → 'beperkt' (alleen koppelpad);
+--   * break-glassaanwijzing zonder geverifieerde MFA    → 'geweigerd';
+--   * break-glass mét MFA, sessie nog op AAL1           → 'beperkt' (zodat de
+--     gebruiker de MFA-stap kán doen; verhogen komt daarna);
+--   * break-glass mét MFA op AAL2                       → 'vol', maar alleen zolang
+--     het activeringsvenster van DEZE MFA-verificatie loopt. Is dat venster
+--     verlopen, dan zakt de sessie terug naar 'beperkt' en moet de gebruiker
+--     opnieuw met MFA aanmelden — dat opent een nieuw, apart geaudit venster.
+create or replace function login_private.wachtwoordlogin_niveau(
+  p_user uuid, p_heeft_mfa boolean, p_aal2 boolean, p_mfa_op timestamptz
+) returns text language sql security definer set search_path = '' stable as $$
+  select case
+    when not exists (select 1 from public.profielen p where p.id = p_user) then 'vol'
+    when not exists (
+      select 1 from public.profielen p
+        join public.fonds_microsoft_login c on c.fonds_id = p.fonds_id
+       where p.id = p_user) then 'geweigerd'
+    when exists (
+      select 1 from public.profielen p
+        join public.fonds_microsoft_login c on c.fonds_id = p.fonds_id
+       where p.id = p_user and c.modus <> 'verplicht') then 'vol'
+    when exists (
+      select 1 from login_private.herkoppel_uitnodigingen u
+        join public.profielen p on p.id = u.user_id and p.fonds_id = u.fonds_id
+       where u.user_id = p_user and u.ingetrokken_op is null and u.voltooid_op is null
+         and u.geactiveerd_op is not null and u.venster_tot > pg_catalog.now()) then 'beperkt'
+    when coalesce(p_heeft_mfa, false) and exists (
+      select 1 from login_private.break_glass g
+        join public.profielen p on p.id = g.user_id and p.fonds_id = g.fonds_id
+       where g.user_id = p_user and g.ingetrokken_op is null)
+      then case
+        when not coalesce(p_aal2, false) then 'beperkt'
+        -- Verhoogd blijven mag alleen binnen het venster van DEZE MFA-verificatie.
+        when exists (
+          select 1 from login_private.break_glass_activeringen a
+           where a.user_id = p_user
+             and (p_mfa_op is null or a.geopend_op >= p_mfa_op)
+             and a.venster_tot > pg_catalog.now()) then 'vol'
+        when exists (
+          select 1 from login_private.break_glass_activeringen a
+           where a.user_id = p_user
+             and (p_mfa_op is null or a.geopend_op >= p_mfa_op)) then 'beperkt'
+        else 'vol'                       -- eerste verzoek na de MFA-stap; de guard opent het venster
+      end
+    else 'geweigerd'
+  end;
 $$;
-revoke all on function login_private.wachtwoordlogin_toegestaan(uuid, boolean) from public, anon, authenticated, service_role, login_gateway;
-grant execute on function login_private.wachtwoordlogin_toegestaan(uuid, boolean) to supabase_auth_admin;
+revoke all on function login_private.wachtwoordlogin_niveau(uuid, boolean, boolean, timestamptz) from public, anon, authenticated, service_role, login_gateway;
+grant execute on function login_private.wachtwoordlogin_niveau(uuid, boolean, boolean, timestamptz) to supabase_auth_admin;
 reset role;
 revoke create on schema login_private from login_hook_owner;
 revoke login_hook_owner from postgres;
 
 -- Leesrechten van de helper: uitsluitend de kolommen die de beslissing dragen.
 grant select (modus) on public.fonds_microsoft_login to login_hook_owner;
-grant select (user_id, fonds_id, ingetrokken_op, geldig_tot) on login_private.break_glass to login_hook_owner;
+grant select (user_id, fonds_id, ingetrokken_op) on login_private.break_glass to login_hook_owner;
+grant select (user_id, geopend_op, venster_tot) on login_private.break_glass_activeringen to login_hook_owner;
+drop policy if exists "hook owner leest breakglass-activeringen" on login_private.break_glass_activeringen;
+create policy "hook owner leest breakglass-activeringen" on login_private.break_glass_activeringen
+  for select to login_hook_owner using (true);
 drop policy if exists "hook owner leest break glass" on login_private.break_glass;
 create policy "hook owner leest break glass" on login_private.break_glass
   for select to login_hook_owner using (true);
@@ -716,9 +935,17 @@ create policy "hook owner leest uitnodigingen" on login_private.herkoppel_uitnod
 
 -- ── 12. Custom Access Token Hook: ook het wachtwoordpad ─────────────────────
 -- Verandering t.o.v. F1B: een NIET-oauth-uitgifte keert niet meer onvoorwaardelijk
--- terug, maar wordt tegen het fondsbeleid gehouden. De MFA-toets voor break-glass
--- gebeurt hier — de hook draait als supabase_auth_admin en leest auth.mfa_factors
--- zelf, zodat login_hook_owner géén rechten in het auth-schema nodig heeft.
+-- terug, maar wordt tegen het fondsbeleid gehouden. De MFA-toets gebeurt hier — de
+-- hook draait als supabase_auth_admin en leest auth.mfa_factors zelf, zodat
+-- login_hook_owner géén rechten in het auth-schema nodig heeft.
+--
+-- Reviewbevinding 1: een uitzonderingssessie kreeg het gewone `authenticated`-token
+-- en kon daarmee rechtstreeks PostgREST, Storage en Realtime benaderen. Zij krijgt
+-- nu de claim `role = portaal_beperkt` — een rol die niets mag behalve de eigen
+-- profielrij lezen. Pas na AAL2 (break-glass) of een geldige Microsoft-koppeling
+-- verschijnt de normale rol. PostgREST doet `set role` op deze claim, dus de
+-- begrenzing zit in de database en niet in de app.
+--
 -- De weigering is één neutrale melding zonder accountenumeratie: zij treedt pas op
 -- ná geldige credentials, dus zij onderscheidt geen bestaande van niet-bestaande
 -- accounts en verraadt geen wachtwoord.
@@ -728,6 +955,9 @@ declare
   v_user uuid;
   v_oauth boolean;
   v_mfa boolean;
+  v_aal2 boolean;
+  v_mfa_op timestamptz;
+  v_niveau text;
   v_aantal integer;
   v_provider text; v_sub text; v_tid text; v_oid text;
   v_weiger jsonb := pg_catalog.jsonb_build_object('error', pg_catalog.jsonb_build_object(
@@ -748,16 +978,24 @@ begin
     if v_user is null then return v_weiger_wachtwoord; end if;
     v_mfa := exists (
       select 1 from auth.mfa_factors f where f.user_id = v_user and f.status = 'verified');
-    if login_private.wachtwoordlogin_toegestaan(v_user, v_mfa) then
-      return event;
+    v_aal2 := (event->'claims'->>'aal') = 'aal2';
+    -- Tijdstip van de MFA-stap uit amr; bepaalt welk activeringsvenster telt.
+    select pg_catalog.max(pg_catalog.to_timestamp((e->>'timestamp')::double precision))
+      into v_mfa_op
+      from pg_catalog.jsonb_array_elements(coalesce(event->'claims'->'amr', '[]'::jsonb)) e
+     where e->>'method' in ('totp','mfa','webauthn') and (e->>'timestamp') ~ '^[0-9]+$';
+    v_niveau := login_private.wachtwoordlogin_niveau(v_user, v_mfa, v_aal2, v_mfa_op);
+    if v_niveau = 'vol' then return event; end if;
+    if v_niveau = 'beperkt' then
+      return pg_catalog.jsonb_set(event, '{claims,role}', '"portaal_beperkt"'::jsonb, true);
     end if;
     return v_weiger_wachtwoord;
   end if;
 
   if v_user is null then return v_weiger; end if;
 
-  select count(*), min(i.provider), min(i.provider_id),
-         min(i.identity_data->'custom_claims'->>'tid'), min(i.identity_data->'custom_claims'->>'oid')
+  select pg_catalog.count(*), pg_catalog.min(i.provider), pg_catalog.min(i.provider_id),
+         pg_catalog.min(i.identity_data->'custom_claims'->>'tid'), pg_catalog.min(i.identity_data->'custom_claims'->>'oid')
     into v_aantal, v_provider, v_sub, v_tid, v_oid
     from auth.identities i
    where i.user_id = v_user and i.provider not in ('email','phone');
@@ -773,6 +1011,30 @@ exception when others then
     'http_code', 403, 'message', 'Uw aanmelding kan nu niet worden gecontroleerd.'));
 end $$;
 revoke all on function public.fn_access_token_hook(jsonb) from public, anon, authenticated, service_role;
+-- Supabase vereist voor een Postgres Auth-hook expliciet USAGE op het schema van de
+-- hookfunctie; de helper staat in login_private, dus ook daar USAGE (geen tabelrechten).
+grant usage on schema public to supabase_auth_admin;
+grant usage on schema login_private to supabase_auth_admin;
 grant execute on function public.fn_access_token_hook(jsonb) to supabase_auth_admin;
+
+-- ── 13. De beperkte portaalrol ──────────────────────────────────────────────
+-- Alles dicht, dan precies één ding open: de eigen profielrij lezen. Dat is het
+-- minimum waarmee de koppel-/herstelsessie en de MFA-stap kunnen werken (de
+-- routewrapper en haalFondsSessie lezen fonds_id en rol uit het eigen profiel).
+-- Geen documenten, geen dossiers, geen storage, geen functies — en geen enkele
+-- andere policy noemt deze rol, dus RLS geeft haar nergens anders rijen.
+revoke all on all tables    in schema public  from portaal_beperkt;
+revoke all on all functions in schema public  from portaal_beperkt;
+revoke all on all sequences in schema public  from portaal_beperkt;
+revoke all on all tables    in schema storage from portaal_beperkt;
+revoke usage on schema storage from portaal_beperkt;
+revoke usage on schema login_private from portaal_beperkt;
+alter default privileges in schema public revoke all on tables    from portaal_beperkt;
+alter default privileges in schema public revoke all on functions from portaal_beperkt;
+grant usage on schema public to portaal_beperkt;
+grant select (id, fonds_id, rol, naam) on public.profielen to portaal_beperkt;
+drop policy if exists "beperkte sessie leest eigen profiel" on public.profielen;
+create policy "beperkte sessie leest eigen profiel" on public.profielen
+  for select to portaal_beperkt using (id = (select auth.uid()));
 
 commit;

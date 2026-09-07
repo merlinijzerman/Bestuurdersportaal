@@ -157,7 +157,11 @@ test("LK-6 INVARIANT — dashboard-layout: geen user → /login; geen profiel �
   assert.match(dashboardLayout, /if \(!user\) \{\s*redirect\("\/login"\);\s*\}/);
   assert.match(dashboardLayout, /if \(!profiel\) \{\s*redirect\("\/login"\);\s*\}/);
   assert.equal((dashboardLayout.match(/redirect\("\/login"\)/g) ?? []).length, 2, "precies twee redirects naar /login");
-  assert.equal((dashboardLayout.match(/redirect\(/g) ?? []).length, 3, "twee naar /login + de L3-beëindiging; mismatch blijft een inline pagina (voorkomt lus)");
+  // #344: vier redirects — twee naar /login, de L3-beëindiging, en de afgeschaalde
+  // sessie (break-glass op AAL1 of koppel-/herstelsessie) naar /beperkte-toegang.
+  // De host-mismatch blijft een inline pagina (voorkomt een lus).
+  assert.equal((dashboardLayout.match(/redirect\(/g) ?? []).length, 4, "twee naar /login, de L3-beëindiging en de beperkte sessie; mismatch blijft een inline pagina");
+  assert.match(dashboardLayout, /if \(sessieOordeel\.beperkt\) redirect\(BEPERKTE_SESSIE_PAD\);/);
   assert.match(dashboardLayout, /beoordeelToegang\(\{\s*resolutie,\s*sessieFondsId,\s*enforce: tenantEnforceAan\(\),?\s*\}\)/);
   assert.match(dashboardLayout, /<h1 className="text-lg font-semibold">Geen toegang op dit adres<\/h1>/);
   assert.match(dashboardLayout, /"Dit webadres hoort bij een ander fonds dan uw account\. Log in via het adres van uw eigen fonds\."/);
@@ -225,8 +229,11 @@ test("LK-9 INVARIANT — withFondsRoute: geen sessie → exact {error:'Niet inge
 });
 
 test("LK-9b T2 — wrapper: guard L3 als geïnjecteerde dep, direct ná auth, met exact de 401-vorm van 'geen sessie'", () => {
-  assert.match(routeWrapper, /beoordeelPortaalSessie: \(supabase: RlsClient, gebruikerId: string\) => Promise<\{ toegestaan: boolean \}>;/);
-  assert.match(routeWrapper, /if \(!user\) return nietIngelogd\(\);[\s\S]{0,600}?if \(!\(await deps\.beoordeelPortaalSessie\(supabase, user\.id\)\)\.toegestaan\) return nietIngelogd\(\);/);
+  // #344: het oordeel draagt naast `toegestaan` ook `beperkt` — een sessie die de
+  // Auth-hook naar de rol `portaal_beperkt` heeft afgeschaald.
+  assert.match(routeWrapper, /beoordeelPortaalSessie: \(supabase: RlsClient, gebruikerId: string\) => Promise<\{ toegestaan: boolean; beperkt\?: boolean \}>;/);
+  assert.match(routeWrapper, /if \(sessieOordeel\.beperkt === true\)/, "beperkte sessie komt niet voorbij de wrapper");
+  assert.match(routeWrapper, /if \(!user\) return nietIngelogd\(\);[\s\S]{0,700}?const sessieOordeel = await deps\.beoordeelPortaalSessie\(supabase, user\.id\);\s*\n\s*if \(!sessieOordeel\.toegestaan\) return nietIngelogd\(\);/);
   const guard = routeWrapper.indexOf("deps.beoordeelPortaalSessie(supabase, user.id)");
   assert.ok(guard < routeWrapper.indexOf("deps.haalProfiel(supabase, user.id)"), "guard vóór de profielresolutie");
   assert.match(routeWrapper, /await import\("@\/core\/lib\/microsoft-login-sessieguard"\)/, "lazy: de sanity blijft server-loos");
@@ -263,13 +270,13 @@ test("LK-11 PIN — sha256 van de auth-kernbestanden (bewust bijwerken; nieuwe w
   // B4 (#335 T2): fonds-sessie.ts, app/auth/callback/route.ts en app/login/layout.tsx
   // bewust opnieuw gepind na guard L3 / L4. supabase-server.ts, redirect-veilig.ts
   // ongewijzigd. B5: app/login/page.tsx (server-pagina) en LoginForm.tsx gepind.
-  // #344 (besluit 0212): vier pins bewust opnieuw berekend — de guard heet nu
+  // #344 (besluit 0212, ná review): vier pins bewust opnieuw berekend — de guard heet nu
   // beoordeelPortaalSessie en beoordeelt ook wachtwoordsessies (fonds-sessie,
   // login-layout, /auth/callback), en LoginForm toont de hookweigering van modus
   // `verplicht` als eigen, sturende melding. app/login/page.tsx, supabase-server.ts
   // en redirect-veilig.ts zijn ongewijzigd.
   const pins: Record<string, string> = {
-    "core/lib/fonds-sessie.ts": "393b6d70ca5ef7a49faac733b87e606796515fe5fa7ed69b2ecd8140e81227d6",
+    "core/lib/fonds-sessie.ts": "754bcca82b56d9683de5bcec42bcf34aba3416f19381f4b9e7c947608e06944a",
     "app/auth/callback/route.ts": "23097717109ba1b31642933453aa4e7034ddf7fcfe5250c4d665772bb67dd328",
     "core/lib/supabase-server.ts": "ff104b6a4bb390ee3563b901dd461fc6e82f2086cb80923816f8ec381a698872",
     "app/login/layout.tsx": "b7ac4b145a3852e003872b0cce93edd640cf0f5b2cfbcfa225b7071c0c59b23c",

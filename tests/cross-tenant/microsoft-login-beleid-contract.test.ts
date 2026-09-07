@@ -29,7 +29,15 @@ const capabilities = lees("core/lib/capabilities-map.ts");
 const GATEWAY_FUNCTIES_1C = [
   "activering_preflight", "zet_modus", "dekkingsrapport", "beheer_intrekking",
   "verleen_break_glass", "trek_break_glass_in", "maak_uitnodiging", "activeer_uitnodiging",
-  "trek_uitnodiging_in", "sessiebeleid",
+  "trek_uitnodiging_in", "sessiebeleid", "open_breakglass_venster", "breakglass_overzicht",
+] as const;
+
+/** Elke functie die de DEKKING van een fonds kan veranderen neemt dezelfde
+ *  advisory lock; anders kan zij tussen de activeringspreflight en de omslag naar
+ *  `verplicht` glippen (reviewbevinding 2). */
+const DEKKINGSMUTATIES = [
+  "zet_modus", "beheer_intrekking", "verleen_break_glass", "trek_break_glass_in",
+  "maak_uitnodiging", "activeer_uitnodiging", "trek_uitnodiging_in", "start_intrekking",
 ] as const;
 
 test("1C: modus is de bron, actief de spiegel; migratie is deterministisch en idempotent", () => {
@@ -45,18 +53,77 @@ test("1C: modus is de bron, actief de spiegel; migratie is deterministisch en id
   assert.doesNotMatch(migratie, /set modus = 'verplicht'/i, "de migratie zet geen enkel fonds op verplicht");
 });
 
+test("1C: een uitzonderingssessie krijgt een BEPERKTE rol, geen portaaltoegang", () => {
+  // De hook schaalt af naar een rol die niets mag; PostgREST doet daar `set role`
+  // op, dus de begrenzing zit in de database en niet in de app.
+  assert.match(migratie, /jsonb_set\(event, '\{claims,role\}', '"portaal_beperkt"'::jsonb, true\)/);
+  assert.match(migratie, /if v_niveau = 'vol' then return event; end if;/);
+  // De rol bestaat, is lid van authenticator en heeft precies één leesrecht.
+  assert.match(migratie, /raise exception 'portaal_beperkt \(NOLOGIN\) ontbreekt/);
+  assert.match(migratie, /raise exception 'portaal_beperkt is geen lid van authenticator/);
+  assert.match(migratie, /grant select \(id, fonds_id, rol, naam\) on public\.profielen to portaal_beperkt;/);
+  assert.match(migratie, /create policy "beperkte sessie leest eigen profiel" on public\.profielen\s*\n\s*for select to portaal_beperkt using \(id = \(select auth\.uid\(\)\)\);/);
+  for (const revoke of [
+    /revoke all on all tables\s+in schema public\s+from portaal_beperkt;/,
+    /revoke all on all functions in schema public\s+from portaal_beperkt;/,
+    /revoke all on all tables\s+in schema storage from portaal_beperkt;/,
+    /revoke usage on schema storage from portaal_beperkt;/,
+    /revoke usage on schema login_private from portaal_beperkt;/,
+  ]) assert.match(migratie, revoke);
+  // De app volgt: een beperkte sessie komt niet voorbij de wrapper of de layouts.
+  assert.match(lees("core/lib/route-wrapper.ts"), /if \(sessieOordeel\.beperkt === true\)[\s\S]{0,220}?magBeperkteSessieRoute\(new URL\(request\.url\)\.pathname\)\) return nietIngelogd\(\);/);
+  assert.match(lees("core/lib/fonds-sessie.ts"), /if \(sessieOordeel\.beperkt\) redirect\(BEPERKTE_SESSIE_PAD\);/);
+  assert.match(lees("app/(dashboard)/layout.tsx"), /if \(sessieOordeel\.beperkt\) redirect\(BEPERKTE_SESSIE_PAD\);/);
+  // En de rolclaim is bindend, ook als het beleid iets anders zou zeggen.
+  assert.match(beleidCore, /if \(args\.rol === ROL_BEPERKT\) \{/);
+});
+
+test("1C: alle dekkingsmutaties nemen dezelfde fondslock", () => {
+  assert.match(migratie, /create or replace function login_private\.fondslock\(p_fonds uuid\)/);
+  assert.match(migratie, /select pg_advisory_xact_lock\(hashtext\('microsoft_login_beleid'\), hashtext\(p_fonds::text\)\);/);
+  for (const fn of DEKKINGSMUTATIES) {
+    const start = migratie.indexOf(`function login_private.${fn}(`);
+    assert.ok(start > 0, `${fn} ontbreekt`);
+    const body = migratie.slice(start, migratie.indexOf("end $$;", start));
+    assert.match(body, /perform fondslock\(p_fonds\)/, `${fn} neemt de fondslock niet`);
+  }
+  // Een nieuw of verplaatst profiel loopt niet door die functies heen: trigger.
+  assert.match(migratie, /create trigger trg_profiel_fondslock\s*\n\s*before insert or update of fonds_id or delete on public\.profielen/);
+  assert.doesNotMatch(migratie, /pg_advisory_xact_lock\([^)]*\);\s*\n\s*select c\.modus/, "zet_modus gebruikt de gedeelde helper, geen eigen lock");
+});
+
+test("1C: break-glass is een DUURZAME aanwijzing met korte activeringsvensters", () => {
+  // Geen einddatum op de aanwijzing zelf: een noodpad dat vanzelf verdampt is bij
+  // een Entra-storing geen noodpad (reviewbevinding 4).
+  assert.doesNotMatch(migratie, /geldig_tot\s+timestamptz not null/, "de aanwijzing kent geen harde vervaldatum");
+  assert.match(migratie, /herzien_voor\s+timestamptz not null/);
+  assert.match(migratie, /constraint break_glass_herziening check \(herzien_voor > uitgegeven_op\)/);
+  // De verloopbewaking telt mee in de preflight, maar blokkeert niet.
+  assert.match(migratie, /breakglass_herziening_verlopen integer/);
+  assert.match(migratie, /return query select true, null::text, 0, v_bg, v_herzien;/);
+  // De korte vensters staan apart, met precies één auditregel per verhoging.
+  assert.match(migratie, /create table if not exists login_private\.break_glass_activeringen/);
+  assert.match(migratie, /'breakglass\.gebruikt'/, "het beloofde auditgebeurtenis bestaat");
+  assert.match(migratie, /delete from break_glass_activeringen a where a\.break_glass_id = p_id and a\.venster_tot > now\(\)/);
+  // De guard opent het venster; de kern beslist wanneer.
+  assert.match(lees("core/lib/microsoft-login-sessieguard.ts"), /moetBreakglassVensterOpenen\(\{ beleid, rol, aal \}\)/);
+  assert.match(beleidCore, /export const BREAKGLASS_VENSTER_SECONDEN = 60 \* 60;/);
+});
+
 test("1C: het wachtwoordpad wordt in de hook getoetst, met een fail-closed richting die geen fonds buitensluit", () => {
   // De hook leest auth.mfa_factors zelf (hij draait als supabase_auth_admin), zodat
   // login_hook_owner geen enkel recht in het auth-schema nodig heeft.
   assert.match(migratie, /from auth\.mfa_factors f where f\.user_id = v_user and f\.status = 'verified'/);
-  assert.match(migratie, /login_private\.wachtwoordlogin_toegestaan\(v_user, v_mfa\)/);
+  assert.match(migratie, /login_private\.wachtwoordlogin_niveau\(v_user, v_mfa, v_aal2, v_mfa_op\)/);
   assert.doesNotMatch(migratie, /grant select[^;]*on auth\.mfa_factors/i, "de hookeigenaar krijgt geen auth-rechten");
-  // Alleen een expliciete `verplicht` sluit het wachtwoordpad: geen profiel of geen
-  // configrij → toegestaan (een afwezig beleid is nooit het strengste beleid).
-  assert.match(migratie, /returns boolean language sql security definer set search_path = '' stable as \$\$\s*\n\s*select not exists \(/);
-  assert.match(migratie, /and c\.modus = 'verplicht'/);
+  // Geen profielrij (platformaccount) → het gewone pad. WÉL een profiel maar GEEN
+  // configuratierij → drift, en drift is dicht (reviewbevinding 3).
+  assert.match(migratie, /when not exists \(select 1 from public\.profielen p where p\.id = p_user\) then 'vol'/);
+  assert.match(migratie, /join public\.fonds_microsoft_login c on c\.fonds_id = p\.fonds_id\s*\n\s*where p\.id = p_user\) then 'geweigerd'/);
+  assert.match(migratie, /where p\.id = p_user and c\.modus <> 'verplicht'\) then 'vol'/);
+  assert.match(beleidCore, /if \(args\.beleid\.configOntbreekt\) return \{ toegestaan: false, beperkt: false, reden: "config-drift" \};/);
   // Uitzonderingen: MFA-plichtige break-glass of een geopend koppelvenster.
-  assert.match(migratie, /coalesce\(p_heeft_mfa, false\) and exists \(\s*\n\s*select 1 from login_private\.break_glass g/);
+  assert.match(migratie, /coalesce\(p_heeft_mfa, false\) and exists \(/);
   assert.match(migratie, /u\.geactiveerd_op is not null and u\.venster_tot > pg_catalog\.now\(\)/);
   // Niet-oauth zonder user_id is niet te beoordelen → weigeren.
   assert.match(migratie, /if v_user is null then return v_weiger_wachtwoord; end if;/);
@@ -67,7 +134,7 @@ test("1C: het wachtwoordpad wordt in de hook getoetst, met een fail-closed richt
 
 test("1C: break-glass is minimaal, niet zelf toe te kennen en MFA-plichtig", () => {
   assert.match(migratie, /constraint break_glass_niet_zelf check \(user_id <> uitgegeven_door\)/);
-  assert.match(migratie, /constraint break_glass_geldigheid check \(geldig_tot > uitgegeven_op\)/);
+  assert.match(migratie, /constraint break_glass_herziening check \(herzien_voor > uitgegeven_op\)/);
   assert.match(migratie, /reden_categorie text not null check \(reden_categorie in \('entra_storing','beheerherstel','migratie'\)\)/,
     "vaste categorieën, geen vrij tekstveld");
   assert.match(migratie, /if p_user = p_actor then[\s\S]{0,400}?'zelf_toekennen'/);
@@ -75,7 +142,7 @@ test("1C: break-glass is minimaal, niet zelf toe te kennen en MFA-plichtig", () 
   // gesloten als auth.mfa_factors niet leesbaar is (geen aanname).
   assert.match(migratie, /has_table_privilege\(current_user, 'auth\.mfa_factors', 'select'\)/);
   assert.match(migratie, /'breakglass_onverifieerbaar'/);
-  assert.match(migratie, /exists \(select 1 from auth\.mfa_factors f where f\.user_id = g\.user_id and f\.status = 'verified'\)/,
+  assert.match(migratie, /select 1 from auth\.mfa_factors f where f\.user_id = g\.user_id and f\.status = 'verified'/,
     "de preflight telt alleen uitzonderingen met een geverifieerde factor");
 });
 
@@ -93,7 +160,7 @@ test("1C: de beperkte koppel-/herstelsessie bewaart alleen een hash en is eenmal
 });
 
 test("1C: activering naar `verplicht` is transactioneel, vergrendeld en fail-closed", () => {
-  assert.match(migratie, /perform pg_advisory_xact_lock\(hashtext\('microsoft_login_beleid'\), hashtext\(p_fonds::text\)\)/);
+  assert.match(migratie, /perform fondslock\(p_fonds\);\s*\n\s*select c\.modus, c\.entra_tenant_id into v_oud, v_tenant/);
   assert.match(migratie, /from public\.fonds_microsoft_login c where c\.fonds_id = p_fonds for update/, "de configrij wordt vergrendeld");
   assert.match(migratie, /select \* into v_pre from activering_preflight\(p_fonds\);\s*\n\s*if not v_pre\.gereed then/,
     "de preflight draait ÍN de schrijftransactie: een race faalt gesloten");
@@ -115,13 +182,13 @@ test("1C: persoonlijk ontkoppelen is server-side dicht in `verplicht`", () => {
 test("1C: guard L3 beoordeelt élke sessie, ongecachet, met de juiste fail-richting", () => {
   assert.match(guard, /^import "server-only";/m);
   assert.match(guard, /export async function beoordeelPortaalSessie/);
-  assert.match(guard, /await sessiebeleid\(gebruikerId\)/);
+  assert.match(guard, /await gateway\.sessiebeleid\(gebruikerId\)/);
   assert.match(guard, /BEWUST ONGECACHET/);
   assert.doesNotMatch(guard, /new Map\(|maak[A-Za-z]*Cache|ttlMs|TTL_MS/, "geen cachelaag: intrekken werkt bij het eerstvolgende verzoek");
   assert.match(guard, /categorie === "config_ontbreekt" \? "config" : "fout"/);
   // De pure kern: fout = dicht, ontbrekende configuratie = het wachtwoordpad zoals het was.
-  assert.match(beleidCore, /if \(uitval === "fout"\) return \{ toegestaan: false, reden: "gateway-fout" \};/);
-  assert.match(beleidCore, /return args\.isOAuth\s*\n\s*\? \{ toegestaan: false, reden: "gateway-fout" \}\s*\n\s*: \{ toegestaan: true, reden: "gateway-niet-geconfigureerd" \};/);
+  assert.match(beleidCore, /if \(uitval === "fout"\) return \{ toegestaan: false, beperkt: false, reden: "gateway-fout" \};/);
+  assert.match(beleidCore, /return args\.isOAuth\s*\n\s*\? \{ toegestaan: false, beperkt: false, reden: "gateway-fout" \}\s*\n\s*: \{ toegestaan: true, beperkt: false, reden: "gateway-niet-geconfigureerd" \};/);
 });
 
 test("1C: geen browserpad naar beleid, tenant of binding; capability is smal", () => {
@@ -139,8 +206,8 @@ test("1C: geen browserpad naar beleid, tenant of binding; capability is smal", (
     assert.match(migratie, new RegExp(`grant execute on function login_private\\.${f}\\([^)]*\\)\\s+to login_gateway`), f);
   }
   // De hookhelper is voor de gatewayrol NIET uitvoerbaar.
-  assert.match(migratie, /revoke all on function login_private\.wachtwoordlogin_toegestaan\(uuid, boolean\) from public, anon, authenticated, service_role, login_gateway/);
-  assert.match(migratie, /grant execute on function login_private\.wachtwoordlogin_toegestaan\(uuid, boolean\) to supabase_auth_admin/);
+  assert.match(migratie, /revoke all on function login_private\.wachtwoordlogin_niveau\(uuid, boolean, boolean, timestamptz\) from public, anon, authenticated, service_role, login_gateway/);
+  assert.match(migratie, /grant execute on function login_private\.wachtwoordlogin_niveau\(uuid, boolean, boolean, timestamptz\) to supabase_auth_admin/);
   // Bevoegdheid: één smalle capability, uitsluitend voor de beheerder.
   assert.match(capabilities, /\| "login\.beleid\.manage"/);
   const voorzitterBlok = capabilities.slice(capabilities.indexOf("  voorzitter: ["), capabilities.indexOf("  bestuurder: ["));
@@ -158,7 +225,9 @@ test("1C: meldingen zijn neutraal en verraden geen account", () => {
 test("1C: rollback zet de F1B-vorm terug en de suite hangt in de gate", () => {
   assert.match(rollback, /add column if not exists pilotstatus text not null default 'uit'/);
   assert.match(rollback, /drop column if exists modus/);
-  assert.match(rollback, /drop function if exists login_private\.wachtwoordlogin_toegestaan\(uuid, boolean\)/);
+  assert.match(rollback, /drop function if exists login_private\.wachtwoordlogin_niveau\(uuid, boolean, boolean, timestamptz\)/);
+  assert.match(rollback, /drop policy if exists "beperkte sessie leest eigen profiel" on public\.profielen/);
+  assert.match(rollback, /drop trigger if exists trg_profiel_fondslock on public\.profielen/);
   for (const f of GATEWAY_FUNCTIES_1C) {
     assert.match(rollback, new RegExp(`drop function if exists login_private\\.${f}\\(`), f);
   }

@@ -11,6 +11,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { beeindigSessie, beoordeelPortaalSessie, LOGIN_NA_BEEINDIGING } from "@/core/lib/microsoft-login-sessieguard";
+import { BEPERKTE_SESSIE_PAD } from "@/core/lib/microsoft-login-beleid-core";
 
 export type FondsSessie = {
   userId: string;
@@ -33,10 +34,15 @@ export async function haalFondsSessie(): Promise<FondsSessie> {
   // Guard L3 (#335 T2, uitgebreid in #344): een `oauth`-sessie zonder actieve
   // Microsoft-binding wordt hier beëindigd, en in een fonds op modus `verplicht`
   // óók een wachtwoordsessie zonder levende uitzondering.
-  if (!(await beoordeelPortaalSessie(supabase, user.id)).toegestaan) {
+  const sessieOordeel = await beoordeelPortaalSessie(supabase, user.id);
+  if (!sessieOordeel.toegestaan) {
     await beeindigSessie(supabase);
     redirect(LOGIN_NA_BEEINDIGING);
   }
+  // Een afgeschaalde sessie (break-glass op AAL1, koppel-/herstelsessie) hoort
+  // niet in het portaal: zij krijgt van de datalaag toch niets en wordt naar de
+  // ene pagina gestuurd waar zij wél iets kan (#344).
+  if (sessieOordeel.beperkt) redirect(BEPERKTE_SESSIE_PAD);
 
   const { data: profiel } = await supabase
     .from("profielen")

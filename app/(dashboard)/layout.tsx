@@ -5,6 +5,7 @@ import { haalFondsContext, tenantEnforceAan } from "@/core/lib/tenant-context";
 import { beoordeelToegang, type ToegangsOordeel } from "@/core/lib/tenant-enforce";
 import { haalFondsConfig } from "@/core/lib/fonds-config";
 import { beeindigSessie, beoordeelPortaalSessie, LOGIN_NA_BEEINDIGING } from "@/core/lib/microsoft-login-sessieguard";
+import { BEPERKTE_SESSIE_PAD } from "@/core/lib/microsoft-login-beleid-core";
 import DashboardShell from "@/core/components/DashboardShell";
 import AssistentOppervlak from "./ai/_components/AssistentOppervlak";
 
@@ -27,10 +28,12 @@ export default async function DashboardLayout({
   // al de eerstvolgende refresh, dit sluit het venster op de portaalsessie zelf.
   // In een fonds op modus `verplicht` geldt hetzelfde voor een wachtwoordsessie
   // zonder levende break-glass- of koppel-/herstelsessie-uitzondering.
-  if (!(await beoordeelPortaalSessie(supabase, user.id)).toegestaan) {
+  const sessieOordeel = await beoordeelPortaalSessie(supabase, user.id);
+  if (!sessieOordeel.toegestaan) {
     await beeindigSessie(supabase);
     redirect(LOGIN_NA_BEEINDIGING);
   }
+  if (sessieOordeel.beperkt) redirect(BEPERKTE_SESSIE_PAD);
 
   const { data: profiel } = await supabase
     .from("profielen")

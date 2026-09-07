@@ -65,18 +65,37 @@ grant execute on function public.fn_access_token_hook(jsonb) to supabase_auth_ad
 -- De helper is eigendom van login_hook_owner; alleen die rol mag hem verwijderen.
 grant login_hook_owner to postgres;
 set local role login_hook_owner;
+drop function if exists login_private.wachtwoordlogin_niveau(uuid, boolean, boolean, timestamptz);
 drop function if exists login_private.wachtwoordlogin_toegestaan(uuid, boolean);
 reset role;
 revoke login_hook_owner from postgres;
 
+-- ── 2b. De beperkte portaalrol ontmantelen ──────────────────────────────────
+-- De ROL zelf blijft staan (provisioning, net als login_gateway); alleen haar
+-- rechten en policy verdwijnen. Zonder de hook wordt de claim toch nooit meer
+-- gezet, en een rechtenloze rol is onschadelijk.
+drop policy if exists "beperkte sessie leest eigen profiel" on public.profielen;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'portaal_beperkt') then
+    execute 'revoke all on public.profielen from portaal_beperkt';
+    execute 'revoke usage on schema public from portaal_beperkt';
+  end if;
+end $$;
+
 -- ── 3. Gatewayfuncties van PR-A weg ─────────────────────────────────────────
 drop function if exists login_private.sessiebeleid(uuid);
+drop function if exists login_private.breakglass_overzicht(uuid);
+drop function if exists login_private.open_breakglass_venster(uuid, integer, text);
 drop function if exists login_private.trek_uitnodiging_in(uuid, uuid, uuid, text);
 drop function if exists login_private.activeer_uitnodiging(text, uuid, integer, text);
 drop function if exists login_private.maak_uitnodiging(uuid, uuid, text, integer, uuid, text);
 drop function if exists login_private.trek_break_glass_in(uuid, uuid, uuid, text);
 drop function if exists login_private.verleen_break_glass(uuid, uuid, text, uuid, integer, text);
 drop function if exists login_private.beheer_intrekking(uuid, uuid, uuid, boolean, text);
+drop trigger if exists trg_profiel_fondslock on public.profielen;
+drop function if exists public.fn_profiel_fondslock();
+drop function if exists login_private.fondslock(uuid);
 drop function if exists login_private.dekkingsrapport(uuid);
 drop function if exists login_private.zet_modus(uuid, text, uuid, text);
 drop function if exists login_private.activering_preflight(uuid);
@@ -137,6 +156,7 @@ grant execute on function login_private.start_intrekking(uuid, uuid, uuid, text)
 
 -- ── 5. Private tabellen van PR-A weg ────────────────────────────────────────
 drop table if exists login_private.herkoppel_uitnodigingen;
+drop table if exists login_private.break_glass_activeringen;
 drop table if exists login_private.break_glass;
 
 -- ── 6. Configuratietabel terug: pilotstatus erbij, modus eraf ───────────────

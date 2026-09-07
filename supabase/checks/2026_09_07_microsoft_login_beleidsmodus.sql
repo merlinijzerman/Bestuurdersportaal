@@ -4,13 +4,16 @@
 --
 --  WAT DEZE SUITE BEWIJST
 --    DEEL 1 — STRUCTUUR: getypeerde modus met spiegelconstraint op `actief`,
---                        `pilotstatus` weg, twee nieuwe private tabellen met RLS
+--                        `pilotstatus` weg, drie nieuwe private tabellen met RLS
 --                        en zonder enig recht voor anon/authenticated/service_role/
---                        login_gateway, elf nieuwe gatewayfuncties met EXECUTE
---                        uitsluitend voor login_gateway (24 in totaal), de tweede
+--                        login_gateway, twaalf nieuwe gatewayfuncties met EXECUTE
+--                        uitsluitend voor login_gateway (26 in totaal), de tweede
 --                        hookhelper onder login_hook_owner met search_path '' en
---                        EXECUTE alleen voor supabase_auth_admin, en exact de
---                        kolomrechten die de helper nodig heeft.
+--                        EXECUTE alleen voor supabase_auth_admin, exact de
+--                        kolomrechten die de helper nodig heeft, én de beperkte
+--                        portaalrol portaal_beperkt: lid van authenticator, USAGE
+--                        op public en NIETS meer dan kolom-SELECT op de eigen
+--                        profielrij.
 --    DEEL 2 — GEDRAG:    modi uit/optioneel/verplicht in de hook (wachtwoord,
 --                        magic link, herstel én refresh); break-glass werkt alleen
 --                        mét geverifieerde MFA-factor en is niet zelf toe te kennen;
@@ -19,7 +22,12 @@
 --                        `verplicht` server-side dicht; beheerintrekking en
 --                        vrijgave; activering faalt gesloten zonder dekking of
 --                        break-glasspad en hertoetst binnen de schrijftransactie
---                        (race); rolgrenzen; audit inhoudsvrij.
+--                        (race); rolgrenzen; audit inhoudsvrij. NIEUW na review:
+--                        de hook schaalt een uitzonderingssessie af naar
+--                        role=portaal_beperkt, die rol kan niets lezen behalve de
+--                        eigen profielrij, een ontbrekende configuratierij is
+--                        DICHT, en een verlopen activeringsvenster zet een
+--                        verhoogde break-glasssessie terug.
 --
 --  Zelf-seedend en volledig terugdraaiend: DEEL 2 draait in één transactie die
 --  eindigt op `rollback`. Er blijft niets achter.
@@ -51,7 +59,7 @@ declare
   v_nieuw text[] := array[
     'activering_preflight','zet_modus','dekkingsrapport','beheer_intrekking',
     'verleen_break_glass','trek_break_glass_in','maak_uitnodiging','activeer_uitnodiging',
-    'trek_uitnodiging_in','sessiebeleid'];
+    'trek_uitnodiging_in','sessiebeleid','open_breakglass_venster','breakglass_overzicht'];
   f text;
 begin
   -- ── Configuratietabel: modus is de bron, actief de spiegel ───────────────
@@ -73,12 +81,12 @@ begin
   -- ── Nieuwe private tabellen ──────────────────────────────────────────────
   select count(*) into v_n from pg_class c join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='login_private' and c.relkind='r'
-     and c.relname in ('break_glass','herkoppel_uitnodigingen') and c.relrowsecurity;
-  if v_n <> 2 then fouten := fouten || format(E'\n- verwacht 2 nieuwe private tabellen met RLS, gevonden %s', v_n); end if;
+     and c.relname in ('break_glass','break_glass_activeringen','herkoppel_uitnodigingen') and c.relrowsecurity;
+  if v_n <> 3 then fouten := fouten || format(E'\n- verwacht 3 nieuwe private tabellen met RLS, gevonden %s', v_n); end if;
 
   if exists (
     select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
-     where n.nspname='login_private' and c.relname in ('break_glass','herkoppel_uitnodigingen')
+     where n.nspname='login_private' and c.relname in ('break_glass','break_glass_activeringen','herkoppel_uitnodigingen')
        and (has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
          or has_table_privilege('authenticated',c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
          or has_table_privilege('service_role',c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
@@ -88,10 +96,14 @@ begin
 
   -- login_hook_owner: uitsluitend de kolommen die de beslissing dragen.
   if not has_column_privilege('login_hook_owner','login_private.break_glass','user_id','SELECT')
-     or not has_column_privilege('login_hook_owner','login_private.break_glass','geldig_tot','SELECT')
+     or not has_column_privilege('login_hook_owner','login_private.break_glass','ingetrokken_op','SELECT')
      or has_column_privilege('login_hook_owner','login_private.break_glass','reden_categorie','SELECT')
      or has_column_privilege('login_hook_owner','login_private.break_glass','correlatie_id','SELECT') then
     fouten := fouten || E'\n- kolomrechten van login_hook_owner op break_glass wijken af';
+  end if;
+  if not has_column_privilege('login_hook_owner','login_private.break_glass_activeringen','venster_tot','SELECT')
+     or has_column_privilege('login_hook_owner','login_private.break_glass_activeringen','correlatie_id','SELECT') then
+    fouten := fouten || E'\n- kolomrechten van login_hook_owner op break_glass_activeringen wijken af';
   end if;
   if not has_column_privilege('login_hook_owner','login_private.herkoppel_uitnodigingen','venster_tot','SELECT')
      or has_column_privilege('login_hook_owner','login_private.herkoppel_uitnodigingen','token_hash','SELECT') then
@@ -101,6 +113,8 @@ begin
     fouten := fouten || E'\n- login_hook_owner mist SELECT op fonds_microsoft_login.modus';
   end if;
   if not exists (select 1 from pg_policies where schemaname='login_private' and tablename='break_glass'
+                   and cmd='SELECT' and 'login_hook_owner' = any(roles))
+     or not exists (select 1 from pg_policies where schemaname='login_private' and tablename='break_glass_activeringen'
                    and cmd='SELECT' and 'login_hook_owner' = any(roles))
      or not exists (select 1 from pg_policies where schemaname='login_private' and tablename='herkoppel_uitnodigingen'
                    and cmd='SELECT' and 'login_hook_owner' = any(roles)) then
@@ -133,12 +147,20 @@ begin
   -- Totaal: 24 gatewayfuncties (13 T1 + tel_startpoging + 10 uit fase 1C).
   select count(*) into v_n from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='login_private' and has_function_privilege('login_gateway', p.oid, 'EXECUTE');
-  if v_n <> 24 then fouten := fouten || format(E'\n- login_gateway mag %s functies uitvoeren, verwacht 24', v_n); end if;
+  if v_n <> 26 then fouten := fouten || format(E'\n- login_gateway mag %s functies uitvoeren, verwacht 26', v_n); end if;
+  -- fondslock is intern: de gatewayrol mag hem niet los aanroepen.
+  if has_function_privilege('login_gateway','login_private.fondslock(uuid)','EXECUTE') then
+    fouten := fouten || E'\n- login_gateway kan fondslock los uitvoeren';
+  end if;
 
   -- ── Hookhelper voor het wachtwoordpad ────────────────────────────────────
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+              where n.nspname='login_private' and p.proname='wachtwoordlogin_toegestaan') then
+    fouten := fouten || E'\n- de oude boolean-helper wachtwoordlogin_toegestaan staat er nog';
+  end if;
   if not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_roles o on o.oid=p.proowner
-     where n.nspname='login_private' and p.proname='wachtwoordlogin_toegestaan'
+     where n.nspname='login_private' and p.proname='wachtwoordlogin_niveau'
        and o.rolname='login_hook_owner' and p.prosecdef
        and coalesce(array_to_string(p.proconfig, ','), '') ~ 'search_path=""?$'
        and has_function_privilege('supabase_auth_admin', p.oid, 'EXECUTE')
@@ -146,7 +168,43 @@ begin
        and not has_function_privilege('authenticated', p.oid, 'EXECUTE')
        and not has_function_privilege('service_role', p.oid, 'EXECUTE')
        and not has_function_privilege('login_gateway', p.oid, 'EXECUTE')) then
-    fouten := fouten || E'\n- wachtwoordlogin_toegestaan: verkeerde eigenaar, geen definer, ongepind pad of te ruime EXECUTE';
+    fouten := fouten || E'\n- wachtwoordlogin_niveau: verkeerde eigenaar, geen definer, ongepind pad of te ruime EXECUTE';
+  end if;
+
+  -- ── De beperkte portaalrol ───────────────────────────────────────────────
+  if not exists (select 1 from pg_roles where rolname='portaal_beperkt'
+                   and not rolcanlogin and not rolsuper and not rolbypassrls and not rolcreaterole) then
+    fouten := fouten || E'\n- portaal_beperkt is niet de vereiste NOLOGIN-rol zonder bypassrls';
+  end if;
+  if not exists (select 1 from pg_auth_members am join pg_roles r on r.oid=am.roleid join pg_roles m on m.oid=am.member
+                  where r.rolname='portaal_beperkt' and m.rolname='authenticator') then
+    fouten := fouten || E'\n- portaal_beperkt is geen lid van authenticator (PostgREST kan de rol niet aannemen)';
+  end if;
+  -- Exact één leesrecht in public: de vier profielkolommen. Verder niets.
+  if (select coalesce(array_agg(cp.table_name || '.' || cp.column_name || ':' || cp.privilege_type
+                                order by cp.table_name, cp.column_name), '{}')
+        from information_schema.column_privileges cp
+       where cp.grantee='portaal_beperkt' and cp.table_schema='public')
+     <> array['profielen.fonds_id:SELECT','profielen.id:SELECT','profielen.naam:SELECT','profielen.rol:SELECT'] then
+    fouten := fouten || E'\n- kolomrechten van portaal_beperkt wijken af van exact profielen(id, fonds_id, rol, naam)';
+  end if;
+  if exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+              where n.nspname in ('public','storage','login_private') and c.relkind in ('r','p','v','m','f')
+                and has_table_privilege('portaal_beperkt', c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) then
+    fouten := fouten || E'\n- portaal_beperkt heeft een tabelbreed recht (moet uitsluitend kolom-SELECT op profielen zijn)';
+  end if;
+  if has_schema_privilege('portaal_beperkt','storage','USAGE')
+     or has_schema_privilege('portaal_beperkt','login_private','USAGE') then
+    fouten := fouten || E'\n- portaal_beperkt heeft USAGE op storage of login_private';
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='profielen'
+                   and policyname='beperkte sessie leest eigen profiel' and cmd='SELECT'
+                   and roles = array['portaal_beperkt']::name[] and qual ~ 'auth\.uid\(\)') then
+    fouten := fouten || E'\n- de policy die portaal_beperkt tot de eigen profielrij beperkt ontbreekt of is te ruim';
+  end if;
+  if exists (select 1 from pg_policies where 'portaal_beperkt' = any(roles)
+               and not (schemaname='public' and tablename='profielen')) then
+    fouten := fouten || E'\n- portaal_beperkt komt in een policy buiten public.profielen voor';
   end if;
 
   -- ── Hook blijft SECURITY INVOKER met leeg pad ────────────────────────────
@@ -158,7 +216,7 @@ begin
   end if;
 
   if fouten <> '' then raise exception 'Microsoft-loginbeleid fase 1C structuur FAALT:%', fouten; end if;
-  raise notice 'OK DEEL 1: modus + spiegelconstraint, twee private tabellen, 24 gateway-executes, tweede hookhelper onder login_hook_owner.';
+  raise notice 'OK DEEL 1: modus + spiegelconstraint, drie private tabellen, 26 gateway-executes, hookhelper wachtwoordlogin_niveau en de beperkte rol portaal_beperkt.';
 end $$;
 
 \echo '== DEEL 2 — GEDRAG (transactie, eindigt op rollback) =='
@@ -188,7 +246,7 @@ declare
   v_hash2 text;
   v_id uuid; v_n integer; v_cat text; v_res jsonb; v_user uuid; v_venster timestamptz;
   v_pre record; v_beleid record;
-  ev_pw jsonb; ev_pw2 jsonb; ev_magic jsonb; ev_recovery jsonb; ev_oauth1 jsonb; ev_refresh1 jsonb;
+  ev_pw jsonb; ev_pw2 jsonb; ev_pw2_aal2 jsonb; ev_magic jsonb; ev_recovery jsonb; ev_oauth1 jsonb; ev_refresh1 jsonb;
 begin
   v_hash := encode(extensions.digest(v_token, 'sha256'), 'hex');
   v_hash2 := encode(extensions.digest('tweede-token', 'sha256'), 'hex');
@@ -220,6 +278,9 @@ begin
              'claims', jsonb_build_object('sub', v_u1, 'role', 'authenticated', 'amr', jsonb_build_array(jsonb_build_object('method','password','timestamp',0))));
   ev_pw2 := jsonb_build_object('user_id', v_u2, 'authentication_method', 'password',
              'claims', jsonb_build_object('sub', v_u2, 'role', 'authenticated', 'amr', jsonb_build_array(jsonb_build_object('method','password','timestamp',0))));
+  ev_pw2_aal2 := jsonb_build_object('user_id', v_u2, 'authentication_method', 'password',
+             'claims', jsonb_build_object('sub', v_u2, 'role', 'authenticated', 'aal', 'aal2',
+               'amr', jsonb_build_array(jsonb_build_object('method','password','timestamp',0), jsonb_build_object('method','totp','timestamp',0))));
   ev_magic := jsonb_build_object('user_id', v_u1, 'authentication_method', 'magiclink',
              'claims', jsonb_build_object('sub', v_u1, 'role', 'authenticated', 'amr', jsonb_build_array(jsonb_build_object('method','magiclink','timestamp',0))));
   ev_recovery := jsonb_build_object('user_id', v_u1, 'authentication_method', 'recovery',
@@ -262,13 +323,13 @@ begin
   -- break-glass zonder MFA telt niet mee
   set local role login_gateway;
   select r.id, r.categorie into v_id, v_cat
-    from login_private.verleen_break_glass(v_fonds, v_u2, 'entra_storing', v_u2, 3600, 'corr-m5b') r;
+    from login_private.verleen_break_glass(v_fonds, v_u2, 'entra_storing', v_u2, 90, 'corr-m5b') r;
   assert v_cat = 'zelf_toekennen' and v_id is null, 'M5: break-glass is niet zelf toe te kennen';
   select r.id, r.categorie into v_id, v_cat
-    from login_private.verleen_break_glass(v_fonds, v_v1, 'entra_storing', v_u1, 3600, 'corr-m5c') r;
+    from login_private.verleen_break_glass(v_fonds, v_v1, 'entra_storing', v_u1, 90, 'corr-m5c') r;
   assert v_cat = 'fonds_mismatch' and v_id is null, 'M5: break-glass voor een ander fonds wordt geweigerd';
   select r.id, r.categorie into v_id, v_cat
-    from login_private.verleen_break_glass(v_fonds, v_u2, 'entra_storing', v_u1, 3600, 'corr-m5d') r;
+    from login_private.verleen_break_glass(v_fonds, v_u2, 'entra_storing', v_u1, 90, 'corr-m5d') r;
   assert v_cat is null and v_id is not null, 'M5: break-glass verleend';
   select * into v_pre from login_private.activering_preflight(v_fonds);
   assert v_pre.categorie = 'breakglass_ontbreekt', 'M5: break-glass zonder geverifieerde MFA-factor telt niet';
@@ -301,11 +362,19 @@ begin
   assert v_res::text !~* ('example\.test|sub-1|' || v_oid1), 'M7: geen accountgegevens in de weigering';
   assert (public.fn_access_token_hook(ev_magic)->'error'->>'http_code') = '403', 'M7: magic link eveneens geweigerd';
   assert (public.fn_access_token_hook(ev_recovery)->'error'->>'http_code') = '403', 'M7: herstelpad eveneens geweigerd';
-  assert public.fn_access_token_hook(ev_pw2) = ev_pw2, 'M7: break-glassaccount met geverifieerde MFA mag wél';
+  -- Break-glass op AAL1: geen 403, maar ook geen portaaltoegang — de hook schaalt
+  -- de sessie af naar de beperkte databaserol (reviewbevinding 1).
+  v_res := public.fn_access_token_hook(ev_pw2);
+  assert v_res->'claims'->>'role' = 'portaal_beperkt', 'M7: break-glass op AAL1 krijgt de beperkte rol';
+  assert v_res->'error' is null, 'M7: … en geen weigering';
+  assert (v_res - 'claims') = (ev_pw2 - 'claims'), 'M7: verder blijft het event ongewijzigd';
+  -- Pas met AAL2 volgt de normale rol.
+  assert public.fn_access_token_hook(ev_pw2_aal2) = ev_pw2_aal2, 'M7: break-glass op AAL2 krijgt de normale rol';
 
   -- MFA-factor terug naar unverified → uitzondering werkt niet meer
   update auth.mfa_factors set status = 'unverified' where user_id = v_u2;
   assert (public.fn_access_token_hook(ev_pw2)->'error'->>'http_code') = '403', 'M7: break-glass zonder geverifieerde MFA → 403';
+  assert (public.fn_access_token_hook(ev_pw2_aal2)->'error'->>'http_code') = '403', 'M7: … ook op AAL2';
   update auth.mfa_factors set status = 'verified' where user_id = v_u2;
 
   -- Het Microsoft-pad blijft ongewijzigd werken
@@ -361,8 +430,9 @@ begin
   assert v_cat = 'uitnodiging_ongeldig', 'M10: het token is eenmalig';
   reset role;
 
-  assert public.fn_access_token_hook(jsonb_set(ev_pw, '{user_id}', to_jsonb(v_u3))) =
-         jsonb_set(ev_pw, '{user_id}', to_jsonb(v_u3)), 'M10: binnen het venster mag dit ene account met wachtwoord aanmelden';
+  v_res := public.fn_access_token_hook(jsonb_set(ev_pw, '{user_id}', to_jsonb(v_u3)));
+  assert v_res->'error' is null, 'M10: binnen het venster mag dit ene account met wachtwoord aanmelden';
+  assert v_res->'claims'->>'role' = 'portaal_beperkt', 'M10: … maar uitsluitend met de beperkte rol';
 
   -- Ontkoppelen mag binnen het venster (de oude identiteit moet los kunnen).
   set local role login_gateway;
@@ -383,7 +453,7 @@ begin
   assert v_cat is null, 'M11: tweede uitnodiging uitgegeven';
   perform login_private.activeer_uitnodiging(v_hash2, v_fonds, 900, 'corr-m11b');
   reset role;
-  assert public.fn_access_token_hook(ev_pw) = ev_pw, 'M11: venster open';
+  assert public.fn_access_token_hook(ev_pw)->'claims'->>'role' = 'portaal_beperkt', 'M11: venster open, beperkte rol';
   update login_private.herkoppel_uitnodigingen set venster_tot = now() - interval '1 second'
    where token_hash = v_hash2;
   assert (public.fn_access_token_hook(ev_pw)->'error'->>'http_code') = '403', 'M11: verlopen venster sluit het wachtwoordpad';
@@ -395,8 +465,12 @@ begin
   assert v_cat is null, 'M12: intrekken slaagt';
   select login_private.trek_break_glass_in(v_id, v_fonds, v_u1, 'corr-m12b') into v_cat;
   assert v_cat is null, 'M12: intrekken is idempotent';
+  -- Voor de vervolgscenario's opnieuw verlenen (de aanwijzing is duurzaam).
+  select r.id, r.categorie into v_id, v_cat
+    from login_private.verleen_break_glass(v_fonds, v_u2, 'entra_storing', v_u1, 90, 'corr-m12c') r;
+  assert v_cat is null, 'M12: opnieuw verlenen slaagt';
   reset role;
-  assert (public.fn_access_token_hook(ev_pw2)->'error'->>'http_code') = '403', 'M12: na intrekking geen noodtoegang meer';
+  assert public.fn_access_token_hook(ev_pw2)->'claims'->>'role' = 'portaal_beperkt', 'M12: opnieuw beperkt beschikbaar';
 
   -- ── M13 — race: dekking valt weg tussen preflight en omslag ──────────────
   set local role login_gateway;
@@ -452,6 +526,77 @@ begin
       'breakglass.ingetrokken','herkoppelen.uitgenodigd','herkoppelen.venster_geopend',
       'beheer.ingetrokken','beheer.vrijgegeven','ontkoppelen.geweigerd');
   assert v_n >= 10, format('M16: alle beleidsgebeurtenissen worden vastgelegd (gevonden %s)', v_n);
+
+  -- ── M18 — configdrift is DICHT (reviewbevinding 3) ───────────────────────
+  -- Elke fonds krijgt een configuratierij uit de migratie en de trigger. Ontbreekt
+  -- zij tóch, dan is dat drift — en drift mag nooit als "geen beleid" gelden.
+  delete from public.fonds_microsoft_login where fonds_id = v_fonds;
+  assert (public.fn_access_token_hook(ev_pw)->'error'->>'http_code') = '403',
+    'M18: profiel met ontbrekende configuratierij → geweigerd';
+  set local role login_gateway;
+  select count(*) into v_n from login_private.sessiebeleid(v_u1) b where b.config_ontbreekt;
+  assert v_n = 1, 'M18: sessiebeleid meldt de drift aan de app';
+  reset role;
+  insert into public.fonds_microsoft_login (fonds_id, actief, entra_tenant_id, modus)
+  values (v_fonds, true, v_tid, 'verplicht');
+  -- Een account ZONDER profiel (platformidentiteit) valt er wél buiten.
+  assert public.fn_access_token_hook(jsonb_set(ev_pw, '{user_id}', to_jsonb('73440000-0000-4000-8000-0000000000ff'::uuid)))
+         = jsonb_set(ev_pw, '{user_id}', to_jsonb('73440000-0000-4000-8000-0000000000ff'::uuid)),
+    'M18: een account zonder fondsprofiel houdt het gewone wachtwoordpad';
+
+  -- ── M19 — de beperkte rol kan niets (reviewbevinding 1) ──────────────────
+  -- Dit is de rol die PostgREST aanneemt op de claim uit M7/M10. Zij mag exact
+  -- één ding: de eigen profielrij lezen.
+  set local role portaal_beperkt;
+  set local request.jwt.claims to '{"sub":"73440000-0000-4000-8000-0000000000a1"}';
+  select count(*) into v_n from public.profielen;
+  assert v_n = 1, format('M19: de beperkte rol ziet alleen de eigen profielrij (zag %s)', v_n);
+  begin
+    perform 1 from public.documenten limit 1;
+    assert false, 'M19: de beperkte rol kon documenten lezen';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform 1 from public.fondsen limit 1;
+    assert false, 'M19: de beperkte rol kon fondsen lezen';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform 1 from storage.objects limit 1;
+    assert false, 'M19: de beperkte rol kon storage lezen';
+  exception when insufficient_privilege or invalid_schema_name then null; end;
+  reset role;
+  reset request.jwt.claims;
+
+  -- ── M20 — activeringsvenster: één auditregel, en het venster loopt af ────
+  set local role login_gateway;
+  select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, 3600, 'corr-m20') r;
+  assert v_cat is null, 'M20: venster geopend';
+  perform login_private.open_breakglass_venster(v_u2, 3600, 'corr-m20b');   -- hergebruikt
+  reset role;
+  select count(*) into v_n from login_private.audit_log
+   where user_id = v_u2 and gebeurtenis = 'breakglass.gebruikt';
+  assert v_n = 1, format('M20: precies één breakglass.gebruikt per venster (was %s)', v_n);
+  assert public.fn_access_token_hook(ev_pw2_aal2) = ev_pw2_aal2, 'M20: binnen het venster blijft de normale rol';
+  -- Let op: binnen één transactie staat now() stil, dus het venster wordt naar het
+  -- verleden verplaatst in plaats van "af te wachten".
+  update login_private.break_glass_activeringen
+     set geopend_op = now() - interval '2 hours', venster_tot = now() - interval '1 hour';
+  assert public.fn_access_token_hook(ev_pw2_aal2)->'claims'->>'role' = 'portaal_beperkt',
+    'M20: na afloop van het venster zakt de verhoogde sessie terug naar de beperkte rol';
+  -- Een NIEUWE MFA-verificatie (latere amr-timestamp) mag wél weer verhogen.
+  assert public.fn_access_token_hook(
+      jsonb_set(ev_pw2_aal2, '{claims,amr}', jsonb_build_array(
+        jsonb_build_object('method','password','timestamp', extract(epoch from now())::bigint),
+        jsonb_build_object('method','totp','timestamp', extract(epoch from now())::bigint)))
+    )->'claims'->>'role' is distinct from 'portaal_beperkt',
+    'M20: een verse MFA-verificatie opent een nieuwe verhoging';
+  -- Intrekken van de aanwijzing beëindigt lopende verhogingen.
+  select g.id into v_id from login_private.break_glass g where g.user_id = v_u2 and g.ingetrokken_op is null;
+  set local role login_gateway;
+  perform login_private.trek_break_glass_in(v_id, v_fonds, v_u1, 'corr-m20c');
+  reset role;
+  select count(*) into v_n from login_private.break_glass_activeringen where user_id = v_u2 and venster_tot > now();
+  assert v_n = 0, 'M20: intrekking ruimt lopende verhogingen op';
+  assert (public.fn_access_token_hook(ev_pw2_aal2)->'error'->>'http_code') = '403', 'M20: na intrekking geen noodtoegang';
 
   -- ── M17 — terug naar uit ─────────────────────────────────────────────────
   set local role login_gateway;

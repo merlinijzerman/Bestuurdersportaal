@@ -1,6 +1,6 @@
 # 0212 — Microsoft-loginbeleid (fase 1C): drie fondsmodi, afdwinging in de Auth-hook, en een beheerde bindingslifecycle met twee begrensde herstelpaden
 
-- **Status:** Voorgesteld (PR-A geïmplementeerd; PR-B — beheer- en profielinterface — volgt)
+- **Status:** Voorgesteld (PR-A geïmplementeerd en na reviewronde 1 herzien; PR-B — beheer- en profielinterface — volgt)
 - **Datum:** 2026-09-07
 - **Betrokkenen:** Merlin (opdrachtgever/productowner, vier expliciete keuzes hieronder), Claude (ontwerp en implementatie)
 - **Ticket:** [#344](https://github.com/merlinijzerman/Bestuurdersportaal/issues/344) — M365 fase 1C, organisatiebreed Microsoft-loginbeleid en beheerde ontkoppeling
@@ -68,11 +68,12 @@ identiteitscontrole nodig — de link mag nooit het enige authenticatiemiddel zi
 
 Afgeleide, dragende ontwerpkeuzes:
 
-**D5 — de fail-closed-richting is asymmetrisch.** Ontbreekt het profiel, de configuratierij
-of de logingateway, dan is het **wachtwoordpad open** en het **Microsoft-pad dicht**. Alleen
-een expliciete `verplicht` sluit wachtwoord. Een afwezig beleid mag nooit als het strengste
-beleid worden gelezen — anders sluit één ontbrekende rij een heel fonds buiten. Binnen
-`verplicht` is elke twijfel wél dicht.
+**D5 — de fail-closed-richting is asymmetrisch, maar drift telt niet als "afwezig beleid".**
+Een account **zonder profielrij** (platformidentiteit) valt buiten het fondsbeleid en houdt het
+gewone wachtwoordpad; ook een ontbrekende logingateway betekent dat Microsoft-login in die
+omgeving niet bestaat. Maar een account **mét profiel in een fonds zonder configuratierij** is
+drift — elke fonds krijgt zo'n rij uit de migratie en de trigger — en wordt geweigerd
+(reviewbevinding 3, 7 september). Binnen `verplicht` is elke twijfel dicht.
 
 **D6 — de "byte-identiek wachtwoordpad"-invariant uit 0211 vervalt.** Guard L3 heet nu
 `beoordeelPortaalSessie` en raadpleegt de gateway voor élke sessie (één functieaanroep op
@@ -100,6 +101,34 @@ onmiddellijk, maar het levende slot blijft bezet zodat de gebruiker de GoTrue-id
 de eigen sessie nog netjes kan losmaken vóór een nieuwe koppeling. Voor een vertrokken
 gebruiker is er `afronden`: het slot komt vrij, de GoTrue-identiteit blijft achter.
 
+## Herziening na reviewronde 1 (7 september 2026)
+
+De opdrachtgever vond vier mergeblokkers op de eerste implementatie. Alle vier zijn in dezelfde
+PR hersteld; de eerste dwong een echte uitbreiding van het besluit af.
+
+**D10 — een uitzonderingssessie krijgt een BEPERKTE databaserol, geen portaaltoegang.** De hook gaf
+een break-glass- of koppelsessie het gewone `authenticated`-token. Dat token bereikt PostgREST,
+Storage en Realtime rechtstreeks — precies het gat dat 0211 (bevinding 3) beschrijft en dat een
+app-guard per definitie niet dicht. Gemeten tegen de lokale GoTrue+PostgREST-stack: met alléén een
+wachtwoord kwam zo'n sessie bij `/rest/v1/profielen` en `/rest/v1/fondsen`.
+De hook zet nu voor die sessies de claim `role = portaal_beperkt`: een NOLOGIN-rol, lid van
+`authenticator`, met `USAGE` op `public` en verder **uitsluitend** kolom-`SELECT` op de eigen
+profielrij (`id, fonds_id, rol, naam`, policy `id = auth.uid()`). PostgREST doet `set role` op die
+claim, dus de begrenzing zit in de database. Dezelfde meting na de wijziging: `documenten` en
+`fondsen` geven 403, alleen de eigen profielrij komt terug. De normale rol verschijnt pas ná AAL2
+(break-glass) of via een geldige Microsoft-koppeling. De app volgt: `withFondsRoute` laat een
+beperkte sessie alleen op het koppelpad toe en de layouts sturen haar naar `/beperkte-toegang`.
+
+**D11 — break-glass is een DUURZAME aanwijzing met korte activeringsvensters.** De eerste versie gaf
+de uitzondering een harde einddatum van hooguit zeven dagen; daarna stond het fonds nog op
+`verplicht` zonder herstelpad. Dat is geen noodpad. De aanwijzing geldt nu tot intrekking. Wat kort
+is, zijn de **activeringsvensters**: elke verhoging naar de normale rol opent een venster van een uur
+in `login_private.break_glass_activeringen` en levert precies één `breakglass.gebruikt` in de audit.
+Loopt dat venster af, dan zakt de sessie bij de eerstvolgende tokenuitgifte terug naar de beperkte
+rol en is een nieuwe MFA-verificatie nodig — die opent een nieuw, apart geaudit venster. De
+verloopBEWAKING zit in `herzien_voor`: die datum blokkeert niets, maar preflight, beheeroverzicht en
+runbook melden dat de aanwijzing herzien moet worden. Intrekken beëindigt lopende verhogingen direct.
+
 ## Overwogen alternatieven
 
 - **`actief` omzetten naar een generated column** — formeel één bron van waarheid, maar
@@ -118,6 +147,12 @@ gebruiker is er `afronden`: het slot komt vrij, de GoTrue-identiteit blijft acht
 - **Alleen in de UI afdwingen, met een controle in de routes** — een sessie die via Supabase
   ontstaat, bereikt PostgREST/Storage/Realtime rechtstreeks (0211, bevinding 3). Een
   controle die alleen in Next.js zit, is nooit de primaire beveiliging. Verworpen.
+- **De hook een verlopen activeringsvenster laten weigeren in plaats van afschalen** — dan zou een
+  break-glassaccount na een uur helemaal buiten staan, ook om de MFA-stap opnieuw te doen.
+  Afschalen naar de beperkte rol houdt precies één weg open: opnieuw verifiëren. Verworpen.
+- **De activeringsduur als bovengrens op de aanwijzing** — dat is exact de fout uit
+  reviewbevinding 4. Het venster begrenst de SESSIE; de aanwijzing eindigt door intrekking of
+  herziening. Verworpen.
 - **Sessiebeleid cachen (5–30 s TTL)** — scheelt een round trip per verzoek, maar maakt het
   intrekkingsvenster onvoorspelbaar precies wanneer het ertoe doet. Niet gedaan; als de
   latency in Preview knelt, is dat een aparte, gemeten afweging.
@@ -153,7 +188,11 @@ gebruiker is er `afronden`: het slot komt vrij, de GoTrue-identiteit blijft acht
   kan niemand meer een token krijgen. Dat is de prijs van fail-closed en het laatste
   redmiddel is platformniveau (hook uitzetten in het Supabase-dashboard, runbook).
   (c) Een door het beheer vrijgegeven binding laat een GoTrue-identiteit achter die alleen
-  de gebruiker zelf kan losmaken.
+  de gebruiker zelf kan losmaken. (d) De rol `portaal_beperkt` moet net als `login_gateway` worden
+  geprovisioneerd (runbook §1C.0) en lid zijn van `authenticator`; ontbreekt zij, dan weigert de
+  migratie te draaien. (e) Een verhoogde break-glasssessie kan zichzelf na afloop van het venster
+  opnieuw verhogen met een nieuwe MFA-stap; het venster begrenst dus de sessie en maakt elk gebruik
+  zichtbaar, maar het is geen rem op de entitlement — die begrenzen intrekking en herziening.
 
 ## Referenties
 

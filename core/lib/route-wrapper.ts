@@ -222,7 +222,7 @@ export type WrapperDeps = {
    *  gateway is server-only); injecteerbaar zodat de sanity de weigertak zonder DB
    *  toetst. Fase 1C (#344): ook een wachtwoordsessie wordt beoordeeld — in modus
    *  `verplicht` mag zij niet bestaan zonder levende uitzondering. */
-  beoordeelPortaalSessie: (supabase: RlsClient, gebruikerId: string) => Promise<{ toegestaan: boolean }>;
+  beoordeelPortaalSessie: (supabase: RlsClient, gebruikerId: string) => Promise<{ toegestaan: boolean; beperkt?: boolean }>;
   beoordeelRouteHostToegang: (args: HostGuardArgs) => Promise<HostGuardOordeel>;
   /** Leest `ENFORCE_CAPABILITY`. Injecteerbaar zodat de sanity-suite BEIDE
    *  vlagstanden kan bewijzen zonder process.env te muteren — de vlag-aan-stand
@@ -324,11 +324,20 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
       } = await supabase.auth.getUser();
       if (!user) return nietIngelogd();
 
-      // 1b. Guard L3 (#335 T2): een `oauth`-sessie zonder actieve Microsoft-binding
-      // krijgt EXACT dezelfde 401 als "geen sessie" — geen nieuwe responsvorm, dus
-      // de anon-snapshots en het 401-contract blijven byte-identiek. Voor
-      // wachtwoordsessies raakt de echte dep de gateway niet.
-      if (!(await deps.beoordeelPortaalSessie(supabase, user.id)).toegestaan) return nietIngelogd();
+      // 1b. Guard L3 (#335 T2, uitgebreid in #344): een sessie die volgens het
+      // actuele fondsbeleid niet mag bestaan krijgt EXACT dezelfde 401 als "geen
+      // sessie" — geen nieuwe responsvorm, dus de anon-snapshots en het
+      // 401-contract blijven byte-identiek.
+      const sessieOordeel = await deps.beoordeelPortaalSessie(supabase, user.id);
+      if (!sessieOordeel.toegestaan) return nietIngelogd();
+      // 1c. Een door de Auth-hook afgeschaalde sessie (break-glass op AAL1 of een
+      // koppel-/herstelsessie) draagt de rol `portaal_beperkt` en krijgt van de
+      // datalaag sowieso niets. Hier stopt zij ook vóór de route: alleen het
+      // koppelpad blijft open, en de weigering is dezelfde 401.
+      if (sessieOordeel.beperkt === true) {
+        const { magBeperkteSessieRoute } = await import("@/core/lib/microsoft-login-beleid-core");
+        if (!magBeperkteSessieRoute(new URL(request.url).pathname)) return nietIngelogd();
+      }
 
       // 2. Profielresolutie (vier kolommen).
       const profiel = await deps.haalProfiel(supabase, user.id);

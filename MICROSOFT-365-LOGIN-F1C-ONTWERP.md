@@ -49,12 +49,17 @@ alleen geen tokenuitgifte meer (ongewijzigd gedrag uit fase 1B).
 
 ```
 L1  Auth-hook (public.fn_access_token_hook, SECURITY INVOKER als supabase_auth_admin)
-    ├── oauth-uitgifte      → login_private.identiteit_toegestaan      (fase 1B, ongewijzigd)
-    └── niet-oauth-uitgifte → login_private.wachtwoordlogin_toegestaan (fase 1C, NIEUW)
-        · modus <> 'verplicht'                                → toegestaan
-        · break-glass live én geverifieerde MFA-factor         → toegestaan
-        · koppel-/herstelvenster open                          → toegestaan
-        · anders                                               → 403, neutrale tekst
+    ├── oauth-uitgifte      → login_private.identiteit_toegestaan   (fase 1B, ongewijzigd)
+    └── niet-oauth-uitgifte → login_private.wachtwoordlogin_niveau  (fase 1C) → drie niveaus:
+        · geen profielrij (platformidentiteit)                 → 'vol'
+        · profiel zonder configuratierij (DRIFT)               → 'geweigerd'
+        · modus <> 'verplicht'                                 → 'vol'
+        · koppel-/herstelvenster open                          → 'beperkt'
+        · break-glassaanwijzing zonder geverifieerde MFA       → 'geweigerd'
+        · break-glass mét MFA, sessie op AAL1                  → 'beperkt'
+        · break-glass mét MFA op AAL2, venster loopt           → 'vol'
+        · break-glass mét MFA op AAL2, venster verlopen        → 'beperkt'
+      'beperkt' = hetzelfde token met claim `role = portaal_beperkt`; 'geweigerd' = 403.
 
 L2  Startroutes (host → fonds → configuratie → modus)         geen knop, geen flow in `uit`
 
@@ -67,13 +72,21 @@ L5  Persoonlijke acties — login_private.start_intrekking weigert in `verplicht
     (de route weigert ook, maar de DB is het slot)
 ```
 
+**De beperkte rol is de kern van de afdwinging.** PostgREST doet `set role` op de `role`-claim.
+`portaal_beperkt` is een NOLOGIN-rol, lid van `authenticator`, met `USAGE` op `public` en verder
+uitsluitend kolom-`SELECT` op de eigen profielrij (`id, fonds_id, rol, naam`, policy
+`id = auth.uid()`). Een uitzonderingssessie bereikt daarmee geen documenten, dossiers, storage of
+realtime — ook niet buiten de app om. Zonder die afschaling zou een break-glassaccount met alléén
+een wachtwoord het hele portaal via PostgREST kunnen lezen; dat is gemeten vóór en na de wijziging
+(besluit 0212, D10).
+
 **Intrekkingsvenster.** De hook weigert de eerstvolgende refresh; de guard beëindigt de
 sessie bij het eerstvolgende serververzoek; de harde bovengrens is `jwt_exp` (≤ 600 s op
 Preview, 0211 D12). Bewust geen cache in de guard: dat zou het venster onvoorspelbaar maken.
 
-**Fail-closed-richting (asymmetrisch, zie 0212 D5).** Geen profiel, geen configrij of geen
-logingateway → **wachtwoord open, Microsoft dicht**. Alleen een expliciete `verplicht` sluit
-het wachtwoordpad. Binnen `verplicht` is elke twijfel dicht.
+**Fail-closed-richting (0212 D5).** Geen profielrij (platformidentiteit) of geen logingateway →
+**wachtwoord open, Microsoft dicht**. Een profiel in een fonds **zonder configuratierij** is drift en
+wordt geweigerd. Binnen `verplicht` is elke twijfel dicht.
 
 ## 5. Datamodel
 
@@ -85,9 +98,12 @@ public.fonds_microsoft_login
 
 login_private.break_glass                                   -- RLS aan, alle rechten dicht
   fonds_id, user_id, reden_categorie ∈ {entra_storing, beheerherstel, migratie},
-  uitgegeven_door, uitgegeven_op, geldig_tot, ingetrokken_op/door, correlatie_id
+  uitgegeven_door, uitgegeven_op, herzien_voor, ingetrokken_op/door, correlatie_id
   check (user_id <> uitgegeven_door)                        -- niet zelf toe te kennen
-  check (geldig_tot > uitgegeven_op)                        -- altijd tijdgebonden
+  check (herzien_voor > uitgegeven_op)                      -- bewaking, geen einddatum
+
+login_private.break_glass_activeringen                      -- RLS aan, alle rechten dicht
+  break_glass_id, fonds_id, user_id, geopend_op, venster_tot, correlatie_id
 
 login_private.herkoppel_uitnodigingen                       -- RLS aan, alle rechten dicht
   token_hash (pk, ^[0-9a-f]{64}$)                           -- ALLEEN de hash
@@ -96,25 +112,35 @@ login_private.herkoppel_uitnodigingen                       -- RLS aan, alle rec
   ingetrokken_op/door, correlatie_id
 ```
 
-Tien nieuwe gatewayfuncties (`activering_preflight`, `zet_modus`, `dekkingsrapport`,
-`beheer_intrekking`, `verleen_break_glass`, `trek_break_glass_in`, `maak_uitnodiging`,
-`activeer_uitnodiging`, `trek_uitnodiging_in`, `sessiebeleid`), EXECUTE uitsluitend voor
-`login_gateway` — samen met fase 1B dus 24. Eén nieuwe hookhelper
-(`wachtwoordlogin_toegestaan`), eigendom van `login_hook_owner`, `search_path ''`, EXECUTE
-alleen voor `supabase_auth_admin`; niet voor de gatewayrol.
+Twaalf nieuwe gatewayfuncties (`activering_preflight`, `zet_modus`, `dekkingsrapport`,
+`beheer_intrekking`, `verleen_break_glass`, `trek_break_glass_in`, `open_breakglass_venster`,
+`breakglass_overzicht`, `maak_uitnodiging`, `activeer_uitnodiging`, `trek_uitnodiging_in`,
+`sessiebeleid`), EXECUTE uitsluitend voor `login_gateway` — samen met fase 1B dus 26. Eén nieuwe
+hookhelper (`wachtwoordlogin_niveau`), eigendom van `login_hook_owner`, `search_path ''`, EXECUTE
+alleen voor `supabase_auth_admin`; niet voor de gatewayrol. En de beperkte portaalrol
+`portaal_beperkt` (provisioning, runbook §1C.0).
 
 ## 6. De twee herstelpaden
 
 ### 6.1 Break-glass (Entra-/Microsoft-storing)
 
-Minimaal, expliciet, tijdgebonden, **niet zelf toe te kennen** en volledig geaudit. Pas
-werkzaam met een **geverifieerde** MFA-factor: de hook leest `auth.mfa_factors` zelf (hij
-draait als `supabase_auth_admin`) en geeft het resultaat als argument aan de helper, zodat
-`login_hook_owner` geen enkel recht in het auth-schema nodig heeft.
+**De aanwijzing is duurzaam** — geldig tot intrekking. Een noodpad met een harde einddatum is bij
+een storing juist geen noodpad meer (besluit 0212, D11). Zij is minimaal, expliciet, **niet zelf toe
+te kennen**, volledig geaudit en pas werkzaam met een **geverifieerde** MFA-factor: de hook leest
+`auth.mfa_factors` zelf (hij draait als `supabase_auth_admin`) en geeft het resultaat als argument
+aan de helper, zodat `login_hook_owner` geen enkel recht in het auth-schema nodig heeft.
 
-De eerste uitgifte ná een wachtwoordlogin is `aal1` — die moet de hook doorlaten, anders
-komt niemand ooit bij de MFA-challenge. De AAL2-eis ligt daarom in de app-laag, zoals bij de
-platformlayout (`heeftActueleMFA`).
+**Kort is het activeringsvenster.** De eerste uitgifte ná een wachtwoordlogin is `aal1`; die krijgt
+de beperkte rol, zodat de gebruiker de MFA-stap kán doen maar nog nergens bij kan. Na een geslaagde
+verificatie (`aal2`) geeft de hook de normale rol, en opent de guard een venster van een uur in
+`login_private.break_glass_activeringen` — met precies één `breakglass.gebruikt` in de audit. Loopt
+dat venster af, dan zakt de sessie bij de eerstvolgende tokenuitgifte terug naar de beperkte rol en
+is een nieuwe MFA-verificatie nodig; die opent een nieuw, apart geaudit venster. Intrekken van de
+aanwijzing beëindigt lopende verhogingen direct.
+
+**Verloopbewaking.** `herzien_voor` blokkeert niets, maar preflight (`breakglass_herziening_verlopen`),
+het beheeroverzicht (`breakglass_overzicht`) en het runbook melden dat een aanwijzing herzien moet
+worden. Zo verdwijnt het herstelpad nooit ongemerkt, en blijft het toch onder periodieke toetsing.
 
 ### 6.2 Beperkte koppel-/herstelsessie
 
@@ -140,13 +166,17 @@ uitnodigingslink mag nooit het enige authenticatiemiddel zijn.
 ## 7. Activering van `verplicht`
 
 `zet_modus` neemt een advisory lock op het fonds, vergrendelt de configuratierij en draait
-`activering_preflight` **binnen dezelfde transactie**. Een race tussen toets en omslag faalt
-daarmee gesloten. De preflight eist:
+`activering_preflight` **binnen dezelfde transactie**. **Élke andere mutatie die de dekking kan
+veranderen neemt dezelfde lock** — beheerintrekking, break-glass verlenen en intrekken,
+uitnodigingen uitgeven/activeren/intrekken en de persoonlijke intrekking — en een trigger op
+`public.profielen` doet hetzelfde voor een nieuw of verplaatst profiel, dat niet door een van die
+functies heen loopt. Een race tussen toets en omslag faalt daarmee gesloten. De preflight eist:
 
 - een gezette Entra-tenant (`tenant_ontbreekt`);
 - volledige dekking: elk profiel in het fonds heeft een `active` binding óf een levende
   break-glassuitzondering (`dekking_onvolledig`, met een telling voor het beheerscherm);
-- minstens één break-glassaccount met geverifieerde MFA (`breakglass_ontbreekt`);
+- minstens één break-glassaanwijzing met geverifieerde MFA (`breakglass_ontbreekt`); het aantal dat
+  herzien moet worden komt als apart telveld terug en blokkeert niet;
 - dat dat MFA-bewijs **verifieerbaar** is: is `auth.mfa_factors` voor de functie-eigenaar
   niet leesbaar, dan is het pad niet aantoonbaar en weigert de activering
   (`breakglass_onverifieerbaar`) in plaats van op een aanname door te gaan.
@@ -190,8 +220,11 @@ het *fondsbeleid*, niet over het bestaan van een account.
 | DB-structuur en -gedrag (17 scenario's, zelf-seedend, eindigt op `rollback`) | `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql` |
 | Bijgewerkt op de veranderde feiten | F1B-suite en -contracttest, R1-gate (uitzondering `login_hook_owner`), karakteriseringssuite `login-keten` |
 
-De gedragssuite bewijst onder meer: nieuw fonds staat op `uit`; de spiegelconstraint laat
-geen drift toe; wachtwoord/magic link/herstel worden in `verplicht` geweigerd en break-glass
+De gedragssuite bewijst onder meer: de beperkte rol kan géén documenten, fondsen of storage lezen
+en ziet alleen de eigen profielrij (M19); de hook schaalt een break-glass- of koppelsessie af naar
+die rol en geeft de normale rol pas op AAL2 binnen een lopend venster (M7, M10, M20); een profiel
+zonder configuratierij wordt geweigerd terwijl een platformaccount het gewone pad houdt (M18);
+nieuw fonds staat op `uit`; de spiegelconstraint laat geen drift toe; wachtwoord/magic link/herstel worden in `verplicht` geweigerd en break-glass
 werkt alleen mét geverifieerde MFA; de koppel-/herstelsessie is eenmalig, kort en sluit bij
 activering; persoonlijk ontkoppelen wordt geweigerd én geaudit; activering faalt gesloten
 zonder dekking of break-glasspad en hertoetst binnen de schrijftransactie; `authenticated`
@@ -205,6 +238,20 @@ en `service_role` kunnen geen enkele beleidsfunctie uitvoeren; de audit blijft i
 4. Break-glassaccount inrichten (MFA verifiëren) en de preflight groen krijgen.
 5. Pas dán PGB gecontroleerd op `verplicht`; smoke volgens `security/MICROSOFT-365-F1B-RUNBOOK.md` §fase 1C.
 6. Na de test terug naar de expliciet gekozen bedrijfsmodus; uitkomst en rollbackbewijs vastleggen.
+
+## 12b. Wat lokaal end-to-end is gemeten (7 september 2026)
+
+De Custom Access Token Hook draait sinds deze tranche óók in de wegwerpstack
+(`supabase/config.toml`), zodat het echte pad meetbaar is. Tegen die stack, met een fonds op
+`verplicht`:
+
+| Stap | Uitkomst |
+|---|---|
+| Wachtwoordlogin zonder uitzondering | GoTrue `403` — "Voor deze omgeving logt u in met Microsoft" |
+| Break-glass op AAL1 | token met `role = portaal_beperkt`; `GET /rest/v1/documenten` → 403, alleen de eigen profielrij komt terug |
+| MFA-verificatie → AAL2 | token met `role = authenticated`; portaal weer bereikbaar |
+| Activeringsvenster verlopen, daarna refresh | token zakt terug naar `portaal_beperkt`; PostgREST → 403 |
+| Venster openen via de gateway | precies één `breakglass.gebruikt` in `login_private.audit_log` |
 
 ## 13. Openstaand voor PR-B
 

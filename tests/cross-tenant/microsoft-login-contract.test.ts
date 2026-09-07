@@ -37,7 +37,7 @@ const GATEWAY_FUNCTIES = [
 const GATEWAY_FUNCTIES_1C = [
   "activering_preflight", "zet_modus", "dekkingsrapport", "beheer_intrekking",
   "verleen_break_glass", "trek_break_glass_in", "maak_uitnodiging", "activeer_uitnodiging",
-  "trek_uitnodiging_in", "sessiebeleid",
+  "trek_uitnodiging_in", "sessiebeleid", "open_breakglass_venster", "breakglass_overzicht",
 ] as const;
 
 test("F1B: rol-grendel, privaat schema en standaard-uit configuratie", () => {
@@ -128,8 +128,8 @@ test("F1B: login_gateway mag exact de dertien T1-gatewayfuncties (+ tel_startpog
   }
   assert.equal((migratieT2.match(/grant execute on function login_private\.[a-z_]+\([^)]*\)\s+to login_gateway/g) ?? []).length, GATEWAY_FUNCTIES_T2.length);
   assert.match(migratieT2, /revoke all on login_private\.start_pogingen from public, anon, authenticated, service_role, login_gateway/);
-  // #344: de F1B-suite telt de volledige verzameling — 13 T1 + tel_startpoging + 10 fase 1C.
-  assert.match(suite, /v_n <> 24/, "de F1B-suite telt nu vierentwintig executes");
+  // #344: de F1B-suite telt de volledige verzameling — 13 T1 + tel_startpoging + 12 fase 1C.
+  assert.match(suite, /v_n <> 26/, "de F1B-suite telt nu zesentwintig executes");
   for (const f of GATEWAY_FUNCTIES) {
     assert.match(migratie, new RegExp(`grant execute on function login_private\\.${f}\\([^)]*\\)\\s+to login_gateway`), f);
   }

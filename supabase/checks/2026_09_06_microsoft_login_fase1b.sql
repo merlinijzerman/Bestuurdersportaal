@@ -3,8 +3,8 @@
 --  supabase/migrations/2026_09_06_microsoft_login_fase1b.sql.
 --
 --  WAT DEZE SUITE BEWIJST
---    DEEL 1 — STRUCTUUR: minimale loginrol login_gateway (exact 24 executes — 13 uit
---                        T1, tel_startpoging uit T2/V9 en 10 uit fase 1C (#344) — nul
+--    DEEL 1 — STRUCTUUR: minimale loginrol login_gateway (exact 26 executes — 13 uit
+--                        T1, tel_startpoging uit T2/V9 en 12 uit fase 1C (#344) — nul
 --                        tabelrechten), NOLOGIN-eigenaar login_hook_owner (rolcontract:
 --                        geen LOGIN/BYPASSRLS/leden/SET ROLE/schrijfrecht, exact de
 --                        kolomrechten, geen andere functies; eerlijke using(true)-
@@ -162,12 +162,12 @@ begin
   end if;
   if exists (select 1 from pg_proc f join pg_namespace n on n.oid=f.pronamespace
               where f.prosecdef and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
-                and not (n.nspname='login_private' and f.proname in ('identiteit_toegestaan','wachtwoordlogin_toegestaan'))) then
+                and not (n.nspname='login_private' and f.proname in ('identiteit_toegestaan','wachtwoordlogin_niveau'))) then
     fouten := fouten || E'\n- login_hook_owner kan een andere SECURITY DEFINER-functie uitvoeren dan de twee eigen helpers';
   end if;
   if exists (select 1 from pg_proc f join pg_namespace n on n.oid=f.pronamespace
               where n.nspname in ('public','login_private') and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
-                and not (n.nspname='login_private' and f.proname in ('identiteit_toegestaan','wachtwoordlogin_toegestaan'))
+                and not (n.nspname='login_private' and f.proname in ('identiteit_toegestaan','wachtwoordlogin_niveau'))
                 and not exists (select 1 from pg_depend d where d.objid=f.oid and d.deptype='e')) then
     fouten := fouten || E'\n- login_hook_owner kan een applicatiefunctie (niet-extensie) uitvoeren buiten de eigen helpers';
   end if;
@@ -180,11 +180,11 @@ begin
   end if;
   -- Fase 1C (#344): break_glass en herkoppel_uitnodigingen krijgen dezelfde,
   -- eerlijke leespolicy voor login_hook_owner — vijf in totaal, alle SELECT.
-  if exists (select 1 from pg_policies where 'login_hook_owner' = any(roles) and not (schemaname||'.'||tablename in ('login_private.microsoft_identiteiten','login_private.break_glass','login_private.herkoppel_uitnodigingen','public.profielen','public.fonds_microsoft_login') and cmd='SELECT')) then
-    fouten := fouten || E'\n- login_hook_owner heeft een policy buiten de vijf toegestane leespolicies';
+  if exists (select 1 from pg_policies where 'login_hook_owner' = any(roles) and not (schemaname||'.'||tablename in ('login_private.microsoft_identiteiten','login_private.break_glass','login_private.break_glass_activeringen','login_private.herkoppel_uitnodigingen','public.profielen','public.fonds_microsoft_login') and cmd='SELECT')) then
+    fouten := fouten || E'\n- login_hook_owner heeft een policy buiten de zes toegestane leespolicies';
   end if;
   select count(*) into v_n from pg_policies where schemaname='login_private';
-  if v_n <> 3 then fouten := fouten || format(E'\n- verwacht exact 3 policies in login_private, gevonden %s', v_n); end if;
+  if v_n <> 4 then fouten := fouten || format(E'\n- verwacht exact 4 policies in login_private, gevonden %s', v_n); end if;
 
   -- Unieke levende slots
   if not exists (select 1 from pg_indexes where schemaname='login_private' and indexname='microsoft_identiteiten_levend_per_identiteit'
@@ -213,7 +213,7 @@ begin
   select count(*) into v_n from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='login_private' and has_function_privilege('login_gateway',p.oid,'EXECUTE');
   -- 13 uit T1, tel_startpoging uit T2/V9 en 10 uit fase 1C (#344, migratie 2026_09_07_…beleidsmodus).
-  if v_n <> 24 then fouten := fouten || format(E'\n- login_gateway mag exact 24 functies uitvoeren (13 T1 + tel_startpoging + 10 fase 1C), gevonden %s', v_n); end if;
+  if v_n <> 26 then fouten := fouten || format(E'\n- login_gateway mag exact 26 functies uitvoeren (13 T1 + tel_startpoging + 12 fase 1C), gevonden %s', v_n); end if;
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='login_private'
                and (has_function_privilege('anon',p.oid,'EXECUTE') or has_function_privilege('authenticated',p.oid,'EXECUTE')
                     or has_function_privilege('service_role',p.oid,'EXECUTE'))) then
@@ -282,7 +282,7 @@ begin
   end if;
 
   if fouten <> '' then raise exception 'Microsoft-login fase 1B structuur FAALT:%', fouten; end if;
-  raise notice 'OK DEEL 1: private schema, 24 gatewayfuncties (13 T1 + tel_startpoging + 10 fase 1C), helper onder login_hook_owner, INVOKER-hook, configtabel standaard uit.';
+  raise notice 'OK DEEL 1: private schema, 26 gatewayfuncties (13 T1 + tel_startpoging + 12 fase 1C), helper onder login_hook_owner, INVOKER-hook, configtabel standaard uit.';
 end $$;
 
 \echo '== DEEL 2 — GEDRAG (transactie, eindigt op rollback) =='

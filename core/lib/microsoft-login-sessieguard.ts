@@ -27,8 +27,13 @@
 // ============================================================================
 import "server-only";
 import type { createServerSupabase } from "@/core/lib/supabase-server";
-import { sessieIsOAuth } from "@/core/lib/microsoft-login-sessieguard-core";
-import { beoordeelPortaalSessieKern, type PortaalSessieOordeel } from "@/core/lib/microsoft-login-beleid-core";
+import { aalUitAccessToken, rolUitAccessToken, sessieIsOAuth } from "@/core/lib/microsoft-login-sessieguard-core";
+import {
+  beoordeelPortaalSessieKern,
+  moetBreakglassVensterOpenen,
+  BREAKGLASS_VENSTER_SECONDEN,
+  type PortaalSessieOordeel,
+} from "@/core/lib/microsoft-login-beleid-core";
 import { gatewayFoutcategorie } from "@/core/lib/microsoft-login-binding-core";
 
 type Supabase = Awaited<ReturnType<typeof createServerSupabase>>;
@@ -50,15 +55,28 @@ export async function huidigAccessToken(supabase: Supabase): Promise<string | nu
  * break-glassuitzondering of een geopende koppel-/herstelsessie is (fase 1C).
  */
 export async function beoordeelPortaalSessie(supabase: Supabase, gebruikerId: string): Promise<PortaalSessieOordeel> {
-  const isOAuth = sessieIsOAuth(await huidigAccessToken(supabase));
+  const token = await huidigAccessToken(supabase);
+  const isOAuth = sessieIsOAuth(token);
+  const rol = rolUitAccessToken(token);
+  const aal = aalUitAccessToken(token);
   try {
-    const { sessiebeleid } = await import("@/core/lib/microsoft-login-gateway");
-    return beoordeelPortaalSessieKern({ isOAuth, beleid: await sessiebeleid(gebruikerId) });
+    const gateway = await import("@/core/lib/microsoft-login-gateway");
+    const beleid = await gateway.sessiebeleid(gebruikerId);
+    // Een verhoogde break-glasssessie krijgt hier haar activeringsvenster; dat
+    // levert precies één `breakglass.gebruikt` per verhoging op en laat de
+    // verhoging aflopen (de hook zakt daarna terug naar de beperkte rol).
+    if (moetBreakglassVensterOpenen({ beleid, rol, aal })) {
+      await gateway
+        .openBreakglassVenster({ userId: gebruikerId, vensterSeconden: BREAKGLASS_VENSTER_SECONDEN, correlatieId: crypto.randomUUID() })
+        .catch(() => undefined);
+    }
+    return beoordeelPortaalSessieKern({ isOAuth, beleid, rol });
   } catch (fout) {
     const categorie = gatewayFoutcategorie(fout);
     return beoordeelPortaalSessieKern({
       isOAuth,
       beleid: null,
+      rol,
       uitval: categorie === "config_ontbreekt" ? "config" : "fout",
     });
   }

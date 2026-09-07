@@ -35,13 +35,36 @@ export function loginModus(v: unknown): LoginModus {
   return isLoginModus(v) ? v : "uit";
 }
 
+/** De databaserol die de Auth-hook aan een beperkte sessie geeft. PostgREST doet
+ *  hier `set role` op; de rol mag niets behalve de eigen profielrij lezen. */
+export const ROL_BEPERKT = "portaal_beperkt";
+
+/** De enige paden die een beperkte sessie mag raken: het koppelpad en de pagina
+ *  waar zij naartoe wordt gestuurd (MFA-stap of koppelknop). */
+export const BEPERKTE_SESSIE_PAD = "/beperkte-toegang";
+export const BEPERKTE_SESSIE_ROUTES = [
+  "/api/microsoft-login/koppeling",
+  "/api/microsoft-login/koppelen/start",
+] as const;
+
+export function magBeperkteSessieRoute(pad: string | null | undefined): boolean {
+  if (typeof pad !== "string") return false;
+  return BEPERKTE_SESSIE_ROUTES.some((r) => pad === r || pad.startsWith(`${r}/`));
+}
+
 /** De stand van één account tegenover het fondsbeleid (login_private.sessiebeleid). */
 export type Sessiebeleid = {
   readonly fondsId: string;
   readonly modus: LoginModus;
+  /** Het profiel bestaat, maar er is geen configuratierij — dat is DRIFT. Elke
+   *  fonds krijgt zo'n rij uit de migratie en de trigger, dus het ontbreken ervan
+   *  is geen "geen beleid" maar een defect, en dat is fail-closed. */
+  readonly configOntbreekt: boolean;
   readonly bindingStatus: BindingStatus | null;
-  /** Levende, MFA-plichtige break-glassuitzondering voor dit account. */
+  /** Levende, MFA-plichtige break-glassAANWIJZING (duurzaam tot intrekking). */
   readonly breakGlass: boolean;
+  /** Einde van het lopende activeringsvenster van die aanwijzing, of null. */
+  readonly breakglassVensterTot: Date | null;
   /** Geopend venster van een beperkte koppel-/herstelsessie. */
   readonly linkOnly: boolean;
 };
@@ -59,8 +82,11 @@ export type Sessiebeleid = {
 export type GatewayUitval = "geen" | "config" | "fout";
 
 export type PortaalSessieOordeel =
-  | { toegestaan: true; reden: "geen-beleid" | "gateway-niet-geconfigureerd" | "actieve-binding" | "wachtwoord-toegestaan" | "break-glass" | "koppelsessie" }
-  | { toegestaan: false; reden: "geen-binding" | "binding-niet-actief" | "gateway-fout" | "wachtwoord-geblokkeerd" };
+  | { toegestaan: true; beperkt: false; reden: "geen-beleid" | "gateway-niet-geconfigureerd" | "actieve-binding" | "wachtwoord-toegestaan" | "break-glass" }
+  /** Toegestaan, maar UITSLUITEND op het koppel-/herstelpad: het token draagt de
+   *  rol `portaal_beperkt`, dus de datalaag geeft deze sessie sowieso niets. */
+  | { toegestaan: true; beperkt: true; reden: "koppelsessie" | "break-glass-niet-verhoogd" }
+  | { toegestaan: false; beperkt: false; reden: "geen-binding" | "binding-niet-actief" | "gateway-fout" | "wachtwoord-geblokkeerd" | "config-drift" };
 
 /**
  * Het oordeel van guard L3 over de HUIDIGE sessie.
@@ -74,32 +100,64 @@ export function beoordeelPortaalSessieKern(args: {
   isOAuth: boolean;
   beleid: Sessiebeleid | null;
   uitval?: GatewayUitval;
+  /** De `role`-claim uit het access-token. Is dat `portaal_beperkt`, dan HEEFT de
+   *  hook de sessie al afgeschaald en is dit de waarheid — niet een afgeleide. */
+  rol?: string | null;
 }): PortaalSessieOordeel {
   const uitval = args.uitval ?? "geen";
-  if (uitval === "fout") return { toegestaan: false, reden: "gateway-fout" };
+  if (uitval === "fout") return { toegestaan: false, beperkt: false, reden: "gateway-fout" };
   if (uitval === "config") {
     // Een oauth-sessie kán niet bestaan zonder gateway; is zij er tóch, dan is er
     // iets mis en weigeren we. Voor een wachtwoordsessie betekent een ontbrekende
     // gateway simpelweg dat Microsoft-login in deze omgeving niet bestaat.
     return args.isOAuth
-      ? { toegestaan: false, reden: "gateway-fout" }
-      : { toegestaan: true, reden: "gateway-niet-geconfigureerd" };
+      ? { toegestaan: false, beperkt: false, reden: "gateway-fout" }
+      : { toegestaan: true, beperkt: false, reden: "gateway-niet-geconfigureerd" };
   }
 
   if (args.isOAuth) {
-    if (!args.beleid || args.beleid.bindingStatus === null) return { toegestaan: false, reden: "geen-binding" };
-    if (args.beleid.bindingStatus !== "active") return { toegestaan: false, reden: "binding-niet-actief" };
-    return { toegestaan: true, reden: "actieve-binding" };
+    if (!args.beleid || args.beleid.bindingStatus === null) return { toegestaan: false, beperkt: false, reden: "geen-binding" };
+    if (args.beleid.bindingStatus !== "active") return { toegestaan: false, beperkt: false, reden: "binding-niet-actief" };
+    return { toegestaan: true, beperkt: false, reden: "actieve-binding" };
   }
 
-  // Geen fondsprofiel (platformidentiteit) of geen beleidsrij: het wachtwoordpad
-  // blijft zoals het was. Alleen een expliciete `verplicht` sluit het.
-  if (!args.beleid) return { toegestaan: true, reden: "geen-beleid" };
-  if (args.beleid.modus !== "verplicht") return { toegestaan: true, reden: "wachtwoord-toegestaan" };
-  if (args.beleid.linkOnly) return { toegestaan: true, reden: "koppelsessie" };
-  if (args.beleid.breakGlass) return { toegestaan: true, reden: "break-glass" };
-  return { toegestaan: false, reden: "wachtwoord-geblokkeerd" };
+  // Geen fondsprofiel (platformidentiteit): valt buiten het fondsbeleid.
+  if (!args.beleid) return { toegestaan: true, beperkt: false, reden: "geen-beleid" };
+  // Profiel zonder configuratierij is drift, en drift is dicht (bevinding 3).
+  if (args.beleid.configOntbreekt) return { toegestaan: false, beperkt: false, reden: "config-drift" };
+
+  // De hook heeft de sessie afgeschaald: dat is bindend, ongeacht wat wij verder
+  // van het beleid vinden. Alleen het koppel-/herstelpad blijft open.
+  if (args.rol === ROL_BEPERKT) {
+    return { toegestaan: true, beperkt: true, reden: args.beleid.linkOnly ? "koppelsessie" : "break-glass-niet-verhoogd" };
+  }
+
+  if (args.beleid.modus !== "verplicht") return { toegestaan: true, beperkt: false, reden: "wachtwoord-toegestaan" };
+  if (args.beleid.linkOnly) return { toegestaan: true, beperkt: true, reden: "koppelsessie" };
+  if (args.beleid.breakGlass) return { toegestaan: true, beperkt: false, reden: "break-glass" };
+  return { toegestaan: false, beperkt: false, reden: "wachtwoord-geblokkeerd" };
 }
+
+/** Moet de guard een activeringsvenster openen? Alleen voor een verhoogde
+ *  break-glasssessie zonder lopend venster; dat levert precies één
+ *  `breakglass.gebruikt` per verhoging op. */
+export function moetBreakglassVensterOpenen(args: {
+  beleid: Sessiebeleid | null;
+  rol?: string | null;
+  aal?: string | null;
+}): boolean {
+  return (
+    !!args.beleid &&
+    args.beleid.breakGlass &&
+    args.rol !== ROL_BEPERKT &&
+    args.aal === "aal2" &&
+    args.beleid.breakglassVensterTot === null
+  );
+}
+
+/** Standaardduur van een break-glassverhoging. Kort en apart geaudit; de
+ *  AANWIJZING zelf blijft bestaan tot zij wordt ingetrokken. */
+export const BREAKGLASS_VENSTER_SECONDEN = 60 * 60;
 
 /** Bestaat de knop "Inloggen met Microsoft" en zijn start/callback open? */
 export function microsoftLoginBeschikbaar(modus: LoginModus): boolean {
@@ -159,6 +217,10 @@ export type Preflight = {
   readonly categorie: BeleidFoutcategorie | null;
   readonly ongedekteAccounts: number;
   readonly breakglassAccounts: number;
+  /** Verloopbewaking: aanwijzingen die herzien moeten worden. Blokkeert NIET —
+   *  een noodpad dat vanzelf verdampt is geen noodpad — maar hoort zichtbaar te
+   *  zijn in preflight, beheeroverzicht en runbook. */
+  readonly breakglassHerzieningVerlopen: number;
 };
 
 /**

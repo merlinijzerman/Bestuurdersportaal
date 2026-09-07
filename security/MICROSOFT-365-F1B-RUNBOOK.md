@@ -108,15 +108,28 @@ Volgorde is blokkerend (S9-nulmeting: alles staat nog uit, `jwt_exp=3600`):
    P7, P8 groen en P9 = uitsluitend `azure`.
 6. Pas dán, na groene S7 en de T2-code: één fonds activeren (id-gebonden, patroon fase 1):
 
+   **Sinds #344 (fase 1C) is `pilotstatus` vervallen en is `modus` de bron.** Zet de tenant
+   id-gebonden en laat de modus door de gatewayfunctie zetten — een directe `update` op de
+   configuratietabel slaat de activeringspreflight over en is daarom fout:
+
    ```sql
+   -- 1. tenant vastleggen (id-gebonden, nooit op slug)
    update public.fonds_microsoft_login
-      set actief = true, entra_tenant_id = '<tid>', pilotstatus = 'pilot', bijgewerkt = now()
-    where fonds_id = '<fonds-id>' and actief = false
-   returning fonds_id, actief, pilotstatus;
+      set entra_tenant_id = '<tid>', bijgewerkt = now()
+    where fonds_id = '<fonds-id>'
+   returning fonds_id, entra_tenant_id is not null as tenant_gezet;
+
+   -- 2. modus zetten via het beleidspad (null = gelukt; anders de reden)
+   grant login_gateway to postgres;
+   begin;
+     set local role login_gateway;
+     select login_private.zet_modus('<fonds-id>', 'optioneel', '<actor-user-id>', 'runbook-<datum>');
+   commit;
+   revoke login_gateway from postgres;
    ```
 
-   Verwacht exact één rij; de wijziging staat daarna in `login_private.audit_log`
-   (`config.gewijzigd`, zonder tenant-id).
+   Verwacht exact één rij bij stap 1 en `null` bij stap 2; de wijziging staat daarna in
+   `login_private.audit_log` (`config.gewijzigd` én `beleid.gewijzigd`, zonder tenant-id).
 
 ## 5. Entra App L (T3 — invarianten E1–E7)
 
@@ -194,6 +207,23 @@ Preview-smoke te bewijzen.
 Bron: `MICROSOFT-365-LOGIN-F1C-ONTWERP.md`. Alles hieronder komt bovenop fase 1B; de
 provisioning uit §2–§4 blijft ongewijzigd (dezelfde rollen, dezelfde variabelen, dezelfde hook).
 
+## 1C.0 Rol provisionen (vóór de migratie)
+
+Naast `login_gateway` en `login_hook_owner` kent fase 1C één extra rol: **`portaal_beperkt`**. De
+Auth-hook schaalt een break-glass- of koppel-/herstelsessie daarheen af; PostgREST doet `set role`
+op die claim, dus de rol moet bestaan én lid zijn van `authenticator` — anders weigert PostgREST het
+token. De migratie controleert beide en stopt met een duidelijke melding als er iets ontbreekt.
+
+```sql
+create role portaal_beperkt nologin noinherit nosuperuser nocreatedb nocreaterole
+  noreplication nobypassrls;
+grant portaal_beperkt to authenticator;
+```
+
+De rol krijgt haar rechten uit de migratie: `USAGE` op `public` en uitsluitend kolom-`SELECT` op
+`public.profielen(id, fonds_id, rol, naam)` met een policy die haar tot de eigen rij beperkt. Geef
+haar nooit iets anders — dat is precies de begrenzing waarop het beleid rust.
+
 ## 1C.1 Volgorde (blokkerend)
 
 1. `supabase/migrations/2026_09_07_microsoft_login_beleidsmodus.sql` toepassen. Deterministisch:
@@ -216,10 +246,22 @@ provisioning uit §2–§4 blijft ongewijzigd (dezelfde rollen, dezelfde variabe
 - Kies een account dat **niet** de beheerder is die de uitzondering verleent; de database
   weigert zelf toekennen (`zelf_toekennen`).
 - Dat account moet een **geverifieerde** MFA-factor hebben (`auth.mfa_factors.status =
-  'verified'`). Zonder die factor telt de uitzondering niet mee en blijft de preflight rood
+  'verified'`). Zonder die factor telt de aanwijzing niet mee en blijft de preflight rood
   met `breakglass_ontbreekt`.
-- Geldigheid is verplicht en begrensd (60 s – 7 dagen). Reden is een vaste categorie:
-  `entra_storing`, `beheerherstel` of `migratie`.
+- **De aanwijzing is duurzaam**: zij geldt tot intrekking. `herzien_over_dagen` (1–365) zet alleen
+  de herzieningsdatum; die blokkeert niets maar verschijnt als
+  `breakglass_herziening_verlopen` in de preflight en in `breakglass_overzicht`. Neem het herzien op
+  in de reguliere beheercyclus. Reden is een vaste categorie: `entra_storing`, `beheerherstel` of
+  `migratie`.
+- **Zo werkt het gebruik.** Aanmelden met wachtwoord geeft eerst een AFGESCHAALDE sessie
+  (`role = portaal_beperkt`): die kan niets behalve de eigen profielrij lezen en de MFA-stap doen op
+  `/beperkte-toegang`. Na een geslaagde verificatie volgt de normale rol en opent de guard een
+  activeringsvenster van een uur, met precies één `breakglass.gebruikt` in
+  `login_private.audit_log`. Loopt dat venster af, dan zakt de sessie terug naar de beperkte rol en
+  is een nieuwe MFA-verificatie nodig. Intrekken van de aanwijzing beëindigt lopende verhogingen
+  onmiddellijk.
+- **Monitoring:** meer dan een handvol `breakglass.gebruikt`-regels per maand, of een aanwijzing
+  waarvan `herzien_voor` is verstreken, hoort een gesprek te zijn — niet een gewoonte.
 - Controleer vooraf `login_private.activering_preflight(<fonds>)`: `gereed = true` en
   `breakglass_accounts >= 1`. Krijg je `breakglass_onverifieerbaar`, dan kan de
   functie-eigenaar `auth.mfa_factors` niet lezen — herstel dat recht, ga niet door op een
@@ -253,8 +295,10 @@ het vast in de audit en houd het venster kort.
 | 4 | Sessievernieuwing na `jwt_exp` | oauth-sessie leeft door; een wachtwoordsessie is uiterlijk na `jwt_exp` weg en al eerder door de guard beëindigd — **meet dit en leg de tijd vast** |
 | 5 | `DELETE /api/microsoft-login/koppeling` (ook rechtstreeks, buiten de UI om) | 403; `ontkoppelen.geweigerd` in `login_private.audit_log` |
 | 6 | Beheerintrekking, daarna login | 403; binding `revoking` |
-| 7 | Koppel-/herstelsessie: uitnodiging → venster → wachtwoordlogin → herkoppelen | sessie alleen binnen het venster; venster gesloten (`voltooid_op`) na activering |
-| 8 | Break-glassaccount met MFA | login lukt; `breakglass`-gebeurtenis in de audit |
+| 7 | Koppel-/herstelsessie: uitnodiging → venster → wachtwoordlogin → herkoppelen | sessie alleen binnen het venster, en dan uitsluitend met `role = portaal_beperkt` (portaal blijft dicht); venster gesloten (`voltooid_op`) na activering |
+| 8a | Break-glassaccount, alleen wachtwoord | login lukt, maar het token draagt `role = portaal_beperkt`; een rechtstreekse `GET /rest/v1/documenten` met dat token geeft 403 en het portaal stuurt naar `/beperkte-toegang` |
+| 8b | Break-glassaccount, ná MFA-verificatie | normale rol; portaal bereikbaar; precies één `breakglass.gebruikt` in de audit |
+| 8c | Break-glassaccount ná afloop van het uur | sessie zakt terug naar de beperkte rol; opnieuw verifiëren opent een nieuw venster (nieuwe auditregel) |
 | 9 | Break-glass ingetrokken of MFA-factor onverified | 403 |
 | 10 | Platformbeheerder en een gebruiker van een ander fonds | ongewijzigd (modus is strikt per fonds) |
 

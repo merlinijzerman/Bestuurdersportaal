@@ -288,7 +288,7 @@ end $$;
 --   • geen tabelbrede SELECT en geen schrijf-/TRUNCATE/REFERENCES/TRIGGER-recht;
 --   • kolom-SELECT op exact de toegestane kolommen en niets meer;
 --   • geen EXECUTE op enige SECURITY DEFINER-functie behalve de eigen twee helpers
---     (identiteit_toegestaan uit #335, wachtwoordlogin_toegestaan uit #344).
+--     (identiteit_toegestaan uit #335, wachtwoordlogin_niveau uit #344).
 create or replace function pg_temp.hook_owner_uitzondering(p_tabel name, p_policy name, p_rollen name[])
 returns boolean language sql stable as $$
   select p_rollen = array['login_hook_owner']::name[]
@@ -316,7 +316,7 @@ returns boolean language sql stable as $$
      and not exists (select 1 from pg_proc f join pg_namespace n on n.oid = f.pronamespace
                       where f.prosecdef and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
                         and not (n.nspname = 'login_private'
-                                 and f.proname in ('identiteit_toegestaan','wachtwoordlogin_toegestaan')));
+                                 and f.proname in ('identiteit_toegestaan','wachtwoordlogin_niveau')));
 $$;
 
 -- ╔════════════════════════════════════════════════════════════════════════╗

@@ -251,8 +251,8 @@ function beleidCategorie(v: string | null | undefined): BeleidFoutcategorie | nu
 
 /** De stand van één account tegenover het fondsbeleid; `null` = geen fondsprofiel. */
 export async function sessiebeleid(userId: string): Promise<Sessiebeleid | null> {
-  const rijen = await roep<{ fonds_id: string; modus: string; binding_status: string | null; break_glass: boolean; link_only: boolean }>(
-    "select fonds_id, modus, binding_status, break_glass, link_only from login_private.sessiebeleid($1)",
+  const rijen = await roep<{ fonds_id: string; modus: string; config_ontbreekt: boolean; binding_status: string | null; break_glass: boolean; breakglass_venster_tot: Date | string | null; link_only: boolean }>(
+    "select fonds_id, modus, config_ontbreekt, binding_status, break_glass, breakglass_venster_tot, link_only from login_private.sessiebeleid($1)",
     [userId]
   );
   const r = rijen[0];
@@ -261,16 +261,62 @@ export async function sessiebeleid(userId: string): Promise<Sessiebeleid | null>
   return {
     fondsId: r.fonds_id,
     modus: loginModus(r.modus),
+    configOntbreekt: r.config_ontbreekt === true,
     bindingStatus: (r.binding_status as BindingStatus | null) ?? null,
     breakGlass: r.break_glass === true,
+    breakglassVensterTot: r.breakglass_venster_tot === null ? null : r.breakglass_venster_tot instanceof Date ? r.breakglass_venster_tot : new Date(r.breakglass_venster_tot),
     linkOnly: r.link_only === true,
   };
 }
 
+/** Opent (of hergebruikt) het activeringsvenster van een verhoogde
+ *  break-glasssessie en levert daarmee de auditgebeurtenis `breakglass.gebruikt`.
+ *  De guard roept dit aan bij het eerste serververzoek van zo'n sessie. */
+export async function openBreakglassVenster(args: { userId: string; vensterSeconden: number; correlatieId: string }): Promise<{ vensterTot: Date } | { categorie: BeleidFoutcategorie }> {
+  const rijen = await roep<{ venster_tot: Date | string | null; categorie: string | null }>(
+    "select venster_tot, categorie from login_private.open_breakglass_venster($1,$2,$3)",
+    [args.userId, args.vensterSeconden, args.correlatieId]
+  );
+  const r = rijen[0];
+  if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
+  if (!r.venster_tot) return { categorie: beleidCategorie(r.categorie) ?? "onbekende_uitzondering" };
+  return { vensterTot: r.venster_tot instanceof Date ? r.venster_tot : new Date(r.venster_tot) };
+}
+
+export type BreakglassRegel = {
+  readonly id: string;
+  readonly userId: string;
+  readonly naam: string | null;
+  readonly redenCategorie: string;
+  readonly uitgegevenOp: Date;
+  readonly herzienVoor: Date;
+  readonly herzieningVerlopen: boolean;
+  readonly laatstGebruiktOp: Date | null;
+};
+
+/** Beheeroverzicht van de duurzame aanwijzingen, met de verloopbewaking. */
+export async function breakglassOverzicht(fondsId: string): Promise<BreakglassRegel[]> {
+  const rijen = await roep<{ id: string; user_id: string; naam: string | null; reden_categorie: string; uitgegeven_op: Date | string; herzien_voor: Date | string; herziening_verlopen: boolean; laatst_gebruikt_op: Date | string | null }>(
+    "select id, user_id, naam, reden_categorie, uitgegeven_op, herzien_voor, herziening_verlopen, laatst_gebruikt_op from login_private.breakglass_overzicht($1)",
+    [fondsId]
+  );
+  const datum = (v: Date | string) => (v instanceof Date ? v : new Date(v));
+  return rijen.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    naam: r.naam,
+    redenCategorie: r.reden_categorie,
+    uitgegevenOp: datum(r.uitgegeven_op),
+    herzienVoor: datum(r.herzien_voor),
+    herzieningVerlopen: r.herziening_verlopen === true,
+    laatstGebruiktOp: r.laatst_gebruikt_op === null ? null : datum(r.laatst_gebruikt_op),
+  }));
+}
+
 /** Wat blokkeert de omslag naar `verplicht`? Leesbaar voor het beheerscherm. */
 export async function activeringPreflight(fondsId: string): Promise<Preflight> {
-  const rijen = await roep<{ gereed: boolean; categorie: string | null; ongedekte_accounts: number; breakglass_accounts: number }>(
-    "select gereed, categorie, ongedekte_accounts, breakglass_accounts from login_private.activering_preflight($1)",
+  const rijen = await roep<{ gereed: boolean; categorie: string | null; ongedekte_accounts: number; breakglass_accounts: number; breakglass_herziening_verlopen: number }>(
+    "select gereed, categorie, ongedekte_accounts, breakglass_accounts, breakglass_herziening_verlopen from login_private.activering_preflight($1)",
     [fondsId]
   );
   const r = rijen[0];
@@ -280,6 +326,7 @@ export async function activeringPreflight(fondsId: string): Promise<Preflight> {
     categorie: beleidCategorie(r.categorie),
     ongedekteAccounts: Number(r.ongedekte_accounts ?? 0),
     breakglassAccounts: Number(r.breakglass_accounts ?? 0),
+    breakglassHerzieningVerlopen: Number(r.breakglass_herziening_verlopen ?? 0),
   };
 }
 
@@ -334,15 +381,17 @@ export async function beheerIntrekking(args: { fondsId: string; doelUserId: stri
   return { bindingId: r.id };
 }
 
-/** Break-glass verlenen. Niet zelf toe te kennen (de DB weigert actor = doel) en
- *  pas werkzaam met een geverifieerde MFA-factor (de Auth-hook toetst dat). */
+/** Break-glass verlenen: een DUURZAME aanwijzing (geldig tot intrekking). Niet
+ *  zelf toe te kennen (de DB weigert actor = doel) en pas werkzaam met een
+ *  geverifieerde MFA-factor (de Auth-hook toetst dat). `herzienOverDagen` zet
+ *  alleen de herzieningsdatum voor de verloopbewaking, niet de geldigheid. */
 export async function verleenBreakGlass(args: {
   fondsId: string; doelUserId: string; reden: "entra_storing" | "beheerherstel" | "migratie";
-  actorId: string; geldigSeconden: number; correlatieId: string;
+  actorId: string; herzienOverDagen: number; correlatieId: string;
 }): Promise<{ id: string } | { categorie: BeleidFoutcategorie }> {
   const rijen = await roep<{ id: string | null; categorie: string | null }>(
     "select id, categorie from login_private.verleen_break_glass($1,$2,$3,$4,$5,$6)",
-    [args.fondsId, args.doelUserId, args.reden, args.actorId, args.geldigSeconden, args.correlatieId]
+    [args.fondsId, args.doelUserId, args.reden, args.actorId, args.herzienOverDagen, args.correlatieId]
   );
   const r = rijen[0];
   if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
