@@ -34,6 +34,9 @@
 --
 --  Draaien:  psql "$DB" -v ON_ERROR_STOP=1 -f supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql
 --  psql exit 0 + "OK"-notices = groen; elke "FAALT" → raise → non-zero exit.
+--  Deze suite gebruikt bewust GEEN psql-clientcommando's (`\echo`, `\set`), zodat
+--  zij ook rechtstreeks in de Supabase SQL-editor kan worden geplakt — dat is het
+--  pad waarlangs migraties in dit project op Preview en productie belanden.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -50,7 +53,7 @@
 --      DEEL 1 uit de catalogus bewezen in plaats van uit een aanroep.
 -- ----------------------------------------------------------------------------
 
-\echo '== DEEL 1 — STRUCTUUR =='
+do $$ begin raise notice '== DEEL 1 — STRUCTUUR =='; end $$;
 
 do $$
 declare
@@ -221,7 +224,7 @@ begin
   raise notice 'OK DEEL 1: modus + spiegelconstraint, drie private tabellen, 26 gateway-executes, hookhelper wachtwoordlogin_niveau en de beperkte rol portaal_beperkt.';
 end $$;
 
-\echo '== DEEL 2 — GEDRAG (transactie, eindigt op rollback) =='
+do $$ begin raise notice '== DEEL 2 — GEDRAG (transactie, eindigt op rollback) =='; end $$;
 
 begin;
 
