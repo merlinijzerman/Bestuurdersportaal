@@ -32,6 +32,7 @@ const lees = (...p: string[]) => readFileSync(join(ROOT, ...p), "utf8");
 const sha256 = (tekst: string) => createHash("sha256").update(tekst).digest("hex");
 
 const loginPagina = lees("app", "login", "page.tsx");
+const loginForm = lees("app", "login", "_components", "LoginForm.tsx");
 const loginLayout = lees("app", "login", "layout.tsx");
 const authCallback = lees("app", "auth", "callback", "route.ts");
 const fondsSessie = lees("core", "lib", "fonds-sessie.ts");
@@ -47,25 +48,30 @@ const routeMechanismenTest = lees("tests", "cross-tenant", "route-mechanismen.te
 
 // ── LK-1 · Wachtwoordlogin (tenant) ──────────────────────────────────────────
 
-test("LK-1 INVARIANT — wachtwoordlogin gaat rechtstreeks via de browserclient met de generieke foutmelding", () => {
-  assert.match(loginPagina, /^"use client";/, "de loginpagina is een client-component");
-  assert.match(loginPagina, /supabase\.auth\.signInWithPassword\(\{\s*email,\s*password: wachtwoord,?\s*\}\)/);
+test("LK-1 INVARIANT — wachtwoordlogin (nu in LoginForm) gaat rechtstreeks via de browserclient met de generieke foutmelding", () => {
+  assert.match(loginForm, /^"use client";/, "het formulier is een client-component");
+  assert.match(loginForm, /supabase\.auth\.signInWithPassword\(\{\s*email,\s*password: wachtwoord,?\s*\}\)/);
   assert.match(
-    loginPagina,
+    loginForm,
     /setFout\("Inloggen mislukt\. Controleer uw e-mailadres en wachtwoord\."\)/,
     "één generieke melding; geen onderscheid onbekend account / fout wachtwoord"
   );
-  // Redirect na login: één volledige navigatie naar "/", géén next-parameter.
-  assert.match(loginPagina, /window\.location\.replace\("\/"\)/);
-  assert.doesNotMatch(loginPagina, /searchParams|useSearchParams|next=|veiligVervolgpad/, "de login honoreert geen vervolgpad");
-  // Geen server action en geen API-route voor het inloggen.
-  assert.doesNotMatch(loginPagina, /"use server"|fetch\(/);
+  // Redirect na wachtwoordlogin: één volledige navigatie naar "/", géén next-parameter.
+  assert.match(loginForm, /window\.location\.replace\("\/"\)/);
+  assert.doesNotMatch(loginForm, /useSearchParams|next=|veiligVervolgpad/, "het wachtwoordpad honoreert geen vervolgpad");
+  // Geen server action en geen API-route voor het wachtwoord-inloggen.
+  assert.doesNotMatch(loginForm, /"use server"|fetch\(/);
 });
 
-test("LK-1b BASISLIJN — de tenant-login kent vóór T2 precies één inlogmethode (geen Microsoft-knop)", () => {
-  assert.doesNotMatch(loginPagina, /microsoft|Microsoft|azure|oidc|signInWithIdToken|microsoft-login/);
-  // De ?error=auth_callback-parameter van /auth/callback wordt vandaag NIET getoond.
-  assert.doesNotMatch(loginPagina, /auth_callback|\.get\("error"\)/);
+test("LK-1b T2 — de server-pagina beslist over de Microsoft-knop (fail-closed) en toont één neutrale melding voor fout= én error=auth_callback", () => {
+  assert.doesNotMatch(loginPagina, /^"use client";/m, "de pagina is nu een server component");
+  assert.match(loginPagina, /microsoftLoginBeschikbaarVoorHost\(host\)/);
+  assert.match(loginPagina, /fout === LOGIN_FOUT_WAARDE \|\| error === "auth_callback" \? LOGIN_MICROSOFT_MELDING : null/, "V11: één melding voor beide");
+  assert.match(loginPagina, /\/\^\[A-Z0-9\]\{8\}\$\/\.test\(sc\)/, "supportcode strikt gevalideerd uit de URL");
+  // De knop is een kale link naar de startroute, zonder parameters; alleen gerenderd bij `microsoftLogin`.
+  assert.match(loginForm, /\{microsoftLogin && \(/);
+  assert.match(loginForm, /href="\/auth\/microsoft-login\/start"/);
+  assert.doesNotMatch(loginForm, /login_hint|domain_hint|prompt=/);
 });
 
 // ── LK-2 · Login-layout ──────────────────────────────────────────────────────
@@ -250,14 +256,15 @@ test("LK-10 CENSUS — app/auth/** telt precies vier routes, alle onder de regis
 test("LK-11 PIN — sha256 van de auth-kernbestanden (bewust bijwerken; nieuwe waarde zelf berekenen)", () => {
   // B4 (#335 T2): fonds-sessie.ts, app/auth/callback/route.ts en app/login/layout.tsx
   // bewust opnieuw gepind na guard L3 / L4. supabase-server.ts, redirect-veilig.ts
-  // en app/login/page.tsx (tot B5) ongewijzigd.
+  // ongewijzigd. B5: app/login/page.tsx (server-pagina) en LoginForm.tsx gepind.
   const pins: Record<string, string> = {
     "core/lib/fonds-sessie.ts": "6a5385ceb9daac7e28d19a83f1a76fc952f5004d2dff243470f92f08e39c57ec",
     "app/auth/callback/route.ts": "d94d3c6d7589c20c9e51866fa36e540aed29f66624de0b486a0cf603f236cf57",
     "core/lib/supabase-server.ts": "ff104b6a4bb390ee3563b901dd461fc6e82f2086cb80923816f8ec381a698872",
     "app/login/layout.tsx": "99e115569a2ef4e835331a0a55d474a07dac24e42bc926b215206392b93ac4ae",
-    "app/login/page.tsx": "9c8f8a3b2144cf812b42d70d92dc0634bcdf73ca390831b8fcab938cba4b3f04",
+    "app/login/page.tsx": "24fe7c00f77334046393c07352e53f40353fbc428fb6ea873e20c153c8984b94",
     "core/lib/redirect-veilig.ts": "e8986ce5c29d7b564ba8e75f0edc6c0913d350daf637d70c61397d2b7b7b97e4",
+    "app/login/_components/LoginForm.tsx": "ab14b4e2ec11cc11394a1ab638437d9e2376fbff515e03df3611c9b63c798b53",
   };
   const afwijkend: string[] = [];
   for (const [pad, verwacht] of Object.entries(pins)) {

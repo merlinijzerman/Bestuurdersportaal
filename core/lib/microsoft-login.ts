@@ -10,7 +10,8 @@
 // ============================================================================
 import "server-only";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { microsoftLoginConfig } from "@/core/lib/microsoft-login-config";
+import { haalFondsContext } from "@/core/lib/tenant-context";
+import { microsoftLoginConfig, microsoftLoginGeconfigureerd } from "@/core/lib/microsoft-login-config";
 import { maakOidcClient } from "@/core/lib/microsoft-login-oidc";
 import * as gateway from "@/core/lib/microsoft-login-gateway";
 import { maakMicrosoftLogin, type AuthAdapter, type SupabaseIdentiteit } from "@/core/lib/microsoft-login-orkestratie-core";
@@ -76,3 +77,20 @@ export async function microsoftLoginVoorRequest() {
 }
 
 export { microsoftLoginActief } from "@/core/lib/microsoft-login-gateway";
+
+/**
+ * Bestaat de knop "Inloggen met Microsoft" voor deze host? host → fonds (actieve
+ * tenant_domains-rij) → configuratie compleet → fondsflag aan. Elke twijfel of
+ * fout = `false` (geen knop, geen verborgen element). Nooit gooien: dit draait op
+ * de publieke loginpagina.
+ */
+export async function microsoftLoginBeschikbaarVoorHost(host: string | null | undefined): Promise<boolean> {
+  try {
+    if (!microsoftLoginGeconfigureerd()) return false;
+    const resolutie = await haalFondsContext(host);
+    if (resolutie.type !== "gevonden") return false;
+    return (await gateway.microsoftLoginActief(resolutie.fondsId)).actief;
+  } catch {
+    return false;
+  }
+}

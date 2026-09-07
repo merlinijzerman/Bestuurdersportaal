@@ -89,9 +89,11 @@ export function microsoftLoginFoutcategorie(fout: unknown): MicrosoftLoginFoutca
 
 // ── Externe oppervlakken ─────────────────────────────────────────────────────
 
-/** Loginscherm: één neutrale melding (V11), ongeacht de interne categorie. */
+/** Loginscherm: één neutrale melding (V11) voor élke mislukte externe login —
+ *  `?fout=microsoft` én het bestaande `?error=auth_callback` — zonder provider- of
+ *  accountdetails, ongeacht de interne categorie. */
 export const LOGIN_MICROSOFT_MELDING =
-  "Inloggen met Microsoft is niet gelukt. Log in met uw wachtwoord of probeer het later opnieuw; neem contact op met uw beheerder als het probleem aanhoudt.";
+  "Inloggen is niet gelukt. Log in met uw e-mailadres en wachtwoord of probeer het later opnieuw; neem contact op met uw beheerder als het probleem aanhoudt.";
 
 /** Querysleutel op /login: alleen de vaste waarde `microsoft` plus een supportcode. */
 export const LOGIN_FOUT_PARAM = "fout";
