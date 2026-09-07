@@ -79,6 +79,20 @@ export const E2E_ASSISTENT_CONTEXT = Object.freeze({
   }),
 });
 
+/** #335 T2 — lokale OIDC-stub (tests/e2e/fixtures/oidc-stub.mjs). Fonds A heeft de
+ *  Microsoft-loginflag aan met deze tenant; fonds B uit. De identiteit is bewust
+ *  NIET gekoppeld aan een portaalaccount: de flow moet neutraal weigeren. */
+export const E2E_OIDC = Object.freeze({
+  poort: 8791,
+  tenantId: "e2e00000-0000-4000-8000-00000000e2e0",
+  clientId: "e2ec0000-0000-4000-8000-00000000c1c1",
+  identiteit: Object.freeze({
+    oid: "e2e0a1d0-0000-4000-8000-00000000a1d0",
+    sub: "e2e-sub-niet-gekoppeld",
+    acct: 0,
+  }),
+});
+
 export function e2eEmail(fondsSleutel, rol) {
   return `wp3-${fondsSleutel}-${rol}@e2e.invalid`;
 }
