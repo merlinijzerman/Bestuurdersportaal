@@ -2,7 +2,7 @@
 
 - **Ticket:** [#335](https://github.com/merlinijzerman/Bestuurdersportaal/issues/335)
 - **Besluit:** `decisions/0211-microsoft-login-expliciete-koppeling-tid-oid.md` (voorgesteld, tweede herziening)
-- **Status van dit document:** ontwerp; spike T0.5 inclusief S7 groen, S9 rode nulmeting (`SPIKE-335-T0.5.md`). **T1/PR-A gebouwd (2026-09-06, draft)** — migratie `2026_09_06_microsoft_login_fase1b.sql`, rollback, check-suite, gateway, runbook. De S7-mergeblokkade is op 7 september 2026 vervallen; Microsoft-login en de fondsflag staan nog standaard uit en niets is extern ingeschakeld.
+- **Status van dit document:** ontwerp; spike T0.5 inclusief S7 groen, S9 rode nulmeting (`SPIKE-335-T0.5.md`). **T1/PR-A gemerged naar `preview` als `40cd5d6` (2026-09-07)** — migratie `2026_09_06_microsoft_login_fase1b.sql`, rollback, check-suite, gateway, runbook. **T2/PR-B gebouwd op `feat/335-t2-voorbereiding` (draft-PR, 2026-09-07)** — zie `MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md` voor de uitvoering, contracten en afwijkingen (V9 in-geheugen startlimiet; V11 één neutrale melding). Microsoft-login en de fondsflag staan nog standaard uit en niets is extern ingeschakeld; T3 volgt `security/MICROSOFT-365-F1B-PGB-SMOKEPLAN.md`.
 - **Branch/worktree:** `feat/335-microsoft-login` vanaf `origin/preview` `259ba44` (merge #324)
 - **Datum:** 2026-09-05 (tweemaal herzien dezelfde dag na review van de opdrachtgever)
 

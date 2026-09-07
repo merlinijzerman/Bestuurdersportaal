@@ -1,6 +1,6 @@
 # 0211 — Microsoft-login (fase 1B): expliciete koppeling aan een bestaand account, autorisatie op `tid + oid`, eigen OIDC-flow en afdwinging vóór tokenuitgifte
 
-- **Status:** Voorgesteld. Spike T0.5 inclusief S7 is op 2026-09-07 groen afgerond; T1/PR-A (datamodel, rechtenmodel, Auth-hook, gateway) is gebouwd en lokaal bewezen. Acceptatie volgt bij merge van T1; S9 blijft tot de gecontroleerde Preview-provisioning een verwachte rode nulmeting.
+- **Status:** Geaccepteerd (2026-09-07: T1/PR-A gemerged naar `preview` als `40cd5d6`; spike T0.5 inclusief S7 groen). T2/PR-B (routes, guard L3/L4, UI) staat als draft-PR op `feat/335-t2-voorbereiding`. De Preview-uitrolvoorwaarden (P1–P9, E1–E7) worden in T3 afzonderlijk afgetekend; S9 blijft tot die provisioning een verwachte rode nulmeting.
 - **Datum:** 2026-09-07
 - **Betrokkenen:** Merlin (opdrachtgever/productowner, review), Claude (karakterisering en ontwerp)
 - **Ticket:** [#335](https://github.com/merlinijzerman/Bestuurdersportaal/issues/335) — M365 fase 1B, Microsoft-login voor bestaande portaalaccounts (PGB Preview-pilot)

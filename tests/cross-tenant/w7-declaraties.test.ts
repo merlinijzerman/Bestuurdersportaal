@@ -116,7 +116,11 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // een DRAAIENDE server opgenomen bij de stack-run, niet voorspeld (besluit 0192,
   // contractwaarde-regel). Zie tests/karakterisering/uitgestelde-opnames.json; die
   // lijst moet leeg zijn vóór P6.
-  assert.equal(HANDLERS.length, 137, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 141: Microsoft-login fase 1B T2 (#335) voegt vier handlers toe onder
+  // app/api/microsoft-login: koppelen starten (profile.manage.own), status
+  // (profile.view.own), ontkoppelen en herstel (profile.manage.own) — strikt
+  // zelfbeheer, dezelfde capabilities als de bestaande Microsoft-connectorroutes.
+  assert.equal(HANDLERS.length, 141, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

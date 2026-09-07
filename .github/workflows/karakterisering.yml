@@ -123,6 +123,11 @@ jobs:
       # (core/lib/ai-gateway/config-db-core.ts), nooit op Preview/Productie.
       AI_GATEWAY_DATABASE_URL: "postgresql://ai_gateway:ai_gateway_lokaal@127.0.0.1:54322/postgres"
       AI_GATEWAY_DB_SSL: "uit"
+      # #335 T2 (V8) — guard L3 raadpleegt de login-gateway alleen bij oauth-sessies;
+      # de W1-sessies zijn wachtwoordsessies, dus dit blijft byte-neutraal. Zonder
+      # MICROSOFT_LOGIN_* is de knop verborgen en zijn de login-routes 404.
+      LOGIN_GATEWAY_DATABASE_URL: "postgresql://login_gateway:login_gateway_lokaal@127.0.0.1:54322/postgres"
+      LOGIN_GATEWAY_DB_SSL: "uit"
       # #311 — SSE-karakterisering via de lokale providerstub (patroon e2e-security.yml).
       WP4_E2E_AI_PROVIDER: "local"
       WP4_E2E_AI_PROVIDER_URL: "http://127.0.0.1:8790"

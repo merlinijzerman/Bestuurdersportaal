@@ -17,6 +17,7 @@ import {
 } from "@/core/lib/vraagtype";
 import OrganisatieprofielTab from "./_components/OrganisatieprofielTab";
 import MicrosoftKoppelingKaart from "./_components/MicrosoftKoppelingKaart";
+import MicrosoftLoginKaart from "./_components/MicrosoftLoginKaart";
 import OutlookAgendaKaart from "./_components/OutlookAgendaKaart";
 import SharePointBronKaart from "./_components/SharePointBronKaart";
 
@@ -286,6 +287,7 @@ export default function ProfielPage() {
       ) : (
         <div className="max-w-3xl">
           <MicrosoftKoppelingKaart />
+          <MicrosoftLoginKaart />
           <OutlookAgendaKaart />
           <SharePointBronKaart />
           <p className="text-sm text-muted mb-6">

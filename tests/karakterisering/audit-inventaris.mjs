@@ -154,6 +154,8 @@ const SPLIT_KLASSE = {
   "DELETE app/api/microsoft/sharepoint/bron/route.ts": "operationeel", // #321 lokaal ontkoppelen van de SharePoint-bron; wrapper-audit + private connectoraudit
   "POST app/api/microsoft/sharepoint/bron/controle/route.ts": "operationeel", // #321 bereikbaarheidscontrole met actuele rechten; wrapper-audit + private connectoraudit
   "POST app/api/microsoft/sharepoint/documenten/[ref]/preview/route.ts": "operationeel", // #321 kortlevende preview-URL; wrapper-audit + private audit met alleen referentie/categorie/latency
+  "DELETE app/api/microsoft-login/koppeling/route.ts": "operationeel", // #335 T2 Microsoft-login ontkoppelen (revoking → unlink → revoked); wrapper-audit + private login_private.audit_log via de gateway
+  "POST app/api/microsoft-login/koppeling/route.ts": "operationeel", // #335 T2 idempotent herstel van een half-afgeronde koppeling; wrapper-audit + private login_private.audit_log via de gateway
   // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",

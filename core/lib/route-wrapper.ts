@@ -217,6 +217,12 @@ export type HostGuardOordeel = { toegestaan: boolean };
 export type WrapperDeps = {
   createServerSupabase: typeof createServerSupabase;
   haalProfiel: typeof haalProfiel;
+  /** Guard L3 (#335 T2): beoordeelt een `oauth`-sessie op een actieve Microsoft-
+   *  binding en beëindigt haar bij weigering. LAZY in echteDeps (sessieguard →
+   *  gateway is server-only); injecteerbaar zodat de sanity de weigertak zonder DB
+   *  toetst. Voor wachtwoordsessies (amr zonder oauth) doet de echte dep GEEN
+   *  gateway-aanroep — het wachtwoordpad blijft byte-identiek. */
+  beoordeelOAuthSessie: (supabase: RlsClient, gebruikerId: string) => Promise<{ toegestaan: boolean }>;
   beoordeelRouteHostToegang: (args: HostGuardArgs) => Promise<HostGuardOordeel>;
   /** Leest `ENFORCE_CAPABILITY`. Injecteerbaar zodat de sanity-suite BEIDE
    *  vlagstanden kan bewijzen zonder process.env te muteren — de vlag-aan-stand
@@ -265,6 +271,12 @@ export type WrapperDeps = {
 const echteDeps: WrapperDeps = {
   createServerSupabase,
   haalProfiel,
+  beoordeelOAuthSessie: async (supabase, gebruikerId) => {
+    const mod = await import("@/core/lib/microsoft-login-sessieguard");
+    const oordeel = await mod.beoordeelOAuthSessie(supabase, gebruikerId);
+    if (!oordeel.toegestaan) await mod.beeindigSessie(supabase);
+    return oordeel;
+  },
   capabilityEnforceAan,
   schemaEnforceAan,
   ratelimitEnforceAan,
@@ -311,6 +323,12 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return nietIngelogd();
+
+      // 1b. Guard L3 (#335 T2): een `oauth`-sessie zonder actieve Microsoft-binding
+      // krijgt EXACT dezelfde 401 als "geen sessie" — geen nieuwe responsvorm, dus
+      // de anon-snapshots en het 401-contract blijven byte-identiek. Voor
+      // wachtwoordsessies raakt de echte dep de gateway niet.
+      if (!(await deps.beoordeelOAuthSessie(supabase, user.id)).toegestaan) return nietIngelogd();
 
       // 2. Profielresolutie (vier kolommen).
       const profiel = await deps.haalProfiel(supabase, user.id);

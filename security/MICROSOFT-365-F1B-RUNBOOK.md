@@ -60,10 +60,13 @@ de check-suite onderscheiden van het tijdelijke migratielidmaatschap, dat wél w
 
 ## 2. Migratie en bewijs
 
-1. Pas `2026_09_06_microsoft_login_fase1b.sql` toe (één transactie). De migratie is
+1. Pas `2026_09_06_microsoft_login_fase1b.sql` toe (één transactie) en daarna
+   `2026_09_07_microsoft_login_startlimiet.sql` (T2/V9: tabel `start_pogingen` +
+   veertiende gatewayfunctie `tel_startpoging`; eigen rollback). Beide zijn
    idempotent; herhaald draaien is veilig.
 2. Draai als database-eigenaar, in deze volgorde:
-   - `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` (DEEL 2 rolt volledig terug);
+   - `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` (DEEL 2 rolt volledig terug; telt 14 executes);
+   - `supabase/checks/2026_09_07_microsoft_login_startlimiet.sql` (startlimiet, rolt terug);
    - `supabase/checks/2026_07_31_r1_structurele_gates.sql` (A–H);
    - `supabase/checks/2026_08_20_v3_grants_volledig.sql` (de vier publieke objecten staan
      in `allowlist-grants.tsv`);
@@ -147,3 +150,29 @@ onderdeel van de smoke.
 
 Tokens, authorization codes, `state`/`nonce`, claims, e-mailadressen. De audit bewaart alleen
 fonds, actor, `sha256(tid:oid)`, foutcategorie en correlatie-id; de hook logt niets.
+
+## 8. Applicatielaag (T2 — routes, guard, UI)
+
+Bron: `MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md`. De code leest uitsluitend de variabelen uit §3;
+ontbreekt er één, dan is de knop verborgen en antwoorden de routes neutraal (404/503).
+
+| Onderdeel | Pad | Gedrag |
+|---|---|---|
+| Start inloggen | `GET /auth/microsoft-login/start[?next=]` | **canonieke fondshost** (`canoniekeFondsHost`: strikt, productie zonder poort; ongeldig → 404) → host→fonds, config, fondsflag, **atomische tempolimiet** `microsoft_login_start` (20 per 10 min per HMAC-SHA256(ip\|host) onder de loginsleutel; `login_private.tel_startpoging`, migratie `2026_09_07_microsoft_login_startlimiet.sql`; telling mislukt = weigeren), bestaande sessie → `/`, veilig vervolgpad, versleutelde eenmalige transactie, 302 naar Entra met exact `openid profile` + PKCE |
+| Callback | `GET /auth/microsoft-login/callback` | canonieke fondshost (ongeldig/onbekend → neutrale 404, nooit een redirect uit `req.url`) → consumeer transactie (replay dood) → tokenwissel → RS256 → exacte claims → inloggen (`zoek_identiteit` active vóór `signInWithIdToken`, kruiscontrole, profiel in host-fonds, `markeer_gebruikt`) of koppelen (reserveer → `linkIdentity` → verifieer → activeer). Elke fout: één neutrale redirect met supportcode |
+| Koppelen starten | `GET /api/microsoft-login/koppelen/start` | `withFondsRoute`, `profile.manage.own`, hostGuard afdwingen, DB-limiet `microsoft_login_start` per gebruiker; 409 bij bestaande levende binding |
+| Status / ontkoppelen / herstel | `GET/DELETE/POST /api/microsoft-login/koppeling` | status zonder tid/oid/sub/e-mail, mét `sessieViaMicrosoft`; ontkoppelen = `start_intrekking` → `unlinkIdentity` → `voltooi_intrekking`, daarna **deterministisch**: was de sessie via Microsoft, dan wordt zij server-side beëindigd (`uitgelogd: true`, kaart → `/login`), anders blijft de wachtwoordsessie (`uitgelogd: false`); mislukt unlink: blijft `revoking`, kaart biedt "Opnieuw proberen"; herstel idempotent (`herstel_koppeling`) |
+| Guard L3 | `withFondsRoute` (dep `beoordeelOAuthSessie`), `haalFondsSessie`, tenant-layout, login-layout, platform-layout | alleen bij `amr ∋ oauth` wordt `levende_binding` geraadpleegd; niet-`active` → sessie beëindigd (`/login?fout=microsoft`, wrapper: exact de bestaande 401; platform: `?fout=geen_toegang`, R-34). Gatewayfout = fail-closed |
+| L4 | `/auth/callback` | `azure`-identiteit zonder actieve binding → `unlinkIdentity` + signOut + `/login?error=auth_callback` |
+| UI | `/login` (server-pagina + `LoginForm`), `/profiel` (`MicrosoftLoginKaart`) | knop alleen als host-fonds de flag aan heeft én de config compleet is; één neutrale melding voor `?fout=microsoft` en `?error=auth_callback` met supportcode; kaart per toestand één handeling |
+
+**Supportcode → categorie:** de supportcode is de eerste acht tekens van de correlatie-id. Zoek in
+de Vercel-runtime-log op `[MICROSOFT-LOGIN]` met die code voor de interne categorie
+(`claim_*`, `binding_ontbreekt`, `hook_geweigerd`, `transactie_ongeldig`, …) en in
+`login_private.audit_log` op `correlatie_id like '<code-in-kleine-letters>%'`. Geen van beide
+bevat tokens, codes, `state`/`nonce`, claims of e-mailadressen.
+
+**Lokaal/E2E:** `tests/e2e/fixtures/oidc-stub.mjs` speelt Entra na (dubbel gegrendeld via
+`MICROSOFT_LOGIN_E2E_OIDC=local` + `SEED_DOELOMGEVING=local` + lokale Supabase-URL). De positieve
+sign-in/link tegen GoTrue vereist de echte Microsoft-JWKS en is alleen met spike T0.5 en de
+Preview-smoke te bewijzen.

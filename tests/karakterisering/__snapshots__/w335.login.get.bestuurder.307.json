@@ -1,0 +1,9 @@
+{
+  "body": {
+    "location_vorm": "/"
+  },
+  "headers": {
+    "content-type": "text/html; charset=utf-8"
+  },
+  "status": 307
+}

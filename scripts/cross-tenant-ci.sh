@@ -203,6 +203,9 @@ SQL_M365F3B="supabase/checks/2026_09_04_microsoft_sharepoint_fase3b_documenten.s
 # minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
 # SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
 SQL_M365F1B="supabase/checks/2026_09_06_microsoft_login_fase1b.sql"
+# Microsoft-login fase 1B T2 (#335, V9) — atomische startlimiet in login_private
+# (veertiende gatewayfunctie tel_startpoging; tabel zonder rolrechten).
+SQL_M365F1B_V9="supabase/checks/2026_09_07_microsoft_login_startlimiet.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -409,6 +412,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
 echo
 echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
+echo
+echo "-- Microsoft-login F1B T2 (#335, V9): atomische startlimiet tel_startpoging --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B_V9"
 echo
 echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"

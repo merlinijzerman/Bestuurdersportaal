@@ -3,7 +3,8 @@
 //  (Microsoft-login fase 1B, #335, T1; besluit 0211).
 // ----------------------------------------------------------------------------
 //  Eén Pool op de minimale databaserol login_gateway. Die rol mag uitsluitend
-//  de dertien gatewayfuncties uitvoeren; tabellen zijn onbereikbaar. Geen
+//  de veertien gatewayfuncties uitvoeren (dertien uit T1 + tel_startpoging uit
+//  T2/V9); tabellen zijn onbereikbaar. Geen
 //  Supabase service-roleclient, geen browserpad. Het toestandsmodel en de fonds-
 //  isolatie worden in de database afgedwongen; deze laag vertaalt alleen typen
 //  en categoriseert fouten inhoudsvrij (nooit een ruwe databasemelding, nooit
@@ -198,6 +199,19 @@ export async function consumeerTransactie(stateHash: string): Promise<Transactie
   return r
     ? { fondsId: r.fonds_id, userId: r.user_id, intent: r.intent, blob: { sleutelVersie: r.sleutel_versie, iv: r.iv, tag: r.tag, ciphertext: r.ciphertext, aad: r.aad } }
     : null;
+}
+
+// ── Tempolimiet startroute (#335 T2, V9; migratie 2026_09_07_microsoft_login_startlimiet) ──
+/** Atomische telling per HMAC-sleutel en vast venster; de sleutel is nooit een ruw IP. */
+export async function telStartpoging(args: { sleutel: string; limiet: number; vensterSeconden: number }): Promise<{ toegestaan: boolean; resterend: number; resetOp: Date | null }> {
+  if (!/^[0-9a-f]{64}$/.test(args.sleutel)) throw new MicrosoftLoginGatewayError("gateway_fout");
+  const rijen = await roep<{ toegestaan: boolean; resterend: number; reset_op: Date | string | null }>(
+    "select toegestaan, resterend, reset_op from login_private.tel_startpoging($1,$2,$3)",
+    [args.sleutel, args.limiet, args.vensterSeconden]
+  );
+  const r = rijen[0];
+  if (!r) throw new MicrosoftLoginGatewayError("gateway_fout");
+  return { toegestaan: r.toegestaan === true, resterend: r.resterend, resetOp: r.reset_op === null ? null : r.reset_op instanceof Date ? r.reset_op : new Date(r.reset_op) };
 }
 
 // ── Audit (inhoudsvrij) ─────────────────────────────────────────────────────

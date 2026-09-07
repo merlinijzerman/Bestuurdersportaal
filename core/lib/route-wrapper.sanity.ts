@@ -66,6 +66,9 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
   return {
     createServerSupabase: async () => nepSupabase({ id: "u-1" }),
     haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "voorzitter", fondsId: "f-1" }),
+    // #335 T2: guard L3 default TOEGESTAAN (= wachtwoordsessie of actieve binding);
+    // de weigertak wordt per test expliciet aangezet.
+    beoordeelOAuthSessie: async () => ({ toegestaan: true }),
     beoordeelRouteHostToegang: async () => ({ toegestaan: true }),
     // W6: default UIT. De vlag-aan-stand is de enige tak die gedrag verandert en
     // wordt per test expliciet aangezet — nooit via process.env.
@@ -120,6 +123,56 @@ async function main() {
     assert.equal(cap.ctx.rol, null);
     assert.equal(cap.ctx.naam, null);
     assert.equal(cap.ctx.gebruikerId, "u-1");
+  });
+
+  // ── #335 T2 — guard L3 in de naad ──────────────────────────────────────────
+  await test("guard L3 weigert → EXACT dezelfde 401 als geen sessie; handler en profiel niet aangeroepen", async () => {
+    let profielAangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({
+        beoordeelOAuthSessie: async () => ({ toegestaan: false }),
+        haalProfiel: async () => {
+          profielAangeroepen++;
+          return null;
+        },
+      })
+    );
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => new Response("mag niet"));
+    const res = await handler(req());
+    assert.equal(res.status, 401);
+    assert.deepEqual(await res.json(), { error: "Niet ingelogd" });
+    assert.equal(profielAangeroepen, 0, "de guard staat vóór de profielresolutie");
+  });
+
+  await test("guard L3 wordt NIET aangeroepen zonder sessie (anon → 401 vóór de guard)", async () => {
+    let guardAangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({
+        createServerSupabase: async () => nepSupabase(null),
+        beoordeelOAuthSessie: async () => {
+          guardAangeroepen++;
+          return { toegestaan: true };
+        },
+      })
+    );
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => Response.json({ ok: true }));
+    assert.equal((await handler(req())).status, 401);
+    assert.equal(guardAangeroepen, 0);
+  });
+
+  await test("guard L3 toegestaan → de gebruiker-id gaat mee en de handler draait", async () => {
+    let gezien: string | null = null;
+    const wrap = maakWithFondsRoute(
+      deps({
+        beoordeelOAuthSessie: async (_s, gebruikerId) => {
+          gezien = gebruikerId;
+          return { toegestaan: true };
+        },
+      })
+    );
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => Response.json({ ok: true }));
+    assert.equal((await handler(req())).status, 200);
+    assert.equal(gezien, "u-1");
   });
 
   await test("host-guard UIT → beoordeelRouteHostToegang wordt niet aangeroepen", async () => {

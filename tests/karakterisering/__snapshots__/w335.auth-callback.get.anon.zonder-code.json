@@ -1,0 +1,7 @@
+{
+  "body": {
+    "location_vorm": "http://localhost:3000/login?error=<geredigeerd>"
+  },
+  "headers": {},
+  "status": 307
+}

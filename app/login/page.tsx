@@ -1,105 +1,37 @@
-"use client";
-import { useState } from "react";
-import { createClient } from "@/core/lib/supabase";
+// ============================================================================
+//  /login — server-pagina. Het wachtwoordformulier zelf is ongewijzigd en leeft in
+//  _components/LoginForm.tsx (client). Deze laag beslist twee dingen (#335 T2):
+//   1. of de knop "Inloggen met Microsoft" bestaat: host → fonds (tenant_domains)
+//      → configuratie compleet → fondsflag aan (login_private.lees_config via de
+//      gateway). Elke twijfel = geen knop (fail-closed, geen verborgen element);
+//   2. de ENE neutrale melding voor `?fout=microsoft` én het bestaande
+//      `?error=auth_callback` (V11), met hooguit een supportcode uit de URL.
+// ============================================================================
+import { headers } from "next/headers";
+import LoginForm from "./_components/LoginForm";
+import { microsoftLoginBeschikbaarVoorHost } from "@/core/lib/microsoft-login";
+import {
+  LOGIN_FOUT_PARAM,
+  LOGIN_FOUT_WAARDE,
+  LOGIN_MICROSOFT_MELDING,
+  SUPPORTCODE_PARAM,
+  SUPPORTCODE_RE,
+} from "@/core/lib/microsoft-login-meldingen-core";
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [wachtwoord, setWachtwoord] = useState("");
-  const [laden, setLaden] = useState(false);
-  const [fout, setFout] = useState("");
-  const supabase = createClient();
+export const dynamic = "force-dynamic";
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLaden(true);
-    setFout("");
+type ZoekParams = Record<string, string | string[] | undefined>;
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: wachtwoord,
-    });
+export default async function LoginPage({ searchParams }: { searchParams: Promise<ZoekParams> }) {
+  const sp = await searchParams;
+  const fout = sp[LOGIN_FOUT_PARAM];
+  const error = sp.error;
+  const sc = sp[SUPPORTCODE_PARAM];
+  const melding = fout === LOGIN_FOUT_WAARDE || error === "auth_callback" ? LOGIN_MICROSOFT_MELDING : null;
+  const supportcode = melding && typeof sc === "string" && SUPPORTCODE_RE.test(sc) ? sc : null;
 
-    if (error) {
-      setFout("Inloggen mislukt. Controleer uw e-mailadres en wachtwoord.");
-      setLaden(false);
-    } else {
-      // Forceer één volledige navigatie nadat de Supabase-client de sessiecookie
-      // heeft opgeslagen. Twee gelijktijdige clientnavigaties kunnen elkaar
-      // annuleren en de gebruiker op /login laten staan.
-      window.location.replace("/");
-    }
-  }
+  const host = (await headers()).get("host");
+  const microsoftLogin = await microsoftLoginBeschikbaarVoorHost(host);
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-app-bg">
-      <div className="w-full max-w-md">
-        {/* Logo — neutraal, geen fondsbranding (publieke login, TO §2.5) */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-accent rounded-2xl mb-4">
-            <span className="text-white font-black text-2xl">B</span>
-          </div>
-          <h1 className="font-serif text-2xl font-bold text-ink">Bestuurdersportaal</h1>
-          <p className="text-sm text-muted mt-1">
-            Open de beveiligde omgeving van uw organisatie
-          </p>
-        </div>
-
-        {/* Login kaart */}
-        <div className="bg-white rounded-2xl border border-line p-8 shadow-sm">
-          <h2 className="text-lg font-bold text-ink mb-6">
-            Log in op uw bestuurdersomgeving
-          </h2>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label htmlFor="login-email" className="block text-sm font-semibold text-ink mb-1">
-                E-mailadres
-              </label>
-              <input
-                id="login-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-line rounded-lg px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-                placeholder="naam@organisatie.nl"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="login-password" className="block text-sm font-semibold text-ink mb-1">
-                Wachtwoord
-              </label>
-              <input
-                id="login-password"
-                type="password"
-                value={wachtwoord}
-                onChange={(e) => setWachtwoord(e.target.value)}
-                className="w-full border border-line rounded-lg px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            {fout && (
-              <div className="bg-err-tint border border-err/30 rounded-lg px-3 py-2 text-sm text-err-ink">
-                {fout}
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={laden}
-              className="w-full bg-accent text-white font-semibold py-2.5 rounded-lg text-sm hover:bg-accent-ink disabled:opacity-50 transition-colors"
-            >
-              {laden ? "Inloggen..." : "Inloggen"}
-            </button>
-          </form>
-        </div>
-
-        <div className="mt-6 text-center">
-          <div className="flex items-center justify-center gap-2 text-xs text-muted">
-            <span className="w-2 h-2 bg-ok rounded-full pulse-dot"></span>
-            Beveiligde, beheerde AI-omgeving
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <LoginForm microsoftLogin={microsoftLogin} melding={melding} supportcode={supportcode} />;
 }

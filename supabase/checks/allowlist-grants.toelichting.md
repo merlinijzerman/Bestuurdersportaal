@@ -311,7 +311,9 @@ Vier nieuwe publieke objecten, allemaal bewust minimaal:
   `service_role -`. De hook toetst bij elke `oauth`-tokenuitgifte de exacte
   Microsoft-identiteit tegen de private binding (besluit 0211).
 
-Het schema `login_private`, de loginrol `login_gateway` (exact dertien executes,
+Het schema `login_private`, de loginrol `login_gateway` (exact veertien executes: dertien uit T1 plus
+`tel_startpoging` uit T2/V9 — migratie `2026_09_07_microsoft_login_startlimiet.sql`, tabel
+`start_pogingen` zonder enig rolrecht;
 nul tabelrechten) en de NOLOGIN-eigenaar `login_hook_owner` (alleen `SELECT` +
 RLS-policy op de bindingstabel, plus kolom-`SELECT` op `public.profielen(id, fonds_id)` en
 `public.fonds_microsoft_login(fonds_id, actief, entra_tenant_id)` met eerlijke `using (true)`-leespolicies

@@ -12,6 +12,8 @@
 
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { sessieIsOAuth } from "@/core/lib/microsoft-login-sessieguard-core";
+import { huidigAccessToken } from "@/core/lib/microsoft-login-sessieguard";
 import {
   huidigePlatformIdentiteit,
   heeftActueleMFA,
@@ -34,6 +36,13 @@ export default async function BeveiligdePlatformLayout({
   } = await sessie.auth.getUser();
   if (!user) {
     redirect("/platform/login");
+  }
+
+  // R-34 (#335 T2): platformaccounts loggen nooit via Microsoft in. Een `oauth`-
+  // sessie op de platformsurface is per definitie geen platformidentiteit en krijgt
+  // dezelfde afhandeling als een tenantaccount (de login logt haar uit).
+  if (sessieIsOAuth(await huidigAccessToken(sessie))) {
+    redirect("/platform/login?fout=geen_toegang");
   }
 
   const identiteit = await huidigePlatformIdentiteit();
