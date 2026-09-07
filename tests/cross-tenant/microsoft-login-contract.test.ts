@@ -82,9 +82,22 @@ test("F1B: hook is SECURITY INVOKER met lege search_path; alleen de helper is DE
   // Minimale kolomrechten + tenantgebonden policies voor login_hook_owner.
   assert.match(migratie, /grant select \(id, fonds_id\) on public\.profielen to login_hook_owner/);
   assert.match(migratie, /grant select \(fonds_id, actief, entra_tenant_id\) on public\.fonds_microsoft_login to login_hook_owner/);
-  assert.match(migratie, /create policy "hook owner leest profiel fonds" on public\.profielen\n\s+for select to login_hook_owner using \(fonds_id is not null\)/);
-  assert.match(migratie, /create policy "hook owner leest loginconfig" on public\.fonds_microsoft_login\n\s+for select to login_hook_owner using \(fonds_id is not null\)/);
+  assert.match(migratie, /create policy "hook owner leest profiel fonds" on public\.profielen\n\s+for select to login_hook_owner using \(true\)/);
+  assert.match(migratie, /create policy "hook owner leest loginconfig" on public\.fonds_microsoft_login\n\s+for select to login_hook_owner using \(true\)/);
   assert.doesNotMatch(migratie, /grant (select|all) on public\.profielen to login_hook_owner/, "geen tabelbrede SELECT op profielen");
+  // De uitzondering in gates B/C bestaat en toetst het volledige rolcontract.
+  const gates = lees("supabase/checks/2026_07_31_r1_structurele_gates.sql");
+  assert.match(gates, /create or replace function pg_temp\.hook_owner_uitzondering/);
+  assert.match(gates, /not r\.rolcanlogin and not r\.rolbypassrls and not r\.rolsuper/);
+  assert.match(gates, /am\.inherit_option or am\.set_option/);
+  assert.match(gates, /array\['fonds_id','id'\]/);
+  assert.match(gates, /array\['actief','entra_tenant_id','fonds_id'\]/);
+  assert.match(gates, /f\.prosecdef and has_function_privilege\('login_hook_owner'/);
+  assert.equal((gates.match(/not pg_temp\.hook_owner_uitzondering\(/g) ?? []).length, 2, "gate B én gate C gebruiken de uitzondering");
+  assert.match(suite, /login_hook_owner heeft LOGIN, BYPASSRLS/);
+  assert.match(suite, /login_hook_owner heeft leden met INHERIT of SET/);
+  assert.match(suite, /kolomrechten van login_hook_owner in public wijken af van exact/);
+  assert.match(suite, /login_hook_owner kan een andere SECURITY DEFINER-functie uitvoeren/);
   assert.match(migratie, /grant usage on schema public to login_hook_owner/);
   // Reserveren dwingt dezelfde configuratie vroeg af.
   assert.match(migratie, /'login_uit'::text/);

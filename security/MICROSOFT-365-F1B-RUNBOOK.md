@@ -42,8 +42,13 @@ from pg_roles where rolname in ('login_gateway','login_hook_owner');
 
 De migratie geeft `login_hook_owner` daarna uitsluitend: `SELECT` op
 `login_private.microsoft_identiteiten`, kolom-`SELECT` op `public.profielen(id, fonds_id)` en
-`public.fonds_microsoft_login(fonds_id, actief, entra_tenant_id)`, elk met een expliciete
-tenantgebonden leespolicy, en `USAGE` (geen `CREATE`) op `public` en `login_private`.
+`public.fonds_microsoft_login(fonds_id, actief, entra_tenant_id)`, elk met een eerlijke
+`using (true)`-leespolicy, en `USAGE` (geen `CREATE`) op `public` en `login_private`. Die
+policies zijn bewust niet tenantgebonden: de helper moet voor élke gebruiker kunnen vaststellen
+of het profiel nog in het fonds van de binding zit en of dat fonds Microsoft-login aan heeft. De
+beveiliging rust op het rolcontract — NOLOGIN, geen BYPASSRLS, geen leden, geen SET ROLE, geen
+schrijfrecht, exact deze kolommen, geen andere functies — dat gates B/C (uitzondering) én de
+F1B-suite afdwingen. Wijzig de rol nooit met de hand: elke afwijking maakt de gates rood.
 
 Verwacht: `login_gateway` met `rolcanlogin=true`, alle andere bevoegdheidsvelden `false`,
 `rolinherit=false`, connection limit ≤ 5; `login_hook_owner` met `rolcanlogin=false` en alle

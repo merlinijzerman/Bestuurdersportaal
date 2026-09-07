@@ -93,8 +93,11 @@ Concreet:
    `login_private.identiteit_toegestaan(user, sub, tid, oid)` heeft verhoogde rechten
    (`SECURITY DEFINER`, eigenaar = minimale NOLOGIN-rol `login_hook_owner` met uitsluitend
    `SELECT` op de bindingstabel plus kolom-`SELECT` op `profielen(id, fonds_id)` en
-   `fonds_microsoft_login(fonds_id, actief, entra_tenant_id)`, elk met een expliciete
-   tenantgebonden leespolicy; `search_path = ''`; execute alleen `supabase_auth_admin`),
+   `fonds_microsoft_login(fonds_id, actief, entra_tenant_id)`, elk met een eerlijke
+   `using (true)`-leespolicy — de helper moet álle rijen kunnen beoordelen; de beveiliging rust
+   op het rolcontract (NOLOGIN, geen BYPASSRLS, geen leden of SET ROLE, geen schrijfrecht, exact
+   deze kolommen, geen andere functies), dat gates B/C als expliciete uitzondering én de
+   F1B-suite afdwingen; `search_path = ''`; execute alleen `supabase_auth_admin`),
    conform het Supabase-advies om Auth-hooks zelf niet als `SECURITY DEFINER` onder een breed
    bevoegde eigenaar te draaien.
 2. **Intrekkingsvenster expliciet.** Een al uitgegeven access-token blijft geldig tot `exp`;

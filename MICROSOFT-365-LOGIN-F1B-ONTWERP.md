@@ -204,8 +204,10 @@ returns boolean language sql security definer set search_path = '' stable as $$
                     and (b.status = 'active' or (b.status = 'pending' and b.pending_verloopt_op > pg_catalog.now())));
 $$;
 -- login_hook_owner: kolom-SELECT (id, fonds_id) op profielen en (fonds_id, actief, entra_tenant_id)
--- op fonds_microsoft_login, elk met een tenantgebonden leespolicy `using (fonds_id is not null)`
--- (gates B/C verbieden USING (true) op fonds_id-tabellen); USAGE zonder CREATE op public.
+-- op fonds_microsoft_login, elk met een eerlijke leespolicy `using (true)`: de helper moet álle
+-- rijen kunnen beoordelen. Beveiliging = afgeschermde NOLOGIN-eigenaar + functiecontract, niet
+-- tenantselectie door RLS; gates B/C hebben een expliciete uitzondering die het volledige
+-- rolcontract toetst (pg_temp.hook_owner_uitzondering). USAGE zonder CREATE op public.
 -- Supabase `postgres` heeft CREATEROLE maar is geen superuser; voor de eigendomsoverdracht
 -- zijn tijdelijk SET ROLE-recht en CREATE op het doelschema nodig. Trek beide direct weer in.
 grant create on schema login_private to login_hook_owner;
