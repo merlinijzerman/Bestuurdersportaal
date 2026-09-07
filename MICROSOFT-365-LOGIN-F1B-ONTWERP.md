@@ -434,10 +434,14 @@ Supabase-dashboard: P1–P8 (hook op `public.fn_access_token_hook`, `jwt_expiry`
 
 Ongewijzigd ten opzichte van de vorige versie, met drie correcties:
 
-- **Koppelen** stap 10–12: `reserveer_identiteit` (pending) → `linkIdentity` (hook staat toe op
-  grond van de pending) → verifiëren → `activeer_identiteit`. Faalt `linkIdentity`, dan is er
+- **Koppelen** stap 10–12: bestaande OAuth-identiteiten controleren → `reserveer_identiteit`
+  (pending) → `linkIdentity` (hook staat toe op grond van de pending) → actuele GoTrue-gebruiker
+  opnieuw lezen → verifiëren → `activeer_identiteit`. Faalt `linkIdentity`, dan is er
   door de transactie geen identiteit; alleen `markeer_mislukt`. De sessie die `linkIdentity`
   teruggeeft (methode `oauth`) vervangt de wachtwoordsessie; vanaf dat moment gelden L1 en L3.
+  Bestaat dezelfde Azure-identiteit al door een eerdere onderbroken poging, dan wordt na een
+  verse geldige ID-tokencontrole een nieuwe pending direct via `herstel_koppeling` geactiveerd;
+  een afwijkende of extra OAuth-identiteit faalt vóór reserveren.
 - **Inloggen**: geen `signInWithIdToken` zonder `active`; de hook is de tweede toets; daarna
   `user.id === binding.user_id`, profiel, host-fonds.
 - **Ontkoppelen**: `start_intrekking` maakt de binding `revoking`; de hook weigert vanaf de

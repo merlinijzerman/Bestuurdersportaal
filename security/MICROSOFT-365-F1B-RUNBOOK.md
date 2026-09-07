@@ -143,7 +143,9 @@ onderdeel van de smoke.
   rollback). Het script weigert zolang `login_private.audit_log` regels bevat; exporteer eerst.
   `login_gateway` gaat op NOLOGIN; beide rollen blijven bestaan.
 - **Herstel van een half-afgeronde koppeling:** `pending` + bestaande identiteit →
-  `herstel_koppeling` (T2-route); `pending` zonder identiteit verloopt na 10 minuten naar
+  `herstel_koppeling` (T2-route). Een nieuwe geldige koppelcallback herkent daarnaast dezelfde
+  Azure-identiteit op het account, maakt een verse pending en herstelt die zonder opnieuw te
+  linken; een afwijkende of extra OAuth-identiteit wordt geweigerd. `pending` zonder identiteit verloopt na 10 minuten naar
   `failed` (`pending_verlopen`) en houdt het slot niet bezet.
 
 ## 7. Wat er nooit in logs of audit staat
@@ -159,7 +161,7 @@ ontbreekt er één, dan is de knop verborgen en antwoorden de routes neutraal (4
 | Onderdeel | Pad | Gedrag |
 |---|---|---|
 | Start inloggen | `GET /auth/microsoft-login/start[?next=]` | **canonieke fondshost** (`canoniekeFondsHost`: strikt, productie zonder poort; ongeldig → 404) → host→fonds, config, fondsflag, **atomische tempolimiet** `microsoft_login_start` (20 per 10 min per HMAC-SHA256(ip\|host) onder de loginsleutel; `login_private.tel_startpoging`, migratie `2026_09_07_microsoft_login_startlimiet.sql`; telling mislukt = weigeren), bestaande sessie → `/`, veilig vervolgpad, versleutelde eenmalige transactie, 302 naar Entra met exact `openid profile` + PKCE |
-| Callback | `GET /auth/microsoft-login/callback` | canonieke fondshost (ongeldig/onbekend → neutrale 404, nooit een redirect uit `req.url`) → consumeer transactie (replay dood) → tokenwissel → RS256 → exacte claims → inloggen (`zoek_identiteit` active vóór `signInWithIdToken`, kruiscontrole, profiel in host-fonds, `markeer_gebruikt`) of koppelen (reserveer → `linkIdentity` → verifieer → activeer). Elke fout: één neutrale redirect met supportcode |
+| Callback | `GET /auth/microsoft-login/callback` | canonieke fondshost (ongeldig/onbekend → neutrale 404, nooit een redirect uit `req.url`) → consumeer transactie (replay dood) → tokenwissel → RS256 → exacte claims → inloggen (`zoek_identiteit` active vóór `signInWithIdToken`, kruiscontrole, profiel in host-fonds, `markeer_gebruikt`) of koppelen (bestaande OAuth-identiteit controleren → reserveer → link of idempotent herstel → actuele GoTrue-gebruiker lezen → verifieer → activeer). Elke fout: één neutrale redirect met supportcode |
 | Koppelen starten | `GET /api/microsoft-login/koppelen/start` | `withFondsRoute`, `profile.manage.own`, hostGuard afdwingen, DB-limiet `microsoft_login_start` per gebruiker; 409 bij bestaande levende binding |
 | Status / ontkoppelen / herstel | `GET/DELETE/POST /api/microsoft-login/koppeling` | status zonder tid/oid/sub/e-mail, mét `sessieViaMicrosoft`; ontkoppelen = `start_intrekking` → `unlinkIdentity` → `voltooi_intrekking`, daarna **deterministisch**: was de sessie via Microsoft, dan wordt zij server-side beëindigd (`uitgelogd: true`, kaart → `/login`), anders blijft de wachtwoordsessie (`uitgelogd: false`); mislukt unlink: blijft `revoking`, kaart biedt "Opnieuw proberen"; herstel idempotent (`herstel_koppeling`) |
 | Guard L3 | `withFondsRoute` (dep `beoordeelOAuthSessie`), `haalFondsSessie`, tenant-layout, login-layout, platform-layout | alleen bij `amr ∋ oauth` wordt `levende_binding` geraadpleegd; niet-`active` → sessie beëindigd (`/login?fout=microsoft`, wrapper: exact de bestaande 401; platform: `?fout=geen_toegang`, R-34). Gatewayfout = fail-closed |

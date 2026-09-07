@@ -149,7 +149,11 @@ Concreet:
    (zelfde `user.id`, `identity.provider_id === sub`) → activeren. Omdat `linkIdentity` de
    identiteit en het token in één databasetransactie uitgeeft en de hook binnen die transactie
    weigert zonder reservering, kan er geen identiteit zonder reservering ontstaan. Callback en
-   retry zijn idempotent; ontkoppelen = `revoking` → `unlinkIdentity` → `revoked`, en een
+   retry zijn idempotent. Na `linkIdentity` wordt de actuele GoTrue-gebruiker opnieuw gelezen
+   voordat de binding actief wordt. Bestaat dezelfde Azure-identiteit al op het account na een
+   onderbroken of afgekeurde eerdere poging, dan maakt een nieuwe geldige callback een verse
+   `pending`-binding en herstelt die zonder een tweede linkpoging; een andere OAuth-identiteit
+   wordt vóór reserveren geweigerd. Ontkoppelen = `revoking` → `unlinkIdentity` → `revoked`, en een
    `revoking`-binding wordt door de hook al geweigerd.
 8. **Private loginidentiteitslaag achter een eigen minimale databaserol.** Schema
    `login_private` met bindingen (inclusief `sub`, `tid`, `oid`), eenmalige transacties en

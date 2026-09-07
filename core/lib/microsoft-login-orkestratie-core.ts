@@ -330,6 +330,12 @@ export function maakMicrosoftLogin(deps: OrkestratieDeps) {
     const profielFonds = await deps.auth.profielFondsId(gebruiker.id);
     if (profielFonds !== tx.fondsId) throw await weiger(profielFonds ? "fonds_mismatch" : "profiel_ontbreekt", gebruiker.id);
 
+    const bestaandeOAuth = gebruiker.identities.filter((i) => i.provider !== "email" && i.provider !== "phone");
+    const bestaandeAzure = azureIdentiteit(gebruiker.identities);
+    if (bestaandeOAuth.length > 0 && (!bestaandeAzure || bestaandeAzure.providerId !== identiteit.sub)) {
+      throw await weiger("identiteit_mismatch", gebruiker.id);
+    }
+
     let bindingId: string;
     try {
       bindingId = await deps.gateway.reserveerIdentiteit({ fondsId: tx.fondsId, userId: gebruiker.id, identiteit, correlatieId: ctx.correlatieId });
@@ -338,14 +344,32 @@ export function maakMicrosoftLogin(deps: OrkestratieDeps) {
       throw faal(microsoftLoginFoutcategorie(e), e);
     }
 
+    // Idempotent herstel wanneer GoTrue de Azure-identiteit in een eerdere
+    // poging al aan precies dit account heeft gehangen, maar de app de pending
+    // binding nog niet kon activeren. `sub` is bij de Azure-provider exact de
+    // provider-id; de DB-binding bevat daarnaast het door ons geverifieerde
+    // tid/oid en een latere tokenuitgifte wordt opnieuw door de hook getoetst.
+    if (bestaandeAzure) {
+      try {
+        await deps.gateway.herstelKoppeling({ bindingId, userId: gebruiker.id, sub: identiteit.sub });
+      } catch (e) {
+        throw faal("activering_mislukt", e);
+      }
+      return { intent: "koppelen", correlatieId: ctx.correlatieId };
+    }
+
     const link = await deps.auth.linkIdentity({ token: idToken, nonce: geheim.nonce });
     if ("fout" in link) {
       const categorie: MicrosoftLoginFoutcategorie = link.fout === "hook_geweigerd" ? "hook_geweigerd" : "link_geweigerd";
       await deps.gateway.markeerMislukt({ bindingId, userId: gebruiker.id, categorie }).catch(() => undefined);
       throw faal(categorie);
     }
-    const az = azureIdentiteit(link.user.identities);
-    if (link.user.id !== gebruiker.id || !az || az.providerId !== identiteit.sub) {
+    // Vraag na de link de actuele GoTrue-gebruiker opnieuw op. De tokenrespons
+    // kan een gebruikerssnapshot van vóór de identity-insert bevatten, terwijl
+    // getUser() de definitieve identiteitstoestand teruggeeft.
+    const actueel = await deps.auth.huidigeGebruiker();
+    const az = actueel ? azureIdentiteit(actueel.identities) : null;
+    if (link.user.id !== gebruiker.id || !actueel || actueel.id !== gebruiker.id || !az || az.providerId !== identiteit.sub) {
       await deps.gateway.markeerMislukt({ bindingId, userId: gebruiker.id, categorie: "identiteit_mismatch" }).catch(() => undefined);
       // De gelinkte sessie is nu `oauth` zonder activering: beëindig haar overal.
       await deps.auth.signOut("global");

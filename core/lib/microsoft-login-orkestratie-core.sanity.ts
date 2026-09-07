@@ -307,6 +307,40 @@ test("koppelen happy path: reserveer → link → verifieer → activeer; sessie
   assert.deepEqual(w.audit.map((a) => a.gebeurtenis), ["koppelen.gestart", "koppelen.gereserveerd"]);
 });
 
+test("koppelen verifieert na link tegen de actuele GoTrue-gebruiker, niet tegen een verouderde response", async () => {
+  const w = wereld({ sessie: { id: USER, identities: [{ provider: "email", providerId: USER }] } });
+  const a = auth(w);
+  const f = maakMicrosoftLogin({
+    gateway: gateway(w), oidc: oidc(w, tokenOpHash()), config: () => config,
+    auth: {
+      ...a,
+      async linkIdentity() {
+        w.aanroepen.push("link");
+        w.sessie = { id: USER, identities: [{ provider: "email", providerId: USER }, { provider: "azure", providerId: SUB }] };
+        return { user: { id: USER, identities: [{ provider: "email", providerId: USER }] } };
+      },
+    },
+  });
+  const r = await startEnCallback(w, f, "koppelen");
+  assert.equal(r.intent, "koppelen");
+  assert.equal(w.bindingen[0]!.status, "active");
+  assert.ok(!w.aanroepen.includes("signOut:global"));
+});
+
+test("koppelen herstelt idempotent wanneer dezelfde Azure-identiteit al aan het account hangt", async () => {
+  const w = wereld({ sessie: { id: USER, identities: [{ provider: "email", providerId: USER }, { provider: "azure", providerId: SUB }] } });
+  const r = await startEnCallback(w, flow(w, tokenOpHash()), "koppelen");
+  assert.equal(r.intent, "koppelen");
+  assert.deepEqual(w.aanroepen.filter((a) => !["actief", "token"].includes(a)), ["reserveer", "herstel"]);
+  assert.equal(w.bindingen[0]!.status, "active");
+});
+
+test("koppelen weigert een reeds gekoppelde andere OAuth-identiteit vóór reserveren", async () => {
+  const w = wereld({ sessie: { id: USER, identities: [{ provider: "email", providerId: USER }, { provider: "azure", providerId: "andere-sub" }] } });
+  await faaltMet(startEnCallback(w, flow(w, tokenOpHash()), "koppelen"), "identiteit_mismatch");
+  assert.ok(!w.aanroepen.includes("reserveer") && !w.aanroepen.includes("link") && !w.aanroepen.includes("herstel"));
+});
+
 test("koppelen zonder passende sessie → sessie_mismatch, geen reservering", async () => {
   const w = wereld({ sessie: { id: "iemand-anders", identities: [] } });
   await faaltMet(startEnCallback(w, flow(w, tokenOpHash()), "koppelen"), "sessie_mismatch");
