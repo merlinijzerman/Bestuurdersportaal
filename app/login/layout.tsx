@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { beeindigSessie, beoordeelOAuthSessie } from "@/core/lib/microsoft-login-sessieguard";
 
 // Server-laag rond de (client-)loginpagina. Twee taken:
 //  1. noindex/follow: de login mag niet in de zoekindex, maar links erin mogen
@@ -26,13 +27,20 @@ export default async function LoginLayout({
   } = await supabase.auth.getUser();
 
   if (user) {
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("id")
-      .eq("id", user.id)
-      .maybeSingle();
+    // Guard L3 (#335 T2): een `oauth`-sessie zonder actieve Microsoft-binding
+    // blijft op de login — sessie beëindigen, géén redirect naar `/` (dat zou een
+    // lus met de tenant-layout geven). Wachtwoordsessies: geen gateway-aanroep.
+    if (!(await beoordeelOAuthSessie(supabase, user.id)).toegestaan) {
+      await beeindigSessie(supabase);
+    } else {
+      const { data: profiel } = await supabase
+        .from("profielen")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
 
-    if (profiel) redirect("/");
+      if (profiel) redirect("/");
+    }
   }
 
   return children;

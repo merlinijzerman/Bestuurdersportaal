@@ -8,12 +8,11 @@
 //  .test.ts) plus sha256-pins op de kleine, stabiele kernbestanden.
 //
 //  Twee soorten asserties:
-//    • INVARIANT — moet ook ná T2 blijven gelden (wachtwoordpad byte-identiek,
-//      ontwerp §6.13). Faalt deze, dan is er een regressie.
-//    • BASISLIJN — beschrijft de huidige toestand die T2 BEWUST wijzigt (bv.
-//      /auth/callback kent nog geen identiteitsopschoning; er is één inlog-
-//      methode). Faalt deze in de T2-PR, dan hoort de wijziging in de PR-tekst
-//      gemotiveerd te zijn en wordt de assertie in dezelfde PR omgezet.
+//    • INVARIANT — geldt vóór én ná T2 (wachtwoordpad byte-identiek, ontwerp
+//      §6.13). Faalt deze, dan is er een regressie.
+//    • T2 — de bewuste wijzigingen van T2 (guard L3 in elk chokepoint, L4 in
+//      /auth/callback, Microsoft-knop). Tot B4 stonden hier BASISLIJN-asserties
+//      die het oude gedrag pinden; ze zijn in dezelfde PR omgezet (B4/B5).
 //
 //  Pins bijwerken: alleen bewust, en bereken de nieuwe sha256 zelf (CLAUDE.md,
 //  patroon generatie-kern.sanity.ts) — neem hem niet over uit de foutmelding.
@@ -78,8 +77,10 @@ test("LK-2 INVARIANT — login-layout stuurt alleen een sessie MET profielen-rij
   assert.equal((loginLayout.match(/redirect\(/g) ?? []).length, 1, "precies één redirect in de login-layout");
 });
 
-test("LK-2b BASISLIJN — login-layout toetst nog geen Microsoft-binding (guard L3 komt in T2)", () => {
-  assert.doesNotMatch(loginLayout, /amr|oauth|actieveBinding|levendeBinding|microsoft/i);
+test("LK-2b T2 — login-layout: oauth-sessie zonder actieve binding blijft op de login (beëindigd), geen redirect naar '/'", () => {
+  assert.match(loginLayout, /beoordeelOAuthSessie\(supabase, user\.id\)/);
+  assert.match(loginLayout, /if \(!\(await beoordeelOAuthSessie\(supabase, user\.id\)\)\.toegestaan\) \{\s*await beeindigSessie\(supabase\);\s*\} else \{/);
+  assert.equal((loginLayout.match(/redirect\(/g) ?? []).length, 1, "nog steeds precies één redirect (naar '/')");
 });
 
 // ── LK-3 · /auth/callback ────────────────────────────────────────────────────
@@ -92,8 +93,13 @@ test("LK-3 INVARIANT — /auth/callback: code-exchange, veilig vervolgpad, vaste
   assert.doesNotMatch(authCallback, /service[_-]?role|SUPABASE_SERVICE/i);
 });
 
-test("LK-3b BASISLIJN — /auth/callback doet vóór T2 niets met identiteiten (L4 = nieuw gedrag)", () => {
-  assert.doesNotMatch(authCallback, /identities|unlinkIdentity|getUserIdentities|signOut|azure|amr/);
+test("LK-3b T2 — /auth/callback L4: azure-identiteit zonder actieve binding → unlink + sessie weg + /login?error=auth_callback", () => {
+  assert.match(authCallback, /if \(user && heeftAzureIdentiteit\(user\)\) \{/, "alleen bij een azure-identiteit wordt de gateway geraadpleegd");
+  assert.match(authCallback, /beoordeelOAuthSessie\(supabase, user\.id\)/);
+  assert.match(authCallback, /supabase\.auth\.unlinkIdentity\(azure\)/);
+  assert.match(authCallback, /await beeindigSessie\(supabase\);/);
+  assert.equal((authCallback.match(/\/login\?error=auth_callback/g) ?? []).length, 2, "L4 en het bestaande faalpad delen dezelfde neutrale redirect");
+  assert.doesNotMatch(authCallback, /accessToken|idToken|refreshToken|console\.(log|error)\(.*user/);
 });
 
 // ── LK-4 · haalFondsSessie ───────────────────────────────────────────────────
@@ -108,8 +114,11 @@ test("LK-4 INVARIANT — haalFondsSessie: geen user → /login; geen fonds-profi
   assert.match(fondsSessie, /export type FondsSessie = \{\s*userId: string;\s*fondsId: string;\s*rol: string \| null;\s*\};/);
 });
 
-test("LK-4b BASISLIJN — haalFondsSessie kent vóór T2 geen bindingstoets (guard L3 komt in T2)", () => {
-  assert.doesNotMatch(fondsSessie, /amr|oauth|actieveBinding|levendeBinding|microsoft/i);
+test("LK-4b T2 — haalFondsSessie: guard L3 direct ná de sessiecontrole, vóór het profiel", () => {
+  const guard = fondsSessie.indexOf("beoordeelOAuthSessie(supabase, user.id)");
+  assert.ok(guard > fondsSessie.indexOf('if (!user) redirect("/login")'), "guard ná de sessiecontrole");
+  assert.ok(guard < fondsSessie.indexOf('.from("profielen")'), "guard vóór de profielresolutie");
+  assert.match(fondsSessie, /await beeindigSessie\(supabase\);\s*redirect\(LOGIN_NA_BEEINDIGING\);/);
 });
 
 // ── LK-5 · Sessieopbouw en refresh ───────────────────────────────────────────
@@ -136,7 +145,7 @@ test("LK-6 INVARIANT — dashboard-layout: geen user → /login; geen profiel �
   assert.match(dashboardLayout, /if \(!user\) \{\s*redirect\("\/login"\);\s*\}/);
   assert.match(dashboardLayout, /if \(!profiel\) \{\s*redirect\("\/login"\);\s*\}/);
   assert.equal((dashboardLayout.match(/redirect\("\/login"\)/g) ?? []).length, 2, "precies twee redirects naar /login");
-  assert.equal((dashboardLayout.match(/redirect\(/g) ?? []).length, 2, "de layout redirect nergens anders heen (mismatch = inline pagina, voorkomt lus)");
+  assert.equal((dashboardLayout.match(/redirect\(/g) ?? []).length, 3, "twee naar /login + de L3-beëindiging; mismatch blijft een inline pagina (voorkomt lus)");
   assert.match(dashboardLayout, /beoordeelToegang\(\{\s*resolutie,\s*sessieFondsId,\s*enforce: tenantEnforceAan\(\),?\s*\}\)/);
   assert.match(dashboardLayout, /<h1 className="text-lg font-semibold">Geen toegang op dit adres<\/h1>/);
   assert.match(dashboardLayout, /"Dit webadres hoort bij een ander fonds dan uw account\. Log in via het adres van uw eigen fonds\."/);
@@ -145,8 +154,11 @@ test("LK-6 INVARIANT — dashboard-layout: geen user → /login; geen profiel �
   assert.match(dashboardLayout, /if \(tenantEnforceAan\(\)\) \{\s*oordeel = \{ toegestaan: false, reden: "onbekende-host" \};/);
 });
 
-test("LK-6b BASISLIJN — dashboard-layout toetst vóór T2 geen Microsoft-binding (guard L3 komt in T2)", () => {
-  assert.doesNotMatch(dashboardLayout, /amr|oauth|actieveBinding|levendeBinding|microsoft-login/i);
+test("LK-6b T2 — dashboard-layout: guard L3 ná de sessiecontrole en vóór profiel/host-logica", () => {
+  const guard = dashboardLayout.indexOf("beoordeelOAuthSessie(supabase, user.id)");
+  assert.ok(guard > dashboardLayout.indexOf('redirect("/login")'), "guard ná !user");
+  assert.ok(guard < dashboardLayout.indexOf('.from("profielen")'), "guard vóór de profielresolutie");
+  assert.match(dashboardLayout, /await beeindigSessie\(supabase\);\s*redirect\(LOGIN_NA_BEEINDIGING\);/);
 });
 
 // ── LK-7 · Platform-layout en -login ─────────────────────────────────────────
@@ -164,7 +176,7 @@ test("LK-7 INVARIANT — beveiligde platform-layout: drie redirects in vaste vol
     assert.ok(m.index > positie, `poort uit volgorde: ${patroon}`);
     positie = m.index;
   }
-  assert.equal((platformLayout.match(/redirect\(/g) ?? []).length, 3);
+  assert.equal((platformLayout.match(/redirect\(/g) ?? []).length, 4, "drie poorten + de R-34-weigering van oauth-sessies");
   assert.match(platformLayout, /export const dynamic = "force-dynamic";/);
 });
 
@@ -174,8 +186,12 @@ test("LK-7b INVARIANT — platform-login: eigen wachtwoordpad + MFA; ?fout=geen_
   assert.match(platformLogin, /mfa\.getAuthenticatorAssuranceLevel\(\)/);
 });
 
-test("LK-7c BASISLIJN — platform-layout weigert vóór T2 nog geen oauth-sessies expliciet (R-34 komt in T2)", () => {
-  assert.doesNotMatch(platformLayout, /amr|oauth|microsoft/i);
+test("LK-7c T2 — platform-layout weigert elke oauth-sessie (R-34) vóór de identiteitspoort, zonder gateway-aanroep", () => {
+  const oauth = platformLayout.indexOf("sessieIsOAuth(await huidigAccessToken(sessie))");
+  assert.ok(oauth > platformLayout.indexOf('redirect("/platform/login")'), "ná !user");
+  assert.ok(oauth < platformLayout.indexOf("huidigePlatformIdentiteit()"), "vóór de identiteitspoort");
+  assert.match(platformLayout, /if \(sessieIsOAuth\(await huidigAccessToken\(sessie\)\)\) \{\s*redirect\("\/platform\/login\?fout=geen_toegang"\);/);
+  assert.doesNotMatch(platformLayout, /levendeBinding|microsoft-login-gateway/, "platform raadpleegt de bindingsgateway niet");
 });
 
 // ── LK-8 · Uitloggen ─────────────────────────────────────────────────────────
@@ -196,8 +212,12 @@ test("LK-9 INVARIANT — withFondsRoute: geen sessie → exact {error:'Niet inge
   assert.match(routeWrapper, /readonly hostGuard: "afdwingen" \| "geen" \| "route-eigen";/);
 });
 
-test("LK-9b BASISLIJN — de wrapper kent vóór T2 geen bindingstoets (guard L3 komt in T2, in dezelfde deps-vorm)", () => {
-  assert.doesNotMatch(routeWrapper, /amr|actieveBinding|levendeBinding|microsoft-login/i);
+test("LK-9b T2 — wrapper: guard L3 als geïnjecteerde dep, direct ná auth, met exact de 401-vorm van 'geen sessie'", () => {
+  assert.match(routeWrapper, /beoordeelOAuthSessie: \(supabase: RlsClient, gebruikerId: string\) => Promise<\{ toegestaan: boolean \}>;/);
+  assert.match(routeWrapper, /if \(!user\) return nietIngelogd\(\);[\s\S]{0,600}?if \(!\(await deps\.beoordeelOAuthSessie\(supabase, user\.id\)\)\.toegestaan\) return nietIngelogd\(\);/);
+  const guard = routeWrapper.indexOf("deps.beoordeelOAuthSessie(supabase, user.id)");
+  assert.ok(guard < routeWrapper.indexOf("deps.haalProfiel(supabase, user.id)"), "guard vóór de profielresolutie");
+  assert.match(routeWrapper, /await import\("@\/core\/lib\/microsoft-login-sessieguard"\)/, "lazy: de sanity blijft server-loos");
 });
 
 // ── LK-10 · Registerdekking van app/auth/** ──────────────────────────────────
@@ -228,11 +248,14 @@ test("LK-10 CENSUS — app/auth/** telt precies vier routes, alle onder de regis
 // ── LK-11 · Byte-pins op de kleine, stabiele kernbestanden ───────────────────
 
 test("LK-11 PIN — sha256 van de auth-kernbestanden (bewust bijwerken; nieuwe waarde zelf berekenen)", () => {
+  // B4 (#335 T2): fonds-sessie.ts, app/auth/callback/route.ts en app/login/layout.tsx
+  // bewust opnieuw gepind na guard L3 / L4. supabase-server.ts, redirect-veilig.ts
+  // en app/login/page.tsx (tot B5) ongewijzigd.
   const pins: Record<string, string> = {
-    "core/lib/fonds-sessie.ts": "71653f231dcc6447d688b901c80ea5f77283cc1868cb5120358e6c33538368b0",
-    "app/auth/callback/route.ts": "a321563ab0e7b2bba9e80d9f5a64bf477a9aa680e42156e622c1b24f2bb57faa",
+    "core/lib/fonds-sessie.ts": "6a5385ceb9daac7e28d19a83f1a76fc952f5004d2dff243470f92f08e39c57ec",
+    "app/auth/callback/route.ts": "d94d3c6d7589c20c9e51866fa36e540aed29f66624de0b486a0cf603f236cf57",
     "core/lib/supabase-server.ts": "ff104b6a4bb390ee3563b901dd461fc6e82f2086cb80923816f8ec381a698872",
-    "app/login/layout.tsx": "870513cb5076fdb124e7306d74e1020c455b9fa9a4563506d8a795b4872a56a6",
+    "app/login/layout.tsx": "99e115569a2ef4e835331a0a55d474a07dac24e42bc926b215206392b93ac4ae",
     "app/login/page.tsx": "9c8f8a3b2144cf812b42d70d92dc0634bcdf73ca390831b8fcab938cba4b3f04",
     "core/lib/redirect-veilig.ts": "e8986ce5c29d7b564ba8e75f0edc6c0913d350daf637d70c61397d2b7b7b97e4",
   };
