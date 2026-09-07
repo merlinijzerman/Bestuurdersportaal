@@ -57,15 +57,21 @@ test("tokenrequest-body: authorization_code + PKCE + exact openid profile, geen 
   assert.deepEqual([...body.keys()].sort(), ["client_id", "client_secret", "code", "code_verifier", "grant_type", "redirect_uri", "scope"]);
 });
 
-test("tokenresponse: refresh_token → weigeren; extra scope → weigeren; id_token verplicht", () => {
+test("tokenresponse: refresh_token verboden; gevraagde scopes vereist; extra access-token-scopes worden genegeerd", () => {
   assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", refresh_token: "r" }), {
     ok: false, categorie: "token_response_ongeldig", reden: "refresh_token_aanwezig",
   });
   assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid profile offline_access" }), {
-    ok: false, categorie: "token_response_ongeldig", reden: "extra_scope",
+    ok: true, idToken: "a.b.c",
   });
   assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid profile email" }), {
-    ok: false, categorie: "token_response_ongeldig", reden: "extra_scope",
+    ok: true, idToken: "a.b.c",
+  });
+  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: "openid User.Read" }), {
+    ok: false, categorie: "token_response_ongeldig", reden: "scope_ontbreekt",
+  });
+  assert.deepEqual(beoordeelTokenResponse({ id_token: "a.b.c", scope: ["openid", "profile"] }), {
+    ok: false, categorie: "token_response_ongeldig", reden: "scope_formaat",
   });
   assert.deepEqual(beoordeelTokenResponse({ access_token: "x" }), {
     ok: false, categorie: "token_response_ongeldig", reden: "id_token_ontbreekt",
