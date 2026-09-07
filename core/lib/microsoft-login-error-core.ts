@@ -1,18 +1,34 @@
 // ============================================================================
 //  core/lib/microsoft-login-error-core.ts — PURE foutcategorieën Microsoft-login
-//  (fase 1B, #335 T2, besluit 0211). Geen I/O, geen server-imports.
+//  (fase 1B, #335 T2, besluit 0211). Geen I/O; wél Node-afhankelijk via
+//  binding-core (node:crypto) — daarom NOOIT in een "use client"-component
+//  importeren. De browserveilige publieke teksten/codes staan in
+//  microsoft-login-meldingen-core.ts en worden hier re-geëxporteerd voor de
+//  server-kant.
 // ----------------------------------------------------------------------------
 //  Intern kent de flow veel categorieën (audit, runtime-log, supportcode). Extern
 //  bestaan er precies TWEE oppervlakken met vaste, neutrale teksten:
-//    • loginscherm  — één melding voor élke mislukte Microsoft-login (V11: ook
-//                     voor het bestaande `?error=auth_callback`); geen onderscheid
-//                     onbekend account / andere tenant / gast / ingetrokken / pending.
-//    • profielkaart — drie meldingen (koppelen mislukt · reservering verlopen ·
-//                     ontkoppelen niet afgerond).
+//    • loginscherm  — één melding voor élke mislukte externe login (V11);
+//    • profielkaart — drie meldingen (koppelen mislukt · verlopen · ontkoppelen).
 //  Ruwe provider-, GoTrue- of databasemeldingen bereiken de gebruiker nooit.
 // ============================================================================
 
 import { LOGIN_GATEWAY_FOUTCATEGORIEEN, type LoginGatewayFoutcategorie } from "@/core/lib/microsoft-login-binding-core";
+import type { ProfielMicrosoftLoginCode } from "@/core/lib/microsoft-login-meldingen-core";
+
+export {
+  LOGIN_MICROSOFT_MELDING,
+  LOGIN_FOUT_PARAM,
+  LOGIN_FOUT_WAARDE,
+  SUPPORTCODE_PARAM,
+  SUPPORTCODE_RE,
+  PROFIEL_MICROSOFT_LOGIN_CODES,
+  PROFIEL_MICROSOFT_LOGIN_MELDINGEN,
+  isProfielMicrosoftLoginCode,
+  supportcode,
+  VERBODEN_MELDINGWOORDEN,
+  type ProfielMicrosoftLoginCode,
+} from "@/core/lib/microsoft-login-meldingen-core";
 
 export const MICROSOFT_LOGIN_FOUTCATEGORIEEN = [
   // configuratie / infrastructuur
@@ -22,6 +38,7 @@ export const MICROSOFT_LOGIN_FOUTCATEGORIEEN = [
   "gateway_db_onbereikbaar",
   "gateway_fout",
   // flow / transactie
+  "ratelimit",
   "transactie_ongeldig",
   "host_mismatch",
   "geweigerd_door_gebruiker",
@@ -87,30 +104,6 @@ export function microsoftLoginFoutcategorie(fout: unknown): MicrosoftLoginFoutca
   return "onverwachte_fout";
 }
 
-// ── Externe oppervlakken ─────────────────────────────────────────────────────
-
-/** Loginscherm: één neutrale melding (V11) voor élke mislukte externe login —
- *  `?fout=microsoft` én het bestaande `?error=auth_callback` — zonder provider- of
- *  accountdetails, ongeacht de interne categorie. */
-export const LOGIN_MICROSOFT_MELDING =
-  "Inloggen is niet gelukt. Log in met uw e-mailadres en wachtwoord of probeer het later opnieuw; neem contact op met uw beheerder als het probleem aanhoudt.";
-
-/** Querysleutel op /login: alleen de vaste waarde `microsoft` plus een supportcode. */
-export const LOGIN_FOUT_PARAM = "fout";
-export const LOGIN_FOUT_WAARDE = "microsoft";
-export const SUPPORTCODE_PARAM = "sc";
-
-/** Profielkaart: drie publieke codes, drie teksten. */
-export const PROFIEL_MICROSOFT_LOGIN_CODES = ["koppelen", "verlopen", "ontkoppelen"] as const;
-export type ProfielMicrosoftLoginCode = (typeof PROFIEL_MICROSOFT_LOGIN_CODES)[number];
-
-export const PROFIEL_MICROSOFT_LOGIN_MELDINGEN: Readonly<Record<ProfielMicrosoftLoginCode, string>> = {
-  koppelen:
-    "Koppelen is niet gelukt. Controleer of dit Microsoft-account al aan een ander portaalaccount is gekoppeld, of neem contact op met uw beheerder.",
-  verlopen: "De koppeling is verlopen. Start het koppelen opnieuw.",
-  ontkoppelen: "Ontkoppelen is nog niet afgerond. Probeer het opnieuw.",
-};
-
 /** Beeldt een interne categorie af op de publieke profielcode. Alles wat geen
  *  verval of unlink is, is 'koppelen' — bewust grof. */
 export function profielCodeVoor(categorie: MicrosoftLoginFoutcategorie): ProfielMicrosoftLoginCode {
@@ -118,22 +111,3 @@ export function profielCodeVoor(categorie: MicrosoftLoginFoutcategorie): Profiel
   if (categorie === "unlink_mislukt") return "ontkoppelen";
   return "koppelen";
 }
-
-/** Supportcode = eerste 8 tekens van de correlatie-id (UUID); geen inhoud. */
-export function supportcode(correlatieId: string): string {
-  return correlatieId.replace(/-/g, "").slice(0, 8).toUpperCase();
-}
-
-/** Woorden die in geen enkele externe melding mogen staan (contracttest §C6). */
-export const VERBODEN_MELDINGWOORDEN = [
-  "tenant",
-  "gast",
-  "ingetrokken",
-  "onbekend account",
-  "bestaat niet",
-  "pending",
-  "revok",
-  "@",
-  "token",
-  "claim",
-] as const;

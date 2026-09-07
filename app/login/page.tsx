@@ -15,7 +15,8 @@ import {
   LOGIN_FOUT_WAARDE,
   LOGIN_MICROSOFT_MELDING,
   SUPPORTCODE_PARAM,
-} from "@/core/lib/microsoft-login-error-core";
+  SUPPORTCODE_RE,
+} from "@/core/lib/microsoft-login-meldingen-core";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const error = sp.error;
   const sc = sp[SUPPORTCODE_PARAM];
   const melding = fout === LOGIN_FOUT_WAARDE || error === "auth_callback" ? LOGIN_MICROSOFT_MELDING : null;
-  const supportcode = melding && typeof sc === "string" && /^[A-Z0-9]{8}$/.test(sc) ? sc : null;
+  const supportcode = melding && typeof sc === "string" && SUPPORTCODE_RE.test(sc) ? sc : null;
 
   const host = (await headers()).get("host");
   const microsoftLogin = await microsoftLoginBeschikbaarVoorHost(host);

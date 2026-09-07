@@ -67,7 +67,8 @@ test("LK-1b T2 — de server-pagina beslist over de Microsoft-knop (fail-closed)
   assert.doesNotMatch(loginPagina, /^"use client";/m, "de pagina is nu een server component");
   assert.match(loginPagina, /microsoftLoginBeschikbaarVoorHost\(host\)/);
   assert.match(loginPagina, /fout === LOGIN_FOUT_WAARDE \|\| error === "auth_callback" \? LOGIN_MICROSOFT_MELDING : null/, "V11: één melding voor beide");
-  assert.match(loginPagina, /\/\^\[A-Z0-9\]\{8\}\$\/\.test\(sc\)/, "supportcode strikt gevalideerd uit de URL");
+  assert.match(loginPagina, /SUPPORTCODE_RE\.test\(sc\)/, "supportcode strikt gevalideerd uit de URL");
+  assert.match(loginPagina, /from "@\/core\/lib\/microsoft-login-meldingen-core"/, "de pagina leest de teksten uit de browserveilige module");
   // De knop is een kale link naar de startroute, zonder parameters; alleen gerenderd bij `microsoftLogin`.
   assert.match(loginForm, /\{microsoftLogin && \(/);
   assert.match(loginForm, /href="\/auth\/microsoft-login\/start"/);
@@ -262,7 +263,7 @@ test("LK-11 PIN — sha256 van de auth-kernbestanden (bewust bijwerken; nieuwe w
     "app/auth/callback/route.ts": "d94d3c6d7589c20c9e51866fa36e540aed29f66624de0b486a0cf603f236cf57",
     "core/lib/supabase-server.ts": "ff104b6a4bb390ee3563b901dd461fc6e82f2086cb80923816f8ec381a698872",
     "app/login/layout.tsx": "99e115569a2ef4e835331a0a55d474a07dac24e42bc926b215206392b93ac4ae",
-    "app/login/page.tsx": "24fe7c00f77334046393c07352e53f40353fbc428fb6ea873e20c153c8984b94",
+    "app/login/page.tsx": "62e135ae3215872e09a046bb6a438a1db596ab56e0f4c3e33e2b0fa119600fbe",
     "core/lib/redirect-veilig.ts": "e8986ce5c29d7b564ba8e75f0edc6c0913d350daf637d70c61397d2b7b7b97e4",
     "app/login/_components/LoginForm.tsx": "ab14b4e2ec11cc11394a1ab638437d9e2376fbff515e03df3611c9b63c798b53",
   };

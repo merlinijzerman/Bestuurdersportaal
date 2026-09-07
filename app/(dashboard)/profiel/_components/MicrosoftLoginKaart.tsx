@@ -6,20 +6,23 @@
 // ----------------------------------------------------------------------------
 //  Rendert niets als het fonds Microsoft-login niet aan heeft (`beschikbaar:false`).
 //  Toont nooit tid/oid/sub of e-mail — alleen de toestand en tijdstippen.
-//  Blokkers vooraf expliciet (UX-principe): wat de gebruiker kan doen en wat een
-//  ontkoppeling voor de huidige sessie betekent.
+//  Ontkoppelen is deterministisch (reviewbevinding PR #339): de status meldt of de
+//  HUIDIGE sessie via Microsoft loopt; dan zegt de kaart vooraf dat u wordt
+//  uitgelogd en stuurt zij na `uitgelogd: true` naar /login. Anders blijft u
+//  ingelogd met uw wachtwoord en zegt de kaart dat.
+//  Importeert uitsluitend de browserveilige meldingen-module (geen node:*).
 // ============================================================================
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  PROFIEL_MICROSOFT_LOGIN_CODES,
+  isProfielMicrosoftLoginCode,
   PROFIEL_MICROSOFT_LOGIN_MELDINGEN,
-  type ProfielMicrosoftLoginCode,
-} from "@/core/lib/microsoft-login-error-core";
+  SUPPORTCODE_RE,
+} from "@/core/lib/microsoft-login-meldingen-core";
 
 type Status =
   | { beschikbaar: false }
-  | ({ beschikbaar: true } & (
+  | ({ beschikbaar: true; sessieViaMicrosoft?: boolean } & (
       | { status: "geen" }
       | { status: "pending"; herstelMogelijk: boolean; pendingVerlooptOp: string | null }
       | { status: "active"; geactiveerdOp: string | null; laatstGebruiktOp: string | null }
@@ -41,12 +44,9 @@ function meldingUitUrl(params: URLSearchParams): string | null {
   if (uitkomst === "gekoppeld") return "Microsoft-login is gekoppeld aan uw account.";
   if (uitkomst === "fout") {
     const code = params.get("c");
-    const bekend = (PROFIEL_MICROSOFT_LOGIN_CODES as readonly string[]).includes(code ?? "")
-      ? (code as ProfielMicrosoftLoginCode)
-      : "koppelen";
+    const tekst = PROFIEL_MICROSOFT_LOGIN_MELDINGEN[isProfielMicrosoftLoginCode(code) ? code : "koppelen"];
     const sc = params.get("sc");
-    const tekst = PROFIEL_MICROSOFT_LOGIN_MELDINGEN[bekend];
-    return sc && /^[A-Z0-9]{8}$/.test(sc) ? `${tekst} Supportcode: ${sc}` : tekst;
+    return sc && SUPPORTCODE_RE.test(sc) ? `${tekst} Supportcode: ${sc}` : tekst;
   }
   return null;
 }
@@ -72,23 +72,29 @@ export default function MicrosoftLoginKaart() {
   }, []);
 
   if (!status?.beschikbaar) return null;
+  const viaMicrosoft = status.sessieViaMicrosoft === true;
 
   const ontkoppel = async () => {
-    if (
-      !confirm(
-        "Microsoft-login ontkoppelen? U kunt daarna alleen nog met uw wachtwoord inloggen. Bent u nu met Microsoft ingelogd, dan wordt u uitgelogd.",
-      )
-    )
-      return;
+    const vraag = viaMicrosoft
+      ? "Microsoft-login ontkoppelen? U bent nu met Microsoft ingelogd en wordt direct uitgelogd; daarna logt u in met uw wachtwoord."
+      : "Microsoft-login ontkoppelen? U blijft ingelogd met uw wachtwoord; inloggen met Microsoft is daarna niet meer mogelijk.";
+    if (!confirm(vraag)) return;
     setBezig(true);
     setMelding(null);
     try {
       const response = await fetch("/api/microsoft-login/koppeling", { method: "DELETE" });
-      setMelding(
-        response.ok
-          ? "Microsoft-login is ontkoppeld. U blijft ingelogd met uw wachtwoord."
-          : PROFIEL_MICROSOFT_LOGIN_MELDINGEN.ontkoppelen,
-      );
+      if (!response.ok) {
+        setMelding(PROFIEL_MICROSOFT_LOGIN_MELDINGEN.ontkoppelen);
+        await laad();
+        return;
+      }
+      const uitkomst = (await response.json()) as { ok: true; uitgelogd: boolean };
+      if (uitkomst.uitgelogd) {
+        // De server heeft de Microsoft-sessie beëindigd; één volledige navigatie naar de login.
+        window.location.replace("/login");
+        return;
+      }
+      setMelding("Microsoft-login is ontkoppeld. U blijft ingelogd met uw wachtwoord.");
       await laad();
     } catch {
       setMelding(PROFIEL_MICROSOFT_LOGIN_MELDINGEN.ontkoppelen);
@@ -135,6 +141,11 @@ export default function MicrosoftLoginKaart() {
           <p className="text-ok-ink font-medium">Gekoppeld</p>
           <p className="text-xs text-muted">
             Gekoppeld op: {datum(status.geactiveerdOp)} · Laatst gebruikt: {datum(status.laatstGebruiktOp)}
+          </p>
+          <p className="text-xs text-muted">
+            {viaMicrosoft
+              ? "U bent nu met Microsoft ingelogd. Ontkoppelen logt u direct uit."
+              : "U bent nu met uw wachtwoord ingelogd. Ontkoppelen laat deze sessie ongemoeid."}
           </p>
           <button
             disabled={bezig}

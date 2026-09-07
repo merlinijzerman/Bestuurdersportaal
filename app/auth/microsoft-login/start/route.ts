@@ -4,27 +4,27 @@
 //  route loopt bewust buiten withFondsRoute (geregistreerd in
 //  tests/cross-tenant/route-mechanismen.expected.json als "oauth-route").
 // ----------------------------------------------------------------------------
-//  Fail-closed volgorde: tempolimiet (V9) → host→fonds → configuratie → fondsflag
-//  → bestaande sessie met profiel → veilig vervolgpad → transactie → 302 Entra.
-//  Geen sessie, geen cookie, geen state/nonce buiten de versleutelde transactie.
-//  Elke weigering is neutraal (404 zonder fondsbestaan te lekken, of de ene
-//  loginmelding met supportcode); alleen de categorie gaat naar de runtime-log.
+//  Fail-closed volgorde: host→fonds → configuratie → fondsflag → atomische
+//  tempolimiet (V9: 20 per 10 min per HMAC(ip|host), geteld in de private gateway;
+//  telling mislukt = weigeren) → bestaande sessie met profiel → veilig vervolgpad
+//  → transactie → 302 Entra. Geen sessie, geen cookie, geen state/nonce buiten de
+//  versleutelde transactie. Elke weigering is neutraal (404 zonder fondsbestaan te
+//  lekken, of de ene loginmelding met supportcode); alleen de categorie gaat naar
+//  de runtime-log.
 // ============================================================================
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { haalFondsContext } from "@/core/lib/tenant-context";
 import { veiligVervolgpad } from "@/core/lib/redirect-veilig";
-import { microsoftLoginGeconfigureerd } from "@/core/lib/microsoft-login-config";
-import { microsoftLoginActief, microsoftLoginVoorRequest } from "@/core/lib/microsoft-login";
+import { microsoftLoginConfig } from "@/core/lib/microsoft-login-config";
+import { microsoftLoginActief, microsoftLoginVoorRequest, telStartpoging } from "@/core/lib/microsoft-login";
 import { MicrosoftLoginFlowFout } from "@/core/lib/microsoft-login-orkestratie-core";
 import { LOGIN_FOUT_PARAM, LOGIN_FOUT_WAARDE, microsoftLoginFoutcategorie, SUPPORTCODE_PARAM, supportcode } from "@/core/lib/microsoft-login-error-core";
-import { clientIpUitHeaders, maakVensterLimiter, startSleutel } from "@/core/lib/microsoft-login-ratelimit-core";
+import { clientIpUitHeaders, MICROSOFT_LOGIN_START_LIMIET, startSleutel } from "@/core/lib/microsoft-login-ratelimit-core";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
-// Per Node-proces (op Vercel: per instantie, best-effort — zie ratelimit-core).
-const limiter = maakVensterLimiter();
 
 function nietBeschikbaar(): NextResponse {
   return NextResponse.json({ error: "Deze inlogmethode is niet beschikbaar." }, { status: 404, headers: NO_STORE });
@@ -41,17 +41,32 @@ export async function GET(req: NextRequest) {
   const { origin, searchParams } = new URL(req.url);
   const host = req.headers.get("host")?.trim().toLowerCase() ?? "";
 
-  const tempo = limiter.beoordeel(startSleutel(clientIpUitHeaders((n) => req.headers.get(n)), host));
-  if (!tempo.toegestaan) {
-    console.warn("[MICROSOFT-LOGIN] start geweigerd: ratelimit");
-    return naarLogin(origin);
-  }
-
   const resolutie = await haalFondsContext(host);
   if (resolutie.type !== "gevonden") return nietBeschikbaar();
-  if (!microsoftLoginGeconfigureerd()) return nietBeschikbaar();
+  let config;
+  try {
+    config = microsoftLoginConfig();
+  } catch {
+    return nietBeschikbaar();
+  }
   const actief = await microsoftLoginActief(resolutie.fondsId).catch(() => ({ actief: false as const }));
   if (!actief.actief) return nietBeschikbaar();
+
+  // V9 — atomische teller in de private gateway; mislukt de telling, dan weigeren.
+  try {
+    const telling = await telStartpoging({
+      sleutel: startSleutel(clientIpUitHeaders((n) => req.headers.get(n)), host, config.sleutel.sleutel),
+      limiet: MICROSOFT_LOGIN_START_LIMIET.limiet,
+      vensterSeconden: MICROSOFT_LOGIN_START_LIMIET.vensterSeconden,
+    });
+    if (!telling.toegestaan) {
+      console.warn("[MICROSOFT-LOGIN] start geweigerd: ratelimit");
+      return naarLogin(origin);
+    }
+  } catch (e) {
+    console.warn(`[MICROSOFT-LOGIN] start geweigerd: ratelimit-telling mislukt (${microsoftLoginFoutcategorie(e)})`);
+    return naarLogin(origin);
+  }
 
   // Al ingelogd mét profiel → geen tweede login (zelfde regel als de login-layout).
   const supabase = await createServerSupabase();

@@ -22,6 +22,9 @@ const bindingCore = lees("core/lib/microsoft-login-binding-core.ts");
 const ci = lees("scripts/cross-tenant-ci.sh");
 const allowlist = lees("supabase/checks/allowlist-grants.tsv");
 const fixture = lees("scripts/testdb-apply-migrations.sh");
+// #335 T2 (V9): de veertiende gatewayfunctie staat in een eigen additieve migratie.
+const migratieT2 = lees("supabase/migrations/2026_09_07_microsoft_login_startlimiet.sql");
+const GATEWAY_FUNCTIES_T2 = ["tel_startpoging"] as const;
 
 const GATEWAY_FUNCTIES = [
   "lees_config", "reserveer_identiteit", "activeer_identiteit", "herstel_koppeling", "markeer_mislukt",
@@ -110,7 +113,13 @@ test("F1B: hook is SECURITY INVOKER met lege search_path; alleen de helper is DE
   assert.match(migratie, /revoke login_hook_owner from postgres/);
 });
 
-test("F1B: login_gateway mag exact de dertien gatewayfuncties uitvoeren en niets anders", () => {
+test("F1B: login_gateway mag exact de dertien T1-gatewayfuncties (+ tel_startpoging uit T2) uitvoeren en niets anders", () => {
+  for (const f of GATEWAY_FUNCTIES_T2) {
+    assert.match(migratieT2, new RegExp(`grant execute on function login_private\\.${f}\\([^)]*\\)\\s+to login_gateway`), f);
+  }
+  assert.equal((migratieT2.match(/grant execute on function login_private\.[a-z_]+\([^)]*\)\s+to login_gateway/g) ?? []).length, GATEWAY_FUNCTIES_T2.length);
+  assert.match(migratieT2, /revoke all on login_private\.start_pogingen from public, anon, authenticated, service_role, login_gateway/);
+  assert.match(suite, /v_n <> 14/, "de F1B-suite telt nu veertien executes");
   for (const f of GATEWAY_FUNCTIES) {
     assert.match(migratie, new RegExp(`grant execute on function login_private\\.${f}\\([^)]*\\)\\s+to login_gateway`), f);
   }
@@ -134,7 +143,7 @@ test("F1B: gateway is server-only, gebruikt alleen login_private-functies en gee
   assert.match(gateway, /max: 2/);
   const aanroepen = [...gateway.matchAll(/login_private\.([a-z_]+)\(/g)].map((m) => m[1]!);
   assert.ok(aanroepen.length >= GATEWAY_FUNCTIES.length);
-  for (const f of aanroepen) assert.ok((GATEWAY_FUNCTIES as readonly string[]).includes(f), `gateway roept ${f} aan, niet in de allowlist`);
+  for (const f of aanroepen) assert.ok(([...GATEWAY_FUNCTIES, ...GATEWAY_FUNCTIES_T2] as readonly string[]).includes(f), `gateway roept ${f} aan, niet in de allowlist`);
   assert.doesNotMatch(gateway, /from login_private\.[a-z_]+\s+where|insert into login_private|update login_private|delete from login_private/i, "geen directe tabeltoegang");
   assert.doesNotMatch(gateway, /console\.(log|error|warn)/, "de gateway logt niets (categorieën via de aanroeper)");
   assert.match(gateway, /gatewayFoutcategorie\(fout\)/);

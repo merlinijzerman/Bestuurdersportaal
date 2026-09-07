@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { amrUitAccessToken, beoordeelBindingGuard, sessieIsOAuth } from "./microsoft-login-sessieguard-core";
-import {
-  clientIpUitHeaders,
-  maakVensterLimiter,
-  MICROSOFT_LOGIN_START_LIMIET,
-  startSleutel,
-} from "./microsoft-login-ratelimit-core";
+import { clientIpUitHeaders, MICROSOFT_LOGIN_START_LIMIET, startSleutel } from "./microsoft-login-ratelimit-core";
 import {
   LOGIN_MICROSOFT_MELDING,
   MICROSOFT_LOGIN_FOUTCATEGORIEEN,
@@ -53,30 +48,20 @@ test("guard: wachtwoordsessie passeert zonder binding; oauth eist exact active; 
   assert.deepEqual(beoordeelBindingGuard({ isOAuth: true, binding: { status: "active" }, gatewayFout: true }), { toegestaan: false, reden: "gateway-fout" });
 });
 
-// ── startlimiter (V9) ───────────────────────────────────────────────────────
+// ── startlimiet (V9): sleutelafleiding; de atomische telling zelf staat in de DB
+//    (supabase/checks/2026_09_07_microsoft_login_startlimiet.sql) ───────────────
 
-test("startlimiter: 20 per 10 minuten per sleutel, glijdend venster, sleutel is een hash zonder ruw IP", () => {
-  assert.deepEqual(MICROSOFT_LOGIN_START_LIMIET, { limiet: 20, vensterMs: 600_000 });
-  const l = maakVensterLimiter();
-  const s = startSleutel("203.0.113.9", "pgb.example");
+test("startlimiet: 20 per 600 s; sleutel = HMAC-SHA256 onder de loginsleutel, hex, zonder ruw IP, per host apart", () => {
+  assert.deepEqual(MICROSOFT_LOGIN_START_LIMIET, { limiet: 20, vensterSeconden: 600 });
+  const sleutel = Buffer.alloc(32, 9);
+  const s = startSleutel("203.0.113.9", "pgb.example", sleutel);
   assert.match(s, /^[0-9a-f]{64}$/);
   assert.doesNotMatch(s, /203\.0\.113/);
-  const t0 = 1_000_000;
-  for (let i = 0; i < 20; i++) assert.equal(l.beoordeel(s, t0 + i).toegestaan, true, `poging ${i + 1}`);
-  const geweigerd = l.beoordeel(s, t0 + 30);
-  assert.equal(geweigerd.toegestaan, false);
-  assert.equal(geweigerd.resetAtMs, t0 + 600_000);
-  assert.equal(l.beoordeel(startSleutel("203.0.113.9", "ander.example"), t0 + 31).toegestaan, true, "andere host = andere teller");
-  assert.equal(l.beoordeel(s, t0 + 600_000).toegestaan, true, "na het venster weer ruimte");
-});
-
-test("startlimiter: opruiming laat geen dode sleutels achter", () => {
-  const l = maakVensterLimiter({ limiet: 1, vensterMs: 100 });
-  l.beoordeel("a", 0);
-  l.beoordeel("b", 0);
-  assert.equal(l._aantalSleutels(), 2);
-  l.beoordeel("c", 1_000);
-  assert.equal(l._aantalSleutels(), 1);
+  assert.equal(s, startSleutel("203.0.113.9", "pgb.example", sleutel), "deterministisch");
+  assert.notEqual(s, startSleutel("203.0.113.9", "ander.example", sleutel), "andere host = andere teller");
+  assert.notEqual(s, startSleutel("203.0.113.9", "pgb.example", Buffer.alloc(32, 8)), "andere sleutel = andere hash (geen kale sha256)");
+  assert.equal(startSleutel(null, null, sleutel).length, 64);
+  assert.throws(() => startSleutel("x", "y", Buffer.alloc(16)), /ongeldig/);
 });
 
 test("client-IP: eerste x-forwarded-for, anders x-real-ip, anders null", () => {

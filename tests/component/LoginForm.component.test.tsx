@@ -6,7 +6,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LoginForm from "@/app/login/_components/LoginForm";
-import { LOGIN_MICROSOFT_MELDING, VERBODEN_MELDINGWOORDEN } from "@/core/lib/microsoft-login-error-core";
+import { LOGIN_MICROSOFT_MELDING, VERBODEN_MELDINGWOORDEN } from "@/core/lib/microsoft-login-meldingen-core";
 import { verwachtGeenErnstigeAxeBevindingen } from "./axe";
 import { renderMetProviders } from "./render-met-providers";
 

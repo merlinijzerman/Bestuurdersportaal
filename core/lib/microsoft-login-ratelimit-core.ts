@@ -1,31 +1,32 @@
 // ============================================================================
-//  core/lib/microsoft-login-ratelimit-core.ts — PURE vensterlimiter voor de
-//  ongeauthenticeerde startroute /auth/microsoft-login/start (fase 1B, #335 T2; V9).
+//  core/lib/microsoft-login-ratelimit-core.ts — PURE sleutelafleiding voor de
+//  tempolimiet op de ongeauthenticeerde startroute /auth/microsoft-login/start
+//  (fase 1B, #335 T2; besluit V9 — reviewcorrectie PR #339).
 // ----------------------------------------------------------------------------
 //  Besluit V9: dedicated limiet `microsoft_login_start`, per IP + host, 20 pogingen
-//  per 10 minuten. De bestaande DB-limiter (`fn_rate_limit_check`) telt op
-//  auth.uid() en is alleen door `authenticated` uitvoerbaar — op een route ZONDER
-//  sessie is hij niet inzetbaar, en T2 voegt geen SQL toe (T1-laag bevroren).
-//  Daarom een in-geheugen glijdend venster in het Node-proces.
+//  per 10 minuten, ATOMISCH geteld. De bestaande DB-limiter (`fn_rate_limit_check`)
+//  telt op auth.uid() en is op een route zonder sessie niet inzetbaar; daarom een
+//  minimale, atomische teller in de private gateway:
+//  `login_private.tel_startpoging(p_sleutel, p_limiet, p_venster_seconden)`
+//  (migratie 2026_09_07_microsoft_login_startlimiet.sql; TS: gateway.telStartpoging).
 //
-//  BEKENDE BEPERKING (gedocumenteerd, geen stille aanname): op Vercel is dit
-//  per serverless-instantie en best-effort. Het remt scriptgebruik per instantie
-//  en is een tempo-, geen volumegrens; de echte grenzen blijven Entra (E1–E7),
-//  de eenmalige transactie (replay dood) en de hook (L1). De sleutel is
-//  sha256(ip|host): er wordt geen ruw IP bewaard.
-//
-//  De geauthenticeerde koppel-start (/api/microsoft-login/koppelen/start) gebruikt
-//  de DB-limiet `LIMIETEN.microsoft_login_start` via de wrapper (zelfde getallen).
+//  De sleutel is een HMAC-SHA256 van `ip|host` onder de eigen loginsleutel
+//  (domeinscheiding via een vast label). Er wordt dus geen ruw IP opgeslagen en
+//  de sleutel is zonder de geheime sleutel niet naar een IP terug te rekenen.
+//  Een mislukte telling is FAIL-CLOSED: zonder database kan de flow toch niet
+//  starten (de transactie staat in dezelfde database).
 // ============================================================================
 
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
-export const MICROSOFT_LOGIN_START_LIMIET = { limiet: 20, vensterMs: 10 * 60_000 } as const;
+export const MICROSOFT_LOGIN_START_LIMIET = { limiet: 20, vensterSeconden: 600 } as const;
 
-export type LimiterBeslissing = { toegestaan: boolean; resterend: number; resetAtMs: number | null };
+const HMAC_LABEL = "m365login:v1:startlimiet";
 
-export function startSleutel(ip: string | null | undefined, host: string | null | undefined): string {
-  return createHash("sha256").update(`${ip ?? "-"}|${host ?? "-"}`).digest("hex");
+/** HMAC-SHA256(sleutel, label|ip|host) als hex; `-` als ip of host ontbreekt. */
+export function startSleutel(ip: string | null | undefined, host: string | null | undefined, sleutel: Buffer): string {
+  if (sleutel.length !== 32) throw new Error("Microsoft-login-sleutel is ongeldig voor de startlimiet.");
+  return createHmac("sha256", sleutel).update(`${HMAC_LABEL}|${ip ?? "-"}|${host ?? "-"}`).digest("hex");
 }
 
 /** Eerste IP uit x-forwarded-for (Vercel zet de client vooraan), anders x-real-ip. */
@@ -39,38 +40,4 @@ export function clientIpUitHeaders(get: (naam: string) => string | null): string
   return real || null;
 }
 
-export function maakVensterLimiter(config: { limiet: number; vensterMs: number } = MICROSOFT_LOGIN_START_LIMIET) {
-  const tijdstippen = new Map<string, number[]>();
-  let laatsteOpruiming = 0;
-
-  function opruimen(nuMs: number) {
-    if (nuMs - laatsteOpruiming < config.vensterMs) return;
-    laatsteOpruiming = nuMs;
-    for (const [sleutel, lijst] of tijdstippen) {
-      const levend = lijst.filter((t) => nuMs - t < config.vensterMs);
-      if (levend.length) tijdstippen.set(sleutel, levend);
-      else tijdstippen.delete(sleutel);
-    }
-  }
-
-  return {
-    /** Telt de poging en beslist. */
-    beoordeel(sleutel: string, nuMs: number = Date.now()): LimiterBeslissing {
-      opruimen(nuMs);
-      const levend = (tijdstippen.get(sleutel) ?? []).filter((t) => nuMs - t < config.vensterMs);
-      if (levend.length >= config.limiet) {
-        tijdstippen.set(sleutel, levend);
-        return { toegestaan: false, resterend: 0, resetAtMs: levend[0]! + config.vensterMs };
-      }
-      levend.push(nuMs);
-      tijdstippen.set(sleutel, levend);
-      return { toegestaan: true, resterend: config.limiet - levend.length, resetAtMs: null };
-    },
-    /** Alleen voor tests. */
-    _aantalSleutels(): number {
-      return tijdstippen.size;
-    },
-  };
-}
-
-export type VensterLimiter = ReturnType<typeof maakVensterLimiter>;
+export type StartTelling = { toegestaan: boolean; resterend: number; resetOp: Date | null };

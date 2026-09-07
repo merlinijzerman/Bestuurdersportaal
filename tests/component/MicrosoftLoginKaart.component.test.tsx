@@ -6,7 +6,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MicrosoftLoginKaart from "@/app/(dashboard)/profiel/_components/MicrosoftLoginKaart";
-import { PROFIEL_MICROSOFT_LOGIN_MELDINGEN } from "@/core/lib/microsoft-login-error-core";
+import { PROFIEL_MICROSOFT_LOGIN_MELDINGEN } from "@/core/lib/microsoft-login-meldingen-core";
 import { verwachtGeenErnstigeAxeBevindingen } from "./axe";
 import { krijgNextNavigationMocks } from "./next-mocks";
 import { renderMetProviders } from "./render-met-providers";
@@ -50,19 +50,42 @@ describe("MicrosoftLoginKaart", () => {
     await verwachtGeenErnstigeAxeBevindingen(container);
   });
 
-  it("gekoppeld: toont tijdstippen (geen identiteitsgegevens) en ontkoppelt na bevestiging", async () => {
+  it("gekoppeld via wachtwoordsessie: kaart zegt vooraf dat de sessie blijft; ontkoppelen bevestigt dat (uitgelogd:false)", async () => {
     const fetchMock = stubFetch({
-      "GET /api/microsoft-login/koppeling": json({ beschikbaar: true, status: "active", geactiveerdOp: "2026-09-07T10:00:00.000Z", laatstGebruiktOp: null }),
-      "DELETE /api/microsoft-login/koppeling": json({ ok: true }),
+      "GET /api/microsoft-login/koppeling": json({ beschikbaar: true, sessieViaMicrosoft: false, status: "active", geactiveerdOp: "2026-09-07T10:00:00.000Z", laatstGebruiktOp: null }),
+      "DELETE /api/microsoft-login/koppeling": json({ ok: true, uitgelogd: false }),
     });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const { user, container } = renderMetProviders(<MicrosoftLoginKaart />);
     expect(await screen.findByText("Gekoppeld")).toBeVisible();
+    expect(screen.getByText(/U bent nu met uw wachtwoord ingelogd\. Ontkoppelen laat deze sessie ongemoeid\./)).toBeVisible();
     expect(container.textContent).not.toMatch(/@|tid|oid|sub/i);
     await user.click(screen.getByRole("button", { name: "Ontkoppelen" }));
+    expect(confirmSpy.mock.calls[0]![0]).toMatch(/U blijft ingelogd met uw wachtwoord/);
     expect(await screen.findByRole("status")).toHaveTextContent("Microsoft-login is ontkoppeld. U blijft ingelogd met uw wachtwoord.");
     expect(fetchMock).toHaveBeenCalledWith("/api/microsoft-login/koppeling", { method: "DELETE" });
     await verwachtGeenErnstigeAxeBevindingen(container);
+  });
+
+  it("gekoppeld via Microsoft-sessie: kaart waarschuwt vooraf; ontkoppelen (uitgelogd:true) stuurt met één navigatie naar /login", async () => {
+    stubFetch({
+      "GET /api/microsoft-login/koppeling": json({ beschikbaar: true, sessieViaMicrosoft: true, status: "active", geactiveerdOp: null, laatstGebruiktOp: null }),
+      "DELETE /api/microsoft-login/koppeling": json({ ok: true, uitgelogd: true }),
+    });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const replace = vi.fn();
+    const origineleLocation = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...origineleLocation, replace } });
+    try {
+      const { user } = renderMetProviders(<MicrosoftLoginKaart />);
+      expect(await screen.findByText(/U bent nu met Microsoft ingelogd\. Ontkoppelen logt u direct uit\./)).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Ontkoppelen" }));
+      expect(confirmSpy.mock.calls[0]![0]).toMatch(/wordt direct uitgelogd/);
+      await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/login"));
+      expect(screen.queryByText(/U blijft ingelogd met uw wachtwoord/)).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: origineleLocation });
+    }
   });
 
   it("ontkoppelen geannuleerd → geen verzoek", async () => {

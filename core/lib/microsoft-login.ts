@@ -76,7 +76,7 @@ export async function microsoftLoginVoorRequest() {
   });
 }
 
-export { microsoftLoginActief } from "@/core/lib/microsoft-login-gateway";
+export { microsoftLoginActief, telStartpoging } from "@/core/lib/microsoft-login-gateway";
 
 /**
  * Bestaat de knop "Inloggen met Microsoft" voor deze host? host → fonds (actieve

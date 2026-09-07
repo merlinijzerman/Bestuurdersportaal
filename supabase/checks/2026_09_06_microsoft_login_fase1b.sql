@@ -3,7 +3,8 @@
 --  supabase/migrations/2026_09_06_microsoft_login_fase1b.sql.
 --
 --  WAT DEZE SUITE BEWIJST
---    DEEL 1 — STRUCTUUR: minimale loginrol login_gateway (exact 13 executes, nul
+--    DEEL 1 — STRUCTUUR: minimale loginrol login_gateway (exact 14 executes — 13 uit
+--                        T1 + tel_startpoging uit T2/V9 (2026_09_07_…startlimiet) — nul
 --                        tabelrechten), NOLOGIN-eigenaar login_hook_owner (rolcontract:
 --                        geen LOGIN/BYPASSRLS/leden/SET ROLE/schrijfrecht, exact de
 --                        kolomrechten, geen andere functies; eerlijke using(true)-
@@ -206,7 +207,7 @@ begin
   end loop;
   select count(*) into v_n from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='login_private' and has_function_privilege('login_gateway',p.oid,'EXECUTE');
-  if v_n <> 13 then fouten := fouten || format(E'\n- login_gateway mag exact 13 functies uitvoeren, gevonden %s', v_n); end if;
+  if v_n <> 14 then fouten := fouten || format(E'\n- login_gateway mag exact 14 functies uitvoeren (13 T1 + tel_startpoging T2), gevonden %s', v_n); end if;
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='login_private'
                and (has_function_privilege('anon',p.oid,'EXECUTE') or has_function_privilege('authenticated',p.oid,'EXECUTE')
                     or has_function_privilege('service_role',p.oid,'EXECUTE'))) then
@@ -275,7 +276,7 @@ begin
   end if;
 
   if fouten <> '' then raise exception 'Microsoft-login fase 1B structuur FAALT:%', fouten; end if;
-  raise notice 'OK DEEL 1: private schema, 13 gatewayfuncties, helper onder login_hook_owner, INVOKER-hook, configtabel standaard uit.';
+  raise notice 'OK DEEL 1: private schema, 14 gatewayfuncties (13 T1 + tel_startpoging), helper onder login_hook_owner, INVOKER-hook, configtabel standaard uit.';
 end $$;
 
 \echo '== DEEL 2 — GEDRAG (transactie, eindigt op rollback) =='
