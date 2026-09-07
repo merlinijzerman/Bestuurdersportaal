@@ -1,9 +1,9 @@
 # Microsoft 365 — fase 1B Preview-smokeplan PGB (Microsoft-login, #335 T3)
 
 > Draaiboek, geen uitvoering. Dit document wijzigt niets aan Entra, Supabase of Vercel en
-> activeert geen flag. Uitvoering pas na: T1/PR-A gemerged en op Preview gemigreerd,
-> T2/PR-B gemerged en gedeployed op `preview-stable`, **spike S7 groen** (drie negatieve
-> e-mailkoppelingruns, `SPIKE-335-T0.5.md`), en akkoord van de opdrachtgever.
+> activeert geen flag. Stand 2026-09-07: T1/PR-A is gemerged (`40cd5d6`) en spike S7 is
+> groen; T2/PR-B staat als draft-PR. Uitvoering pas na: T2 gemerged en gedeployed op
+> `preview-stable`, de T1-migratie op Preview toegepast, en akkoord van de opdrachtgever.
 > Ontwerp: `MICROSOFT-365-LOGIN-F1B-ONTWERP.md` §3.3 (invarianten E1–E7, P1–P9, O1), §8;
 > T2-ontwerp: `MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md`. Patroon: `MICROSOFT-365-F1-RUNBOOK.md`.
 

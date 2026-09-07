@@ -4,6 +4,11 @@
   "uitgesteld": [],
   "nog_op_te_nemen_bij_stackrun": [
     {
+      "method": "GET/DELETE/POST",
+      "route": "/microsoft-login/koppelen/start  ·  /microsoft-login/koppeling",
+      "reden": "#335 T2 (B3): vier nieuwe gewrapte handlers zonder W1-scenario. Anon → 401 is het bestaande wrappercontract (gedekt door LK-9 en de wrapper-sanity); de happy paths vergen de lokale login_gateway-rol, MICROSOFT_LOGIN_*-env en een fonds met de flag aan in de W1-seed — op te nemen tegen een draaiende wegwerpstack bij de stack-run (besluit 0192, contractwaarde-regel), niet voorspeld. Staat NIET in 'uitgesteld' omdat de authz-matrix voor deze routes geen bestaand scenario raakt (regeneratie ongewijzigd)."
+    },
+    {
       "method": "GET",
       "route": "/auth/callback  ·  /auth/callback?code=<ongeldig>&next=<pad>",
       "reden": "#335 T2-voorbereiding (karakterisering vóór wijziging; ontwerp §6.13 'wachtwoordpad en /auth/callback byte-identiek'): het W1-harnas kent alleen /api/*-scenario's; run.mjs volgt geen redirects en heeft verwacht:'redirect' + locatieVorm() al klaar, dus twee paginascenario's (zonder code → <origin>/login?error=<geredigeerd>; met ongeldige code én next → dezelfde redirect) zijn klaar om op te nemen — tegen een draaiende wegwerpstack, niet voorspeld (besluit 0192). De lokale stack was op 2026-09-06 door een andere sessie bezet. Rijen staan letterlijk in MICROSOFT-365-LOGIN-F1B-T2-ONTWERP.md §2.3 (slugs w335.auth-callback.get.anon.zonder-code / .ongeldige-code). Op te nemen in T2-stap B7, vóór de L4-wijziging aan deze route; daarna moet de T2-PR byte-identiek blijven voor beide."

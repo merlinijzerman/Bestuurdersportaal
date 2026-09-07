@@ -3,9 +3,10 @@
 - **Ticket:** [#335](https://github.com/merlinijzerman/Bestuurdersportaal/issues/335)
 - **Bron:** `MICROSOFT-365-LOGIN-F1B-ONTWERP.md` en `decisions/0211-…` op `feat/335-microsoft-login` (commit `15b7f56`); spike `SPIKE-335-T0.5.md`; T1-stand `origin/feat/335-microsoft-login-t1` `a104af3` (draft-PR #338) plus de op 2026-09-06 nog ongepushte werkboom `mvp-335-t1` (alleen gelezen)
 - **Branch:** `feat/335-t2-voorbereiding` vanaf `origin/preview` `56efa65` (merge #336)
-- **Status:** voorbereiding; **geen productiecode, geen migraties, geen configuratie, geen featureflag**
-- **Datum:** 2026-09-06
-- **Blokkades vóór merge/activering van T2:** spike **S7** (negatieve e-mailkoppeling, drie runs) staat open en is blokkerend; T1/PR-A moet gereviewd en gemerged zijn; de T1↔T2-contracten in §4 zijn een **voorstel** tot de T1-uitvoerder ze bevestigt.
+- **Status (2026-09-07):** **T2/PR-B gebouwd** in commits B0–B6 + B8 op deze branch (draft-PR naar `preview`); geen migraties, geen configuratie, geen featureflag, niets gemerged of geactiveerd. T1 is gemerged (`40cd5d6`), S7 is groen, S9 blijft bewust rood tot de Preview-inrichting (T3).
+- **Datum:** 2026-09-06 (voorbereiding), 2026-09-07 (uitvoering)
+- **Contractvragen:** V1–V8, V10 en V12 gesloten conform het voorstel; V9 = dedicated limiet `microsoft_login_start` per ip+host, 20 per 10 minuten; V11 = één neutrale melding voor `error=auth_callback` én `fout=…` zonder technische details (zie §8).
+- **Blokkade vóór merge:** review van PR-B door de opdrachtgever (raakt de sessieresolutie). **Blokkade vóór activering:** T3 (rollen/migratie op Preview, geheimen, hook + provider, PGB-activering) volgens het smokeplan.
 
 Dit document maakt T2 uitvoerbaar zodra T1 gereviewd is. §1 inventariseert de keten die T2 raakt, §2 legt het huidige gedrag vast (karakterisering vóór wijziging), §3 is het uitvoerbare T2-ontwerp, §4 de contractvoorstellen naar T1, §5 de testmatrix, §7 het stappenplan en §8 de contractvragen. Het Preview-smokeplan voor PGB staat apart in `security/MICROSOFT-365-F1B-PGB-SMOKEPLAN.md` (§6 verwijst).
 
@@ -398,22 +399,24 @@ Voorwaarden vóór B1: T1/PR-A gereviewd en gemerged naar `preview`; §4-contrac
 
 | Stap | Inhoud | Gate | PR |
 |---|---|---|---|
-| **B0** | Registergat dichten: `route-mechanismen.test.ts` scant óók `app/auth/**`; `app/auth/callback` en `app/auth/microsoft/callback` als erkende `oauth-callback`-uitzondering met reden in `expected.json`; LK-10-census blijft. Geen productiecode. | `test:xtenant` groen; ontsnappingstellers ongewijzigd | PR-B0 (klein, apart mergebaar; kan vóór T1) |
-| **B1** | Pure kernen: `oidc-core`, `identity-core`, `crypto-core`, `error-core`, `sessieguard-core` + sanity's (T2-3, T2-8, T2-C1, T2-C3, T2-C6) | `npm run sanity`, `tsc` | PR-B (commit 1) |
-| **B2** | `microsoft-login-config.ts` + `microsoft-login.ts` (orchestratie met geïnjecteerde gateway/fetch voor testbaarheid) + flowtests met mock-gateway (T2-1, T2-2, T2-4b, T2-5, T2-6, T2-7) | sanity, `tsc`, contracttest T2-C2/C4 | commit 2 |
-| **B3** | Routes `app/auth/microsoft-login/{start,callback}` + `app/api/microsoft-login/**` met `RouteSpecV1`; registers bijgewerkt (T2-C5); LK-10 en LK-3b/… bewust omgezet | `test:xtenant`, W1 `--verify` (bestaande snapshots byte-identiek), authz-matrix geregenereerd | commit 3 |
-| **B4** | Guard L3 in wrapper (nieuwe `WrapperDeps`-dep, default = geen aanroep bij niet-`oauth`), `haalFondsSessie`, dashboard-, login-, platform-layout; L4 in `/auth/callback`. Sanity op `route-wrapper.sanity.ts` uitgebreid (wachtwoordsessie → geen gateway-aanroep) | W1 3× verify byte-identiek; LK-INVARIANTS groen; BASISLIJN-tests omgezet met motivering | commit 4 |
-| **B5** | UI: `LoginForm` afsplitsen (gedrag ongewijzigd), `MicrosoftLoginKnop`, meldingsblok; `MicrosoftLoginKaart`; componenttests (K) | vitest component + axe | commit 5 |
-| **B6** | Lokale OIDC-stub + Playwright T2-E1…E3 (+ T2-1/2/7 via stub) | `e2e-security.yml` lokaal | commit 6 |
-| **B7** | W1: drie uitgestelde paginascenario's opnemen tegen de wegwerpstack, plus `/login` ingelogd (nieuwe seed-gebruiker zonder profiel) | `karakterisering.yml` | commit 7 |
-| **B8** | Docs: ontwerp §4.4/§5 bijwerken, `security/MICROSOFT-365-F1B-RUNBOOK.md` (T2-deel), dreigingsmodel R-28…R-41, ASVS-register, HANDOVER | ontwerp-sync | commit 8 |
-| **B9** | Reviewpakket: PR-B naar `preview` (**gebruiker merget**: raakt sessieresolutie); S7 groen als mergevoorwaarde | alle gates + `npm run gates` | PR-B |
+| **B0** ✅ `e5c6e4a` | Registergat gedicht: `route-mechanismen.test.ts` en `audit-handelingen.test.ts` scannen óók `app/auth/**`; niet-gewrapte routes daar zijn mechanisme `oauth-route` en moeten geregistreerd staan (registratie = declaratie). | `test:xtenant` groen; tellers ongewijzigd | in PR-B |
+| **B1** ✅ `c0e47e8` | Zeven pure kernen (`oidc`, `identity`, `crypto`, `flow`, `sessieguard`, `ratelimit`, `error`) + 46 sanity-tests (T2-3, T2-8, T2-C1, T2-C3, T2-C6, V9-limiter) | sanity, `tsc` | in PR-B |
+| **B2** ✅ `bf9fbda` | `microsoft-login-orkestratie-core.ts` (puur, deps geïnjecteerd) + server-only `-config`, `-oidc`, `microsoft-login.ts`; 24 flowtests met mock-gateway/OIDC/auth (T2-1, T2-2, T2-3, T2-4b, T2-5, T2-7, T2-8, T2-9, T2-10, E2, koppelen/herstel/ontkoppelen); `LIMIETEN.microsoft_login_start` | sanity, `tsc` | in PR-B |
+| **B3** ✅ `82dc6f6` | Routes `app/auth/microsoft-login/{start,callback}` (oauth-route) + `app/api/microsoft-login/{koppelen/start,koppeling}`; registers: route-mechanismen (tellers 67→71, 42→43 gemotiveerd), audit-handelingen (3), W7 137→141, audit-inventaris (2× operationeel), authz-matrix ongewijzigd, LK-10 census 4 | `test:xtenant` 425/425, vitest node 144/144 | in PR-B |
+| **B4** ✅ `e15f00a` | Guard L3: wrapper-dep `beoordeelOAuthSessie` (exact de bestaande 401), `haalFondsSessie`, tenant-, login-, platformlayout (R-34); L4 in `/auth/callback`; wrapper-sanity +3 (45/45); LK-BASISLIJN → T2-invarianten, pins herberekend | sanity volledig groen, `tsc` | in PR-B |
+| **B5** ✅ `9e3bc75` | `/login` server-pagina + `LoginForm` (wachtwoordpad byte-identiek) + knop per fonds + één neutrale melding (V11); `MicrosoftLoginKaart` op `/profiel`; componenttests 6 + 9 | vitest component 68/68 | in PR-B |
+| **B6** ✅ `15c0565` | Lokale OIDC-stub (+ guardtest), seed fondsflag A aan/B uit, `microsoft-login.spec.ts` (8 scenario's), CI-env in `e2e-security.yml` en `karakterisering.yml` (V8). **Grens:** positieve sign-in/link tegen GoTrue vereist de echte Microsoft-JWKS → spike T0.5 + Preview-smoke | `test:e2e:guard` 29/29; Playwright draait in CI | in PR-B |
+| **B7** ⏸ uitgesteld | W1-paginascenario's (`/auth/callback`, `/login`) + vier nieuwe API-routes: opnemen tegen een draaiende wegwerpstack (besluit 0192, niet voorspellen). Geregistreerd in `tests/karakterisering/uitgestelde-opnames.json` | `karakterisering.yml` | stack-run |
+| **B8** ✅ | Docs: dit document, F1B-ontwerp status, runbook §8 (applicatielaag), smokeplan, dreigingsmodel R-28…R-41, ASVS V6, HANDOVER, 0211 → Geaccepteerd | ontwerp-sync | in PR-B |
+| **B9** ▶ | Draft-PR naar `preview`; **gebruiker merget** (raakt sessieresolutie). Niets provisionen of activeren; T3 daarna | alle gates + `npm run gates` | PR-B |
 
 Aansluittabel T0 §4.4 → dit plan: `microsoft-login-config.ts` → B2; `identity-core` → B1; `error-core` → B1; `gateway.ts` → **T1** (bestaat); `microsoft-login.ts` → B2; `sessieguard(-core)` → B1/B4; `app/auth/microsoft-login/*` → B3; `app/api/microsoft-login/*` → B3; `MicrosoftLoginKaart`, `app/login/*` → B5; layout/fonds-sessie/wrapper/login-layout/platform-layout → B4; `app/auth/callback` L4 → B4; migratie/check/rollback/allowlist → **T1**. Nieuw t.o.v. T0: B0 (registergat), `oidc-core`/`crypto-core` (afsplitsing uit "orchestratie"), OIDC-stub (B6), W1-paginascenario's (B7). Niets uit T0 §4.4 is vervallen.
 
 ---
 
-## 8. Contractvragen voor de T1-uitvoerder
+## 8. Contractvragen voor de T1-uitvoerder — **stand 2026-09-07: gesloten**
+
+Besluit opdrachtgever (2026-09-07): V1–V8, V10 en V12 conform het voorstel; **V9** = dedicated rate limit `microsoft_login_start`, per IP + host, 20 pogingen per 10 minuten; **V11** = één neutrale foutmelding voor zowel `error=auth_callback` als `fout=…`, zonder technische details. Uitvoering: V9 → `core/lib/microsoft-login-ratelimit-core.ts` (in-geheugen glijdend venster per sha256(ip|host) op `/auth/microsoft-login/start`; **bekende beperking:** per serverless-instantie, best-effort, want de DB-teller telt op `auth.uid()` en de T1-laag is bevroren) + `LIMIETEN.microsoft_login_start` per gebruiker op de koppel-start; V11 → `LOGIN_MICROSOFT_MELDING` in `microsoft-login-error-core.ts`, gerenderd door `app/login/page.tsx` voor beide parameters. V10 → RS256 via `node:crypto` (`microsoft-login-oidc-core.ts`). V8 → `LOGIN_GATEWAY_*` in `karakterisering.yml` en `e2e-security.yml`. De tabel hieronder is de oorspronkelijke vraaglijst.
 
 | # | Vraag | Waarom het T2 raakt | Voorstel |
 |---|---|---|---|
