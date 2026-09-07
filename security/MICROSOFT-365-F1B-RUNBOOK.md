@@ -60,10 +60,13 @@ de check-suite onderscheiden van het tijdelijke migratielidmaatschap, dat wél w
 
 ## 2. Migratie en bewijs
 
-1. Pas `2026_09_06_microsoft_login_fase1b.sql` toe (één transactie). De migratie is
+1. Pas `2026_09_06_microsoft_login_fase1b.sql` toe (één transactie) en daarna
+   `2026_09_07_microsoft_login_startlimiet.sql` (T2/V9: tabel `start_pogingen` +
+   veertiende gatewayfunctie `tel_startpoging`; eigen rollback). Beide zijn
    idempotent; herhaald draaien is veilig.
 2. Draai als database-eigenaar, in deze volgorde:
-   - `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` (DEEL 2 rolt volledig terug);
+   - `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` (DEEL 2 rolt volledig terug; telt 14 executes);
+   - `supabase/checks/2026_09_07_microsoft_login_startlimiet.sql` (startlimiet, rolt terug);
    - `supabase/checks/2026_07_31_r1_structurele_gates.sql` (A–H);
    - `supabase/checks/2026_08_20_v3_grants_volledig.sql` (de vier publieke objecten staan
      in `allowlist-grants.tsv`);
@@ -155,10 +158,10 @@ ontbreekt er één, dan is de knop verborgen en antwoorden de routes neutraal (4
 
 | Onderdeel | Pad | Gedrag |
 |---|---|---|
-| Start inloggen | `GET /auth/microsoft-login/start[?next=]` | vensterlimiet `microsoft_login_start` (20/10 min per sha256(ip\|host), in-geheugen per instantie — best-effort), host→fonds, config, fondsflag, bestaande sessie → `/`, veilig vervolgpad, versleutelde eenmalige transactie, 302 naar Entra met exact `openid profile` + PKCE |
+| Start inloggen | `GET /auth/microsoft-login/start[?next=]` | host→fonds, config, fondsflag, **atomische tempolimiet** `microsoft_login_start` (20 per 10 min per HMAC-SHA256(ip\|host) onder de loginsleutel; `login_private.tel_startpoging`, migratie `2026_09_07_microsoft_login_startlimiet.sql`; telling mislukt = weigeren), bestaande sessie → `/`, veilig vervolgpad, versleutelde eenmalige transactie, 302 naar Entra met exact `openid profile` + PKCE |
 | Callback | `GET /auth/microsoft-login/callback` | consumeer transactie (replay dood) → tokenwissel → RS256 → exacte claims → inloggen (`zoek_identiteit` active vóór `signInWithIdToken`, kruiscontrole, profiel in host-fonds, `markeer_gebruikt`) of koppelen (reserveer → `linkIdentity` → verifieer → activeer). Elke fout: één neutrale redirect met supportcode |
 | Koppelen starten | `GET /api/microsoft-login/koppelen/start` | `withFondsRoute`, `profile.manage.own`, hostGuard afdwingen, DB-limiet `microsoft_login_start` per gebruiker; 409 bij bestaande levende binding |
-| Status / ontkoppelen / herstel | `GET/DELETE/POST /api/microsoft-login/koppeling` | status zonder tid/oid/sub/e-mail; ontkoppelen = `start_intrekking` → `unlinkIdentity` → `voltooi_intrekking` (mislukt unlink: blijft `revoking`, kaart biedt "Opnieuw proberen"); herstel idempotent (`herstel_koppeling`) |
+| Status / ontkoppelen / herstel | `GET/DELETE/POST /api/microsoft-login/koppeling` | status zonder tid/oid/sub/e-mail, mét `sessieViaMicrosoft`; ontkoppelen = `start_intrekking` → `unlinkIdentity` → `voltooi_intrekking`, daarna **deterministisch**: was de sessie via Microsoft, dan wordt zij server-side beëindigd (`uitgelogd: true`, kaart → `/login`), anders blijft de wachtwoordsessie (`uitgelogd: false`); mislukt unlink: blijft `revoking`, kaart biedt "Opnieuw proberen"; herstel idempotent (`herstel_koppeling`) |
 | Guard L3 | `withFondsRoute` (dep `beoordeelOAuthSessie`), `haalFondsSessie`, tenant-layout, login-layout, platform-layout | alleen bij `amr ∋ oauth` wordt `levende_binding` geraadpleegd; niet-`active` → sessie beëindigd (`/login?fout=microsoft`, wrapper: exact de bestaande 401; platform: `?fout=geen_toegang`, R-34). Gatewayfout = fail-closed |
 | L4 | `/auth/callback` | `azure`-identiteit zonder actieve binding → `unlinkIdentity` + signOut + `/login?error=auth_callback` |
 | UI | `/login` (server-pagina + `LoginForm`), `/profiel` (`MicrosoftLoginKaart`) | knop alleen als host-fonds de flag aan heeft én de config compleet is; één neutrale melding voor `?fout=microsoft` en `?error=auth_callback` met supportcode; kaart per toestand één handeling |

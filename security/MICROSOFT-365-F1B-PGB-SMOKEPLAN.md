@@ -28,7 +28,7 @@ De S9-nulmeting bewijst dat manual linking, de Azure-provider, de Auth-hook en `
 | Stap | Wat | Wie | Bewijs |
 |---|---|---|---|
 | 1 | Databaserollen `login_gateway` (LOGIN, minimaal, connection limit ≤ 5) en `login_hook_owner` (NOLOGIN) aanmaken — interactief, wachtwoord alleen in de Preview-secretstore | opdrachtgever | `pg_roles`-query (§1.1) |
-| 2 | T1-migratie `2026_09_06_microsoft_login_fase1b.sql` toepassen; daarna `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` als database-eigenaar → DEEL 1 én DEEL 2 `OK` | opdrachtgever | psql exit 0, twee OK-notices; `2026_07_31_r1_structurele_gates.sql` en V3-grants-gate schoon |
+| 2 | Migraties toepassen: `2026_09_06_microsoft_login_fase1b.sql` (T1) én `2026_09_07_microsoft_login_startlimiet.sql` (T2/V9); daarna de checks `2026_09_06_microsoft_login_fase1b.sql` (telt 14 executes) en `2026_09_07_microsoft_login_startlimiet.sql` als database-eigenaar → alle OK | opdrachtgever | psql exit 0, vier OK-notices; `2026_07_31_r1_structurele_gates.sql` en V3-grants-gate schoon |
 | 3 | Entra App L conform §2 | opdrachtgever (Entra-beheerder) | manifest-export in het changebewijs (zonder secret) |
 | 4 | Supabase Auth conform §3, **in de volgorde van §3** (P5 → P2/P3/P4 → P1 → P7 → P8) | opdrachtgever | `management-auth-config.mjs` read-only met vaste allowlist (S9-script) + `/auth/v1/health` |
 | 5 | Vercel-geheimen conform §4; nieuwe `preview-stable`-deployment | opdrachtgever | deployment-id in changebewijs |
