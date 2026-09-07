@@ -45,6 +45,7 @@ export const BEPERKTE_SESSIE_PAD = "/beperkte-toegang";
 export const BEPERKTE_SESSIE_ROUTES = [
   "/api/microsoft-login/koppeling",
   "/api/microsoft-login/koppelen/start",
+  "/api/microsoft-login/verhoging",
 ] as const;
 
 export function magBeperkteSessieRoute(pad: string | null | undefined): boolean {
@@ -138,21 +139,20 @@ export function beoordeelPortaalSessieKern(args: {
   return { toegestaan: false, beperkt: false, reden: "wachtwoord-geblokkeerd" };
 }
 
-/** Moet de guard een activeringsvenster openen? Alleen voor een verhoogde
- *  break-glasssessie zonder lopend venster; dat levert precies één
- *  `breakglass.gebruikt` per verhoging op. */
-export function moetBreakglassVensterOpenen(args: {
+/**
+ * Mag deze sessie een activeringsvenster openen (de verhogingsroute)?
+ *
+ * Uitsluitend een break-glassaccount dat de MFA-stap heeft afgerond en daardoor
+ * op AAL2 zit, maar nog géén venster heeft. De sessie is op dat moment nog
+ * BEPERKT — de hook geeft de normale rol pas als het venster bestaat. Zo is het
+ * openen een expliciete, geaudite handeling en kan een client de app niet
+ * overslaan door rechtstreeks bij GoTrue te refreshen (reviewbevinding P1).
+ */
+export function magBreakglassVerhogen(args: {
   beleid: Sessiebeleid | null;
-  rol?: string | null;
   aal?: string | null;
 }): boolean {
-  return (
-    !!args.beleid &&
-    args.beleid.breakGlass &&
-    args.rol !== ROL_BEPERKT &&
-    args.aal === "aal2" &&
-    args.beleid.breakglassVensterTot === null
-  );
+  return !!args.beleid && args.beleid.breakGlass && args.aal === "aal2" && args.beleid.breakglassVensterTot === null;
 }
 
 /** Standaardduur van een break-glassverhoging. Kort en apart geaudit; de

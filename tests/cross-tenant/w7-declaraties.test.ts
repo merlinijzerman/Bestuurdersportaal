@@ -120,7 +120,12 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // app/api/microsoft-login: koppelen starten (profile.manage.own), status
   // (profile.view.own), ontkoppelen en herstel (profile.manage.own) — strikt
   // zelfbeheer, dezelfde capabilities als de bestaande Microsoft-connectorroutes.
-  assert.equal(HANDLERS.length, 141, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 142: Microsoft-loginbeleid fase 1C (#344) voegt POST verhoging toe — het
+  // expliciet openen van het activeringsvenster van een break-glasssessie
+  // (profile.manage.own, strikt zelfbeheer). Die route bestaat juist omdat het
+  // openen géén bijwerking van een willekeurig verzoek mag zijn: de Auth-hook
+  // geeft de volledige rol pas als het venster er al is (reviewbevinding P1).
+  assert.equal(HANDLERS.length, 142, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

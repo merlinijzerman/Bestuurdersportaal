@@ -424,6 +424,13 @@ echo
 echo "-- Microsoft-loginbeleid F1C (#344): modi, break-glass, koppel-/herstelsessie, activeringspreflight --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1C"
 echo
+# De SQL-suite roept de hookFUNCTIE aan; deze test praat met de echte Auth-API en
+# met PostgREST, en raakt de app niet aan. Dat is de enige manier om te bewijzen
+# dat een client de verhogingsroute niet kan overslaan door rechtstreeks te
+# refreshen (reviewbevinding P1, #344).
+echo "-- Microsoft-loginbeleid F1C (#344): break-glass — directe GoTrue-refresh zonder het portaal --"
+TEST_DATABASE_URL="$DB_URL" node scripts/breakglass-directe-refresh.mjs
+echo
 echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
 echo
@@ -474,6 +481,7 @@ echo "  T7   semantische laag: RLS op semantic_units + waardetypering           
 echo "  T8   semantische extractie: gate H op de schrijffunctie + hints         (DB-laag)"
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "  V3   grants-gate: feitelijke rechten op alle relaties/functies == allowlist (DB-laag)"
+echo "  BG   break-glass: directe GoTrue-refresh geeft nooit een volledige rol zonder venster (API-laag)"
 echo "  BBIND bewijsbinding: één-op-één + DB-validatie/audit + snapshotdekking       (DB-laag)"
 echo "  T2   voorbereiding-product: eigen schrijfrecht, overschrijven, notities intact (DB-laag)"
 echo "============================================================================"

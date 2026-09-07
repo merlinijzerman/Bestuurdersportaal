@@ -368,8 +368,10 @@ begin
   assert v_res->'claims'->>'role' = 'portaal_beperkt', 'M7: break-glass op AAL1 krijgt de beperkte rol';
   assert v_res->'error' is null, 'M7: … en geen weigering';
   assert (v_res - 'claims') = (ev_pw2 - 'claims'), 'M7: verder blijft het event ongewijzigd';
-  -- Pas met AAL2 volgt de normale rol.
-  assert public.fn_access_token_hook(ev_pw2_aal2) = ev_pw2_aal2, 'M7: break-glass op AAL2 krijgt de normale rol';
+  -- Ook AAL2 alléén is niet genoeg: de normale rol volgt pas als er een
+  -- activeringsvenster IS (zie M20). Zo kan een client de app niet overslaan.
+  assert public.fn_access_token_hook(ev_pw2_aal2)->'claims'->>'role' = 'portaal_beperkt',
+    'M7: AAL2 zonder activeringsvenster blijft beperkt';
 
   -- MFA-factor terug naar unverified → uitzondering werkt niet meer
   update auth.mfa_factors set status = 'unverified' where user_id = v_u2;
@@ -566,7 +568,19 @@ begin
   reset role;
   reset request.jwt.claims;
 
-  -- ── M20 — activeringsvenster: één auditregel, en het venster loopt af ────
+  -- ── M20 — verhoging bestaat NIET zonder venster (reviewbevinding P1) ─────
+  -- Na een verse MFA-verificatie is er nog geen venster; de sessie blijft dan
+  -- BEPERKT. Zou de hook hier al 'vol' geven, dan kon een client de app overslaan
+  -- en rechtstreeks bij GoTrue refreshen: volledige tokens zonder venster en
+  -- zonder auditregel.
+  delete from login_private.break_glass_activeringen where user_id = v_u2;
+  assert public.fn_access_token_hook(ev_pw2_aal2)->'claims'->>'role' = 'portaal_beperkt',
+    'M20: AAL2 zonder activeringsvenster blijft beperkt';
+  select count(*) into v_n from login_private.audit_log
+   where user_id = v_u2 and gebeurtenis = 'breakglass.gebruikt';
+  assert v_n = 0, 'M20: … en er is niets geaudit, want er is niets verhoogd';
+
+  -- Pas de expliciete verhoging opent het venster én schrijft één auditregel.
   set local role login_gateway;
   select r.categorie into v_cat from login_private.open_breakglass_venster(v_u2, 3600, 'corr-m20') r;
   assert v_cat is null, 'M20: venster geopend';
@@ -575,21 +589,26 @@ begin
   select count(*) into v_n from login_private.audit_log
    where user_id = v_u2 and gebeurtenis = 'breakglass.gebruikt';
   assert v_n = 1, format('M20: precies één breakglass.gebruikt per venster (was %s)', v_n);
-  assert public.fn_access_token_hook(ev_pw2_aal2) = ev_pw2_aal2, 'M20: binnen het venster blijft de normale rol';
+  assert public.fn_access_token_hook(ev_pw2_aal2) = ev_pw2_aal2, 'M20: mét venster volgt de normale rol';
+
   -- Let op: binnen één transactie staat now() stil, dus het venster wordt naar het
   -- verleden verplaatst in plaats van "af te wachten".
   update login_private.break_glass_activeringen
      set geopend_op = now() - interval '2 hours', venster_tot = now() - interval '1 hour';
   assert public.fn_access_token_hook(ev_pw2_aal2)->'claims'->>'role' = 'portaal_beperkt',
     'M20: na afloop van het venster zakt de verhoogde sessie terug naar de beperkte rol';
-  -- Een NIEUWE MFA-verificatie (latere amr-timestamp) mag wél weer verhogen.
+  -- Een NIEUWE MFA-verificatie (latere amr-timestamp) geeft óók geen volledige rol
+  -- zolang er geen bijbehorend venster is — verhogen blijft een expliciete stap.
   assert public.fn_access_token_hook(
       jsonb_set(ev_pw2_aal2, '{claims,amr}', jsonb_build_array(
         jsonb_build_object('method','password','timestamp', extract(epoch from now())::bigint),
         jsonb_build_object('method','totp','timestamp', extract(epoch from now())::bigint)))
-    )->'claims'->>'role' is distinct from 'portaal_beperkt',
-    'M20: een verse MFA-verificatie opent een nieuwe verhoging';
+    )->'claims'->>'role' = 'portaal_beperkt',
+    'M20: ook een verse MFA-verificatie verhoogt niet vanzelf';
   -- Intrekken van de aanwijzing beëindigt lopende verhogingen.
+  set local role login_gateway;
+  perform login_private.open_breakglass_venster(v_u2, 3600, 'corr-m20d');
+  reset role;
   select g.id into v_id from login_private.break_glass g where g.user_id = v_u2 and g.ingetrokken_op is null;
   set local role login_gateway;
   perform login_private.trek_break_glass_in(v_id, v_fonds, v_u1, 'corr-m20c');
@@ -597,6 +616,14 @@ begin
   select count(*) into v_n from login_private.break_glass_activeringen where user_id = v_u2 and venster_tot > now();
   assert v_n = 0, 'M20: intrekking ruimt lopende verhogingen op';
   assert (public.fn_access_token_hook(ev_pw2_aal2)->'error'->>'http_code') = '403', 'M20: na intrekking geen noodtoegang';
+
+  -- ── M21 — fondslock in canonieke volgorde (reviewbevinding P2) ───────────
+  -- Twee gelijktijdige verplaatsingen A→B en B→A mogen elkaar niet deadlocken;
+  -- de trigger sorteert daarom op UUID. Hier toetsen we dat de volgorde
+  -- daadwerkelijk onafhankelijk is van de richting van de verplaatsing.
+  update public.profielen set fonds_id = v_fonds2 where id = v_u3;
+  update public.profielen set fonds_id = v_fonds where id = v_u3;
+  assert (select fonds_id from public.profielen where id = v_u3) = v_fonds, 'M21: verplaatsing heen en terug werkt';
 
   -- ── M17 — terug naar uit ─────────────────────────────────────────────────
   set local role login_gateway;

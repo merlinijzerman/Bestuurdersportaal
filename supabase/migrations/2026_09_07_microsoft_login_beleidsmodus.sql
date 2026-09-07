@@ -304,19 +304,29 @@ revoke all on function login_private.fondslock(uuid) from public, anon, authenti
 -- Een nieuw of verplaatst profiel verandert de dekking zonder door een van onze
 -- functies te lopen. Deze trigger neemt daarom dezelfde lock, zodat een insert
 -- of fondswissel nooit tussen preflight en omslag valt.
+-- Twee fondsen tegelijk vergrendelen mag NOOIT in de volgorde van de verplaatsing:
+-- twee gelijktijdige wissels A→B en B→A zouden elkaar dan deadlocken
+-- (reviewbevinding P2). De lock gaat daarom altijd in canonieke volgorde — op
+-- gesorteerde UUID — ongeacht welke kant de verplaatsing op gaat.
 create or replace function public.fn_profiel_fondslock() returns trigger
 language plpgsql security definer set search_path = login_private, public, pg_temp as $$
+declare v_fondsen uuid[];
 begin
-  if tg_op = 'INSERT' then
-    if new.fonds_id is not null then perform login_private.fondslock(new.fonds_id); end if;
-  elsif tg_op = 'UPDATE' then
-    if new.fonds_id is distinct from old.fonds_id then
-      if old.fonds_id is not null then perform login_private.fondslock(old.fonds_id); end if;
-      if new.fonds_id is not null then perform login_private.fondslock(new.fonds_id); end if;
-    end if;
-  else
-    if old.fonds_id is not null then perform login_private.fondslock(old.fonds_id); end if;
+  v_fondsen := (
+    select coalesce(array_agg(distinct f order by f), '{}'::uuid[])
+      from unnest(array[
+        case when tg_op in ('INSERT','UPDATE') then new.fonds_id end,
+        case when tg_op in ('UPDATE','DELETE') then old.fonds_id end
+      ]) f
+     where f is not null
+  );
+  -- Bij een UPDATE zonder fondswissel valt er niets te serialiseren.
+  if tg_op = 'UPDATE' and new.fonds_id is not distinct from old.fonds_id then
+    return new;
   end if;
+  for i in 1 .. coalesce(array_length(v_fondsen, 1), 0) loop
+    perform login_private.fondslock(v_fondsen[i]);
+  end loop;
   return coalesce(new, old);
 end $$;
 revoke all on function public.fn_profiel_fondslock() from public, anon, authenticated, service_role;
@@ -896,17 +906,19 @@ create or replace function login_private.wachtwoordlogin_niveau(
        where g.user_id = p_user and g.ingetrokken_op is null)
       then case
         when not coalesce(p_aal2, false) then 'beperkt'
-        -- Verhoogd blijven mag alleen binnen het venster van DEZE MFA-verificatie.
+        -- Verhoogd zijn mag UITSLUITEND binnen een reeds bestaand, lopend venster
+        -- dat bij DEZE MFA-verificatie hoort. Bestaat dat venster nog niet, dan
+        -- blijft de sessie beperkt: het openen ervan is een expliciete, geaudite
+        -- handeling (POST /api/microsoft-login/verhoging), geen bijwerking van een
+        -- willekeurig verzoek. Zonder deze regel kon een client de app overslaan en
+        -- rechtstreeks bij GoTrue refreshen — volledige tokens zonder venster en
+        -- zonder auditregel (reviewbevinding P1, 7 september).
         when exists (
           select 1 from login_private.break_glass_activeringen a
            where a.user_id = p_user
              and (p_mfa_op is null or a.geopend_op >= p_mfa_op)
              and a.venster_tot > pg_catalog.now()) then 'vol'
-        when exists (
-          select 1 from login_private.break_glass_activeringen a
-           where a.user_id = p_user
-             and (p_mfa_op is null or a.geopend_op >= p_mfa_op)) then 'beperkt'
-        else 'vol'                       -- eerste verzoek na de MFA-stap; de guard opent het venster
+        else 'beperkt'
       end
     else 'geweigerd'
   end;

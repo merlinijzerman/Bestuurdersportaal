@@ -92,6 +92,33 @@ test("1C: alle dekkingsmutaties nemen dezelfde fondslock", () => {
   assert.doesNotMatch(migratie, /pg_advisory_xact_lock\([^)]*\);\s*\n\s*select c\.modus/, "zet_modus gebruikt de gedeelde helper, geen eigen lock");
 });
 
+test("1C: verhogen is een expliciete, geaudite handeling — geen bijwerking van de guard", () => {
+  // P1: zonder bestaand venster geeft de hook NOOIT de volledige rol. Anders kan
+  // een client de app overslaan en rechtstreeks bij GoTrue refreshen.
+  assert.match(migratie, /and a\.venster_tot > pg_catalog\.now\(\)\) then 'vol'\s*\n\s*else 'beperkt'/);
+  assert.doesNotMatch(migratie, /else 'vol' {2,}-- eerste verzoek/, "de oude fallback mag niet terug");
+  // De guard oordeelt alleen; hij opent geen vensters meer.
+  assert.doesNotMatch(guard, /openBreakglassVenster/, "de guard heeft geen bijwerking");
+  // Het openen loopt via één expliciete route, met eigen audithandeling.
+  const route = lees("app/api/microsoft-login/verhoging/route.ts");
+  assert.match(route, /audit: \{ handeling: "microsoft-login\.breakglass\.verhoging" \}/);
+  assert.match(route, /magBreakglassVerhogen\(\{ beleid, aal \}\)/);
+  assert.match(route, /if \("categorie" in r\)[\s\S]{0,200}?status: 403/, "een mislukte opening wordt niet genegeerd");
+  assert.match(beleidCore, /"\/api\/microsoft-login\/verhoging",/);
+  // En de echte GoTrue-test hangt in de blokkerende gate.
+  assert.match(ci, /node scripts\/breakglass-directe-refresh\.mjs/);
+  const bewijs = lees("scripts/breakglass-directe-refresh.mjs");
+  assert.match(bewijs, /grant_type=refresh_token/, "de test refresht rechtstreeks bij GoTrue");
+  assert.match(bewijs, /een DIRECTE refresh \(app overgeslagen\) geeft géén volledige rol/);
+});
+
+test("1C: de fondslock gaat in canonieke volgorde (geen deadlock bij A→B en B→A)", () => {
+  assert.match(migratie, /array_agg\(distinct f order by f\)/, "gesorteerde UUID's, niet de richting van de verplaatsing");
+  assert.match(migratie, /for i in 1 \.\. coalesce\(array_length\(v_fondsen, 1\), 0\) loop/);
+  assert.doesNotMatch(migratie, /perform login_private\.fondslock\(old\.fonds_id\); end if;\s*\n\s*if new\.fonds_id is not null then/,
+    "niet meer oud-dan-nieuw");
+});
+
 test("1C: break-glass is een DUURZAME aanwijzing met korte activeringsvensters", () => {
   // Geen einddatum op de aanwijzing zelf: een noodpad dat vanzelf verdampt is bij
   // een Entra-storing geen noodpad (reviewbevinding 4).
@@ -105,8 +132,6 @@ test("1C: break-glass is een DUURZAME aanwijzing met korte activeringsvensters",
   assert.match(migratie, /create table if not exists login_private\.break_glass_activeringen/);
   assert.match(migratie, /'breakglass\.gebruikt'/, "het beloofde auditgebeurtenis bestaat");
   assert.match(migratie, /delete from break_glass_activeringen a where a\.break_glass_id = p_id and a\.venster_tot > now\(\)/);
-  // De guard opent het venster; de kern beslist wanneer.
-  assert.match(lees("core/lib/microsoft-login-sessieguard.ts"), /moetBreakglassVensterOpenen\(\{ beleid, rol, aal \}\)/);
   assert.match(beleidCore, /export const BREAKGLASS_VENSTER_SECONDEN = 60 \* 60;/);
 });
 
@@ -182,7 +207,7 @@ test("1C: persoonlijk ontkoppelen is server-side dicht in `verplicht`", () => {
 test("1C: guard L3 beoordeelt élke sessie, ongecachet, met de juiste fail-richting", () => {
   assert.match(guard, /^import "server-only";/m);
   assert.match(guard, /export async function beoordeelPortaalSessie/);
-  assert.match(guard, /await gateway\.sessiebeleid\(gebruikerId\)/);
+  assert.match(guard, /await sessiebeleid\(gebruikerId\)/);
   assert.match(guard, /BEWUST ONGECACHET/);
   assert.doesNotMatch(guard, /new Map\(|maak[A-Za-z]*Cache|ttlMs|TTL_MS/, "geen cachelaag: intrekken werkt bij het eerstvolgende verzoek");
   assert.match(guard, /categorie === "config_ontbreekt" \? "config" : "fout"/);

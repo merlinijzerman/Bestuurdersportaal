@@ -1,6 +1,6 @@
 # 0212 — Microsoft-loginbeleid (fase 1C): drie fondsmodi, afdwinging in de Auth-hook, en een beheerde bindingslifecycle met twee begrensde herstelpaden
 
-- **Status:** Voorgesteld (PR-A geïmplementeerd en na reviewronde 1 herzien; PR-B — beheer- en profielinterface — volgt)
+- **Status:** Voorgesteld (PR-A geïmplementeerd en na reviewrondes 1 en 2 herzien; PR-B — beheer- en profielinterface — volgt)
 - **Datum:** 2026-09-07
 - **Betrokkenen:** Merlin (opdrachtgever/productowner, vier expliciete keuzes hieronder), Claude (ontwerp en implementatie)
 - **Ticket:** [#344](https://github.com/merlinijzerman/Bestuurdersportaal/issues/344) — M365 fase 1C, organisatiebreed Microsoft-loginbeleid en beheerde ontkoppeling
@@ -129,6 +129,29 @@ rol en is een nieuwe MFA-verificatie nodig — die opent een nieuw, apart geaudi
 verloopBEWAKING zit in `herzien_voor`: die datum blokkeert niets, maar preflight, beheeroverzicht en
 runbook melden dat de aanwijzing herzien moet worden. Intrekken beëindigt lopende verhogingen direct.
 
+## Herziening na reviewronde 2 (7 september 2026)
+
+**D12 — verhogen is een expliciete, geaudite handeling; de hook vertrouwt nooit op "de app komt
+straks wel langs".** In de eerste herstelronde gaf de helper na een verse MFA-verificatie meteen
+`vol`, met de gedachte dat de guard daarna het activeringsvenster zou openen. Een client kan dat
+verzoek overslaan en rechtstreeks bij GoTrue refreshen: dan blijven volledige tokens komen zonder
+venster en zonder auditregel — en een mislukte opening werd bovendien stil genegeerd
+(reviewbevinding P1). De helper geeft nu `vol` **uitsluitend** wanneer er al een lopend venster is
+dat bij díe MFA-verificatie hoort; in alle andere gevallen `beperkt`. Het openen loopt via één
+route, `POST /api/microsoft-login/verhoging`, met eigen audithandeling en een harde 403 als het
+mislukt. De guard heeft geen bijwerking meer.
+
+Dit is niet met een SQL-suite te bewijzen — die roept de hookfunctie aan, niet GoTrue. Daarom draait
+`scripts/breakglass-directe-refresh.mjs` in de blokkerende gate: hij logt echt in, verifieert echt
+MFA, refresht **rechtstreeks bij de Auth-API zonder de app aan te raken**, en toetst daarna PostgREST
+met het verkregen token. Met het oude gedrag teruggezet gaat die test rood op precies vier
+asserties (negatieve controle uitgevoerd).
+
+**D13 — de fondslock gaat in canonieke volgorde.** De profieltrigger vergrendelde bij een
+verplaatsing eerst het oude en dan het nieuwe fonds; twee gelijktijdige wissels A→B en B→A konden
+elkaar zo deadlocken (reviewbevinding P2). De trigger sorteert de betrokken fondsen nu op UUID en
+vergrendelt ze in die volgorde, ongeacht de richting.
+
 ## Overwogen alternatieven
 
 - **`actief` omzetten naar een generated column** — formeel één bron van waarheid, maar
@@ -191,8 +214,9 @@ runbook melden dat de aanwijzing herzien moet worden. Intrekken beëindigt lopen
   de gebruiker zelf kan losmaken. (d) De rol `portaal_beperkt` moet net als `login_gateway` worden
   geprovisioneerd (runbook §1C.0) en lid zijn van `authenticator`; ontbreekt zij, dan weigert de
   migratie te draaien. (e) Een verhoogde break-glasssessie kan zichzelf na afloop van het venster
-  opnieuw verhogen met een nieuwe MFA-stap; het venster begrenst dus de sessie en maakt elk gebruik
-  zichtbaar, maar het is geen rem op de entitlement — die begrenzen intrekking en herziening.
+  opnieuw verhogen met een nieuwe MFA-stap **plus een nieuwe, geaudite verhogingsaanroep**; het
+  venster begrenst dus de sessie en maakt elk gebruik zichtbaar, maar het is geen rem op de
+  entitlement — die begrenzen intrekking en herziening.
 
 ## Referenties
 

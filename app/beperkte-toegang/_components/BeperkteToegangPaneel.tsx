@@ -28,6 +28,21 @@ export default function BeperkteToegangPaneel({ naam, factorId }: { naam: string
       setBezig(false);
       return;
     }
+    // De sessie is nu AAL2, maar nog stééds beperkt: de Auth-hook geeft de normale
+    // rol pas als er een activeringsvenster IS. Dat openen is een expliciete,
+    // geaudite serverhandeling — daarna vernieuwen we het token één keer.
+    const verhoging = await fetch("/api/microsoft-login/verhoging", { method: "POST" });
+    if (!verhoging.ok) {
+      setFout("Noodtoegang kan nu niet worden geopend. Neem contact op met uw beheerder.");
+      setBezig(false);
+      return;
+    }
+    const { error: verversFout } = await supabase.auth.refreshSession();
+    if (verversFout) {
+      setFout("De sessie kon niet worden vernieuwd. Probeer het opnieuw.");
+      setBezig(false);
+      return;
+    }
     window.location.replace("/");
   }
 

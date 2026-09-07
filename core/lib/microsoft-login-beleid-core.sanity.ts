@@ -8,7 +8,7 @@ import {
   LOGIN_MODI,
   ROL_BEPERKT,
   magBeperkteSessieRoute,
-  moetBreakglassVensterOpenen,
+  magBreakglassVerhogen,
   activeringWeigering,
   beoordeelPortaalSessieKern,
   isBeleidFoutcategorie,
@@ -93,19 +93,20 @@ test("configdrift: een profiel zonder configuratierij is dicht", () => {
   assert.equal(beoordeelPortaalSessieKern({ isOAuth: false, beleid: null }).toegestaan, true);
 });
 
-test("break-glassvenster: precies één keer openen per verhoging", () => {
+test("break-glassverhoging: alleen ná de MFA-stap en alleen als er nog geen venster is", () => {
   assert.equal(BREAKGLASS_VENSTER_SECONDEN, 3600);
   const bg = beleid({ modus: "verplicht", breakGlass: true });
-  assert.equal(moetBreakglassVensterOpenen({ beleid: bg, rol: "authenticated", aal: "aal2" }), true);
-  assert.equal(moetBreakglassVensterOpenen({ beleid: bg, rol: "authenticated", aal: "aal1" }), false, "niet verhoogd");
-  assert.equal(moetBreakglassVensterOpenen({ beleid: bg, rol: ROL_BEPERKT, aal: "aal2" }), false, "afgeschaalde sessie opent niets");
+  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal2" }), true);
+  assert.equal(magBreakglassVerhogen({ beleid: bg, aal: "aal1" }), false, "MFA-stap nog niet gedaan");
   assert.equal(
-    moetBreakglassVensterOpenen({ beleid: beleid({ modus: "verplicht", breakGlass: true, breakglassVensterTot: new Date(Date.now() + 60_000) }), rol: "authenticated", aal: "aal2" }),
+    magBreakglassVerhogen({ beleid: beleid({ modus: "verplicht", breakGlass: true, breakglassVensterTot: new Date(Date.now() + 60_000) }), aal: "aal2" }),
     false,
-    "venster loopt al",
+    "er loopt al een venster",
   );
-  assert.equal(moetBreakglassVensterOpenen({ beleid: beleid({ modus: "verplicht" }), rol: "authenticated", aal: "aal2" }), false, "geen aanwijzing");
-  assert.equal(moetBreakglassVensterOpenen({ beleid: null, rol: "authenticated", aal: "aal2" }), false);
+  assert.equal(magBreakglassVerhogen({ beleid: beleid({ modus: "verplicht" }), aal: "aal2" }), false, "geen aanwijzing");
+  assert.equal(magBreakglassVerhogen({ beleid: null, aal: "aal2" }), false);
+  // De verhogingsroute staat op de smalle allowlist; het portaal niet.
+  assert.equal(magBeperkteSessieRoute("/api/microsoft-login/verhoging"), true);
 });
 
 test("wachtwoordsessie: alleen een expliciete `verplicht` sluit het pad", () => {

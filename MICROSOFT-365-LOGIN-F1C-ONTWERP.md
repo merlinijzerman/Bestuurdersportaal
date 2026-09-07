@@ -57,8 +57,8 @@ L1  Auth-hook (public.fn_access_token_hook, SECURITY INVOKER als supabase_auth_a
         · koppel-/herstelvenster open                          → 'beperkt'
         · break-glassaanwijzing zonder geverifieerde MFA       → 'geweigerd'
         · break-glass mét MFA, sessie op AAL1                  → 'beperkt'
-        · break-glass mét MFA op AAL2, venster loopt           → 'vol'
-        · break-glass mét MFA op AAL2, venster verlopen        → 'beperkt'
+        · break-glass mét MFA op AAL2 én een lopend venster    → 'vol'
+        · break-glass mét MFA op AAL2 zonder (lopend) venster  → 'beperkt'
       'beperkt' = hetzelfde token met claim `role = portaal_beperkt`; 'geweigerd' = 403.
 
 L2  Startroutes (host → fonds → configuratie → modus)         geen knop, geen flow in `uit`
@@ -130,13 +130,18 @@ te kennen**, volledig geaudit en pas werkzaam met een **geverifieerde** MFA-fact
 `auth.mfa_factors` zelf (hij draait als `supabase_auth_admin`) en geeft het resultaat als argument
 aan de helper, zodat `login_hook_owner` geen enkel recht in het auth-schema nodig heeft.
 
-**Kort is het activeringsvenster.** De eerste uitgifte ná een wachtwoordlogin is `aal1`; die krijgt
-de beperkte rol, zodat de gebruiker de MFA-stap kán doen maar nog nergens bij kan. Na een geslaagde
-verificatie (`aal2`) geeft de hook de normale rol, en opent de guard een venster van een uur in
-`login_private.break_glass_activeringen` — met precies één `breakglass.gebruikt` in de audit. Loopt
-dat venster af, dan zakt de sessie bij de eerstvolgende tokenuitgifte terug naar de beperkte rol en
-is een nieuwe MFA-verificatie nodig; die opent een nieuw, apart geaudit venster. Intrekken van de
-aanwijzing beëindigt lopende verhogingen direct.
+**Kort is het activeringsvenster, en verhogen is een expliciete handeling.** De eerste uitgifte ná
+een wachtwoordlogin is `aal1`; die krijgt de beperkte rol, zodat de gebruiker de MFA-stap kán doen
+maar nog nergens bij kan. Ook ná de verificatie (`aal2`) blijft de sessie beperkt: de hook geeft de
+normale rol **pas als het venster er al is**. Dat venster openen doet `POST
+/api/microsoft-login/verhoging` — één expliciete route met eigen audithandeling, die faalt met 403
+als het niet lukt. Pas daarna vernieuwt de client zijn token en volgt de normale rol.
+
+Die volgorde is bewust: zou het venster als bijwerking van een willekeurig verzoek ontstaan, dan kan
+een client de app overslaan en rechtstreeks bij GoTrue refreshen — en volledige tokens houden zonder
+venster en zonder auditregel (besluit 0212 D12). Loopt het venster af, dan zakt de sessie bij de
+eerstvolgende tokenuitgifte terug naar de beperkte rol en zijn een nieuwe MFA-verificatie én een
+nieuwe verhogingsaanroep nodig. Intrekken van de aanwijzing beëindigt lopende verhogingen direct.
 
 **Verloopbewaking.** `herzien_voor` blokkeert niets, maar preflight (`breakglass_herziening_verlopen`),
 het beheeroverzicht (`breakglass_overzicht`) en het runbook melden dat een aanwijzing herzien moet
@@ -217,7 +222,8 @@ het *fondsbeleid*, niet over het bestaan van een account.
 |---|---|
 | Pure beslisregels (modi, uitzonderingen, fail-richting, tokenvorm) | `core/lib/microsoft-login-beleid-core.sanity.ts` |
 | Bron-invarianten (migratie, rollback, gateway, guard, routes, capability, CI) | `tests/cross-tenant/microsoft-login-beleid-contract.test.ts` |
-| DB-structuur en -gedrag (17 scenario's, zelf-seedend, eindigt op `rollback`) | `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql` |
+| DB-structuur en -gedrag (19 scenario's, zelf-seedend, eindigt op `rollback`) | `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql` |
+| **Echte GoTrue + PostgREST** — directe refresh zonder de app, negatieve controle uitgevoerd | `scripts/breakglass-directe-refresh.mjs` (in `cross-tenant-ci.sh`) |
 | Bijgewerkt op de veranderde feiten | F1B-suite en -contracttest, R1-gate (uitzondering `login_hook_owner`), karakteriseringssuite `login-keten` |
 
 De gedragssuite bewijst onder meer: de beperkte rol kan géén documenten, fondsen of storage lezen
