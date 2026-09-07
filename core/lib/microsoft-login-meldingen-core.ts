@@ -25,8 +25,15 @@ export const SUPPORTCODE_PARAM = "sc";
 /** Supportcode-vorm zoals de URL en de UI haar tonen (acht hoofdletters/cijfers). */
 export const SUPPORTCODE_RE = /^[A-Z0-9]{8}$/;
 
-/** Profielkaart: drie publieke codes, drie teksten. */
-export const PROFIEL_MICROSOFT_LOGIN_CODES = ["koppelen", "verlopen", "ontkoppelen"] as const;
+/** Loginscherm, fase 1C (#344): het fonds staat op modus `verplicht` en GoTrue
+ *  weigerde de wachtwoorduitgifte via de Auth-hook. Deze melding verschijnt pas
+ *  ná geldige credentials en onderscheidt dus geen bestaande van niet-bestaande
+ *  accounts — géén accountenumeratie. Zij zegt alleen wat de gebruiker moet doen. */
+export const LOGIN_VERPLICHT_MELDING =
+  "Voor deze omgeving logt u in met Microsoft. Gebruik de knop hieronder; neem contact op met uw beheerder als dat niet lukt.";
+
+/** Profielkaart: vier publieke codes, vier teksten. */
+export const PROFIEL_MICROSOFT_LOGIN_CODES = ["koppelen", "verlopen", "ontkoppelen", "beheer"] as const;
 export type ProfielMicrosoftLoginCode = (typeof PROFIEL_MICROSOFT_LOGIN_CODES)[number];
 
 export const PROFIEL_MICROSOFT_LOGIN_MELDINGEN: Readonly<Record<ProfielMicrosoftLoginCode, string>> = {
@@ -34,6 +41,8 @@ export const PROFIEL_MICROSOFT_LOGIN_MELDINGEN: Readonly<Record<ProfielMicrosoft
     "Koppelen is niet gelukt. Controleer of dit Microsoft-account al aan een ander portaalaccount is gekoppeld, of neem contact op met uw beheerder.",
   verlopen: "De koppeling is verlopen. Start het koppelen opnieuw.",
   ontkoppelen: "Ontkoppelen is nog niet afgerond. Probeer het opnieuw.",
+  // Fase 1C (#344): in modus `verplicht` beheert de organisatie de koppeling.
+  beheer: "Uw organisatie beheert deze koppeling. Neem contact op met uw beheerder om opnieuw te koppelen.",
 };
 
 export function isProfielMicrosoftLoginCode(v: unknown): v is ProfielMicrosoftLoginCode {

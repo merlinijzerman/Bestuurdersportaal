@@ -83,19 +83,24 @@ test("foutcategorie: MicrosoftLoginError → categorie; gatewayfout → 1-op-1; 
   assert.doesNotMatch(e.message, /abc|provider/);
 });
 
-test("externe meldingen: één logintekst, drie profielteksten, geen verboden woorden, geen orakel", () => {
+test("externe meldingen: één logintekst, vier profielteksten, geen verboden woorden, geen orakel", () => {
   const alle = [LOGIN_MICROSOFT_MELDING, ...Object.values(PROFIEL_MICROSOFT_LOGIN_MELDINGEN)];
-  assert.equal(alle.length, 4);
+  assert.equal(alle.length, 5);
   for (const tekst of alle) {
     for (const woord of VERBODEN_MELDINGWOORDEN) {
       assert.doesNotMatch(tekst.toLowerCase(), new RegExp(woord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").toLowerCase()), `${woord} in "${tekst}"`);
     }
   }
-  // Elke interne categorie beeldt af op een van de drie profielcodes; alleen verval
-  // en unlink onderscheiden zich — de rest is één grove 'koppelen'-melding.
+  // Elke interne categorie beeldt af op een van de vier profielcodes; alleen
+  // verval, unlink en de beheerde koppeling (#344) onderscheiden zich — de rest is
+  // één grove 'koppelen'-melding.
   for (const c of MICROSOFT_LOGIN_FOUTCATEGORIEEN) {
     const code = profielCodeVoor(c);
-    assert.equal(code, c === "pending_verlopen" ? "verlopen" : c === "unlink_mislukt" ? "ontkoppelen" : "koppelen", c);
+    assert.equal(
+      code,
+      c === "pending_verlopen" ? "verlopen" : c === "unlink_mislukt" ? "ontkoppelen" : c === "ontkoppelen_verplicht" ? "beheer" : "koppelen",
+      c,
+    );
   }
 });
 

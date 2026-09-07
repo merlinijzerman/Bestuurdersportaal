@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { veiligVervolgpad } from "@/core/lib/redirect-veilig";
-import { beeindigSessie, beoordeelOAuthSessie, heeftAzureIdentiteit } from "@/core/lib/microsoft-login-sessieguard";
+import { beeindigSessie, beoordeelPortaalSessie, heeftAzureIdentiteit } from "@/core/lib/microsoft-login-sessieguard";
 
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       // terug naar de login. Sessies zonder azure-identiteit raken de gateway niet.
       const { data: { user } } = await supabase.auth.getUser();
       if (user && heeftAzureIdentiteit(user)) {
-        const oordeel = await beoordeelOAuthSessie(supabase, user.id);
+        const oordeel = await beoordeelPortaalSessie(supabase, user.id);
         if (!oordeel.toegestaan) {
           const azure = user.identities?.find((i) => i.provider === "azure");
           if (azure) await supabase.auth.unlinkIdentity(azure).catch(() => undefined);

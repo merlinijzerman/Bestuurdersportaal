@@ -108,15 +108,28 @@ Volgorde is blokkerend (S9-nulmeting: alles staat nog uit, `jwt_exp=3600`):
    P7, P8 groen en P9 = uitsluitend `azure`.
 6. Pas dán, na groene S7 en de T2-code: één fonds activeren (id-gebonden, patroon fase 1):
 
+   **Sinds #344 (fase 1C) is `pilotstatus` vervallen en is `modus` de bron.** Zet de tenant
+   id-gebonden en laat de modus door de gatewayfunctie zetten — een directe `update` op de
+   configuratietabel slaat de activeringspreflight over en is daarom fout:
+
    ```sql
+   -- 1. tenant vastleggen (id-gebonden, nooit op slug)
    update public.fonds_microsoft_login
-      set actief = true, entra_tenant_id = '<tid>', pilotstatus = 'pilot', bijgewerkt = now()
-    where fonds_id = '<fonds-id>' and actief = false
-   returning fonds_id, actief, pilotstatus;
+      set entra_tenant_id = '<tid>', bijgewerkt = now()
+    where fonds_id = '<fonds-id>'
+   returning fonds_id, entra_tenant_id is not null as tenant_gezet;
+
+   -- 2. modus zetten via het beleidspad (null = gelukt; anders de reden)
+   grant login_gateway to postgres;
+   begin;
+     set local role login_gateway;
+     select login_private.zet_modus('<fonds-id>', 'optioneel', '<actor-user-id>', 'runbook-<datum>');
+   commit;
+   revoke login_gateway from postgres;
    ```
 
-   Verwacht exact één rij; de wijziging staat daarna in `login_private.audit_log`
-   (`config.gewijzigd`, zonder tenant-id).
+   Verwacht exact één rij bij stap 1 en `null` bij stap 2; de wijziging staat daarna in
+   `login_private.audit_log` (`config.gewijzigd` én `beleid.gewijzigd`, zonder tenant-id).
 
 ## 5. Entra App L (T3 — invarianten E1–E7)
 
@@ -164,7 +177,7 @@ ontbreekt er één, dan is de knop verborgen en antwoorden de routes neutraal (4
 | Callback | `GET /auth/microsoft-login/callback` | canonieke fondshost (ongeldig/onbekend → neutrale 404, nooit een redirect uit `req.url`) → consumeer transactie (replay dood) → tokenwissel → RS256 → exacte claims → inloggen (`zoek_identiteit` active vóór `signInWithIdToken`, kruiscontrole, profiel in host-fonds, `markeer_gebruikt`) of koppelen (bestaande OAuth-identiteit controleren → reserveer → link of idempotent herstel → actuele GoTrue-gebruiker lezen → verifieer → activeer). Elke fout: één neutrale redirect met supportcode |
 | Koppelen starten | `GET /api/microsoft-login/koppelen/start` | `withFondsRoute`, `profile.manage.own`, hostGuard afdwingen, DB-limiet `microsoft_login_start` per gebruiker; 409 bij bestaande levende binding |
 | Status / ontkoppelen / herstel | `GET/DELETE/POST /api/microsoft-login/koppeling` | status zonder tid/oid/sub/e-mail, mét `sessieViaMicrosoft`; ontkoppelen = `start_intrekking` → `unlinkIdentity` → `voltooi_intrekking`, daarna **deterministisch**: was de sessie via Microsoft, dan wordt zij server-side beëindigd (`uitgelogd: true`, kaart → `/login`), anders blijft de wachtwoordsessie (`uitgelogd: false`); mislukt unlink: blijft `revoking`, kaart biedt "Opnieuw proberen"; herstel idempotent (`herstel_koppeling`) |
-| Guard L3 | `withFondsRoute` (dep `beoordeelOAuthSessie`), `haalFondsSessie`, tenant-layout, login-layout, platform-layout | alleen bij `amr ∋ oauth` wordt `levende_binding` geraadpleegd; niet-`active` → sessie beëindigd (`/login?fout=microsoft`, wrapper: exact de bestaande 401; platform: `?fout=geen_toegang`, R-34). Gatewayfout = fail-closed |
+| Guard L3 | `withFondsRoute` (dep `beoordeelPortaalSessie`), `haalFondsSessie`, tenant-layout, login-layout, platform-layout | **fase 1C (#344):** élke sessie wordt tegen `login_private.sessiebeleid` gehouden (ongecachet). Oauth zonder `active` binding → sessie beëindigd (`/login?fout=microsoft`, wrapper: exact de bestaande 401; platform: `?fout=geen_toegang`, R-34). Gatewayfout = fail-closed |
 | L4 | `/auth/callback` | `azure`-identiteit zonder actieve binding → `unlinkIdentity` + signOut + `/login?error=auth_callback` |
 | UI | `/login` (server-pagina + `LoginForm`), `/profiel` (`MicrosoftLoginKaart`) | knop alleen als host-fonds de flag aan heeft én de config compleet is; één neutrale melding voor `?fout=microsoft` en `?error=auth_callback` met supportcode; kaart per toestand één handeling |
 
@@ -186,3 +199,129 @@ de twee bedoelde OIDC-permissies heeft.
 `MICROSOFT_LOGIN_E2E_OIDC=local` + `SEED_DOELOMGEVING=local` + lokale Supabase-URL). De positieve
 sign-in/link tegen GoTrue vereist de echte Microsoft-JWKS en is alleen met spike T0.5 en de
 Preview-smoke te bewijzen.
+
+---
+
+# Fase 1C — organisatiebreed loginbeleid (#344, besluit 0212)
+
+Bron: `MICROSOFT-365-LOGIN-F1C-ONTWERP.md`. Alles hieronder komt bovenop fase 1B; de
+provisioning uit §2–§4 blijft ongewijzigd (dezelfde rollen, dezelfde variabelen, dezelfde hook).
+
+## 1C.0 Rol provisionen (vóór de migratie)
+
+Naast `login_gateway` en `login_hook_owner` kent fase 1C één extra rol: **`portaal_beperkt`**. De
+Auth-hook schaalt een break-glass- of koppel-/herstelsessie daarheen af; PostgREST doet `set role`
+op die claim, dus de rol moet bestaan én lid zijn van `authenticator` — anders weigert PostgREST het
+token. De migratie controleert beide en stopt met een duidelijke melding als er iets ontbreekt.
+
+```sql
+create role portaal_beperkt nologin noinherit nosuperuser nocreatedb nocreaterole
+  noreplication nobypassrls;
+grant portaal_beperkt to authenticator;
+```
+
+De rol krijgt haar rechten uit de migratie: `USAGE` op `public` en uitsluitend kolom-`SELECT` op
+`public.profielen(id, fonds_id, rol, naam)` met een policy die haar tot de eigen rij beperkt. Geef
+haar nooit iets anders — dat is precies de begrenzing waarop het beleid rust.
+
+## 1C.1 Volgorde (blokkerend)
+
+1. `supabase/migrations/2026_09_07_microsoft_login_beleidsmodus.sql` toepassen. Deterministisch:
+   een actief fonds (de PGB-pilot) wordt `optioneel` — gedragsneutraal — en alle overige fondsen
+   `uit`. De migratie zet **geen enkel** fonds op `verplicht`.
+2. Beide suites draaien tegen de doeldatabase:
+   `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` en
+   `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql`, plus
+   `supabase/checks/2026_07_31_r1_structurele_gates.sql` (de uitzondering voor
+   `login_hook_owner` is verbreed met de kolom `modus` en de tweede helper).
+3. Pas dán de code van PR-A deployen. Andersom crasht de guard op de ontbrekende
+   `login_private.sessiebeleid` — fail-closed, maar het legt het portaal plat.
+4. Moduswijzigingen lopen ná PR-B uitsluitend via het beheerpad (capability
+   `login.beleid.manage`, alleen de rol `beheerder`). Tot die tijd via
+   `login_private.zet_modus` als `login_gateway`; **nooit** met een directe `update` op
+   `public.fonds_microsoft_login` — dan slaat de preflight over.
+
+## 1C.2 Break-glass inrichten (vóór `verplicht`)
+
+- Kies een account dat **niet** de beheerder is die de uitzondering verleent; de database
+  weigert zelf toekennen (`zelf_toekennen`).
+- Dat account moet een **geverifieerde** MFA-factor hebben (`auth.mfa_factors.status =
+  'verified'`). Zonder die factor telt de aanwijzing niet mee en blijft de preflight rood
+  met `breakglass_ontbreekt`.
+- **De aanwijzing is duurzaam**: zij geldt tot intrekking. `herzien_over_dagen` (1–365) zet alleen
+  de herzieningsdatum; die blokkeert niets maar verschijnt als
+  `breakglass_herziening_verlopen` in de preflight en in `breakglass_overzicht`. Neem het herzien op
+  in de reguliere beheercyclus. Reden is een vaste categorie: `entra_storing`, `beheerherstel` of
+  `migratie`.
+- **Zo werkt het gebruik.** Aanmelden met wachtwoord geeft eerst een AFGESCHAALDE sessie
+  (`role = portaal_beperkt`): die kan niets behalve de eigen profielrij lezen en de MFA-stap doen op
+  `/beperkte-toegang`. Ook ná de verificatie blijft de sessie beperkt totdat het
+  activeringsvenster is geopend — dat doet de pagina met één aanroep van
+  `POST /api/microsoft-login/verhoging`, wat precies één `breakglass.gebruikt` in
+  `login_private.audit_log` oplevert. Daarna vernieuwt de client zijn token en volgt de normale rol.
+  Loopt het venster (een uur) af, dan zakt de sessie terug en zijn een nieuwe MFA-verificatie én een
+  nieuwe verhoging nodig: elke verhoging hangt aan één verificatie, die vers moet zijn (< 5 minuten)
+  en maar één keer bruikbaar is. Dezelfde AAL2-sessie kan het venster dus niet heropenen zonder
+  nieuwe code. Intrekken van de aanwijzing beëindigt lopende verhogingen onmiddellijk.
+- **Monitoring:** meer dan een handvol `breakglass.gebruikt`-regels per maand, of een aanwijzing
+  waarvan `herzien_voor` is verstreken, hoort een gesprek te zijn — niet een gewoonte.
+- Controleer vooraf `login_private.activering_preflight(<fonds>)`: `gereed = true` en
+  `breakglass_accounts >= 1`. Krijg je `breakglass_onverifieerbaar`, dan kan de
+  functie-eigenaar `auth.mfa_factors` niet lezen — herstel dat recht, ga niet door op een
+  aanname.
+
+## 1C.3 Herkoppelen (beperkte koppel-/herstelsessie)
+
+1. Beheer geeft een uitnodiging uit voor exact één account; de app stuurt uitsluitend
+   `sha256(token)` naar de database. Het token zelf komt nergens in database, log of audit —
+   dus **bewaar het niet**: is het kwijt, geef dan een nieuwe uit (de vorige vervalt).
+2. De gebruiker opent de link, activeert daarmee het venster (eenmalig, standaard 15 min) en
+   logt in **met zijn bestaande wachtwoord**. Het token authenticeert niet.
+3. Binnen het venster maakt de gebruiker de oude identiteit los en koppelt hij de nieuwe.
+   Zodra `tid + oid` actief is, sluit het venster onmiddellijk en logt hij voortaan met
+   Microsoft in.
+4. Heeft de gebruiker zijn wachtwoord ook niet meer, dan is aanvullende identiteitscontrole
+   nodig. De uitnodigingslink mag nooit het enige authenticatiemiddel zijn.
+
+**Laatste redmiddel (alleen als beide paden falen):** zet het fonds tijdelijk terug op
+`optioneel`, laat de gebruiker koppelen, en zet het daarna weer op `verplicht` — de
+activeringspreflight draait dan opnieuw. Dit verlaagt het beleid voor het hele fonds; leg
+het vast in de audit en houd het venster kort.
+
+## 1C.4 Smoke bij `verplicht` (Preview, PGB)
+
+| # | Scenario | Verwacht |
+|---|---|---|
+| 1 | Microsoft-login met een gekoppeld account | sessie, `amr ∋ oauth` |
+| 2 | Wachtwoordlogin met correcte credentials, gewone gebruiker | 403 van de hook; loginscherm toont "Voor deze omgeving logt u in met Microsoft" |
+| 3 | Wachtwoordlogin met een fout wachtwoord | onveranderd de generieke melding (geen orakel) |
+| 4 | Sessievernieuwing na `jwt_exp` | oauth-sessie leeft door; een wachtwoordsessie is uiterlijk na `jwt_exp` weg en al eerder door de guard beëindigd — **meet dit en leg de tijd vast** |
+| 5 | `DELETE /api/microsoft-login/koppeling` (ook rechtstreeks, buiten de UI om) | 403; `ontkoppelen.geweigerd` in `login_private.audit_log` |
+| 6 | Beheerintrekking, daarna login | 403; binding `revoking` |
+| 7 | Koppel-/herstelsessie: uitnodiging → venster → wachtwoordlogin → herkoppelen | sessie alleen binnen het venster, en dan uitsluitend met `role = portaal_beperkt` (portaal blijft dicht); venster gesloten (`voltooid_op`) na activering |
+| 8a | Break-glassaccount, alleen wachtwoord | login lukt, maar het token draagt `role = portaal_beperkt`; een rechtstreekse `GET /rest/v1/documenten` met dat token geeft 403 en het portaal stuurt naar `/beperkte-toegang` |
+| 8b | Break-glassaccount, ná MFA-verificatie én verhoging | normale rol; portaal bereikbaar; precies één `breakglass.gebruikt` in de audit |
+| 8b' | Break-glassaccount, ná MFA maar **zonder** verhoging (bijv. rechtstreeks refreshen) | blijft `portaal_beperkt`; geen auditregel — dit is de regressie uit reviewbevinding P1 |
+| 8c | Break-glassaccount ná afloop van het uur | sessie zakt terug naar de beperkte rol; een verhoging met dezelfde (oude) MFA-verificatie wordt geweigerd; pas een nieuwe verificatie opent een nieuw venster (nieuwe auditregel) |
+| 9 | Break-glass ingetrokken of MFA-factor onverified | 403 |
+| 10 | Platformbeheerder en een gebruiker van een ander fonds | ongewijzigd (modus is strikt per fonds) |
+
+## 1C.5 Storingsscenario's
+
+- **Entra/Microsoft plat, fonds op `verplicht`.** Gebruik het break-glassaccount. Is dat er
+  niet, zet het fonds op `optioneel` (gateway of beheerpad) — dat werkt zonder Microsoft.
+- **`login_private` onbereikbaar.** De hook weigert dan élke uitgifte (fail-closed) en de
+  guard beëindigt bestaande sessies. Laatste redmiddel op platformniveau: schakel de Custom
+  Access Token Hook uit in het Supabase-dashboard (§4); daarmee vervalt óók de afdwinging van
+  fase 1B, dus alleen bewust, kort en met vastlegging.
+- **Ontbrekende `LOGIN_GATEWAY_*`-configuratie.** Dan bestaat Microsoft-login in die omgeving
+  niet en blijft het wachtwoordpad open zoals het altijd was (besluit 0212 D5); de knop is
+  verborgen en de routes antwoorden neutraal.
+
+## 1C.6 Terugdraaien
+
+`supabase/rollbacks/2026_09_07_microsoft_login_beleidsmodus_ROLLBACK.sql` zet de F1B-vorm
+terug (binaire `actief` + `pilotstatus`, hook laat niet-oauth onvoorwaardelijk door). **Rol
+eerst de PR-A-code terug of zet elk fonds op `optioneel`/`uit`** — draai je de rollback
+terwijl een fonds nog `verplicht` is, dan valt de afdwinging weg en kunnen die gebruikers
+weer met wachtwoord inloggen. `login_private.audit_log` blijft ongemoeid (append-only).

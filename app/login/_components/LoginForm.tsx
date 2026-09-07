@@ -10,6 +10,7 @@
 // ============================================================================
 import { useEffect, useState } from "react";
 import { createClient } from "@/core/lib/supabase";
+import { LOGIN_VERPLICHT_MELDING } from "@/core/lib/microsoft-login-meldingen-core";
 
 export type LoginFormProps = {
   /** Toon de knop "Inloggen met Microsoft" (fonds heeft Microsoft-login aan). */
@@ -48,7 +49,12 @@ export default function LoginForm({ microsoftLogin, melding, supportcode }: Logi
     });
 
     if (error) {
-      setFout("Inloggen mislukt. Controleer uw e-mailadres en wachtwoord.");
+      // Fase 1C (#344): staat het fonds op modus `verplicht`, dan weigert de
+      // Auth-hook de uitgifte met 403 — ná geldige credentials, dus dit
+      // onderscheidt geen bestaande van niet-bestaande accounts. Zonder deze tak
+      // zou de gebruiker "controleer uw wachtwoord" lezen terwijl het wachtwoord
+      // klopt. Elke andere fout blijft de ene, neutrale melding.
+      setFout(error.status === 403 ? LOGIN_VERPLICHT_MELDING : "Inloggen mislukt. Controleer uw e-mailadres en wachtwoord.");
       setLaden(false);
     } else {
       // Forceer één volledige navigatie nadat de Supabase-client de sessiecookie

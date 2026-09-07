@@ -2,16 +2,16 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 110,
+    "aantalHandlers": 111,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 33,
+    "zonderSpoor": 34,
     "klasseTelling": {
       "domein": 39,
       "geen": 9,
       "bewijsketen": 38,
       "machine": 6,
-      "operationeel": 18
+      "operationeel": 19
     },
     "ketengebeurtenisVereist": [],
     "spoorVereist": [],
@@ -959,6 +959,18 @@
     },
     {
       "handler": "POST app/api/microsoft-login/koppeling/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/microsoft-login/verhoging/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",

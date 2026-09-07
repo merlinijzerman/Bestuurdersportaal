@@ -206,6 +206,11 @@ SQL_M365F1B="supabase/checks/2026_09_06_microsoft_login_fase1b.sql"
 # Microsoft-login fase 1B T2 (#335, V9) — atomische startlimiet in login_private
 # (veertiende gatewayfunctie tel_startpoging; tabel zonder rolrechten).
 SQL_M365F1B_V9="supabase/checks/2026_09_07_microsoft_login_startlimiet.sql"
+# Microsoft-loginbeleid fase 1C (#344, PR-A, besluit 0212) — getypeerde modus
+# uit|optioneel|verplicht met spiegelconstraint, het wachtwoordpad in de Auth-hook,
+# MFA-plichtige break-glass, de eenmalige koppel-/herstelsessie, transactionele
+# activeringspreflight en de server-side geweigerde persoonlijke ontkoppeling.
+SQL_M365F1C="supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -416,6 +421,16 @@ echo
 echo "-- Microsoft-login F1B T2 (#335, V9): atomische startlimiet tel_startpoging --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B_V9"
 echo
+echo "-- Microsoft-loginbeleid F1C (#344): modi, break-glass, koppel-/herstelsessie, activeringspreflight --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1C"
+echo
+# De SQL-suite roept de hookFUNCTIE aan; deze test praat met de echte Auth-API en
+# met PostgREST, en raakt de app niet aan. Dat is de enige manier om te bewijzen
+# dat een client de verhogingsroute niet kan overslaan door rechtstreeks te
+# refreshen (reviewbevinding P1, #344).
+echo "-- Microsoft-loginbeleid F1C (#344): break-glass — directe GoTrue-refresh zonder het portaal --"
+TEST_DATABASE_URL="$DB_URL" node scripts/breakglass-directe-refresh.mjs
+echo
 echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
 echo
@@ -466,6 +481,7 @@ echo "  T7   semantische laag: RLS op semantic_units + waardetypering           
 echo "  T8   semantische extractie: gate H op de schrijffunctie + hints         (DB-laag)"
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "  V3   grants-gate: feitelijke rechten op alle relaties/functies == allowlist (DB-laag)"
+echo "  BG   break-glass: directe GoTrue-refresh geeft nooit een volledige rol zonder venster (API-laag)"
 echo "  BBIND bewijsbinding: één-op-één + DB-validatie/audit + snapshotdekking       (DB-laag)"
 echo "  T2   voorbereiding-product: eigen schrijfrecht, overschrijven, notities intact (DB-laag)"
 echo "============================================================================"

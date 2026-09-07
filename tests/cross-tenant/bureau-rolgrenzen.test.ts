@@ -236,9 +236,14 @@ test("BB-4 — de twee AI-capabilities zijn server-side bedraad (T2/T4)", () => 
 // ── (2) NULGRENS G23 — de drie bestaande rollen zijn ongewijzigd ───────────
 
 test("BB-5 — nulgrens: de capability-sets van bestuurder/voorzitter/beheerder zijn gepind", () => {
-  // Letterlijk gepind als BASELINE + W7-DELTA. Wijzigt er iets buiten de delta,
-  // dan is dat per definitie een doorbraak van de nulgrens en faalt deze test
-  // luid in plaats van stil.
+  // Letterlijk gepind als BASELINE + W7-DELTA (+ de expliciet vastgelegde latere
+  // deltas). Wijzigt er iets daarbuiten, dan is dat per definitie een doorbraak
+  // van de nulgrens en faalt deze test luid in plaats van stil.
+  //
+  // #344 (besluit 0212): `login.beleid.manage` — organisatiebreed Microsoft-
+  // loginbeleid, uitsluitend voor de beheerder. Bewust niet voor de voorzitter:
+  // deze gate kan een heel fonds buitensluiten.
+  const NA_W7_beheerder = ["login.beleid.manage"];
   const VOOR_W7_beheerder = [
     "catalog.manage",
     "classification.review",
@@ -280,7 +285,7 @@ test("BB-5 — nulgrens: de capability-sets van bestuurder/voorzitter/beheerder 
 
   assert.deepEqual(
     [...ROL_CAPABILITIES.beheerder].sort(),
-    [...VOOR_W7_beheerder, ...W7_PER_ROL.beheerder].sort()
+    [...VOOR_W7_beheerder, ...W7_PER_ROL.beheerder, ...NA_W7_beheerder].sort()
   );
   assert.deepEqual(
     [...ROL_CAPABILITIES.voorzitter].sort(),

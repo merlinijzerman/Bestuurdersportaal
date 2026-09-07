@@ -13,6 +13,8 @@ import { microsoftLoginConfig, microsoftLoginGeconfigureerd } from "@/core/lib/m
 import { canoniekeFondsHost } from "@/core/lib/microsoft-login-flow-core";
 import { microsoftLoginActief, microsoftLoginVoorRequest } from "@/core/lib/microsoft-login";
 import { microsoftLoginFoutcategorie } from "@/core/lib/microsoft-login-error-core";
+import { sessiebeleid } from "@/core/lib/microsoft-login-gateway";
+import { magZelfKoppelen } from "@/core/lib/microsoft-login-beleid-core";
 
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store" } as const;
@@ -33,6 +35,13 @@ export const GET = withFondsRoute(
     const actief = await microsoftLoginActief(ctx.fondsId).catch(() => ({ actief: false as const }));
     if (!actief.actief) {
       return NextResponse.json({ error: "Microsoft-login is niet beschikbaar voor dit fonds." }, { status: 404, headers: NO_STORE });
+    }
+    // Fase 1C (#344): in modus `verplicht` start de gebruiker geen koppeling op
+    // eigen initiatief; dat mag alleen binnen een door het fondsbeheer geopende
+    // koppel-/herstelsessie. Fail-closed: geen beleid = geen start.
+    const beleid = await sessiebeleid(ctx.gebruikerId).catch(() => null);
+    if (!beleid || !magZelfKoppelen(beleid.modus, beleid.linkOnly)) {
+      return NextResponse.json({ error: "Uw organisatie beheert deze koppeling." }, { status: 403, headers: NO_STORE });
     }
     try {
       const flow = await microsoftLoginVoorRequest();

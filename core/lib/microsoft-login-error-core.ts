@@ -65,6 +65,7 @@ export const MICROSOFT_LOGIN_FOUTCATEGORIEEN = [
   "ongeldige_overgang",
   "onbekende_binding",
   "pending_verlopen",
+  "ontkoppelen_verplicht",
   "profiel_ontbreekt",
   "sessie_mismatch",
   "identiteit_mismatch",
@@ -109,5 +110,8 @@ export function microsoftLoginFoutcategorie(fout: unknown): MicrosoftLoginFoutca
 export function profielCodeVoor(categorie: MicrosoftLoginFoutcategorie): ProfielMicrosoftLoginCode {
   if (categorie === "pending_verlopen") return "verlopen";
   if (categorie === "unlink_mislukt") return "ontkoppelen";
+  // Fase 1C (#344): in modus `verplicht` ligt de lifecycle bij het fondsbeheer;
+  // dat is geen fout van de gebruiker en verdient een eigen, sturende tekst.
+  if (categorie === "ontkoppelen_verplicht") return "beheer";
   return "koppelen";
 }

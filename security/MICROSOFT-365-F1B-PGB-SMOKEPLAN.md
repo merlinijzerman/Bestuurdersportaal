@@ -113,7 +113,7 @@ Niet zetten: `LOGIN_GATEWAY_DB_SSL` (alleen lokaal), niets in Production of de g
 Preflight (lees de rij, controleer `slug` en `id`):
 
 ```sql
-select f.id, f.slug, c.actief, c.entra_tenant_id, c.pilotstatus, c.bijgewerkt
+select f.id, f.slug, c.actief, c.modus, c.entra_tenant_id, c.bijgewerkt
 from public.fondsen f
 left join public.fonds_microsoft_login c on c.fonds_id = f.id
 where f.slug = 'pgb';
@@ -121,18 +121,28 @@ where f.slug = 'pgb';
 
 Verwacht: één rij, `actief = false` (of nog geen configrij als de T1-trigger alleen bij nieuwe fondsen vult; dan eerst een id-gebonden `insert` met `actief=false`). Activeer id-gebonden, nooit op slug:
 
+**Sinds #344 (fase 1C) is `pilotstatus` vervallen en is `modus` de bron.** Zet eerst de tenant, en
+laat de modus daarna door de gatewayfunctie zetten — een directe `update` op `modus` slaat de
+activeringspreflight over:
+
 ```sql
 update public.fonds_microsoft_login
-set actief = true,
-    entra_tenant_id = '<tenant-id>',
-    pilotstatus = 'pilot',
+set entra_tenant_id = '<tenant-id>',
     bijgewerkt = now()
 where fonds_id = '37fdca3b-e92b-4671-b6b7-ac2bb83e3b89'
-  and actief = false
-returning fonds_id, actief, pilotstatus;
+returning fonds_id, entra_tenant_id is not null as tenant_gezet;
+
+grant login_gateway to postgres;
+begin;
+  set local role login_gateway;
+  select login_private.zet_modus('37fdca3b-e92b-4671-b6b7-ac2bb83e3b89', 'optioneel',
+                                 '<actor-user-id>', 'smoke-<datum>');
+commit;
+revoke login_gateway from postgres;
 ```
 
-(Zelfde statement als `MICROSOFT-365-F1B-RUNBOOK.md` §4 stap 6; `entra_tenant_id` niet in de `returning`, zodat het changebewijs de tenant-id niet draagt.) Verwacht: **exact één rij**; nul rijen ⇒ opnieuw controleren, geen bredere update. De configtrigger schrijft `config.gewijzigd` in `login_private.audit_log` (zonder tenant-id); controleer die regel. Alle andere fondsen blijven `actief=false` (query: `select count(*) from public.fonds_microsoft_login where actief` → `1`).
+(Zelfde statements als `MICROSOFT-365-F1B-RUNBOOK.md` §4 stap 6; `entra_tenant_id` niet in de `returning`, zodat het changebewijs de tenant-id niet draagt.) Verwacht: **exact één rij** bij de tenant-update en `null` uit `zet_modus`; nul rijen of een
+categorie ⇒ opnieuw controleren, geen bredere update. De configtrigger schrijft `config.gewijzigd` in `login_private.audit_log` (zonder tenant-id); controleer die regel. Alle andere fondsen blijven `actief=false` (query: `select count(*) from public.fonds_microsoft_login where actief` → `1`).
 
 ---
 

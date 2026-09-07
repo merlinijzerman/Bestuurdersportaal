@@ -46,6 +46,7 @@
     "microsoft-login.koppeling.herstellen": "POST microsoft-login/koppeling",
     "microsoft-login.koppeling.ontkoppelen": "DELETE microsoft-login/koppeling",
     "microsoft-login.koppeling.start": "GET microsoft-login/koppelen/start",
+    "microsoft-login.breakglass.verhoging": "POST microsoft-login/verhoging",
     "microsoft.koppeling.ontkoppelen": "DELETE microsoft/connectie",
     "microsoft.koppeling.start": "GET microsoft/connect",
     "microsoft.koppeling.test": "POST microsoft/test",

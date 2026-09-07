@@ -3,8 +3,8 @@
 --  supabase/migrations/2026_09_06_microsoft_login_fase1b.sql.
 --
 --  WAT DEZE SUITE BEWIJST
---    DEEL 1 — STRUCTUUR: minimale loginrol login_gateway (exact 14 executes — 13 uit
---                        T1 + tel_startpoging uit T2/V9 (2026_09_07_…startlimiet) — nul
+--    DEEL 1 — STRUCTUUR: minimale loginrol login_gateway (exact 26 executes — 13 uit
+--                        T1, tel_startpoging uit T2/V9 en 12 uit fase 1C (#344) — nul
 --                        tabelrechten), NOLOGIN-eigenaar login_hook_owner (rolcontract:
 --                        geen LOGIN/BYPASSRLS/leden/SET ROLE/schrijfrecht, exact de
 --                        kolomrechten, geen andere functies; eerlijke using(true)-
@@ -122,12 +122,15 @@ begin
      or has_table_privilege('login_hook_owner','public.profielen','INSERT,UPDATE,DELETE') then
     fouten := fouten || E'\n- login_hook_owner heeft meer of minder dan kolom-SELECT (id, fonds_id) op profielen';
   end if;
+  -- Fase 1C (#344): `modus` komt erbij — de tweede helper (wachtwoordlogin_toegestaan)
+  -- leest hem. `bijgewerkt` blijft buiten bereik.
   if not has_column_privilege('login_hook_owner','public.fonds_microsoft_login','fonds_id','SELECT')
      or not has_column_privilege('login_hook_owner','public.fonds_microsoft_login','actief','SELECT')
      or not has_column_privilege('login_hook_owner','public.fonds_microsoft_login','entra_tenant_id','SELECT')
-     or has_column_privilege('login_hook_owner','public.fonds_microsoft_login','pilotstatus','SELECT')
+     or not has_column_privilege('login_hook_owner','public.fonds_microsoft_login','modus','SELECT')
+     or has_column_privilege('login_hook_owner','public.fonds_microsoft_login','bijgewerkt','SELECT')
      or has_table_privilege('login_hook_owner','public.fonds_microsoft_login','INSERT,UPDATE,DELETE') then
-    fouten := fouten || E'\n- login_hook_owner heeft meer of minder dan kolom-SELECT (fonds_id, actief, entra_tenant_id) op fonds_microsoft_login';
+    fouten := fouten || E'\n- login_hook_owner heeft meer of minder dan kolom-SELECT (fonds_id, actief, entra_tenant_id, modus) op fonds_microsoft_login';
   end if;
   -- Eerlijke policyvorm: exact `true`, alleen voor login_hook_owner, alleen SELECT.
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='profielen' and policyname='hook owner leest profiel fonds'
@@ -154,19 +157,19 @@ begin
   end if;
   if (select coalesce(array_agg(table_name || '.' || column_name || ':' || privilege_type order by table_name, column_name), '{}')
         from information_schema.column_privileges where grantee='login_hook_owner' and table_schema='public')
-     <> array['fonds_microsoft_login.actief:SELECT','fonds_microsoft_login.entra_tenant_id:SELECT','fonds_microsoft_login.fonds_id:SELECT','profielen.fonds_id:SELECT','profielen.id:SELECT'] then
-    fouten := fouten || E'\n- kolomrechten van login_hook_owner in public wijken af van exact (profielen: id, fonds_id; fonds_microsoft_login: fonds_id, actief, entra_tenant_id; alleen SELECT)';
+     <> array['fonds_microsoft_login.actief:SELECT','fonds_microsoft_login.entra_tenant_id:SELECT','fonds_microsoft_login.fonds_id:SELECT','fonds_microsoft_login.modus:SELECT','profielen.fonds_id:SELECT','profielen.id:SELECT'] then
+    fouten := fouten || E'\n- kolomrechten van login_hook_owner in public wijken af van exact (profielen: id, fonds_id; fonds_microsoft_login: fonds_id, actief, entra_tenant_id, modus; alleen SELECT)';
   end if;
   if exists (select 1 from pg_proc f join pg_namespace n on n.oid=f.pronamespace
               where f.prosecdef and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
-                and not (n.nspname='login_private' and f.proname='identiteit_toegestaan')) then
-    fouten := fouten || E'\n- login_hook_owner kan een andere SECURITY DEFINER-functie uitvoeren dan de eigen helper';
+                and not (n.nspname='login_private' and f.proname in ('identiteit_toegestaan','wachtwoordlogin_niveau'))) then
+    fouten := fouten || E'\n- login_hook_owner kan een andere SECURITY DEFINER-functie uitvoeren dan de twee eigen helpers';
   end if;
   if exists (select 1 from pg_proc f join pg_namespace n on n.oid=f.pronamespace
               where n.nspname in ('public','login_private') and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
-                and not (n.nspname='login_private' and f.proname='identiteit_toegestaan')
+                and not (n.nspname='login_private' and f.proname in ('identiteit_toegestaan','wachtwoordlogin_niveau'))
                 and not exists (select 1 from pg_depend d where d.objid=f.oid and d.deptype='e')) then
-    fouten := fouten || E'\n- login_hook_owner kan een applicatiefunctie (niet-extensie) uitvoeren buiten de eigen helper';
+    fouten := fouten || E'\n- login_hook_owner kan een applicatiefunctie (niet-extensie) uitvoeren buiten de eigen helpers';
   end if;
   if exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
               where n.nspname='public' and c.relkind in ('r','p','v','m','f')
@@ -175,11 +178,13 @@ begin
                   or exists (select 1 from information_schema.column_privileges cp where cp.grantee='login_hook_owner' and cp.table_schema='public' and cp.table_name=c.relname))) then
     fouten := fouten || E'\n- login_hook_owner heeft rechten op een andere publieke relatie dan profielen/fonds_microsoft_login';
   end if;
-  if exists (select 1 from pg_policies where 'login_hook_owner' = any(roles) and not (schemaname||'.'||tablename in ('login_private.microsoft_identiteiten','public.profielen','public.fonds_microsoft_login') and cmd='SELECT')) then
-    fouten := fouten || E'\n- login_hook_owner heeft een policy buiten de drie toegestane leespolicies';
+  -- Fase 1C (#344): break_glass en herkoppel_uitnodigingen krijgen dezelfde,
+  -- eerlijke leespolicy voor login_hook_owner — vijf in totaal, alle SELECT.
+  if exists (select 1 from pg_policies where 'login_hook_owner' = any(roles) and not (schemaname||'.'||tablename in ('login_private.microsoft_identiteiten','login_private.break_glass','login_private.break_glass_activeringen','login_private.herkoppel_uitnodigingen','public.profielen','public.fonds_microsoft_login') and cmd='SELECT')) then
+    fouten := fouten || E'\n- login_hook_owner heeft een policy buiten de zes toegestane leespolicies';
   end if;
   select count(*) into v_n from pg_policies where schemaname='login_private';
-  if v_n <> 1 then fouten := fouten || format(E'\n- verwacht exact 1 policy in login_private, gevonden %s', v_n); end if;
+  if v_n <> 4 then fouten := fouten || format(E'\n- verwacht exact 4 policies in login_private, gevonden %s', v_n); end if;
 
   -- Unieke levende slots
   if not exists (select 1 from pg_indexes where schemaname='login_private' and indexname='microsoft_identiteiten_levend_per_identiteit'
@@ -207,7 +212,8 @@ begin
   end loop;
   select count(*) into v_n from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='login_private' and has_function_privilege('login_gateway',p.oid,'EXECUTE');
-  if v_n <> 14 then fouten := fouten || format(E'\n- login_gateway mag exact 14 functies uitvoeren (13 T1 + tel_startpoging T2), gevonden %s', v_n); end if;
+  -- 13 uit T1, tel_startpoging uit T2/V9 en 10 uit fase 1C (#344, migratie 2026_09_07_…beleidsmodus).
+  if v_n <> 26 then fouten := fouten || format(E'\n- login_gateway mag exact 26 functies uitvoeren (13 T1 + tel_startpoging + 12 fase 1C), gevonden %s', v_n); end if;
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='login_private'
                and (has_function_privilege('anon',p.oid,'EXECUTE') or has_function_privilege('authenticated',p.oid,'EXECUTE')
                     or has_function_privilege('service_role',p.oid,'EXECUTE'))) then
@@ -276,7 +282,7 @@ begin
   end if;
 
   if fouten <> '' then raise exception 'Microsoft-login fase 1B structuur FAALT:%', fouten; end if;
-  raise notice 'OK DEEL 1: private schema, 14 gatewayfuncties (13 T1 + tel_startpoging), helper onder login_hook_owner, INVOKER-hook, configtabel standaard uit.';
+  raise notice 'OK DEEL 1: private schema, 26 gatewayfuncties (13 T1 + tel_startpoging + 12 fase 1C), helper onder login_hook_owner, INVOKER-hook, configtabel standaard uit.';
 end $$;
 
 \echo '== DEEL 2 — GEDRAG (transactie, eindigt op rollback) =='
@@ -307,10 +313,10 @@ begin
   -- ── Seed ────────────────────────────────────────────────────────────────
   insert into public.fondsen (id, naam, slug) values (v_fonds_a, 'Login 1B fonds A', 'login1b-a'), (v_fonds_b, 'Login 1B fonds B', 'login1b-b');
   -- trigger: configrij standaard uit
-  select count(*) into v_n from public.fonds_microsoft_login where fonds_id in (v_fonds_a, v_fonds_b) and actief = false and pilotstatus = 'uit';
+  select count(*) into v_n from public.fonds_microsoft_login where fonds_id in (v_fonds_a, v_fonds_b) and actief = false and modus = 'uit';
   assert v_n = 2, 'nieuwe fondsen krijgen Microsoft-login standaard uit';
   -- Voor de gedragsscenario's: beide fondsen actief op dezelfde tenant (gecontroleerde SQL, patroon runbook).
-  update public.fonds_microsoft_login set actief = true, entra_tenant_id = v_tid, pilotstatus = 'pilot' where fonds_id in (v_fonds_a, v_fonds_b);
+  update public.fonds_microsoft_login set actief = true, entra_tenant_id = v_tid, modus = 'optioneel' where fonds_id in (v_fonds_a, v_fonds_b);
   insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data) values
     (v_ua, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'login1b-a@example.test', jsonb_build_object('fonds_id', v_fonds_a::text)),
     (v_ub, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'login1b-b@example.test', jsonb_build_object('fonds_id', v_fonds_b::text)),
@@ -327,7 +333,10 @@ begin
 
   -- ── H1 niet-oauth passeert onaangeroerd ─────────────────────────────────
   assert public.fn_access_token_hook(ev_pw) = ev_pw, 'H1: wachtwoordsessie passeert ongewijzigd';
-  assert public.fn_access_token_hook(ev_pw - 'user_id') = (ev_pw - 'user_id'), 'H1b: niet-oauth zonder user_id raakt geen database';
+  -- Fase 1C (#344): het niet-oauth-pad wordt tegen het fondsbeleid gehouden. Bij
+  -- modus `optioneel` verandert er niets (H1), maar een uitgifte zonder user_id is
+  -- niet te beoordelen en wordt daarom geweigerd in plaats van doorgelaten.
+  assert (public.fn_access_token_hook(ev_pw - 'user_id')->'error'->>'http_code') = '403', 'H1b: niet-oauth zonder user_id → fail-closed';
 
   -- ── H2 oauth zonder OAuth-identiteit ────────────────────────────────────
   v_res := public.fn_access_token_hook(ev_oauth);
@@ -416,13 +425,14 @@ begin
     perform login_private.voltooi_intrekking(v_id, v_ua, 'corr');
     raise exception 'H10: voltooi_intrekking op active had moeten falen';
   exception when check_violation then null; end;
-  begin
-    perform login_private.start_intrekking(v_fonds_b, v_ua, v_ua, 'corr');
-    raise exception 'H10: intrekking onder verkeerd fonds had moeten falen';
-  exception when no_data_found then null; end;
-  v_id2 := login_private.start_intrekking(v_fonds_a, v_ua, v_ua, 'corr-h10');
+  -- Fase 1C (#344): start_intrekking geeft (id, categorie) terug in plaats van te
+  -- raisen, zodat de weigering in modus `verplicht` in de audit blijft staan.
+  select r.categorie into v_gebeurt from login_private.start_intrekking(v_fonds_b, v_ua, v_ua, 'corr') r;
+  assert v_gebeurt = 'onbekende_binding', 'H10: intrekking onder verkeerd fonds wordt geweigerd';
+  select r.id into v_id2 from login_private.start_intrekking(v_fonds_a, v_ua, v_ua, 'corr-h10') r;
   assert v_id2 = v_id, 'H10: start_intrekking geeft de binding terug';
-  assert login_private.start_intrekking(v_fonds_a, v_ua, v_ua, 'corr-h10') = v_id, 'H10: start_intrekking is idempotent';
+  select r.id into v_id2 from login_private.start_intrekking(v_fonds_a, v_ua, v_ua, 'corr-h10') r;
+  assert v_id2 = v_id, 'H10: start_intrekking is idempotent';
   reset role;
   assert (public.fn_access_token_hook(ev_oauth)->'error'->>'http_code') = '403', 'H10a: revoking → 403';
   assert (public.fn_access_token_hook(ev_refresh)->'error'->>'http_code') = '403', 'H10a: refresh bij revoking → 403';
@@ -478,7 +488,7 @@ begin
 
   -- ── H14 verlopen reservering wordt vrijgegeven ──────────────────────────
   set local role login_gateway;
-  perform login_private.start_intrekking(v_fonds_a, v_ua, v_ua, 'corr-h14');
+  perform r.id from login_private.start_intrekking(v_fonds_a, v_ua, v_ua, 'corr-h14') r;
   perform login_private.voltooi_intrekking(v_id, v_ua, 'corr-h14');
   select r.id into v_id from login_private.reserveer_identiteit(v_fonds_a, v_ua, v_tid, v_oid_b, v_sub_b, 'corr-h14a') r; assert v_id is not null, 'reservering verwacht';
   reset role;
@@ -560,7 +570,7 @@ begin
   assert (select count(*) from public.fonds_microsoft_login where fonds_id in (v_fonds_a, v_fonds_b)) = 1, 'H17: authenticated ziet alleen eigen fondsconfig';
   assert (select fonds_id from public.fonds_microsoft_login where fonds_id in (v_fonds_a, v_fonds_b)) = v_fonds_a, 'H17: … en dat is het eigen fonds';
   begin
-    update public.fonds_microsoft_login set actief = true, entra_tenant_id = v_tid where fonds_id = v_fonds_a;
+    update public.fonds_microsoft_login set actief = true, entra_tenant_id = v_tid, modus = 'optioneel' where fonds_id = v_fonds_a;
     raise exception 'H17: authenticated kon de config bijwerken';
   exception when insufficient_privilege then null; end;
   reset role;
@@ -585,14 +595,14 @@ begin
   reset role;
 
   -- ── H18 config: constraint en audit (fonds B) ─────────────────────────
-  update public.fonds_microsoft_login set actief = false, entra_tenant_id = null, pilotstatus = 'uit' where fonds_id = v_fonds_b;
+  update public.fonds_microsoft_login set actief = false, entra_tenant_id = null, modus = 'uit' where fonds_id = v_fonds_b;
   begin
-    update public.fonds_microsoft_login set actief = true where fonds_id = v_fonds_b;
+    update public.fonds_microsoft_login set actief = true, modus = 'optioneel' where fonds_id = v_fonds_b;
     raise exception 'H18: actief zonder tenant had moeten falen';
   exception when check_violation then null; end;
-  update public.fonds_microsoft_login set actief = true, entra_tenant_id = v_tid, pilotstatus = 'pilot' where fonds_id = v_fonds_b;
+  update public.fonds_microsoft_login set actief = true, entra_tenant_id = v_tid, modus = 'optioneel' where fonds_id = v_fonds_b;
   select foutcategorie into v_gebeurt from login_private.audit_log where fonds_id = v_fonds_b and gebeurtenis = 'config.gewijzigd' order by aangemaakt desc limit 1;
-  assert v_gebeurt = 'actief=true;pilotstatus=pilot;tenant_gezet=true', format('H18: configwijziging gelogd (%s)', v_gebeurt);
+  assert v_gebeurt = 'modus=optioneel;actief=true;tenant_gezet=true', format('H18: configwijziging gelogd (%s)', v_gebeurt);
   assert not exists (select 1 from login_private.audit_log where foutcategorie ~ v_tid), 'H18: tenant-id zelf niet in de audit';
   set local role login_gateway;
   assert (select actief from login_private.lees_config(v_fonds_b)) = true, 'H18: gateway leest de geactiveerde config';
@@ -623,7 +633,8 @@ begin
   assert public.fn_access_token_hook(ev_oauth) = ev_oauth, 'H20: profiel terug → toegestaan';
 
   -- H21 fondsflag uit → initiële uitgifte én refresh 403; binding blijft bestaan; reserveren → login_uit
-  update public.fonds_microsoft_login set actief = false where fonds_id = v_fonds_a;
+  -- Fase 1C (#344): `actief` is de spiegel van `modus`; de flag gaat dus samen om.
+  update public.fonds_microsoft_login set actief = false, modus = 'uit' where fonds_id = v_fonds_a;
   assert (public.fn_access_token_hook(ev_oauth)->'error'->>'http_code') = '403', 'H21: flag uit → initiële uitgifte 403';
   assert (public.fn_access_token_hook(ev_refresh)->'error'->>'http_code') = '403', 'H21: flag uit → refresh 403';
   assert public.fn_access_token_hook(ev_pw) = ev_pw, 'H21: wachtwoordsessie onaangeroerd';
@@ -632,7 +643,7 @@ begin
   assert (select r.categorie from login_private.reserveer_identiteit(v_fonds_a, v_ua, v_tid, '99999999-9999-4999-8999-999999999999', 'sub-N', 'corr-h21') r) = 'login_uit', 'H21: reserveren bij flag uit → login_uit';
   reset role;
   assert (select count(*) from login_private.audit_log where foutcategorie = 'login_uit' and correlatie_id = 'corr-h21') = 1, 'H21: login_uit gelogd';
-  update public.fonds_microsoft_login set actief = true where fonds_id = v_fonds_a;
+  update public.fonds_microsoft_login set actief = true, modus = 'optioneel' where fonds_id = v_fonds_a;
   assert public.fn_access_token_hook(ev_oauth) = ev_oauth, 'H21: flag weer aan → toegestaan';
 
   -- H22 geconfigureerde tenant gewijzigd → 403; reserveren → tenant_mismatch
@@ -654,7 +665,7 @@ begin
   -- H23 fondsconfiguratie ontbreekt geheel → 403
   delete from public.fonds_microsoft_login where fonds_id = v_fonds_a;
   assert (public.fn_access_token_hook(ev_oauth)->'error'->>'http_code') = '403', 'H23: ontbrekende fondsconfiguratie → 403';
-  insert into public.fonds_microsoft_login (fonds_id, actief, entra_tenant_id, pilotstatus) values (v_fonds_a, true, v_tid, 'pilot');
+  insert into public.fonds_microsoft_login (fonds_id, actief, entra_tenant_id, modus) values (v_fonds_a, true, v_tid, 'optioneel');
 
   -- H24 alles hersteld → toegestaan; wachtwoord ongewijzigd
   assert public.fn_access_token_hook(ev_oauth) = ev_oauth, 'H24: flag/tenant/fonds hersteld → toegestaan';

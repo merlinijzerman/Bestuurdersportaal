@@ -174,6 +174,26 @@ begin
       noreplication
       nobypassrls;
   end if;
+  -- #344 — de beperkte portaalrol waarnaar de Auth-hook een break-glass- of
+  -- koppelsessie afschaalt. PostgREST doet `set role` op de claim, dus de rol
+  -- moet bestaan én lid zijn van authenticator (zoals anon/authenticated).
+  if not exists (select 1 from pg_roles where rolname = 'portaal_beperkt') then
+    create role portaal_beperkt
+      nologin
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticator')
+     and not exists (select 1 from pg_auth_members am
+                       join pg_roles r on r.oid = am.roleid
+                       join pg_roles m on m.oid = am.member
+                      where r.rolname = 'portaal_beperkt' and m.rolname = 'authenticator') then
+    grant portaal_beperkt to authenticator;
+  end if;
 end
 $$;
 SQL

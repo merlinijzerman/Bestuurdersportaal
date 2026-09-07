@@ -40,6 +40,60 @@ export function sessieIsOAuth(accessToken: string | null | undefined): boolean {
   return amrUitAccessToken(accessToken).includes("oauth");
 }
 
+/** Eén claim uit het access-token, of null bij een onleesbaar token. Zelfde regel
+ *  als hierboven: alleen DECODEREN om te beslissen wélke controle nodig is —
+ *  GoTrue heeft het token al geverifieerd, en de gateway blijft de bron. */
+function claimUitAccessToken(accessToken: string | null | undefined, naam: string): string | null {
+  if (!accessToken) return null;
+  const delen = accessToken.split(".");
+  if (delen.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(delen[1]!, "base64url").toString("utf8")) as Record<string, unknown>;
+    const waarde = payload[naam];
+    return typeof waarde === "string" ? waarde : null;
+  } catch {
+    return null;
+  }
+}
+
+/** De databaserol in het token (#344). Bij een beperkte sessie zet de Auth-hook
+ *  hier `portaal_beperkt`; PostgREST doet daar `set role` op, dus dit is precies
+ *  wat de datalaag ziet. */
+export function rolUitAccessToken(accessToken: string | null | undefined): string | null {
+  return claimUitAccessToken(accessToken, "role");
+}
+
+/**
+ * Het tijdstip van de MFA-verificatie uit `amr` (de tweede-factor-methode), of
+ * null als het token er geen draagt. De verhoging van een break-glasssessie hangt
+ * hieraan: één verificatie, één venster. Ontbreekt het tijdstip, dan is er niets
+ * om aan te hangen en weigert de database (fail-closed).
+ */
+export function mfaVerificatieUitAccessToken(accessToken: string | null | undefined): Date | null {
+  if (!accessToken) return null;
+  const delen = accessToken.split(".");
+  if (delen.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(delen[1]!, "base64url").toString("utf8")) as { amr?: unknown };
+    if (!Array.isArray(payload.amr)) return null;
+    const stempels = payload.amr
+      .filter((e): e is { method?: unknown; timestamp?: unknown } => typeof e === "object" && e !== null)
+      .filter((e) => e.method === "totp" || e.method === "mfa" || e.method === "webauthn")
+      .map((e) => e.timestamp)
+      .filter((t): t is number => typeof t === "number" && Number.isFinite(t) && t > 0);
+    if (stempels.length === 0) return null;
+    return new Date(Math.max(...stempels) * 1000);
+  } catch {
+    return null;
+  }
+}
+
+/** Het AAL van de sessie (`aal1`/`aal2`); bepaalt of een break-glassaccount is
+ *  verhoogd. Alleen indicatief voor de app — de hook beslist. */
+export function aalUitAccessToken(accessToken: string | null | undefined): string | null {
+  return claimUitAccessToken(accessToken, "aal");
+}
+
 export type GuardOordeel =
   | { toegestaan: true; reden: "geen-oauth" | "actieve-binding" }
   | { toegestaan: false; reden: "geen-binding" | "binding-niet-actief" | "gateway-fout" };
