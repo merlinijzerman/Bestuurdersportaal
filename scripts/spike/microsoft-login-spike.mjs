@@ -23,7 +23,8 @@
 //   S6    hosted flow: alleen redirect_uri-controle; browsertest HANDMATIG
 //
 //  SPIKE_MODE=s7 (negatieve test; hook UIT in config.toml; SPIKE_SCOPES="openid profile email";
-//  inloggen met het TWEEDE account, zelfde e-mailadres als het lokale testaccount):
+//  inloggen met een nog niet lokaal gekoppelde Microsoft-identiteit, met hetzelfde e-mailadres
+//  als het lokale wegwerp-wachtwoordaccount):
 //   S7a   id_token-grant zonder sessie → verwacht ZONDER linking domain: 200 + identiteit aan het
 //         bestaande account (automatische e-mailkoppeling); MET linking domain of zonder email:
 //         422 signup_disabled. Het script meet en rapporteert; identiteit wordt opgeruimd.
@@ -204,7 +205,7 @@ async function haalIdToken() {
     await writeFile(AUTH_URL_FILE, url.toString(), { encoding: "utf8", mode: 0o600, flag: "wx" });
     process.stderr.write(`\nAutorisatie-URL staat tijdelijk in een afgeschermd bestand; niet delen.\n`);
   } else {
-    process.stderr.write(`\n[bevat tijdelijk state-/noncemateriaal — niet delen]\nOpen in de browser en log in met het Microsoft-${MODE === "s7" ? "TWEEDE" : "test"}account:\n${url}\n\n`);
+    process.stderr.write(`\n[bevat tijdelijk state-/noncemateriaal — niet delen]\nOpen in de browser en log in met het Microsoft-${MODE === "s7" ? "S7-test" : "test"}account:\n${url}\n\n`);
   }
   const code = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { server?.close(); reject(new Error(`geen callback binnen ${TIMEOUT_MS / 1000} s`)); }, TIMEOUT_MS);
@@ -390,7 +391,7 @@ async function s7() {
     `scopes=${SCOPES.join("+")}; refresh-token=${refreshTokenUitgegeven ? "JA" : "nee"}`,
     !SCOPES.includes("offline_access") && !refreshTokenUitgegeven);
   meetClaims(claims, nonce);
-  info("S7-0", "modus", `hook moet UIT staan; scopes "${SCOPES.join(" ")}"; tweede account met e-mail gelijk aan het testaccount; verwacht: ${S7_VERWACHT}`);
+  info("S7-0", "modus", `hook moet UIT staan; scopes "${SCOPES.join(" ")}"; niet-gekoppelde Microsoft-identiteit met e-mail gelijk aan het lokale testaccount; verwacht: ${S7_VERWACHT}`);
   const s7a = await idTokenGrant(idToken, nonce);
   const na = await tel();
   const rij = await pg.query("select user_id, id from auth.identities where provider = 'azure' and provider_id = $1", [String(claims.sub)]);
@@ -398,7 +399,7 @@ async function s7() {
   azureIdentityId = rij.rows[0]?.id ?? null;
   const autoLink = s7a.status === 200 && gekoppeldAanTest && na.users === nul.users;
   const geweigerd = s7a.status === 422 && /signup_disabled/.test(foutcode(s7a)) && na.users === nul.users && na.azure === nul.azure;
-  info("S7a", "id_token-grant zonder sessie met tweede account (zelfde e-mail)",
+  info("S7a", "id_token-grant zonder sessie met niet-gekoppelde Microsoft-identiteit (zelfde e-mail)",
     `${s7a.status} ${s7a.status === 200 ? "SESSIE UITGEGEVEN" : foutcode(s7a)}; identiteit aan testaccount=${gekoppeldAanTest}; ${telTekst(nul)} → ${telTekst(na)}`);
   const uitkomst = autoLink ? "auto_link" : geweigerd ? "signup_disabled" : "onverwacht";
   meet("S7b", "uitkomst versus verwachting", `verwacht ${S7_VERWACHT} (zonder linking domain + email: auto_link = R-28 bewezen voor de id-token-ingang; met linking domain of zonder email: signup_disabled)`,

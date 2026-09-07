@@ -10,10 +10,10 @@ geen fondsactivering.
 
 | # | Voorwaarde | Status |
 |---|---|---|
-| S7 | Negatieve e-mailkoppelingstest met een tweede Microsoft-account (drie runs, `SPIKE-335-T0.5.md`) | **open** — T1 mag worden gebouwd en gereviewd, maar **niet gemerged** en PGB **niet geactiveerd** vóór S7 groen is |
+| S7 | Negatieve e-mailkoppelingstest met een niet-gekoppelde Microsoft-identiteit en een lokaal wachtwoordaccount met exact hetzelfde e-mailadres (drie runs, `SPIKE-335-T0.5.md`) | **groen op 7 september 2026** — automatische koppeling uitsluitend met `email` en zonder linking domain; beide beschermde varianten geven `signup_disabled` |
 | S9 | Preview-authconfiguratie gemeten (read-only, allowlist) | rood als nulmeting (verwacht vóór T3); geen implementatiefout |
 | P5 | Supabase Auth ≥ 2.185.0 (`GET /auth/v1/health`) | te meten vóór iedere activering |
-| — | Besluit 0211 blijft *Voorgesteld* tot S7 én de Preview-uitrolvoorwaarden groen zijn | — |
+| — | Besluit 0211 blijft *Voorgesteld* tot T1 is gemerged; de Preview-uitrolvoorwaarden worden in T3 afzonderlijk afgetekend | — |
 
 ## 1. Rollen provisionen (vóór de migratie; per omgeving)
 

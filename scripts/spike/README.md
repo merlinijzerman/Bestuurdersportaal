@@ -22,8 +22,9 @@ uitgeeft.
    - API permissions: alleen delegated `openid`, `profile` (geen `email`, `offline_access`, `User.Read`);
    - Token configuration → optional claim (ID): `acct`;
    - clientsecret aanmaken.
-2. Eén Microsoft-testaccount (lid van de tenant). Voor S7 een tweede account met hetzelfde
-   e-mailadres als het lokale testaccount.
+2. Eén Microsoft-testaccount (lid van de tenant). Voor S7 mag hetzelfde account worden gebruikt,
+   zolang de Microsoft-identiteit lokaal nog niet gekoppeld is en het wegwerp-wachtwoordaccount
+   exact hetzelfde e-mailadres heeft.
 
 ## Lokale stack
 
@@ -111,7 +112,8 @@ Zet in `config.toml` de hook op `enabled = false`, herstart de stack, en draai:
 SPIKE_MODE=s7 SPIKE_S7_VERWACHT=auto_link SPIKE_SCOPES="openid profile email" node --env-file=.env.spike scripts/spike/microsoft-login-spike.mjs > SPIKE-335-T0.5-s7.md
 ```
 
-Log in met het **tweede** account (zelfde e-mailadres als het lokale testaccount). De
+Log in met de **nog niet lokaal gekoppelde** Microsoft-identiteit (zelfde e-mailadres als het
+lokale wegwerp-wachtwoordaccount). De
 verwachting wordt vooraf uitgesproken via `SPIKE_S7_VERWACHT`; een afwijkende uitkomst is rood:
 
 | Run | Instelling | `SPIKE_S7_VERWACHT` |
