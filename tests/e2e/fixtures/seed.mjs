@@ -214,13 +214,16 @@ export async function seedE2e(env = process.env) {
     // #335 T2 — Microsoft-loginflag: alleen fonds A aan, met de stub-tenant; fonds B
     // blijft uit zodat de knop- en 404-negatieven meetbaar zijn. Service-role, want de
     // publieke tabel heeft bewust geen schrijfpolicy (migratie-/SQL-only).
+    // #344: `modus` is de bron (`pilotstatus` is vervallen); `actief` blijft de
+    // spiegel — de CHECK op de tabel eist dat beide kloppen. `optioneel` is exact
+    // het gedrag dat de bestaande E2E-scenario's meten.
     const loginAan = fondsSleutel === "a";
     const { error: loginFlagError } = await admin.from("fonds_microsoft_login").upsert(
       {
         fonds_id: fonds.id,
         actief: loginAan,
         entra_tenant_id: loginAan ? E2E_OIDC.tenantId : null,
-        pilotstatus: loginAan ? "pilot" : "uit",
+        modus: loginAan ? "optioneel" : "uit",
       },
       { onConflict: "fonds_id" }
     );
