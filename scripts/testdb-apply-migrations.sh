@@ -148,6 +148,32 @@ begin
       nobypassrls
       connection limit 5;
   end if;
+  -- #335 T1 — Microsoft-login fase 1B: minimale loginrol login_gateway (zelfde
+  -- vorm als microsoft_vault; T2-code moet er lokaal mee kunnen verbinden, dus
+  -- een vast, niet-geheim wachtwoord) en de NOLOGIN-eigenaar van de hookhelper
+  -- (security/MICROSOFT-365-F1B-RUNBOOK.md). Uitsluitend voor de wegwerp-DB.
+  if not exists (select 1 from pg_roles where rolname = 'login_gateway') then
+    create role login_gateway
+      login
+      password 'login_gateway_lokaal'
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls
+      connection limit 5;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'login_hook_owner') then
+    create role login_hook_owner
+      nologin
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls;
+  end if;
 end
 $$;
 SQL

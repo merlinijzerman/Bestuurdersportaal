@@ -271,6 +271,51 @@ begin
 end $$;
 
 -- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ UITZONDERING B/C — afgeschermde functie-eigenaar (Microsoft-login F1B)   ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- Besluit 0211 / migratie 2026_09_06_microsoft_login_fase1b.sql. De hookhelper
+-- login_private.identiteit_toegestaan (SECURITY DEFINER, eigenaar login_hook_owner)
+-- moet voor élke gebruiker kunnen beoordelen of diens profiel nog in het fonds van
+-- de Microsoft-binding zit en of dat fonds Microsoft-login aan heeft. De twee
+-- leespolicies voor die rol zijn daarom bewust `using (true)`: de beveiliging rust
+-- niet op tenantselectie door RLS maar op de afgeschermde NOLOGIN-eigenaar en het
+-- beperkte functiecontract. Deze functie beoordeelt het VOLLEDIGE contract; faalt
+-- één onderdeel, dan telt de policy gewoon als overtreding in gate B en C:
+--   • exact deze policy op exact deze tabel, alleen voor de rol login_hook_owner, SELECT;
+--   • login_hook_owner: NOLOGIN, geen BYPASSRLS/SUPERUSER/CREATEROLE/INHERIT;
+--   • geen leden met INHERIT of SET (het impliciete ADMIN-lidmaatschap van de
+--     aanmakende postgres-rol heeft beide niet), en zelf lid van niets;
+--   • geen tabelbrede SELECT en geen schrijf-/TRUNCATE/REFERENCES/TRIGGER-recht;
+--   • kolom-SELECT op exact de toegestane kolommen en niets meer;
+--   • geen EXECUTE op enige SECURITY DEFINER-functie behalve de eigen helper.
+create or replace function pg_temp.hook_owner_uitzondering(p_tabel name, p_policy name, p_rollen name[])
+returns boolean language sql stable as $$
+  select p_rollen = array['login_hook_owner']::name[]
+     and (p_tabel, p_policy) in (('profielen','hook owner leest profiel fonds'),
+                                 ('fonds_microsoft_login','hook owner leest loginconfig'))
+     and exists (select 1 from pg_roles r where r.rolname = 'login_hook_owner'
+                   and not r.rolcanlogin and not r.rolbypassrls and not r.rolsuper
+                   and not r.rolcreaterole and not r.rolinherit)
+     and not exists (select 1 from pg_auth_members am join pg_roles r on r.oid = am.roleid
+                      where r.rolname = 'login_hook_owner' and (am.inherit_option or am.set_option))
+     and not exists (select 1 from pg_auth_members am join pg_roles m on m.oid = am.member
+                      where m.rolname = 'login_hook_owner')
+     and not has_table_privilege('login_hook_owner', ('public.' || quote_ident(p_tabel))::regclass, 'SELECT')
+     and not has_table_privilege('login_hook_owner', ('public.' || quote_ident(p_tabel))::regclass, 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+     and (select coalesce(array_agg(cp.column_name::text order by cp.column_name), '{}')
+            from information_schema.column_privileges cp
+           where cp.grantee = 'login_hook_owner' and cp.table_schema = 'public' and cp.table_name = p_tabel)
+         = case p_tabel when 'profielen' then array['fonds_id','id']
+                        when 'fonds_microsoft_login' then array['actief','entra_tenant_id','fonds_id'] end
+     and not exists (select 1 from information_schema.column_privileges cp
+                      where cp.grantee = 'login_hook_owner' and cp.table_schema = 'public'
+                        and cp.table_name = p_tabel and cp.privilege_type <> 'SELECT')
+     and not exists (select 1 from pg_proc f join pg_namespace n on n.oid = f.pronamespace
+                      where f.prosecdef and has_function_privilege('login_hook_owner', f.oid, 'EXECUTE')
+                        and not (n.nspname = 'login_private' and f.proname = 'identiteit_toegestaan'));
+$$;
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
 -- ║ GATE B — tabellen mét eigen fonds_id                                    ║
 -- ╚════════════════════════════════════════════════════════════════════════╝
 -- Een policy moet ófwel fonds_id noemen, ófwel binden aan auth.uid(). Een
@@ -289,6 +334,8 @@ begin
                     where col.table_schema='public' and col.table_name=p.tablename
                       and col.column_name='fonds_id')
        and p.tablename <> 'fondsen'
+       -- Afgeschermde functie-eigenaar (F1B): alleen als het volledige rolcontract klopt.
+       and not pg_temp.hook_owner_uitzondering(p.tablename::name, p.policyname::name, p.roles::name[])
      order by p.tablename, p.policyname
   loop
     if r.qual is not null
@@ -337,6 +384,8 @@ begin
        and p.cmd in ('SELECT','ALL')
        and btrim(coalesce(p.qual,'')) = 'true'
        and not (p.tablename = any(select_allow))
+       -- Afgeschermde functie-eigenaar (F1B): alleen als het volledige rolcontract klopt.
+       and not pg_temp.hook_owner_uitzondering(p.tablename::name, p.policyname::name, p.roles::name[])
      order by p.tablename
   loop
     offenders := offenders || format('  - %s.%s: USING (true)%s', r.tablename, r.policyname, chr(10));
@@ -345,7 +394,7 @@ begin
   if offenders <> '' then
     raise exception E'GATE C FAALT: onbeperkte leespolicies op tenanttabellen:\n%', offenders;
   end if;
-  raise notice 'GATE C OK: geen USING (true) op tenanttabellen.';
+  raise notice 'GATE C OK: geen USING (true) op tenanttabellen (F1B-functie-eigenaar uitgezonderd onder volledig rolcontract).';
 end $$;
 
 -- ╔════════════════════════════════════════════════════════════════════════╗
