@@ -190,6 +190,24 @@ test("T2-C5 — beide app/auth-routes staan als oauth-route in het register; dri
   assert.equal(audit.handelingen["microsoft-login.koppeling.herstellen"], "POST microsoft-login/koppeling");
 });
 
+// ── Canonieke fondshost (reviewbevinding PR #339, ronde 2) ──────────────────
+
+test("hostgrens — routes gebruiken de ruwe Host-header uitsluitend via canoniekeFondsHost; geen requestOrigin; ongeldig/onbekend → 404", () => {
+  for (const r of ["app/auth/microsoft-login/start/route.ts", "app/auth/microsoft-login/callback/route.ts", "app/api/microsoft-login/koppelen/start/route.ts"]) {
+    const bron = lees(r);
+    for (const m of bron.matchAll(/req\.headers\.get\("host"\)/g)) {
+      const regel = bron.slice(bron.lastIndexOf("\n", m.index!) + 1, bron.indexOf("\n", m.index!));
+      assert.match(regel, /canoniekeFondsHost\(req\.headers\.get\("host"\)/, `${r}: ruwe Host-header buiten canoniekeFondsHost: ${regel.trim()}`);
+    }
+    assert.doesNotMatch(bron, /requestOrigin|new URL\(req\.url\)\.origin|\{ origin[,}]/, `${r} gebruikt req.url als redirect-origin`);
+    assert.match(bron, /if \(!host\) return/, `${r}: ongeldige host → neutrale weigering`);
+  }
+  const flow = lees("core/lib/microsoft-login-flow-core.ts");
+  assert.match(flow, /export function canoniekeFondsHost\(/);
+  assert.match(flow, /if \(!opties\.lokaalToegestaan \|\| !isLokaleTestHostnaam\(hostnaam\)/, "poort alleen lokaal op .localhost/loopback");
+  assert.match(flow, /const c = eisCanoniek\(host, opties\);/, "origin eist een canonieke host");
+});
+
 // ── V9: atomische teller in de private gateway ──────────────────────────────
 
 test("V9 — startlimiet telt atomisch in de private gateway met een HMAC van ip|host, niet in het Node-proces", () => {

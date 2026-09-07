@@ -3,6 +3,7 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import {
   callbackUrlVoorHost,
+  canoniekeFondsHost,
   codeChallenge,
   maakFlowGeheimen,
   MICROSOFT_LOGIN_CALLBACK_PAD,
@@ -48,6 +49,9 @@ test("transactiegeheim: rondreis en strikte vormcontrole", () => {
     ["next absoluut", JSON.stringify({ ...geheim, next: "https://evil.example" })],
     ["host met slash", JSON.stringify({ ...geheim, host: "a/b" })],
     ["host met @", JSON.stringify({ ...geheim, host: "x@evil.example" })],
+    ["host met userinfo en poort", JSON.stringify({ ...geheim, host: "pgb.example:443@evil.example" })],
+    ["host met hoofdletters (niet canoniek)", JSON.stringify({ ...geheim, host: "PGB.example" })],
+    ["host met poort op niet-lokale naam", JSON.stringify({ ...geheim, host: "pgb.example:8443" })],
     ["redirectUri met query", JSON.stringify({ ...geheim, redirectUri: `${geheim.redirectUri}?x=1` })],
     ["redirectUri met credentials", JSON.stringify({ ...geheim, redirectUri: "https://u:p@h/auth/microsoft-login/callback" })],
     ["array", "[]"],
@@ -56,17 +60,59 @@ test("transactiegeheim: rondreis en strikte vormcontrole", () => {
   }
 });
 
+test("canonieke fondshost: exact een hostnaam; productie zonder poort; lokaal alleen .localhost/loopback met poort", () => {
+  const prod = { lokaalToegestaan: false };
+  const lokaal = { lokaalToegestaan: true };
+  assert.equal(canoniekeFondsHost("pgb.preview.bestuurdersportaal.com", prod), "pgb.preview.bestuurdersportaal.com");
+  assert.equal(canoniekeFondsHost("PGB.Preview.Bestuurdersportaal.COM", prod), "pgb.preview.bestuurdersportaal.com", "kleine letters");
+  assert.equal(canoniekeFondsHost("fonds-a.localhost:3000", lokaal), "fonds-a.localhost:3000");
+  assert.equal(canoniekeFondsHost("localhost:3000", lokaal), "localhost:3000");
+  assert.equal(canoniekeFondsHost("127.0.0.1:3000", lokaal), "127.0.0.1:3000");
+  for (const [naam, ruw, opties] of [
+    ["userinfo met poort (de reviewcase)", "pgb.example:443@evil.example", prod],
+    ["userinfo", "user@pgb.example", prod],
+    ["poort in productie", "pgb.example:8443", prod],
+    ["poort 443 in productie", "pgb.example:443", prod],
+    ["poort op niet-lokale host, lokaal", "evil.example:3000", lokaal],
+    ["pad", "pgb.example/", prod],
+    ["backslash", "pgb.example\\evil", prod],
+    ["query", "pgb.example?x=1", prod],
+    ["fragment", "pgb.example#f", prod],
+    ["witruimte vooraan", " pgb.example", prod],
+    ["witruimte achteraan", "pgb.example ", prod],
+    ["witruimte binnenin", "pgb example", prod],
+    ["ipv6-haakjes", "[::1]:3000", lokaal],
+    ["dubbele poort", "fonds-a.localhost:3000:3000", lokaal],
+    ["poort 0", "fonds-a.localhost:0", lokaal],
+    ["poort te hoog", "fonds-a.localhost:70000", lokaal],
+    ["lege string", "", prod],
+    ["null", null, prod],
+    ["punt vooraan", ".pgb.example", prod],
+    ["dubbele punt", "pgb..example", prod],
+    ["underscore", "pgb_x.example", prod],
+    ["unicode", "pgb.exämple", prod],
+  ] as const) {
+    assert.equal(canoniekeFondsHost(ruw as string | null, opties), null, naam);
+  }
+});
+
+test("origin/callback-URI weigeren een niet-canonieke host hard (geen stille reparatie)", () => {
+  for (const h of ["pgb.example:443@evil.example", "pgb.example:8443", "Pgb.Example", "pgb.example/"]) {
+    assert.throws(() => origineVoorHost(h, { lokaalToegestaan: false }), /niet canoniek/, h);
+    assert.throws(() => callbackUrlVoorHost(h, { lokaalToegestaan: false }), /niet canoniek/, h);
+  }
+  assert.throws(() => origineVoorHost("fonds-a.localhost:3000", { lokaalToegestaan: false }), /niet canoniek/, "poort alleen lokaal");
+});
+
 test("origin: uit de geverifieerde host; https, lokaal alleen http mét toestemming", () => {
   assert.equal(origineVoorHost("pgb.preview.bestuurdersportaal.com", { lokaalToegestaan: true }), "https://pgb.preview.bestuurdersportaal.com");
   assert.equal(origineVoorHost("fonds-a.localhost:3000", { lokaalToegestaan: true }), "http://fonds-a.localhost:3000");
-  assert.equal(origineVoorHost("fonds-a.localhost:3000", { lokaalToegestaan: false }), "https://fonds-a.localhost:3000");
 });
 
 test("callback-URL: vast pad, https, lokaal alleen http mét toestemming", () => {
   assert.equal(MICROSOFT_LOGIN_CALLBACK_PAD, "/auth/microsoft-login/callback");
   assert.equal(callbackUrlVoorHost("pgb.preview.bestuurdersportaal.com", { lokaalToegestaan: false }), "https://pgb.preview.bestuurdersportaal.com/auth/microsoft-login/callback");
   assert.equal(callbackUrlVoorHost("fonds-a.localhost:3000", { lokaalToegestaan: true }), "http://fonds-a.localhost:3000/auth/microsoft-login/callback");
-  assert.equal(callbackUrlVoorHost("fonds-a.localhost:3000", { lokaalToegestaan: false }), "https://fonds-a.localhost:3000/auth/microsoft-login/callback");
   assert.equal(callbackUrlVoorHost("pgb.preview.bestuurdersportaal.com", { lokaalToegestaan: true }), "https://pgb.preview.bestuurdersportaal.com/auth/microsoft-login/callback", "een echte host blijft https, ook lokaal");
 });
 

@@ -21,7 +21,7 @@ import { microsoftLoginActief, microsoftLoginVoorRequest, telStartpoging } from 
 import { MicrosoftLoginFlowFout } from "@/core/lib/microsoft-login-orkestratie-core";
 import { LOGIN_FOUT_PARAM, LOGIN_FOUT_WAARDE, microsoftLoginFoutcategorie, SUPPORTCODE_PARAM, supportcode } from "@/core/lib/microsoft-login-error-core";
 import { clientIpUitHeaders, MICROSOFT_LOGIN_START_LIMIET, startSleutel } from "@/core/lib/microsoft-login-ratelimit-core";
-import { origineVoorHost } from "@/core/lib/microsoft-login-flow-core";
+import { canoniekeFondsHost, origineVoorHost } from "@/core/lib/microsoft-login-flow-core";
 
 export const dynamic = "force-dynamic";
 
@@ -40,17 +40,20 @@ function naarLogin(origin: string, sc?: string): NextResponse {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const host = req.headers.get("host")?.trim().toLowerCase() ?? "";
-
-  const resolutie = await haalFondsContext(host);
-  if (resolutie.type !== "gevonden") return nietBeschikbaar();
   let config;
   try {
     config = microsoftLoginConfig();
   } catch {
     return nietBeschikbaar();
   }
-  // Redirect-origin uit de GEVERIFIEERDE fondshost, niet uit req.url (zie flow-core).
+  // Eén canonieke fondshost (flow-core): strikt gevalideerd, daarna tegen
+  // tenant_domains getoetst. Dezelfde waarde voor fondscontrole, limietsleutel,
+  // callback-URI en redirect-origin. Ongeldig of onbekend → neutrale 404, nooit een
+  // redirect op basis van de ruwe Host-header of req.url.
+  const host = canoniekeFondsHost(req.headers.get("host"), { lokaalToegestaan: config.lokaalToegestaan });
+  if (!host) return nietBeschikbaar();
+  const resolutie = await haalFondsContext(host);
+  if (resolutie.type !== "gevonden") return nietBeschikbaar();
   const origin = origineVoorHost(host, { lokaalToegestaan: config.lokaalToegestaan });
   const actief = await microsoftLoginActief(resolutie.fondsId).catch(() => ({ actief: false as const }));
   if (!actief.actief) return nietBeschikbaar();

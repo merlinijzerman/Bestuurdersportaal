@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { haalFondsContext } from "@/core/lib/tenant-context";
 import { microsoftLoginConfig } from "@/core/lib/microsoft-login-config";
-import { origineVoorHost } from "@/core/lib/microsoft-login-flow-core";
+import { canoniekeFondsHost, origineVoorHost } from "@/core/lib/microsoft-login-flow-core";
 import { microsoftLoginVoorRequest } from "@/core/lib/microsoft-login";
 import { MicrosoftLoginFlowFout } from "@/core/lib/microsoft-login-orkestratie-core";
 import {
@@ -29,6 +29,10 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
+function nietBeschikbaar(): NextResponse {
+  return NextResponse.json({ error: "Deze inlogmethode is niet beschikbaar." }, { status: 404, headers: NO_STORE });
+}
+
 function naarLogin(origin: string, sc?: string): NextResponse {
   const u = new URL("/login", origin);
   u.searchParams.set(LOGIN_FOUT_PARAM, LOGIN_FOUT_WAARDE);
@@ -43,20 +47,20 @@ function naarProfiel(origin: string, params: Record<string, string>): NextRespon
 }
 
 export async function GET(req: NextRequest) {
-  const { origin: requestOrigin, searchParams } = new URL(req.url);
-  const host = req.headers.get("host")?.trim().toLowerCase() ?? "";
-
-  const resolutie = await haalFondsContext(host);
+  const { searchParams } = new URL(req.url);
   let config;
   try {
     config = microsoftLoginConfig();
   } catch {
-    config = null;
+    return nietBeschikbaar();
   }
-  // Onbekende host of geen config: neutraal terug naar de login op de request-origin
-  // (geen fondshost om op te vertrouwen). Anders: origin uit de GEVERIFIEERDE fondshost,
-  // want req.url draagt achter een proxy/next start de luisterhost (zie flow-core).
-  if (resolutie.type !== "gevonden" || !config) return naarLogin(requestOrigin);
+  // Eén canonieke fondshost (flow-core), strikt gevalideerd en tegen tenant_domains
+  // getoetst; ongeldig of onbekend → neutrale 404. Nooit een redirect op basis van
+  // de ruwe Host-header of req.url (reviewbevinding PR #339, ronde 2).
+  const host = canoniekeFondsHost(req.headers.get("host"), { lokaalToegestaan: config.lokaalToegestaan });
+  if (!host) return nietBeschikbaar();
+  const resolutie = await haalFondsContext(host);
+  if (resolutie.type !== "gevonden") return nietBeschikbaar();
   const origin = origineVoorHost(host, { lokaalToegestaan: config.lokaalToegestaan });
 
   try {

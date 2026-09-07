@@ -9,7 +9,8 @@
 // ============================================================================
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { microsoftLoginGeconfigureerd } from "@/core/lib/microsoft-login-config";
+import { microsoftLoginConfig, microsoftLoginGeconfigureerd } from "@/core/lib/microsoft-login-config";
+import { canoniekeFondsHost } from "@/core/lib/microsoft-login-flow-core";
 import { microsoftLoginActief, microsoftLoginVoorRequest } from "@/core/lib/microsoft-login";
 import { microsoftLoginFoutcategorie } from "@/core/lib/microsoft-login-error-core";
 
@@ -39,7 +40,10 @@ export const GET = withFondsRoute(
       if (status.status !== "geen") {
         return NextResponse.json({ error: "Er is al een Microsoft-koppeling voor dit account." }, { status: 409, headers: NO_STORE });
       }
-      const host = req.headers.get("host")?.trim().toLowerCase() ?? "";
+      // Canonieke fondshost (flow-core); de wrapper heeft host↔fonds al afgedwongen,
+      // maar de callback-URI mag alleen uit een strikt gevalideerde host ontstaan.
+      const host = canoniekeFondsHost(req.headers.get("host"), { lokaalToegestaan: microsoftLoginConfig().lokaalToegestaan });
+      if (!host) return NextResponse.json({ error: "Microsoft-login is niet beschikbaar voor dit fonds." }, { status: 404, headers: NO_STORE });
       const { url } = await flow.start({ intent: "koppelen", hostFondsId: ctx.fondsId, host, userId: ctx.gebruikerId, next: "/profiel" });
       return NextResponse.redirect(url, { headers: NO_STORE });
     } catch (e) {
