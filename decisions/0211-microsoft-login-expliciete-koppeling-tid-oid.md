@@ -1,7 +1,7 @@
 # 0211 — Microsoft-login (fase 1B): expliciete koppeling aan een bestaand account, autorisatie op `tid + oid`, eigen OIDC-flow en afdwinging vóór tokenuitgifte
 
-- **Status:** Voorgesteld (tweede herziening 2026-09-05 na review; ter akkoord vóór T0.5-spike en T1)
-- **Datum:** 2026-09-05
+- **Status:** Voorgesteld (T0.5 inclusief S7 groen op 2026-09-07; acceptatie volgt bij merge van T1)
+- **Datum:** 2026-09-07
 - **Betrokkenen:** Merlin (opdrachtgever/productowner, review), Claude (karakterisering en ontwerp)
 - **Ticket:** [#335](https://github.com/merlinijzerman/Bestuurdersportaal/issues/335) — M365 fase 1B, Microsoft-login voor bestaande portaalaccounts (PGB Preview-pilot)
 - **Ontwerp:** `MICROSOFT-365-LOGIN-F1B-ONTWERP.md`

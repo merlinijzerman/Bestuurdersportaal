@@ -2,9 +2,9 @@
 
 - **Ticket:** [#335](https://github.com/merlinijzerman/Bestuurdersportaal/issues/335)
 - **Besluit:** `decisions/0211-microsoft-login-expliciete-koppeling-tid-oid.md` (voorgesteld, tweede herziening)
-- **Status van dit document:** ontwerp ter akkoord; nog géén productiecode; eerst spike T0.5
+- **Status van dit document:** ontwerp akkoord; spike T0.5 inclusief S7 groen; T1 staat afzonderlijk in draft-PR #338
 - **Branch/worktree:** `feat/335-microsoft-login` vanaf `origin/preview` `259ba44` (merge #324)
-- **Datum:** 2026-09-05 (tweemaal herzien dezelfde dag na review van de opdrachtgever)
+- **Datum:** 2026-09-07 (S7 met het bestaande Microsoft-testaccount afgerond)
 
 Dit document legt vast (1) wat Supabase Auth werkelijk doet met een Azure-identiteit,
 (2) welke dreigingen daaruit volgen, (3) de gekozen route en invarianten, (4) het
@@ -528,7 +528,7 @@ noncemateriaal; alleen de markdown-uitvoer is daarvan vrij.
 | S10e | `oauth`-sessie met `active` binding → `GET /rest/v1/profielen` | 200 (basislijn, vóór S10a) |
 | S5 | binding `active` herstellen → unlink (`DELETE /user/identities/{id}`) → id-token-grant | unlink 200; daarna 422 `signup_disabled`; identiteiten terug op beginstand |
 | S6 | **handmatig in de browser:** `…/auth/v1/authorize?provider=azure&redirect_to=http://localhost:3000/auth/callback` | Entra-foutpagina **AADSTS50011**; geen rij, geen sessie (script controleert alleen de `redirect_uri` in de 302 en print de URL) |
-| S7 | **negatieve test, aparte run** `SPIKE_MODE=s7` met vooraf uitgesproken `SPIKE_S7_VERWACHT=auto_link\|signup_disabled` (hook uit in `config.toml`, `SPIKE_SCOPES="openid profile email"`, inloggen met tweede Entra-account met **hetzelfde e-mailadres** als het testaccount): id-token-grant zonder sessie; afwijking van de verwachting is rood | zonder linking domain: **automatische koppeling** (sessie + identiteit aan bestaand account) — bevestigt R-28 voor de id-token-ingang; met `GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="azure=microsoft_login"` lokaal: `signup_disabled`; zonder `email`-scope: `signup_disabled`. Script ruimt de identiteit op |
+| S7 | **negatieve test, aparte run** `SPIKE_MODE=s7` met vooraf uitgesproken `SPIKE_S7_VERWACHT=auto_link\|signup_disabled` (hook uit in `config.toml`; een nog niet lokaal gekoppelde Microsoft-identiteit en een wegwerp-wachtwoordaccount met **exact hetzelfde e-mailadres**): id-token-grant zonder sessie; afwijking van de verwachting is rood | **Groen op 7 september 2026:** zonder linking domain + `email` automatische koppeling; met `GOTRUE_EXPERIMENTAL_PROVIDER_LINKING_DOMAINS="azure=microsoft_login"` lokaal `signup_disabled`; zonder `email`-scope `signup_disabled`. Script ruimde de identiteit op |
 | S8 | `GET /auth/v1/health` | `version` ≥ 2.185.0 |
 | S9 | `scripts/spike/management-auth-config.mjs`: read-only `GET /v1/projects/{ref}/config/auth`, verwerkt via vaste allowlist (P1–P4, P7, P8), lijst ingeschakelde OAuth-providers (P9) en aanwezigheid van een linking-domain-sleutel (P6); ruwe respons wordt niet opgeslagen | P9: alleen `azure`; P6: ja/nee vastleggen, anders navraag bij Supabase |
 
@@ -543,15 +543,17 @@ SQL-opruimregel printen), `spike_private.bindingen` leeg, databaseverbinding slu
 callbackserver sluiten.
 
 **Benodigd van de opdrachtgever:** App L-registratie (E1–E3, E6, E7; redirect-URI
-`http://localhost:3999/callback`), client-id/secret/tenant-id in `.env.spike`, één lid-testaccount,
-één tweede account met gelijk e-mailadres (S7). Uitvoer → `SPIKE-335-T0.5.md`.
+`http://localhost:3999/callback`), client-id/secret/tenant-id in `.env.spike` en één
+lid-testaccount. Voor S7 volstaat hetzelfde Microsoft-account wanneer zijn identiteit nog niet
+lokaal gekoppeld is en het wegwerp-wachtwoordaccount exact hetzelfde e-mailadres heeft.
+Uitvoer → `SPIKE-335-T0.5.md`.
 
 ### 9.2 Tranches
 
 | Tranche | Inhoud | Merge-regel |
 |---|---|---|
 | **T0** | karakterisering, 0211, dit ontwerp; na akkoord als voorgestelde ontwerpcommit op de branch | gebruiker akkoord op §10 |
-| **T0.5** | spike §9.1 incl. S10; `SPIKE-335-T0.5.md`; D8/P6/P7 definitief | gebruiker beoordeelt; blokkerend voor T1 |
+| **T0.5** | spike §9.1 incl. S7 en S10; `SPIKE-335-T0.5.md`; D8/P6/P7 definitief | groen afgerond op 7 september 2026 |
 | **T1 / PR-A** | migratie (`login_private`, hook, toestandsmodel, config) + rollback + check-SQL (hook-events) + allowlist + gateway + runbook | migratie ⇒ gebruiker merget |
 | **T2 / PR-B** | cores, orchestratie, routes, callback, guard L3, L4, UI, tests, registers | raakt sessieresolutie ⇒ gebruiker merget |
 | **T3** | Entra/Supabase (P1–P8)/Vercel, PGB-activering, smoke, docs-PR | docs additief ⇒ zelf mergen bij groene gates |

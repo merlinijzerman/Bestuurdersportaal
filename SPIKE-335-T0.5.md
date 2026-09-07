@@ -3,9 +3,10 @@
 ## Stand
 
 De hoofdmodus en S6 zijn op 6 september 2026 groen uitgevoerd tegen de lokale
-wegwerp-Supabase-stack. S9 is dezelfde dag als read-only nulmeting tegen Preview uitgevoerd en
-is, zoals vóór uitrol te verwachten, rood. S7 (negatieve e-mailkoppeling met tweede account)
-staat nog open.
+wegwerp-Supabase-stack. S7 is op 7 september 2026 in drie afzonderlijke runs groen uitgevoerd
+met een niet-gekoppelde Microsoft-identiteit en een lokaal wegwerp-wachtwoordaccount met exact
+hetzelfde e-mailadres. S9 is op 6 september als read-only nulmeting tegen Preview uitgevoerd en
+is, zoals vóór uitrol te verwachten, rood.
 
 - Supabase Auth: v2.195.0
 - Scopes: exact `openid profile`
@@ -36,6 +37,9 @@ staat nog open.
 | S10c–d | wachtwoordlogin/refresh/PostgREST bij ingetrokken Microsoft-binding | alle 200 | ✅ |
 | S5 | unlink, daarna nieuwe id-token-grant | unlink 200; daarna 422 `signup_disabled`; tellingen gelijk | ✅ |
 | S6 | generieke Supabase-hosted Azure-flow | Microsoft `AADSTS50011`; Supabase-callback niet geregistreerd; tellingen gelijk | ✅ |
+| S7.1 | `email`-scope, geen linking domain | automatische koppeling aan bestaand account; geen nieuwe gebruiker; identiteit opgeruimd | ✅ |
+| S7.2 | `email`-scope, `azure=microsoft_login` linking domain | 422 `signup_disabled`; geen identiteit of gebruiker aangemaakt | ✅ |
+| S7.3 | geen `email`-scope, geen linking domain | 422 `signup_disabled`; geen identiteit of gebruiker aangemaakt | ✅ |
 | S9 | hosted Preview-authconfiguratie | Microsoft-provider, manual linking, Auth-hook en JWT-verkorting nog niet geconfigureerd | ❌ nulmeting |
 | S0 | begin- en eindtelling | 1 user en 0 Azure-identiteiten, zowel voor als na | ✅ |
 
@@ -48,6 +52,20 @@ dat GoTrue `tid` en `oid` onder `identity_data.custom_claims` bewaart, is bevest
 De al uitgegeven OAuth-access-token bleef na intrekking nog maximaal de ingestelde JWT-levensduur
 van 600 seconden bruikbaar; een refresh werd wel direct geweigerd. Dit bevestigt het in besluit 0211
 expliciet geaccepteerde Preview-intrekkingsvenster.
+
+## S7 — negatieve e-mailkoppeling
+
+De drie vooraf uitgesproken verwachtingen zijn bevestigd. Met een e-mailclaim en zonder linking
+domain koppelt GoTrue de onbekende Azure-identiteit automatisch aan het bestaande wachtwoordaccount
+met hetzelfde e-mailadres. Met het linking domain wordt die koppeling voorkomen. Zonder
+`email`-scope ontbreekt de e-mailclaim en volgt eveneens `signup_disabled`.
+
+Voor S7 is geen tweede persoon of tweede Microsoft-account vereist: dezelfde, nog niet aan de
+lokale gebruiker gekoppelde Microsoft-identiteit volstaat wanneer het wegwerp-wachtwoordaccount
+exact hetzelfde e-mailadres heeft. De eerste configuratiepogingen met een uitgeschakelde lokale
+provider en een niet exact overeenkomend testadres tellen niet als meting; zij veranderden geen
+gebruiker of identiteit. Na elke geldige run stond de stack weer op één gebruiker en nul
+Azure-identiteiten. Er zijn geen tokens, codes, nonces of e-mailadressen in dit rapport opgenomen.
 
 ## S9 — hosted Preview-nulmeting
 
@@ -72,6 +90,5 @@ expliciet en in de juiste volgorde provisionen voordat Microsoft-login op PGB wo
 
 ## Nog af te ronden
 
-1. S7: drie negatieve e-mailkoppelingruns met het tweede Microsoft-account. Uitgesteld totdat
-   de eigenaar van dat account zelf de interactieve aanmelding kan afronden; er is nog geen
-   accountidentifier naar Microsoft verstuurd in deze poging.
+S7 is afgerond. De resterende rode S9-stand is de verwachte Preview-nulmeting en wordt pas tijdens
+de gecontroleerde T3-provisioning gewijzigd.
