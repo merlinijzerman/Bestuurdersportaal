@@ -184,6 +184,7 @@
       "methode": "fts_dutch_terugval",
       "namespace_conventie": "bibliotheek",
       "opgehaald": 1,
+      "poging_herkomst_geprojecteerd": null,
       "selectie": {
         "afgevallen_telling": {
           "budget": 0,
@@ -207,6 +208,16 @@
         "regime": "alles"
       },
       "toegepaste_fonds_filter": "<uuid:2>"
+    },
+    "volgorde": {
+      "bronversie_audit": [
+        "00 doc=<uuid:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
+      ],
+      "chunks": [
+        "00 chunk=<uuid:3> doc=<uuid:1> rang=0.3 fts=geen vec=geen"
+      ],
+      "poging_herkomst": null,
+      "retrieval_pogingen": []
     }
   },
   "status": 200

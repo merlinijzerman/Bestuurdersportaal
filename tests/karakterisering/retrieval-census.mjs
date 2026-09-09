@@ -76,8 +76,61 @@ export function census() {
   return Object.fromEntries(Object.entries(register).sort(([a], [b]) => a.localeCompare(b)));
 }
 
+// ============================================================================
+//  Tweede register — de CONTEXTBRONNEN op het antwoordpad (#348 §1).
+// ----------------------------------------------------------------------------
+//  De census hierboven telt aanroepers van de retrievalkern. Dat is niet de hele
+//  waarheid: het antwoordpad vult de modelcontext óók met gestructureerde
+//  DB-inhoud die `rag.ts` nooit ziet — agendapunt-, vergadering-, proces-,
+//  risico- en portaalstandcontext. Die paden hebben geen ranking, geen
+//  citaat-ID en geen bronversie-audit, en zouden een toekomstige adaptergrens
+//  dus ONGEMERKT omzeilen.
+//
+//  Dit register bevriest ze: per bestand op het antwoordpad welke tabellen het
+//  rechtstreeks leest. `app/api/chat/route.ts` plus elke `core/lib`-module die
+//  de chatroute direct importeert. Een nieuwe tabel of een nieuwe lezende module
+//  is daarmee een bewuste, gereviewde handeling in plaats van een stille
+//  uitbreiding van wat er in de prompt belandt.
+// ============================================================================
+export const ANTWOORDPAD_INGANG = join(ROOT, "app", "api", "chat", "route.ts");
+
+function directeCoreImports(bron) {
+  const uit = new Set();
+  for (const m of bron.matchAll(/from\s+"@\/core\/lib\/([a-z0-9-]+)"/g)) uit.add(m[1]);
+  return [...uit].sort();
+}
+
+function tabellenIn(bron) {
+  return [...new Set([...bron.matchAll(/\.from\(\s*"([a-z0-9_]+)"\s*\)/g)].map((m) => m[1]))].sort();
+}
+
+export function contextCensus() {
+  const ingang = readFileSync(ANTWOORDPAD_INGANG, "utf8");
+  const register = {
+    "app/api/chat/route.ts": { tabellen: tabellenIn(ingang), directe_core_imports: directeCoreImports(ingang).length },
+  };
+  for (const mod of directeCoreImports(ingang)) {
+    const pad = join(ROOT, "core", "lib", `${mod}.ts`);
+    let bron;
+    try { bron = readFileSync(pad, "utf8"); } catch { continue; }
+    const tabellen = tabellenIn(bron);
+    if (tabellen.length) register[`core/lib/${mod}.ts`] = { tabellen };
+  }
+  return Object.fromEntries(Object.entries(register).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+export const CONTEXT_REGISTER_PAD = join(ROOT, "tests", "cross-tenant", "retrieval-contextbronnen.expected.json");
+
 if (process.argv[1] && fileURLToPath(new URL(import.meta.url)) === process.argv[1]) {
   const resultaat = census();
+  const context = contextCensus();
+  if (process.argv.includes("--schrijf")) {
+    writeFileSync(CONTEXT_REGISTER_PAD, JSON.stringify({
+      _doc: "#322 F4-T1 — bevroren register van de CONTEXTBRONNEN op het antwoordpad: elke tabel die app/api/chat/route.ts en zijn direct geïmporteerde core/lib-modules rechtstreeks lezen. Alleen document_chunks en documenten lopen via rag.ts; al het overige vult de modelcontext buiten de retrievalkern om en zou een adaptergrens ongemerkt omzeilen. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
+      contextbronnen: context,
+    }, null, 2) + "\n");
+    console.log(`contextregister geschreven: ${Object.keys(context).length} bestanden`);
+  }
   if (process.argv.includes("--schrijf")) {
     writeFileSync(REGISTER_PAD, JSON.stringify({
       _doc: "#322 F4-T1 — bevroren census van directe aanroepers van de retrievalkern (rag.ts en aangrenzende modules, zoek-RPC's, document_chunks). Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf. Elke toename is een bewuste, gereviewde handeling; in T2 krimpt dit register tot de adapter-/orkestratielaag.",

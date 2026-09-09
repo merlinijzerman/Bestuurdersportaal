@@ -132,6 +132,42 @@ objecten, grant/RLS-export en herhaalbare migratieverificatie.
 
 ## Verplichte CI-poorten
 
+### Retrievalcontract fase 4 — T1 (#322/#348, besluit 0213)
+
+T1 legt ontwerpverplichtingen vast en verandert geen productiecode; het is dus geen
+afgeronde control, maar het bepaalt wél waar in T2 het bewijs moet landen.
+
+- **V1 architectuur / V4 toegangscontrole.** De adaptergrens ligt om de retrievalkern.
+  Fonds, bronbeleid en adapterkeuze komen uitsluitend server-side uit sessie en
+  fondsconfig; browser noch generatiemodel kan adapter, endpoint, tenant of fonds
+  kiezen. Rechten-, status-, geldigheids- en privacycontroles staan vóór ranking en
+  vóór iedere AI-call. Scopereferenties (proces, vergadering, agendapunt, document)
+  worden in T2 expliciet in de laag gevalideerd in plaats van impliciet aan RLS
+  overgelaten (gap G-6).
+- **V7 foutafhandeling en logging.** Negen genormaliseerde foutcategorieën; geen
+  providerdetail naar de client en geen enkele categorie die de bronset verruimt.
+  Eén correlation-id verbindt retrieval → AI-gateway → governance (gap G-7); vandaag
+  ontbreekt die schakel in `retrieval_meta`.
+- **V8 gegevensbescherming.** Auditregels blijven inhoudsvrij: geen passages, geen
+  zoekvragen met persoonsgegevens, geen tokens of providerresponses. De
+  karakterisering legt passages uitsluitend als sha256-prefix vast, niet als tekst.
+  Openstaand: `GET /api/zoeken` kent geen PII-gate op de zoekterm (gap G-4).
+- **V11 bedrijfslogica / V13 API.** `AdapterCapabilities` draagt `ondersteundeFilters`,
+  `cancellation` en `timeout` expliciet: een adapter die een filter niet kan
+  uitvoeren moet dat melden in plaats van het stil te negeren. Vandaag kent de keten
+  geen `AbortSignal` en geen looptijdbegrenzing (gap G-3, risico R-50).
+- **V14 configuratie.** Geen migratie, geen databaseobject, geen grant gewijzigd;
+  rollback is `git revert`. Alleen gap G-7 introduceert eventueel één idempotente
+  forwardmigratie voor de SQL-allowlist van `meta_basisniveau()`.
+
+**Regressiepoorten die nu draaien** (offline, in `npm run test:xtenant`):
+`retrieval-census.test.ts` (5 tests — de retrievalcensus van 17 bestanden én het
+contextregister van 10 bestanden/33 tabellen, met de 31 omzeilende tabellen hard
+gepind) en `retrieval-golden-gevoeligheid.test.ts` (15 negatieve controles die per
+mutatie — volgorde, citaat-ID, fondsfilter, versie-identiteit — bewijzen dat de
+goldens kantelen). Het resterende bewijs is de W1-harnasrun met de w322-scenario's,
+drie identiek opeenvolgende `--verify`-rondes in `karakterisering.yml`.
+
 ### Microsoft SharePoint fase 3 (Preview-only, #321)
 
 De fase-3-uitwerking dekt ASVS-toepassingen voor least privilege, server-side

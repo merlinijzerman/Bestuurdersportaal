@@ -40,5 +40,16 @@
   "headers": {
     "content-type": "application/json"
   },
+  "nawerk": {
+    "volgorde": {
+      "documenten": [
+        "00 doc=<uuid:1> bib=fonds status=concept"
+      ],
+      "treffers": [
+        "00.00 doc=<uuid:1> pagina=2 paragraaf=geen lengte=187 sha=f21ed9a89346",
+        "00.01 doc=<uuid:1> pagina=4 paragraaf=geen lengte=199 sha=0e58c50289e5"
+      ]
+    }
+  },
   "status": 200
 }

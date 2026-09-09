@@ -83,6 +83,24 @@
 | R-45 | Fondsbeleid, tenant of binding wordt buiten het bevoegde servercontract gewijzigd | Kritiek | Geen schrijfpolicy op `public.fonds_microsoft_login` en nul rechten voor `anon`/`authenticated`/`service_role` op de private beleidstabellen; elke mutatie loopt via een `SECURITY DEFINER`-gatewayfunctie die uitsluitend `login_gateway` mag uitvoeren, met capability `login.beleid.manage` (alleen de rol `beheerder`) in de route | Gedekt (DEEL 1 + M15, V3-grants-gate) |
 | R-46 | Beleidsafdwinging valt weg door een uitgevallen of niet-geconfigureerde logingateway | Hoog | Gatewayfout = fail-closed (sessie beëindigd, hook 403). Een *ontbrekende* gatewayconfiguratie is bewust géén weigering van het wachtwoordpad: zonder gateway kan geen enkel fonds op `verplicht` staan, en uitloggen zou een omgeving zonder Microsoft-login platleggen (besluit 0212 D5) | Gedekt in de pure kern (`microsoft-login-beleid-core.sanity.ts`) en de contracttest |
 
+### Retrievalcontract fase 4 (#322/#348, besluit 0213) — ontwerprisico's
+
+Deze vier komen uit de T1-inventarisatie. Ze beschrijven de keten zoals die
+vandaag draait; de mitigatiekolom noemt wat er nu is en wat T2 moet toevoegen.
+
+| ID | Risico | Ernst | Mitigatie | Status |
+|---|---|---|---|---|
+| R-48 | Een toekomstige retrieval-adaptergrens dekt maar een fractie van wat het model te zien krijgt: van de 33 tabellen op het antwoordpad lopen er 2 via de retrievalkern en 31 via de contextlaag (agendapunt, vergadering, proces, risico, portaalstand, profielsturing). Die inhoud draagt geen ranking, citation-id of bronversie-audit | Middel | Alle lezingen lopen onder RLS met de tenant-client, en `module-scope` weigert expliciet bij een niet-gevonden `procedure_id`/`risico_id` in plaats van terug te vallen op fondsbrede data. De omvang is nu bevroren in `retrieval-contextbronnen.expected.json` (gate `F4-context` pint het getal 31), zodat uitbreiding een gereviewde handeling is | Gedekt tegen stille groei; het ontwerpgat zelf staat als G-1 open (reviewvraag R5) |
+| R-49 | Een Microsoftbron belandt zonder exacte versie of zonder actuele permissionproof in de AI-context, waardoor een antwoord op een ingetrokken of niet-toegankelijk document steunt | Hoog | Geen enkele call-site legt vandaag een exacte documentversie per passage vast (`bronversie_audit` kent alleen status en datum). Het contract weigert daarom elk resultaat zonder `versie.{soort,waarde}` én `versie.gecontroleerdOp`; drive-/item-identiteit blijft achter de private gateway | **Open — T2-3/G-2.** T1 doet geen enkele Microsoft-call, dus het risico is nog niet actief |
+| R-50 | Een afgebroken of vastlopend verzoek laat retrieval en modelcalls doorlopen (kosten, belasting, en context die na annulering alsnog wordt opgebouwd) | Middel | `rag.ts`, `rerank.ts` en `embeddings.ts` bevatten nul voorkomens van `AbortSignal`; er is geen looptijdbegrenzing per call-site. Bestaande compensatie: rate limits (`chat` 20/5 min, `zoeken` 60/5 min fail-closed), quota en de vier kill switches | **Open — T2-5/G-3.** `AdapterCapabilities` draagt `cancellation` en `timeout` expliciet, zodat een adapter zonder die eigenschappen niet stilzwijgend doorgaat |
+| R-51 | Een scopereferentie uit de query-string bereikt de retrievalfilters zonder servervalidatie: `GET /api/zoeken?procesinstantie=<id>` gaat rechtstreeks in `filters.procesinstantie_ids` | Laag | RLS en de expliciete server-side fondsfilter maken dit onschadelijk — een dossier van een ander fonds levert simpelweg niets op. Vastgelegd in de golden `w322.zoeken.get.bestuurder.premiebeleid-procesref-vreemd`, zodat T2 die eigenschap niet stilzwijgend weggeeft bij het verplaatsen van de filters | Gedekt door RLS; expliciete laagvalidatie staat als G-6 open |
+
+Twee bevindingen over het *bewijs* horen hier ook: de retrieval-goldens legden vóór
+deze tranche de rangorde niet vast (`normaliseerJson()` sorteert elke array), en
+citaat-ID's zijn door de UUID-maskering alleen relationeel te pinnen. Beide zijn nu
+geadresseerd met een volgorde-gecodeerde projectie en 15 negatieve controles
+(`retrieval-golden-gevoeligheid.test.ts`); zie ontwerp §3.3.
+
 ## AI-specifieke grenzen voor Preview
 
 AI blijft bewust aan op Preview om het echte pad te kunnen testen. Dat is alleen

@@ -12,5 +12,11 @@
   "headers": {
     "content-type": "application/json"
   },
+  "nawerk": {
+    "volgorde": {
+      "documenten": [],
+      "treffers": []
+    }
+  },
   "status": 200
 }
