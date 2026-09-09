@@ -4,6 +4,11 @@
   "uitgesteld": [],
   "nog_op_te_nemen_bij_stackrun": [
     {
+      "method": "GET/PATCH/POST/DELETE",
+      "route": "/microsoft-login/beheer/{beleid,intrekking,breakglass,breakglass/[id],uitnodiging}  ·  /auth/microsoft-login/uitnodiging  ·  /koppelen",
+      "reden": "#344 PR-B: zeven gewrapte beheerhandlers (login.beleid.manage), de publieke activerings-POST en de pagina /koppelen. Anon → 401 is het bestaande wrappercontract (LK-9, wrapper-sanity); de happy paths vergen een fonds met Microsoft-login in de W1-omgeving (bewust zonder MICROSOFT_LOGIN_*), dus opnemen tegen een draaiende wegwerpstack bij de stack-run (besluit 0192), niet voorspellen. De E2E-spec dekt de flows tegen de lokale stack."
+    },
+    {
       "method": "GET/DELETE/POST",
       "route": "/microsoft-login/koppelen/start  ·  /microsoft-login/koppeling",
       "reden": "#335 T2 (B3): vier gewrapte handlers zonder W1-scenario. Anon → 401 is het bestaande wrappercontract (gedekt door LK-9, de wrapper-sanity en de E2E-spec); de happy paths vergen een fonds met de flag aan én MICROSOFT_LOGIN_*-env in de W1-omgeving — bewust NIET in karakterisering.yml gezet (de W1-run bewijst juist het wachtwoordpad zonder Microsoft-config). Op te nemen tegen een draaiende wegwerpstack zodra de W1-omgeving die config krijgt (besluit 0192). De vier paginascenario's van B7 (/auth/callback ×2, /login anon, /login ingelogd) zijn op 2026-09-07 WEL opgenomen en 3× stabiel geverifieerd (378/378)."
