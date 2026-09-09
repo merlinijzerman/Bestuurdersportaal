@@ -158,8 +158,8 @@ const nextConfig: NextConfig = {
       },
       {
         // #344 PR-B: de herstelflow draagt het herkoppeltoken in het URL-fragment.
-        // Geen caching en geen referrer; de pagina heeft een eigen root-layout
-        // zonder analytics (app/(herstel)/layout.tsx).
+        // Geen caching en geen referrer; de analytics van de root-layout is op
+        // dit pad uitgeschakeld (core/components/RouteBewusteAnalytics.tsx).
         source: "/koppelen",
         headers: [
           { key: "Cache-Control", value: "no-store" },

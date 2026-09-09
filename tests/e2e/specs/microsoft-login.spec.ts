@@ -282,6 +282,29 @@ test.describe("MS-LOGIN — #344 beheer en herstel via uitnodiging", () => {
     await beheer.dispose();
   });
 
+  test("analytics: /koppelen#<canary> doet géén verzoek naar /_vercel/insights of *.vercel-insights.com; /login (controle) wél", async ({ page }) => {
+    // Reviewbevinding: app/(herstel)/layout.tsx is geen root-layout — /koppelen erft app/layout.tsx
+    // mét <Analytics/>. Die is nu routebewust (core/components/RouteBewusteAnalytics.tsx). Het
+    // analytics-script wordt client-side geïnjecteerd, dus alleen een netwerkmeting bewijst dit.
+    const ANALYTICS_RE = /\/_vercel\/insights|vercel-insights\.com|va\.vercel-scripts\.com/;
+    const canary = "C".repeat(43);
+    const verzoeken: string[] = [];
+    page.on("request", (r) => verzoeken.push(r.url()));
+    await page.goto(`${ORIGINS.fondsA}/koppelen#${canary}`);
+    await expect(page.getByRole("button", { name: "Herstel starten" })).toBeVisible();
+    // Even wachten: de injectie gebeurt in een effect ná hydratie.
+    await page.waitForTimeout(1500);
+    expect(verzoeken.filter((u) => ANALYTICS_RE.test(u))).toEqual([]);
+    expect(verzoeken.some((u) => u.includes(canary))).toBe(false);
+
+    // Negatieve controle: op een gewone pagina wordt het script wél opgevraagd — anders meet de
+    // test hierboven niets (lokaal geeft /_vercel/insights/script.js 404, het verzoek telt).
+    verzoeken.length = 0;
+    await page.goto(`${ORIGINS.fondsA}/login`);
+    await expect(page.getByRole("button", { name: "Inloggen" })).toBeVisible();
+    await expect.poll(() => verzoeken.some((u) => ANALYTICS_RE.test(u)), { timeout: 8_000 }).toBe(true);
+  });
+
   test("gelijktijdige activering: exact één van twee parallelle POSTs slaagt", async ({ page }) => {
     const beheer = await beheerContext();
     const { token } = await uitnodigingVoorBestuurder(beheer);

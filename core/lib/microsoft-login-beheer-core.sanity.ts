@@ -12,7 +12,7 @@ import {
   maakHerkoppelToken,
   VERBODEN_RESPONSSLEUTELS,
 } from "./microsoft-login-beheer-core";
-import { BEHEER_TEKSTEN, tokenUitFragment, UITNODIGING_ONGELDIG_MELDING, VERBODEN_MELDINGWOORDEN } from "./microsoft-login-meldingen-core";
+import { analyticsUitgesloten, BEHEER_TEKSTEN, tokenUitFragment, UITNODIGING_ONGELDIG_MELDING, VERBODEN_MELDINGWOORDEN } from "./microsoft-login-meldingen-core";
 import { activeringWeigering, magActiveren } from "./microsoft-login-beleid-core";
 
 const TOKEN = "a".repeat(43);
@@ -44,6 +44,17 @@ test("fragment lezen: alleen exact `#<token>`; alles anders is null", () => {
   assert.equal(tokenUitFragment(`#${TOKEN}&x=1`), null);
   assert.equal(tokenUitFragment(""), null);
   assert.equal(tokenUitFragment(null), null);
+});
+
+test("analytics: uitgesloten op exact /koppelen (en dieper), nergens anders", () => {
+  assert.equal(analyticsUitgesloten("/koppelen"), true);
+  assert.equal(analyticsUitgesloten("/koppelen/"), true);
+  assert.equal(analyticsUitgesloten("/koppelen/x"), true);
+  assert.equal(analyticsUitgesloten("/koppelenx"), false);
+  assert.equal(analyticsUitgesloten("/login"), false);
+  assert.equal(analyticsUitgesloten("/"), false);
+  assert.equal(analyticsUitgesloten(null), false);
+  assert.equal(analyticsUitgesloten(undefined), false);
 });
 
 test("bodycontracten: strikt; ongeldige modus, niet-uuid en extra sleutels worden geweigerd", () => {

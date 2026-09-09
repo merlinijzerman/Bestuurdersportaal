@@ -334,9 +334,12 @@ verbruikt. De uitnodigingslink is nu
 https://<fondshost>/koppelen#<token>
 ```
 
-- `/koppelen` is een vaste pagina (`app/(herstel)/koppelen`) met een **eigen root-layout** zonder
-  `<Analytics/>`, `robots: noindex`, `Referrer-Policy: no-referrer` en `Cache-Control: no-store`
-  (metadata én `next.config.ts`). Het fragment gaat nooit naar de server.
+- `/koppelen` is een vaste pagina (`app/(herstel)/koppelen`) met `robots: noindex`,
+  `Referrer-Policy: no-referrer` en `Cache-Control: no-store` (metadata én `next.config.ts`). De
+  geneste layout is **geen** eigen root-layout — zolang `app/layout.tsx` bestaat erft `/koppelen`
+  die, inclusief `<Analytics/>`. Daarom is de analytics in de root-layout zelf routebewust gemaakt
+  (`core/components/RouteBewusteAnalytics.tsx`, padregel `analyticsUitgesloten`): op `/koppelen`
+  rendert zij niets. Het fragment gaat nooit naar de server.
 - De client leest het fragment (`tokenUitFragment`, alleen exact `#<43 tekens base64url>`), wist
   het direct met `history.replaceState`, rendert het nergens en verstuurt het uitsluitend in de body
   van een `POST /auth/microsoft-login/uitnodiging` na een expliciete klik ("Herstel starten").
@@ -353,9 +356,9 @@ De beperkte sessie zelf (`/beperkte-toegang`) kreeg de ontbrekende stap: "Oude k
 
 | Laag | Test |
 |---|---|
-| Contract (statisch) | `tests/cross-tenant/microsoft-login-beheer-contract.test.ts` — 7 handlers met capability + inline poort + audit; geen tenant-id in de respons; token alleen in fragment, nooit in log; `/koppelen`-layout zonder analytics; POST-only + limiter; afronden zonder checkbox; registers |
+| Contract (statisch) | `tests/cross-tenant/microsoft-login-beheer-contract.test.ts` — 7 handlers met capability + inline poort + audit; geen tenant-id in de respons; token alleen in fragment, nooit in log; root-layout rendert `<Analytics/>` alleen via de routebewuste wrapper en de herstel-layout nest geen `<html>/<body>`; POST-only + limiter; afronden zonder checkbox; registers |
 | Component | `KoppelActivering` (fragment gewist, token niet in DOM, POST-body, neutrale weigering) en `LoginBeleidBeheer` (geen tenant-id, verplicht geblokkeerd bij rode preflight, afronden met bevestigingswoord, link eenmalig + kopieerknop) |
-| E2E (wegwerpstack) | `microsoft-login.spec.ts`: beleid zonder tenant-id (403 voor bestuurder, 401 anoniem), beheerpagina, linkpreview verbruikt niets, activering eenmalig, replay = neutrale fout, gelijktijdige activering exact één 200, ongeldig/leeg/zonder-flag/GET/pad-token, beheerintrekking |
+| E2E (wegwerpstack) | `microsoft-login.spec.ts`: beleid zonder tenant-id (403 voor bestuurder, 401 anoniem), beheerpagina, linkpreview verbruikt niets, activering eenmalig, replay = neutrale fout, gelijktijdige activering exact één 200, ongeldig/leeg/zonder-flag/GET/pad-token, beheerintrekking, en `/koppelen#<canary>` zonder enig verzoek naar `/_vercel/insights` of `*.vercel-insights.com` (met `/login` als negatieve controle) |
 | Preview (PGB) | runbook §1C.4, scenario's 6b en 7a–7d |
 
 Wat de contracttest níét kan bewijzen is dat het token nooit in een applicatielog belandt; dat

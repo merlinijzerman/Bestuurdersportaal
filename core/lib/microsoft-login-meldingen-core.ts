@@ -59,6 +59,14 @@ export function supportcode(correlatieId: string): string {
 /** Vaste ingang van de beperkte koppel-/herstelsessie; de link is `/koppelen#<token>`. */
 export const KOPPEL_PAD = "/koppelen";
 
+/** Paden waarop de algemene root-layout GEEN analytics mag laden: de herstelflow
+ *  draagt het herkoppeltoken tijdelijk in het URL-fragment, en `app/(herstel)/layout.tsx`
+ *  is géén eigen root-layout (die is `app/layout.tsx`, mét <Analytics/>). */
+export function analyticsUitgesloten(pathname: string | null | undefined): boolean {
+  if (typeof pathname !== "string") return false;
+  return pathname === KOPPEL_PAD || pathname.startsWith(`${KOPPEL_PAD}/`);
+}
+
 /** Vorm van het opake herkoppeltoken (32 bytes base64url = 43 tekens). Zegt niets
  *  over geldigheid — dat doet uitsluitend de database, atomisch en eenmalig. */
 export const HERKOPPEL_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;

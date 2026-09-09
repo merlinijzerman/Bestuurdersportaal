@@ -221,7 +221,9 @@ browsergeschiedenis en in de fetch van linkpreviews en mailscanners — en een e
 door een scanner wordt "geopend" is daarna verbruikt. Het fragment gaat niet naar de server; de
 client wist het direct (`history.replaceState`), rendert het niet, en verstuurt het uitsluitend in
 de body van een `POST` naar een vast endpoint zonder GET, achter dezelfde atomische startlimiet als
-de inlogstart. De pagina heeft een eigen root-layout zonder analytics, `no-store` en `no-referrer`.
+de inlogstart. De pagina heeft `no-store` en `no-referrer`; de analytics van de algemene
+root-layout is routebewust en rendert op `/koppelen` niets (reviewbevinding van 9 september: een
+geneste layout onder `app/layout.tsx` is geen root-layout en erft dus `<Analytics/>`).
 
 **D18 — afronden is een afzonderlijke, nadrukkelijk bevestigde beheeractie.** Beheerintrekking
 gaat standaard naar `revoking`. "Intrekking afronden" is een eigen dialoog met bevestigingswoord

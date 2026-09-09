@@ -6,7 +6,7 @@
 //  Reviewafspraken die hier hard staan:
 //    • het herkoppeltoken staat NOOIT in een URL-pad, log, audit of HTML — alleen
 //      in het fragment van de uitnodigingslink en in de body van één POST;
-//    • /koppelen heeft een eigen root-layout zonder analytics, no-store en
+//    • /koppelen erft de algemene root-layout; die laadt analytics routebewust NIET op /koppelen; no-store en
 //      no-referrer; activering is POST-only (GET/linkpreview verbruikt niets);
 //    • GET beleid geeft geen tenant-id, alleen `tenantGeconfigureerd`;
 //    • ongeldig, verlopen en al gebruikt delen één neutrale 403;
@@ -28,6 +28,17 @@ function routes(dir: string): string[] {
     const p = join(resolve(root, dir), naam);
     if (statSync(p).isDirectory()) uit.push(...routes(relative(root, p)));
     else if (naam === "route.ts") uit.push(relative(root, p).split("\\").join("/"));
+  }
+  return uit;
+}
+
+/** Alle .ts/.tsx-bronnen onder een map (voor "nergens anders"-controles). */
+function alleBronnen(dir: string): string[] {
+  const uit: string[] = [];
+  for (const naam of readdirSync(resolve(root, dir))) {
+    const p = join(resolve(root, dir), naam);
+    if (statSync(p).isDirectory()) uit.push(...alleBronnen(relative(root, p)));
+    else if (/\.tsx?$/.test(naam)) uit.push(relative(root, p).split("\\").join("/"));
   }
   return uit;
 }
@@ -92,11 +103,28 @@ test("PR-B: het herkoppeltoken verlaat de server één keer en staat alleen in h
   assert.ok(!alle.some((p) => /\[token\]|koppelen\/\[/.test(p)), "geen dynamisch tokensegment in een routepad");
 });
 
-test("PR-B: /koppelen — vaste pagina in een eigen root-layout zonder analytics; fragment client-side gelezen en gewist; token alleen in een POST-body", () => {
+test("PR-B: /koppelen — geneste layout onder de algemene root-layout; analytics routebewust uit; fragment client-side gelezen en gewist; token alleen in een POST-body", () => {
+  // De herstel-layout is GEEN root-layout (app/layout.tsx bestaat): geen <html>/<body>,
+  // geen eigen analytics, alleen metadata. Reviewbevinding: de vorige versie nestte een
+  // tweede <html>/<body> en erfde stilzwijgend het <Analytics/> van de root-layout.
   const layout = zonderCommentaar(lees(HERSTEL_LAYOUT));
+  assert.doesNotMatch(layout, /<html|<body/, "geen geneste <html>/<body> in een niet-root-layout");
   assert.doesNotMatch(layout, /@vercel\/analytics|<Analytics/, "geen analytics in de herstelflow");
   assert.match(layout, /referrer: "no-referrer"/);
   assert.match(layout, /robots: \{ index: false, follow: false \}/);
+  // De algemene root-layout rendert analytics uitsluitend via de routebewuste wrapper.
+  const root = zonderCommentaar(lees("app/layout.tsx"));
+  assert.doesNotMatch(root, /@vercel\/analytics|<Analytics /, "root-layout importeert/rendert <Analytics/> niet rechtstreeks");
+  assert.match(root, /import RouteBewusteAnalytics from "@\/core\/components\/RouteBewusteAnalytics"/);
+  assert.match(root, /<RouteBewusteAnalytics \/>/);
+  const wrapper = zonderCommentaar(lees("core/components/RouteBewusteAnalytics.tsx"));
+  assert.match(wrapper, /^"use client";/);
+  assert.match(wrapper, /usePathname\(\)/);
+  assert.match(wrapper, /if \(analyticsUitgesloten\(pathname\)\) return null;/);
+  assert.match(wrapper, /return <Analytics \/>;/);
+  // Geen andere plek in de app rendert <Analytics/> buiten de wrapper om.
+  const overige = alleBronnen("app").filter((p) => /<Analytics\s*\/>/.test(zonderCommentaar(lees(p))));
+  assert.deepEqual(overige, [], "alleen de wrapper rendert <Analytics/>");
   assert.match(lees(KOPPEL_PAGINA), /<KoppelActivering \/>/);
   const client = lees(KOPPEL_CLIENT);
   assert.match(client, /^"use client";/);
