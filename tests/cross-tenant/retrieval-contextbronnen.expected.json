@@ -1,49 +1,167 @@
 {
-  "_doc": "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie per tabel (evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte tabel zonder klasse maakt de gate rood. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
-  "bereikte_bestanden": 106,
-  "klassen": {
+  "_doc": "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie PER LEZING (bestand::tabel → een of meer van evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte lezing zonder klasse maakt de gate rood. Padresolutie volgt de tsconfig-alias en echte relatieve paden, inclusief ../ en indexbestanden. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
+  "bereikte_bestanden": 112,
+  "lezingen_per_klasse": {
     "evidence": [
-      "concepts",
-      "decision_objects",
-      "document_chunks",
-      "documenten",
-      "semantic_units"
+      "app/api/chat/route.ts::decision_objects",
+      "app/api/chat/route.ts::document_chunks",
+      "core/lib/besluitvorming-bron.ts::decision_objects",
+      "core/lib/parent-context.ts::document_chunks",
+      "core/lib/rag.ts::document_chunks",
+      "core/lib/rag.ts::documenten",
+      "core/lib/vergelijk-productie.ts::semantic_units"
     ],
     "modelcontext": [
-      "agendapunt_inbreng",
-      "agendapunten",
-      "expertises",
-      "gremia",
-      "kritische_focusgebieden",
-      "organisatie_profielen",
-      "procedure_bewijs",
-      "procedure_eigenaars",
-      "procedure_requirements",
-      "procedure_stappen",
-      "procedures",
-      "profiel_expertises",
-      "profiel_focusgebieden",
-      "profiel_gremia",
-      "risico_log",
-      "risico_maatregelen",
-      "risicos",
-      "vergaderingen"
+      "app/api/chat/route.ts::agendapunten",
+      "app/api/chat/route.ts::documenten",
+      "app/api/chat/route.ts::governance_log_inhoud",
+      "app/api/chat/route.ts::procedure_bewijs",
+      "app/api/chat/route.ts::procedure_requirements",
+      "app/api/chat/route.ts::procedure_stappen",
+      "app/api/chat/route.ts::procedures",
+      "app/api/chat/route.ts::profielen",
+      "app/api/chat/route.ts::risico_log",
+      "app/api/chat/route.ts::risico_maatregelen",
+      "app/api/chat/route.ts::risicos",
+      "core/lib/organisatieprofiel.ts::organisatie_profielen",
+      "core/lib/portaalcontext.ts::agendapunt_inbreng",
+      "core/lib/portaalcontext.ts::agendapunten",
+      "core/lib/portaalcontext.ts::documenten",
+      "core/lib/portaalcontext.ts::procedure_eigenaars",
+      "core/lib/portaalcontext.ts::procedure_stappen",
+      "core/lib/portaalcontext.ts::profielen",
+      "core/lib/portaalcontext.ts::vergaderingen",
+      "core/lib/profielsturing.ts::expertises",
+      "core/lib/profielsturing.ts::gremia",
+      "core/lib/profielsturing.ts::kritische_focusgebieden",
+      "core/lib/profielsturing.ts::profiel_expertises",
+      "core/lib/profielsturing.ts::profiel_focusgebieden",
+      "core/lib/profielsturing.ts::profiel_gremia",
+      "core/lib/profielsturing.ts::profielen"
     ],
     "configuratie": [
-      "bron_whitelist",
-      "fonds_config_log",
-      "fonds_content_overrides",
-      "fonds_feature_flags",
-      "fonds_module_manifest",
-      "fonds_theming",
-      "profielen"
+      "app/api/chat/route.ts::profielen",
+      "core/lib/capabilities.ts::profielen",
+      "core/lib/fonds-config.ts::fonds_config_log",
+      "core/lib/fonds-config.ts::fonds_content_overrides",
+      "core/lib/fonds-config.ts::fonds_feature_flags",
+      "core/lib/fonds-config.ts::fonds_module_manifest",
+      "core/lib/fonds-config.ts::fonds_theming",
+      "core/lib/fonds-sessie.ts::profielen",
+      "core/lib/profiel.ts::profielen",
+      "core/lib/vergelijk-productie.ts::concepts",
+      "core/lib/web-whitelist-data.ts::bron_whitelist"
     ],
     "audit": [
-      "governance_log",
-      "governance_log_inhoud",
-      "voorbereidingen"
+      "app/api/chat/route.ts::governance_log",
+      "app/api/chat/route.ts::governance_log_inhoud",
+      "app/api/chat/route.ts::voorbereidingen"
     ],
     "onbekend": []
+  },
+  "klassen_per_tabel": {
+    "agendapunt_inbreng": [
+      "modelcontext"
+    ],
+    "agendapunten": [
+      "modelcontext"
+    ],
+    "bron_whitelist": [
+      "configuratie"
+    ],
+    "concepts": [
+      "configuratie"
+    ],
+    "decision_objects": [
+      "evidence"
+    ],
+    "document_chunks": [
+      "evidence"
+    ],
+    "documenten": [
+      "evidence",
+      "modelcontext"
+    ],
+    "expertises": [
+      "modelcontext"
+    ],
+    "fonds_config_log": [
+      "configuratie"
+    ],
+    "fonds_content_overrides": [
+      "configuratie"
+    ],
+    "fonds_feature_flags": [
+      "configuratie"
+    ],
+    "fonds_module_manifest": [
+      "configuratie"
+    ],
+    "fonds_theming": [
+      "configuratie"
+    ],
+    "governance_log": [
+      "audit"
+    ],
+    "governance_log_inhoud": [
+      "audit",
+      "modelcontext"
+    ],
+    "gremia": [
+      "modelcontext"
+    ],
+    "kritische_focusgebieden": [
+      "modelcontext"
+    ],
+    "organisatie_profielen": [
+      "modelcontext"
+    ],
+    "procedure_bewijs": [
+      "modelcontext"
+    ],
+    "procedure_eigenaars": [
+      "modelcontext"
+    ],
+    "procedure_requirements": [
+      "modelcontext"
+    ],
+    "procedure_stappen": [
+      "modelcontext"
+    ],
+    "procedures": [
+      "modelcontext"
+    ],
+    "profiel_expertises": [
+      "modelcontext"
+    ],
+    "profiel_focusgebieden": [
+      "modelcontext"
+    ],
+    "profiel_gremia": [
+      "modelcontext"
+    ],
+    "profielen": [
+      "configuratie",
+      "modelcontext"
+    ],
+    "risico_log": [
+      "modelcontext"
+    ],
+    "risico_maatregelen": [
+      "modelcontext"
+    ],
+    "risicos": [
+      "modelcontext"
+    ],
+    "semantic_units": [
+      "evidence"
+    ],
+    "vergaderingen": [
+      "modelcontext"
+    ],
+    "voorbereidingen": [
+      "audit"
+    ]
   },
   "contextbronnen": {
     "app/api/chat/route.ts": {

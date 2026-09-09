@@ -159,20 +159,28 @@ afgeronde control, maar het bepaalt wél waar in T2 het bewijs moet landen.
   expliciet, en een toelatingspoort vóór de selectie toetst elke kandidaat tegen de
   capabilities die de adapter zélf claimt. Vandaag kent de keten geen `AbortSignal` en
   geen looptijdbegrenzing (gap G-3, risico R-50); dat landt in T2-1 (besluit R6).
-- **V4 toegangscontrole, per resultaat.** `permissionProof` is niet langer alleen een
-  capability-boolean: elk resultaat draagt `toegangscontrole {toegestaan,
-  gecontroleerdOp, basis, bronconfiguratieVersie}`. Versie- en rechtenbewijs zijn
-  **gescheiden bewijzen met gescheiden tijdstippen**, zodat een verlopen rechtencheck op
-  een nog geldige versie herkenbaar blijft (gap G-3b, risico R-52).
+- **V4 toegangscontrole, per resultaat en per verzoek.** `permissionProof` is niet
+  langer alleen een capability-boolean: elk resultaat draagt `toegangscontrole
+  {toegestaan, gebruikerId, correlationId, gecontroleerdOp, basis,
+  bronconfiguratieVersie}`, en een toelatingspoort toetst vijf voorwaarden (V1–V5,
+  ontwerp §4.2.1) vóór de selectie. Het bewijs is **gebonden aan deze actor en dit
+  verzoek**: zonder `gebruikerId` en `correlationId` zou een verse, op zichzelf geldige
+  proof van een andere gebruiker of uit een eerdere request door de poort komen.
+  Versie- en rechtenbewijs zijn **gescheiden bewijzen met gescheiden tijdstippen**,
+  zodat een verlopen rechtencheck op een nog geldige versie herkenbaar blijft
+  (gap G-3b, risico R-52).
 - **V14 configuratie.** Geen migratie, geen databaseobject, geen grant gewijzigd;
   rollback is `git revert`. Alleen gap G-7 introduceert eventueel één idempotente
   forwardmigratie voor de SQL-allowlist van `meta_basisniveau()`.
 
 **Regressiepoorten die nu draaien** (offline, in `npm run test:xtenant`):
 `retrieval-census.test.ts` (8 tests — de retrievalcensus van 17 bestanden én het
-antwoordpadregister, dat **transitief** 106 bestanden aflegt, 13 lezers en 33 tabellen
-vastlegt, elke bereikte tabel in vier klassen indeelt en de klassengroottes 5/18/7/3
-hard pint; een tabel zónder klasse maakt de gate rood) en
+antwoordpadregister, dat **transitief** 112 bestanden aflegt — met een resolver die de
+tsconfig-alias, `../` en indexbestanden aankan, en een negatieve controle op precies die
+gevallen — en 45 lezingen (`bestand::tabel`) over 33 tabellen in vier klassen indeelt met
+de verdeling 7/26/11/3 hard gepind; een bereikte lezing zónder klasse maakt de gate rood.
+Classificatie gaat per lezing omdat `profielen` op vijf plekken zowel autorisatie als
+modelcontext levert) en
 `retrieval-golden-gevoeligheid.test.ts` (15 negatieve controles die per mutatie —
 volgorde, citaat-ID, fondsfilter, versie-identiteit — bewijzen dat de goldens kantelen).
 Het resterende bewijs is de W1-harnasrun met de w322-scenario's, drie identiek

@@ -3,7 +3,7 @@
 > **Status:** T1 afgerond; ontwerp gereviewd en R1–R6 **beslist** (9 september 2026).
 > Geen productiecode, geen migratie en geen databaseobject gewijzigd.
 > Fase 3 (#323, #324) en de AI-gateway-cutover (#325) zijn op `preview` gemerged.
-> Wat vóór T2-1 nog moet gebeuren is **T1b** (embeddingstub + hybride golden, besluit R3);
+> Wat vóór T2-1 nog moet gebeuren is **T1b** (embeddingstub + hybride golden, besluit R3, ticket [#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349));
 > de ontwerpvragen zijn dicht — zie §6.
 > Bron van waarheid voor de huidige keten: `core/lib/rag.ts` en de migraties. Dit
 > document beschrijft wat er **is** (gemeten, met vindplaats) en wat het contract
@@ -65,34 +65,49 @@ blijft leidend.
 | Daarvan met **alleen type-imports** uit `rag.ts` | **3** | klasse C, §2.5 |
 | Aanroepen van `zoekRelevanteChunksMetMeta` in productiecode | **6** | §2.3, kolom "vindplaats" |
 | Directe `.from()`-lezingen in `app/api/chat/route.ts` | **24** | `retrieval-contextbronnen.expected.json` |
-| Bestanden in de **transitieve** importgraaf vanaf de chatroute | **106** | idem |
+| Bestanden in de **transitieve** importgraaf vanaf de chatroute | **112** | idem |
 | Daarvan bestanden die zelf een tabel lezen of schrijven | **13** | idem |
 | Unieke tabellen bereikbaar op het antwoordpad | **33** | idem |
-| — waarvan klasse **evidence** (citeerbaar en versiebaar) | **5** | gate `F4-context` |
-| — waarvan klasse **modelcontext** (prompt in, niet citeerbaar) | **18** | idem |
-| — waarvan klasse **configuratie/autorisatie/bronbeleid** | **7** | idem |
-| — waarvan klasse **audit/persistentie** | **3** | idem |
-| Evidencebronnen die vandaag via de retrievalkern lopen | **2** (`document_chunks`, `documenten`) | idem |
-| Evidencebronnen die er **buiten** om lopen | **3** (`decision_objects`, `semantic_units`, `concepts`) | idem |
+| **Lezingen** (`bestand::tabel`) — de eenheid van classificatie | **45** | gate `F4-context` |
+| — klasse **evidence** (citeerbaar en versiebaar) | **7** | idem |
+| — klasse **modelcontext** (prompt in, niet citeerbaar) | **26** | idem |
+| — klasse **configuratie/autorisatie/bronbeleid** | **11** | idem |
+| — klasse **audit/persistentie** | **3** | idem |
+| Evidencelezingen die via de retrievalkern lopen | **2** (beide in `rag.ts`) | idem |
+| Evidencelezingen die er **buiten** om lopen | **5** | idem |
+| Tabellen die in **meer dan één** klasse voorkomen | **3** (`profielen`, `documenten`, `governance_log_inhoud`) | idem |
 
-**Correctie op de eerste ronde.** Die telde "31 tabellen buiten de retrievalkern" en
-noemde dat de contextlaag. Dat was een verkeerde classificatie: in dat getal zaten
-configuratie, autorisatie en bronbeleid (`fonds_theming`, featureflags, `profielen`,
-de web-whitelist) — dat is geen modelcontext. De scan volgde bovendien alleen de
-**directe** imports van de chatroute; een tabellezing in een transitief geïmporteerde
-helper bleef onzichtbaar. Beide zijn hersteld: de scan loopt nu de hele importgraaf af
-(106 bestanden) en elke bereikte tabel draagt een expliciete klasse, waarbij een
-**onbekende tabel de gate rood maakt**.
+**Drie correcties op eerdere rondes.** (1) De eerste telling — "31 tabellen buiten de
+retrievalkern, dat is de contextlaag" — was een verkeerde classificatie: daarin zaten
+configuratie, autorisatie en bronbeleid (`fonds_theming`, featureflags, `profielen`, de
+web-whitelist), en dat is geen modelcontext. (2) De scan volgde alleen de **directe**
+imports; een tabellezing in een transitief geïmporteerde helper bleef onzichtbaar. Dat
+kostte drie lezers: `fonds-sessie.ts`, `profiel.ts` en — het meest sprekend —
+`parent-context.ts`, dat `document_chunks` rechtstreeks leest. (3) De daaropvolgende
+"transitieve" scan resolveerde relatieve specifiers verkeerd (`./config-db-core` vanuit
+`core/lib/ai-gateway/config-db.ts` werd `core/lib/config-db-core.ts`; `../ai-poort` werd
+genegeerd), zodat de graaf niet bewezen volledig was.
 
-De transitieve scan vond dezelfde 33 tabellen — de telling klopte dus, maar toevallig —
-en **drie extra lezende bestanden** die de directe scan miste: `core/lib/fonds-sessie.ts`,
-`core/lib/profiel.ts` en, het meest sprekend, `core/lib/parent-context.ts`, dat
-`document_chunks` rechtstreeks leest.
+Alle drie zijn hersteld. De resolver volgt nu de tsconfig-alias, echte relatieve paden
+inclusief `../`, extensies en indexbestanden — met een **negatieve controle op precies
+die gevallen** — en bereikt 112 bestanden. Dat leverde geen nieuwe tabellen op (de zes
+extra bestanden lezen niets), wat de telling van 33 nu ook daadwerkelijk bewijst in
+plaats van toevallig te bevestigen.
 
-Het scherpere beeld: niet "31 tabellen omzeilen de kern", maar **3 van de 5
-evidencebronnen** doen dat — besluitregistratie en de twee vergelijk-tabellen — en
-daarnaast staat er een aparte laag van 18 gestructureerde contexttabellen die nooit
-citeerbaar wordt maar wel de prompt in gaat.
+**Classificatie gaat per lezing, niet per tabel.** Per tabel bleek te grof: `profielen`
+staat op vijf plekken en doet daar drie dingen — `capabilities.ts` leest `rol`
+(autorisatie), `fonds-sessie.ts` en `profiel.ts` lezen tenant en identiteit, terwijl
+`profielsturing.ts` (`bestuurlijke_rol`, `antwoordvoorkeur`, `detailniveau`) en
+`portaalcontext.ts` (`naam`) juist de **modelcontext** vullen. Eén klasse per tabel
+maakte dat onzichtbaar. De eenheid is daarom `bestand::tabel`, en een lezing mag
+meerdere klassen dragen: de chatroute leest `profielen` in één query voor beide doelen.
+
+Het scherpere beeld: **5 van de 7 evidencelezingen omzeilen de retrievalkern** —
+besluitregistratie (twee plekken), `document_chunks` in de chatroute én in
+`parent-context.ts`, en `semantic_units` — en daarnaast staan 26 modelcontextlezingen
+die nooit citeerbaar worden maar wel de prompt in gaan. `concepts` staat níét meer bij
+evidence: die lezing (`id, key, label, type, status`) is een begrippencatalogus die
+`semantic_units` interpreteert, geen documentgebonden bewijs.
 
 ### 2.3 Klasse A — retrieval-call-sites
 
@@ -123,47 +138,70 @@ Elke vindplaats is exact herleidbaar.
 
 ### 2.4 Klasse B — het antwoordpad in vier hoedanigheden
 
-Het antwoordpad leest 33 tabellen. Ze hebben niet dezelfde rol, en de eerste ronde
-behandelde ze wél als één hoop ("31 contexttabellen"). De indeling hieronder is een
-**ontwerpoordeel**, vastgelegd in `TABELKLASSE` (`retrieval-census.mjs`) en afgedwongen
-door de gate: een bereikte tabel zonder klasse maakt haar rood.
+Het antwoordpad doet **45 lezingen** over 33 tabellen. Ze hebben niet dezelfde rol, en
+de eerste ronde behandelde ze als één hoop ("31 contexttabellen"). De indeling gaat per
+**lezing** (`bestand::tabel`), niet per tabel, en een lezing mag meerdere klassen
+dragen. Ze is een **ontwerpoordeel**, vastgelegd in `LEZINGKLASSE`
+(`retrieval-census.mjs`) met per regel een `doel`, en afgedwongen door de gate: een
+bereikte lezing zonder klasse maakt haar rood.
 
-| Klasse | # | Tabellen | Wat het contract ermee doet |
-|---|---|---|---|
-| **evidence** — citeerbaar én versiebaar | 5 | `document_chunks`, `documenten`, `decision_objects`, `semantic_units`, `concepts` | hoort **achter het retrievalcontract**. Vandaag lopen alleen de eerste twee via `rag.ts`; de andere drie zijn de eigenlijke omzeiling (gap G-1) |
-| **modelcontext** — gaat de prompt in, niet citeerbaar | 18 | `agendapunten`, `agendapunt_inbreng`, `vergaderingen`, `procedures`, `procedure_stappen`, `procedure_requirements`, `procedure_bewijs`, `procedure_eigenaars`, `risicos`, `risico_log`, `risico_maatregelen`, `organisatie_profielen`, `expertises`, `gremia`, `kritische_focusgebieden`, `profiel_expertises`, `profiel_focusgebieden`, `profiel_gremia` | blijft **buiten documentretrieval**, maar krijgt in T2 een **eigen typed contextcontract** met eigen audit (besluit R5) |
-| **configuratie/autorisatie/bronbeleid** | 7 | `profielen`, `fonds_feature_flags`, `fonds_config_log`, `fonds_content_overrides`, `fonds_module_manifest`, `fonds_theming`, `bron_whitelist` | **geen contextlaag.** Stuurt de retrieval, maar belandt niet als inhoud in de prompt. Hoort niet in enige contextteller |
-| **audit/persistentie** | 3 | `governance_log`, `governance_log_inhoud`, `voorbereidingen` | het auditspoor en het bewaarde antwoordproduct; geen bron |
+| Klasse | Lezingen | Wat het contract ermee doet |
+|---|---|---|
+| **evidence** — citeerbaar én versiebaar | **7** | hoort **achter het retrievalcontract**. Slechts 2 lopen via `rag.ts`; de andere 5 zijn de eigenlijke omzeiling (G-1a, G-8) |
+| **modelcontext** — gaat de prompt in, niet citeerbaar | **26** | blijft **buiten documentretrieval**, maar krijgt in T2 een **eigen typed contextcontract** met eigen audit (besluit R5) |
+| **configuratie/autorisatie/bronbeleid** | **11** | **geen contextlaag.** Stuurt de retrieval en de autorisatie, maar belandt niet als inhoud in de prompt. Hoort in geen enkele contextteller |
+| **audit/persistentie** | **3** | het auditspoor en het bewaarde antwoordproduct; geen bron |
 
-Per lezend bestand (13 van de 106 bereikte bestanden), met de rol die het speelt:
+**De zeven evidencelezingen**, met hun positie ten opzichte van de kern:
+
+| Lezing | Via de kern? | Wat het is |
+|---|---|---|
+| `core/lib/rag.ts::document_chunks` | ✅ | de retrievalkern zelf |
+| `core/lib/rag.ts::documenten` | ✅ | documentmetadata bij de chunks (status, geldigheid, normgewicht) |
+| `app/api/chat/route.ts::document_chunks` | ❌ | chunkpresentie per document, buiten `rag.ts` om (G-8) |
+| `core/lib/parent-context.ts::document_chunks` | ❌ | parent-context rond een geselecteerde chunk (G-8) — **alleen zichtbaar na de resolverfix** |
+| `app/api/chat/route.ts::decision_objects` | ❌ | besluitregistratie in het procesblok (G-1a) |
+| `core/lib/besluitvorming-bron.ts::decision_objects` | ❌ | besluitregistratie als "formele bron náást `document_chunks`" (G-1a) |
+| `core/lib/vergelijk-productie.ts::semantic_units` | ❌ | documentgebonden waarden met `page` en `evidence` (G-1a) |
+
+**Drie tabellen dragen meer dan één hoedanigheid** — precies wat een classificatie per
+tabel zou hebben verborgen:
+
+| Tabel | Klassen | Waarom |
+|---|---|---|
+| `profielen` | configuratie + modelcontext | `capabilities.ts` leest `rol` (autorisatie), `fonds-sessie.ts` en `profiel.ts` lezen tenant en identiteit; `profielsturing.ts` leest `bestuurlijke_rol`, `antwoordvoorkeur` en `detailniveau` en `portaalcontext.ts` leest `naam` — die vullen de prompt. De chatroute doet in één query beide |
+| `documenten` | evidence + modelcontext | `rag.ts` leest documentmetadata bij de chunks; de chatroute en `portaalcontext.ts` lezen titels voor scope- en bronlabels |
+| `governance_log_inhoud` | audit + modelcontext | de vraag van de vorige beurt is auditdata én reconstrueert de gespreksdraad in de prompt |
+
+Per lezend bestand (13 van de 112 bereikte bestanden):
 
 | Bestand | Klassen die het raakt | Rol |
 |---|---|---|
 | `app/api/chat/route.ts` | evidence, modelcontext, configuratie, audit | agendapunt-, proces-, risico- en risicomatrixblokken; chunkpresentie per document (3 plekken: `:1036`, `:1063`, `:1298`) |
-| `core/lib/portaalcontext.ts` | modelcontext (+ `documenten`, `profielen`) | **vergadering- en agendacontext** ("wat speelt er nu") |
-| `core/lib/profielsturing.ts` | modelcontext (+ `profielen`) | persoonsgebonden sturing van het antwoord |
+| `core/lib/portaalcontext.ts` | modelcontext | **vergadering- en agendacontext** ("wat speelt er nu"), inclusief namen |
+| `core/lib/profielsturing.ts` | modelcontext | persoonsgebonden sturing van het antwoord |
 | `core/lib/organisatieprofiel.ts` | modelcontext | regimekader/organisatieblok |
-| `core/lib/besluitvorming-bron.ts` | **evidence** | besluitregistratie als "formele bron náást `document_chunks`" — wordt citeerbaar (R5) |
-| `core/lib/vergelijk-productie.ts` | **evidence** | vergelijkpad: `semantic_units`, `concepts` |
-| `core/lib/rag.ts` | **evidence** | de enige twee die vandaag via de retrievalkern lopen |
-| `core/lib/parent-context.ts` | **evidence** | leest `document_chunks` rechtstreeks — **alleen zichtbaar door de transitieve scan** |
+| `core/lib/besluitvorming-bron.ts` | **evidence** | besluitregistratie — wordt citeerbaar (R5) |
+| `core/lib/vergelijk-productie.ts` | **evidence** + configuratie | `semantic_units` is bewijs; `concepts` is de begrippencatalogus die het interpreteert |
+| `core/lib/rag.ts` | **evidence** | de enige twee lezingen die vandaag via de retrievalkern lopen |
+| `core/lib/parent-context.ts` | **evidence** | leest `document_chunks` rechtstreeks — **alleen zichtbaar na de resolverfix** |
 | `core/lib/fonds-config.ts` | configuratie | vlaggen die de retrieval sturen |
-| `core/lib/capabilities.ts`, `core/lib/fonds-sessie.ts`, `core/lib/profiel.ts` | configuratie | autorisatie en identiteit (de laatste twee alleen transitief bereikbaar) |
+| `core/lib/capabilities.ts`, `core/lib/fonds-sessie.ts`, `core/lib/profiel.ts` | configuratie | autorisatie, tenant en identiteit |
 | `core/lib/web-whitelist-data.ts` | configuratie | bronbeleid van de webarm |
 
-De gate `F4-context` pint de vier klassengroottes (5/18/7/3) hard, pint de omvang van de
-importgraaf (106), en maakt elke bereikte tabel zónder klasse rood. Classificeren is
-daarmee een gereviewde handeling: een nieuwe tabel kan niet stilzwijgend als "context"
-meeliften, en configuratie kan niet stilzwijgend voor modelcontext doorgaan.
+De gate `F4-context` pint de klassenverdeling (7/26/11/3 over 45 lezingen), pint de
+omvang van de importgraaf (112), en maakt elke bereikte lezing zónder klasse rood.
+Classificeren is daarmee een gereviewde handeling: een nieuwe lezing kan niet
+stilzwijgend als "context" meeliften, en configuratie kan niet stilzwijgend voor
+modelcontext doorgaan.
 
 > **Reikwijdte van deze bevinding.** Dit is géén beveiligingslek: al deze lezingen lopen
 > onder RLS met de tenant-client, en `module_scope` weigert expliciet bij een
 > niet-gevonden `procedure_id`/`risico_id` in plaats van terug te vallen op fondsbrede
-> data (`module-scope.ts`, kopcommentaar). Het punt is architectonisch, en na de
-> herclassificatie scherper dan in de eerste ronde: **drie van de vijf evidencebronnen
-> lopen buiten de retrievalkern om** en zijn daardoor niet citeerbaar of versiebaar,
-> terwijl 18 contexttabellen dat ook nooit worden — maar wel een eigen contract nodig
-> hebben in plaats van stilzwijgend meeliften.
+> data (`module-scope.ts`, kopcommentaar). Het punt is architectonisch: **5 van de 7
+> evidencelezingen lopen buiten de retrievalkern om** en zijn daardoor niet citeerbaar
+> of versiebaar, terwijl 26 modelcontextlezingen dat ook nooit worden — maar wel een
+> eigen contract nodig hebben in plaats van stilzwijgend mee te liften.
 
 ### 2.5 Klasse C — geen retrieval (expliciet afgebakend)
 
@@ -211,7 +249,7 @@ doen géén retrieval en blijven buiten de adaptergrens.
 - **Census-gates** (`tests/cross-tenant/retrieval-census.test.ts`, 5 tests): het
   retrievalregister (17 bestanden, per symbool), de eis dat zoek-RPC's uitsluitend in
   `rag.ts` leven, de vier productie-ingangen, plus de twee nieuwe contextgates
-  (106 bereikte bestanden, 13 lezers, 33 tabellen in vier klassen).
+  (112 bereikte bestanden, 13 lezers, 45 lezingen in vier klassen).
 - **Retrieval-goldens in het W1-harnas** (`tests/karakterisering/`):
   - vier extra chunks onder het bestaande `document1` in de seed — geen nieuw
     document, en de teksten vermijden elk woord uit de #311-chatvragen, zodat de
@@ -379,17 +417,19 @@ export interface Bronresultaat {
   // VERSIE is vastgesteld, en uitdrukkelijk niet het moment van de rechtencheck.
   versie: { soort: "etag" | "ctag" | "hash" | "status-datum" | "onbekend"; waarde: string | null; gecontroleerdOp: string };
 
-  // OF DE ACTOR HET MOCHT LEZEN — rechtenbewijs, een ander bewijs met een eigen
-  // tijdstip. Zonder dit veld is `AdapterCapabilities.permissionProof` niets meer
-  // dan een belofte van de adapter over zichzelf; de orkestratie kan er niet op
-  // toetsen. Verplicht zodra `capabilities().permissionProof` waar is; de
-  // orkestratie weigert dan elk resultaat zonder `toegangscontrole.toegestaan`
-  // en elk resultaat waarvan `gecontroleerdOp` buiten het toegestane venster valt.
+  // OF DÉZE ACTOR HET IN DÍT VERZOEK MOCHT LEZEN — rechtenbewijs, een ander
+  // bewijs met een eigen tijdstip. Zonder dit veld is
+  // `AdapterCapabilities.permissionProof` niets meer dan een belofte van de
+  // adapter over zichzelf. Het bewijs is gebonden aan actor én request: zonder
+  // `gebruikerId` en `correlationId` zou een verse proof van een ándere
+  // gebruiker of uit een eerdere request technisch door de poort komen.
   toegangscontrole?: {
     toegestaan: true;                         // alleen toegestane resultaten verlaten de adapter
+    gebruikerId: string;                      // lokale profiel-id; MOET gelijk zijn aan ctx.actor.gebruikerId
+    correlationId: string;                    // MOET gelijk zijn aan ctx.correlationId — bindt het bewijs aan dit verzoek
     gecontroleerdOp: string;                  // ISO-tijdstip van de live rechtencheck
     basis: "delegated_user" | "rls";          // met wiens rechten is getoetst
-    bronconfiguratieVersie: number;           // sharepoint_bronnen.versie die gold
+    bronconfiguratieVersie: number;           // sharepoint_bronnen.versie die bij de check gold
   };
 
   locator: { pagina?: number | null; paragraaf?: string | null; mappad?: string; chunkIndex?: number };
@@ -486,11 +526,11 @@ Drie dingen zijn nieuw ten opzichte van de eerste T1-ronde, alle drie uit de rev
    retrievallaag kiest **nooit** provider of model.
 7. **Toelatingspoort per kandidaat, vóór selectie.** De orkestratie weigert een
    `Bronresultaat` dat niet voldoet aan de capabilities die de adapter zelf claimt:
-   ontbrekende `versie.waarde` bij `versiebewijs: true`, ontbrekende of verlopen
-   `toegangscontrole` bij `permissionProof: true`, of een filter uit `query.filters`
-   dat niet in `ondersteundeFilters` staat. Een geweigerde kandidaat verdwijnt uit de
-   kandidatenset en telt als `toestemming_geweigerd` of `configuratiefout` — hij komt
-   nooit alsnog via een andere weg in de context.
+   ontbrekende `versie.waarde` bij `versiebewijs: true`, een `toegangscontrole` die
+   niet geldig is bij `permissionProof: true` (zie §4.2.1), of een filter uit
+   `query.filters` dat niet in `ondersteundeFilters` staat. Een geweigerde kandidaat
+   verdwijnt uit de kandidatenset en telt als `toestemming_geweigerd` of
+   `configuratiefout` — hij komt nooit alsnog via een andere weg in de context.
 
 **Wie doet wat.** De scheiding is hard, en volgt uit de splitsing in §4.1:
 
@@ -504,6 +544,31 @@ Drie dingen zijn nieuw ten opzichte van de eerste T1-ronde, alle drie uit de rev
 | Citaties en `BronVerwijzing` bouwen | — | ✅ |
 | `RetrievalMeta` en het auditspoor schrijven | — | ✅ |
 | Begrenzing op tekens en looptijd | — | ✅ |
+
+### 4.2.1 Wanneer is een `toegangscontrole` geldig?
+
+Vijf voorwaarden, alle vijf noodzakelijk. Ontbreekt er één, dan wordt de kandidaat
+geweigerd met `toestemming_geweigerd`; hij wordt nooit gedegradeerd of alsnog
+toegelaten op een zwakker bewijs.
+
+| # | Voorwaarde | Wat het uitsluit |
+|---|---|---|
+| V1 | `toegestaan === true` | een resultaat dat de adapter zelf al had moeten weglaten |
+| V2 | `gebruikerId === ctx.actor.gebruikerId` | een verse, geldige proof die bij een **andere gebruiker** hoort (gedeelde cache, verkeerd doorgegeven token) |
+| V3 | `correlationId === ctx.correlationId` | een proof uit een **eerdere request** van dezelfde gebruiker — hergebruik over verzoeken heen |
+| V4 | `verzoekStart ≤ gecontroleerdOp ≤ nu`, met ten hoogste 2 s klokspeling naar de toekomst, en `nu − gecontroleerdOp ≤ 60 s` | een check van vóór dit verzoek, een tijdstip uit de toekomst, en een proof die tijdens een lange beurt is verouderd |
+| V5 | `bronconfiguratieVersie === de versie die de orkestratie bij verzoekstart voor die bron vaststelde` | een bron die **tijdens** het verzoek is herconfigureerd of ontkoppeld |
+
+V3 is de scherpste: `correlationId` is dezelfde waarde die naar de AI-gateway en het
+auditspoor gaat, dus de rechtencheck, de modelaanroep en de governanceregel hangen aan
+één identiteit. Dat maakt het bewijs achteraf ook controleerbaar in plaats van alleen
+ten tijde van de call.
+
+De 60 s van V4 is een **bovengrens**, geen streefwaarde: op het Microsoftpad hoort de
+check vlak vóór de retrieval te gebeuren. De grens bestaat voor de lange beurt (breed
+documentpad, reranker, trage provider) waarin tussen check en modelcontext meer tijd
+zit dan verwacht. `basis: "rls"` kent geen eigen venster — daar is de tenant-client zelf
+het bewijs — maar V2 en V3 gelden onverkort.
 
 ### 4.3 Datastroom
 
@@ -571,7 +636,7 @@ belangrijkste invariant van het foutmodel.
 | Tenant-isolatie | RLS leidend, `handhaafFondsdiscipline` als app-guard náást RLS en RPC | DB + `rag.ts:129` |
 | Scopevalidatie | proces-, vergadering-, agendapunt- en document-referenties expliciet tegen het fonds getoetst | orkestratie (**nieuw**, §2.6 punt 7) |
 | Versiebewijs | elk resultaat draagt `versie.{soort,waarde,gecontroleerdOp}`; volledige hash op het eigen pad, eTag/cTag op het Microsoftpad. `status-datum` is een zwakke legacyfallback en op het Microsoftpad **niet toegestaan** (R1) | toelatingspoort §4.2 punt 7 |
-| Rechtenbewijs | claimt een adapter `permissionProof`, dan draagt **elk** resultaat een `toegangscontrole` met eigen `gecontroleerdOp`, `basis` en `bronconfiguratieVersie`. Versie- en rechtencontrole zijn gescheiden bewijzen met gescheiden tijdstippen | toelatingspoort §4.2 punt 7, weigert |
+| Rechtenbewijs | claimt een adapter `permissionProof`, dan draagt **elk** resultaat een `toegangscontrole` die aan V1–V5 (§4.2.1) voldoet: toegestaan, **gebonden aan deze actor en dit `correlationId`**, binnen het venster, op de geldende bronconfiguratieversie. Versie- en rechtencontrole zijn gescheiden bewijzen met gescheiden tijdstippen | toelatingspoort §4.2 punt 7, weigert |
 | Capability-eerlijkheid | een filter uit `query.filters` dat niet in `ondersteundeFilters` staat is een fout, nooit een stille no-op | toelatingspoort §4.2 punt 7 |
 | PII | PII-gate vóór retrieval en vóór elke web-arm | chatroute; **ontbreekt op C5** (gaplijst G-4) |
 | Bronscheiding | centrale sectorbronnen blijven een eigen bronsoort; vermenging alleen deterministisch in de orkestratie | orkestratie |
@@ -622,6 +687,8 @@ De mapping van de fase-3-referentie naar het contract:
 | `eTag` / `cTag` | `versie.{soort,waarde}` | `soort: "etag"` respectievelijk `"ctag"` |
 | moment waarop die eTag/cTag is gelezen | `versie.gecontroleerdOp` | **versiebewijs** |
 | moment van de live permission-check | `toegangscontrole.gecontroleerdOp` | **rechtenbewijs**, met het token van de **gebruiker** (`basis: "delegated_user"`), niet van de app |
+| de actor namens wie is getoetst | `toegangscontrole.gebruikerId` | lokale profiel-id; moet gelijk zijn aan `ctx.actor.gebruikerId` (V2) |
+| het verzoek waarin is getoetst | `toegangscontrole.correlationId` | bindt het bewijs aan déze beurt en aan de gateway-/governanceketen (V3) |
 | previewrecht na hostvalidatie | `previewMogelijk` | alleen `true` ná een geslaagde permission-check |
 
 De twee tijdstippen zijn bewust gescheiden. Ze vallen in de praktijk vaak samen, maar het
@@ -632,10 +699,10 @@ rechtencheck op een nog geldige versie te herkennen.
 `capabilities()` = `{versiebewijs: true, permissionProof: true, preview: true,
 cancellation: true, timeout: true, strategieen: ["gericht"]}`. Omdat deze adapter
 `permissionProof: true` claimt, dwingt de toelatingspoort (§4.2 punt 7) af dat **elk**
-resultaat een volledige `toegangscontrole` draagt met `basis: "delegated_user"`, een
-`gecontroleerdOp` binnen het toegestane venster en de `bronconfiguratieVersie` die op dat
-moment gold — plus een `versie` van soort `etag` of `ctag`. `status-datum` is hier
-onvoldoende. Een resultaat dat daar niet aan voldoet wordt geweigerd, niet gedegradeerd.
+resultaat een `toegangscontrole` draagt die aan alle vijf voorwaarden van §4.2.1 voldoet
+— inclusief `gebruikerId` en `correlationId` van dít verzoek — plus een `versie` van
+soort `etag` of `ctag`. `status-datum` is hier onvoldoende. Een resultaat dat daar niet
+aan voldoet wordt geweigerd, niet gedegradeerd.
 In T2 kent deze adapter uitsluitend een teststub.
 
 ### 4.8 Audit en observability
@@ -656,8 +723,8 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 
 | # | Gap | Call-sites | Ernst | Waarom | Pakket |
 |---|---|---|---|---|---|
-| **G-1a** | Drie van de vijf **evidencebronnen** lopen buiten de retrievalkern om | `besluitvorming-bron.ts` (`decision_objects`), `vergelijk-productie.ts` (`semantic_units`, `concepts`) | **hoog** | formele bronnen zonder citation-id, versie of ranking; R5 maakt ze citeerbaar en versiebaar | T2-4 |
-| **G-1b** | 18 **modelcontext**-tabellen gaan de prompt in zonder enig contract | `portaalcontext.ts`, `module-scope`, `profielsturing.ts`, `organisatieprofiel.ts` | **hoog** | geen typed vorm, geen audit, geen begrenzing; R5 geeft ze een eigen contextcontract | T2-4 |
+| **G-1a** | Vijf van de zeven **evidencelezingen** lopen buiten de retrievalkern om | `besluitvorming-bron.ts` en `chat/route.ts` (`decision_objects`), `vergelijk-productie.ts` (`semantic_units`), `chat/route.ts` en `parent-context.ts` (`document_chunks`) | **hoog** | formele bronnen zonder citation-id, versie of ranking; R5 maakt ze citeerbaar en versiebaar | T2-4 |
+| **G-1b** | 26 **modelcontext**-lezingen gaan de prompt in zonder enig contract | `portaalcontext.ts`, `module-scope`, `profielsturing.ts`, `organisatieprofiel.ts` | **hoog** | geen typed vorm, geen audit, geen begrenzing; R5 geeft ze een eigen contextcontract | T2-4 |
 | **G-2** | Geen versie-identiteit per passage | C1–C6 | **hoog** | zonder exacte versie kan een Microsoftresultaat niet worden toegelaten; blokkeert §4.7. R1: volledige hash, `status-datum` alleen als zwakke legacyfallback | T2-3 |
 | **G-3** | Geen cancellation en geen timeout in de keten | alle | **hoog** | een afgebroken verzoek laat retrieval en modelcalls doorlopen (kosten + belasting). R6: meteen in T2-1 | **T2-1** |
 | **G-3b** | `permissionProof` was niet afdwingbaar | contract | **hoog** | capability-boolean zonder bewijs per resultaat; opgelost met `Bronresultaat.toegangscontrole` + toelatingspoort §4.2 punt 7 | T2-1 |
@@ -674,11 +741,11 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 
 | # | Pakket | Raakt | Gate |
 |---|---|---|---|
-| **T1b** | Embeddingstub naast de Anthropic-stub + geëmbedde fixtures; hybride golden op het `zoek_chunks_hybride`-pad. **Nog steeds geen productiecode.** | tests, fixtures | nieuwe hybride golden; bestaande 390 ongewijzigd |
+| **T1b** ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349)) | Embeddingstub naast de Anthropic-stub + geëmbedde fixtures; hybride golden op het `zoek_chunks_hybride`-pad. **Nog steeds geen productiecode.** | tests, fixtures | nieuwe hybride golden; bestaande 390 ongewijzigd |
 | T2-1 | Contract + orkestratie + Supabase-adapter; C1 erdoorheen. **Inclusief `AbortSignal`, timeout en de toelatingspoort** (R6, G-3, G-3b) | chatroute, `rag.ts` (wrapper) | w311/w322-goldens identiek volgens §3.2; contracttests op cancellation/timeout |
 | T2-2 | C5 en C6 door de orkestratie (vlaggen, bronvorm, scopevalidatie, PII-gate op C5). **C6 behoudt zijn filtergedrag** (R2) | zoeken, vergelijk | nieuwe goldens vóór en ná |
 | T2-3 | Versie-identiteit (volledige hash, R1) in `bronversie_audit`; `correlationId` in `retrieval_meta` (R4, één forwardmigratie) | `audit-meta.ts`, SQL-projectie, migratie | audit-meta-sanity + karakterisering + R1-gates |
-| T2-4 | Evidencebronnen achter het contract (G-1a); **typed contextcontract + audit voor de 18 modelcontext-tabellen** (G-1b); census krimpt tot adapter/orkestratie; chunkpresentie en `parent-context` via de adapter | chatroute, contextmodules | census-gate + contextgate (klassengroottes verschuiven bewust) |
+| T2-4 | Evidencebronnen achter het contract (G-1a); **typed contextcontract + audit voor de 26 modelcontextlezingen** (G-1b); census krimpt tot adapter/orkestratie; chunkpresentie en `parent-context` via de adapter | chatroute, contextmodules | census-gate + contextgate (klassengroottes verschuiven bewust) |
 | T2-5 | Microsoft-stub + contracttests: capabilities, versie- én **rechtenbewijs**, truncatie, alle negen foutcategorieën, cross-tenant met gemanipuleerde refs | tests | xtenant |
 | T2-6 | Docs: dreigingsmodel, ASVS, HANDOVER, rollback | docs | ontwerp-sync |
 
@@ -698,9 +765,9 @@ Vastgelegd in [`decisions/0213`](./decisions/0213-retrievalcontract-adaptergrens
 |---|---|---|---|
 | **R1** | Versiebewijs Supabase | **Volledige hash** `(document_id, indexering_versie, bestand_hash)` als versie-identiteit. `status-datum` blijft uitsluitend als **expliciet zwakke legacyfallback** en is **niet voldoende voor een Microsoftresultaat** | §4.6; toelatingspoort weigert `status-datum` op het Microsoftpad |
 | **R2** | Vergelijk-filters | **Huidig gedrag behouden.** Geen impliciet `actueel`-filter: expliciet gekozen historische documenten moeten vergelijkbaar blijven | G-5 beperkt zich tot de bronvorm; geen gedragswijziging in T2-2 |
-| **R3** | Hybride golden | **Eigen tranche T1b**, vóór enige productiecode in T2-1 | G-10 van laag naar hoog; T1b toegevoegd aan §5.2 |
+| **R3** | Hybride golden | **Eigen tranche T1b**, vóór enige productiecode in T2-1 — vastgelegd als [#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349) | G-10 van laag naar hoog; T1b toegevoegd aan §5.2 |
 | **R4** | `correlationId` | **Toevoegen**, forwardmigratie geaccepteerd | G-7 sluit in T2-3; één idempotente migratie |
 | **R5** | Reikwijdte contextlaag | **Hybride.** Besluitregistratie en andere formele evidence worden **citeerbaar en versiebaar**; agenda-, vergadering-, proces- en profielcontext blijft buiten documentretrieval maar krijgt een **eigen typed contextcontract met eigen audit**. Configuratie/autorisatie is **geen contextlaag** | G-1 gesplitst in G-1a/G-1b; de vier tabelklassen zijn hierop gebouwd en door de gate afgedwongen |
 | **R6** | Cancellation/timeout | **Meteen in T2-1**, met de contracttests erbij. Het hoort bij de orkestratiegrens en de kostenbeheersing, niet bij de tests | G-3 verplaatst van T2-5 naar T2-1 |
 
-**Wat nu nog openstaat vóór T2-1:** alleen T1b (R3). De ontwerpvragen zijn beslist.
+**Wat nu nog openstaat vóór T2-1:** alleen T1b, als zelfstandig te volgen ticket [#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349). De ontwerpvragen zijn beslist.
