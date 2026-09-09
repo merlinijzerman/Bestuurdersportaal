@@ -202,6 +202,15 @@ afhankelijkheid. Beide signaturen worden nu idempotent verwijderd, en de rollbac
 uitgevoerd tegen de actuele migratie: nul resterende functies, nul resterende tabellen,
 `pilotstatus` terug en `modus` weg.
 
+## Correctie na de Preview-smoke (9 september 2026)
+
+**D16 — een weigering die geaudit moet worden, wordt door de database geweigerd.** De DELETE-route
+had een vroege 403 vóór de gatewayaanroep. Functioneel klopte de uitkomst, maar de auditregel
+`ontkoppelen.geweigerd` bleef weg: die wordt geschreven door `login_private.start_intrekking`, en
+daar kwam het verzoek nooit. Vroege poorten mogen dus alleen bestaan waar zij géén geaudite
+beslissing overslaan. Aanvullend toont de profielkaart in `verplicht` geen ontkoppelknop meer en
+gebruikt zij bij een weigering de tekst van de server.
+
 ## Overwogen alternatieven
 
 - **`actief` omzetten naar een generated column** — formeel één bron van waarheid, maar

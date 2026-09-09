@@ -148,4 +148,51 @@ describe("MicrosoftLoginKaart", () => {
     renderMetProviders(<MicrosoftLoginKaart />);
     expect(await screen.findByRole("status")).toHaveTextContent("Microsoft-login is gekoppeld aan uw account.");
   });
+
+  // ── #344 · modus `verplicht`: de organisatie beheert de koppeling ─────────
+  // Uit de Preview-smoke (scenario 5): de kaart toonde de knop nog, terwijl de
+  // server hem terecht weigerde. Een knop die tóch wordt geweigerd is precies wat
+  // het UX-principe "maak blokkers vooraf expliciet" verbiedt.
+  it("verplicht: geen ontkoppelknop, wél uitleg dat de organisatie de koppeling beheert", async () => {
+    stubFetch({
+      "GET /api/microsoft-login/koppeling": json({
+        beschikbaar: true, sessieViaMicrosoft: false, status: "active",
+        modus: "verplicht", stand: "alleen-status", magKoppelen: false, magOntkoppelen: false,
+        geactiveerdOp: "2026-09-07T10:00:00.000Z", laatstGebruiktOp: null,
+      }),
+    });
+    const { container } = renderMetProviders(<MicrosoftLoginKaart />);
+    expect(await screen.findByText("Gekoppeld")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Ontkoppelen" })).toBeNull();
+    expect(screen.getByText(PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer)).toBeVisible();
+    expect(container.textContent).not.toMatch(/@|tid|oid|sub/i);
+    await verwachtGeenErnstigeAxeBevindingen(container);
+  });
+
+  it("verplicht + revoking: ook 'Opnieuw proberen' verdwijnt", async () => {
+    stubFetch({
+      "GET /api/microsoft-login/koppeling": json({
+        beschikbaar: true, status: "revoking", modus: "verplicht", stand: "alleen-status",
+        magKoppelen: false, magOntkoppelen: false,
+      }),
+    });
+    renderMetProviders(<MicrosoftLoginKaart />);
+    expect(await screen.findByText(/Ontkoppelen is nog niet afgerond/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Opnieuw proberen" })).toBeNull();
+    expect(screen.getByText(PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer)).toBeVisible();
+  });
+
+  it("weigering door de server: de kaart toont de reden van de server, niet haar eigen generieke tekst", async () => {
+    // Vangnet voor het geval de kaart tóch een knop toont (bijvoorbeeld door een
+    // oudere respons zonder magOntkoppelen): de melding moet dan alsnog kloppen.
+    stubFetch({
+      "GET /api/microsoft-login/koppeling": json({ beschikbaar: true, sessieViaMicrosoft: false, status: "active", geactiveerdOp: null, laatstGebruiktOp: null }),
+      "DELETE /api/microsoft-login/koppeling": json({ error: PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer }, 403),
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { user } = renderMetProviders(<MicrosoftLoginKaart />);
+    expect(await screen.findByText("Gekoppeld")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Ontkoppelen" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer);
+  });
 });

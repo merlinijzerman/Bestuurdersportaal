@@ -26,7 +26,7 @@ import { microsoftLoginFoutcategorie, PROFIEL_MICROSOFT_LOGIN_MELDINGEN } from "
 import { beeindigSessie, huidigAccessToken } from "@/core/lib/microsoft-login-sessieguard";
 import { sessieIsOAuth } from "@/core/lib/microsoft-login-sessieguard-core";
 import { sessiebeleid } from "@/core/lib/microsoft-login-gateway";
-import { magZelfOntkoppelen, profielkaartStand, type Sessiebeleid } from "@/core/lib/microsoft-login-beleid-core";
+import { magZelfKoppelen, magZelfOntkoppelen, profielkaartStand, type Sessiebeleid } from "@/core/lib/microsoft-login-beleid-core";
 
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store" } as const;
@@ -60,6 +60,7 @@ export const GET = withFondsRoute(
           sessieViaMicrosoft,
           modus,
           stand: profielkaartStand(modus, linkOnly),
+          magKoppelen: magZelfKoppelen(modus, linkOnly),
           magOntkoppelen: magZelfOntkoppelen(modus, linkOnly),
           ...status,
         },
@@ -80,13 +81,12 @@ export const DELETE = withFondsRoute(
       return NextResponse.json({ error: "Microsoft-login is niet beschikbaar voor dit fonds." }, { status: 404, headers: NO_STORE });
     }
     try {
-      // Modus `verplicht`: de lifecycle ligt bij het fondsbeheer. De database
-      // weigert dit óók (start_intrekking); deze poort geeft de gebruiker alleen
-      // eerder een bruikbaar antwoord.
-      const beleid = await beleidVoor(ctx.gebruikerId);
-      if (!beleid || !magZelfOntkoppelen(beleid.modus, beleid.linkOnly)) {
-        return NextResponse.json({ error: PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer }, { status: 403, headers: NO_STORE });
-      }
+      // Modus `verplicht`: de lifecycle ligt bij het fondsbeheer. De weigering komt
+      // BEWUST uit de database (login_private.start_intrekking) en niet uit een
+      // vroege poort hier: die functie schrijft namelijk ook de auditregel
+      // `ontkoppelen.geweigerd`. Een 403 vóór de gatewayaanroep zou de weigering
+      // stil laten verdwijnen — precies wat de Preview-smoke van scenario 5 aan
+      // het licht bracht. De app beslist hier dus niets; zij vertaalt alleen.
       // Vóór de intrekking bepalen: is DEZE sessie via Microsoft ingelogd?
       const viaMicrosoft = sessieIsOAuth(await huidigAccessToken(ctx.supabase));
       const flow = await microsoftLoginVoorRequest();
