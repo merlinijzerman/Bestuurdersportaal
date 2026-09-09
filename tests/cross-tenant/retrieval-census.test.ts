@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { census, REGISTER_PAD, contextCensus, CONTEXT_REGISTER_PAD } from "../karakterisering/retrieval-census.mjs";
+import { census, REGISTER_PAD, contextCensus, tabellenPerKlasse, TABELKLASSE, CONTEXT_REGISTER_PAD } from "../karakterisering/retrieval-census.mjs";
 
 // #322 F4-T1 — de retrievalkern heeft vandaag een klein, bekend aantal directe
 // aanroepers. Dit register bevriest ze vóór de verplaatsing achter het
@@ -41,30 +41,67 @@ test("F4-census — de vier productie-ingangen van zoekRelevanteChunksMetMeta zi
   assert.deepEqual(ingangen, ["app/api/chat/route.ts", "app/api/zoeken/route.ts", "core/lib/vergelijk-productie.ts"]);
 });
 
-// ── #348 §1 — het tweede register: de contextbronnen op het antwoordpad ──────
-//  De census hierboven telt aanroepers van de retrievalkern. Die telling alleen
-//  onderschat de adaptergrens: de chatroute en haar direct geïmporteerde
-//  core-modules lezen ook gestructureerde context (agendapunt, vergadering,
-//  proces, risico, portaalstand, profielsturing) die `rag.ts` nooit ziet en die
-//  zonder ranking, citaat-ID of bronversie-audit in de modelcontext belandt.
+// ── #348 §1 — het antwoordpadregister (reviewronde 2) ───────────────────────
+//  Twee correcties op de eerste opzet. (a) De scan is TRANSITIEF: de directe
+//  variant miste `fonds-sessie.ts`, `profiel.ts` en — het meest sprekend —
+//  `parent-context.ts`, dat `document_chunks` rechtstreeks leest. (b) De eerdere
+//  claim "31 contexttabellen" klopte niet: daarin zaten configuratie,
+//  autorisatie en bronbeleid. Elke bereikte tabel draagt nu een expliciete
+//  klasse, en een ONBEKENDE tabel maakt de gate rood.
 const contextRegister = JSON.parse(readFileSync(CONTEXT_REGISTER_PAD, "utf8")) as {
+  bereikte_bestanden: number;
+  klassen: Record<string, string[]>;
   contextbronnen: Record<string, { tabellen: string[] }>;
 };
 
-test("F4-context — de contextbronnen op het antwoordpad zijn exact het bevroren register", () => {
+test("F4-context — het antwoordpadregister is exact bevroren", () => {
+  const nu = contextCensus();
   assert.deepEqual(
-    contextCensus(), contextRegister.contextbronnen,
+    nu.bestanden, contextRegister.contextbronnen,
     "het antwoordpad leest andere tabellen dan bevroren — motiveer en regenereer met node tests/karakterisering/retrieval-census.mjs --schrijf"
+  );
+  assert.equal(nu.bereikte_bestanden, contextRegister.bereikte_bestanden,
+    "de importgraaf vanaf de chatroute is van omvang veranderd — beoordeel of er een nieuw pad bij is gekomen");
+});
+
+test("F4-context — elke bereikte tabel is geclassificeerd", () => {
+  const k = tabellenPerKlasse() as Record<string, string[]>;
+  assert.deepEqual(
+    k.onbekend, [],
+    `bereikte tabel zonder klasse: ${k.onbekend.join(", ")} — deel haar in TABELKLASSE in (evidence / modelcontext / configuratie / audit). ` +
+      "Dat is een ontwerpoordeel: laat het niet meeliften."
   );
 });
 
-test("F4-context — slechts twee van de gelezen tabellen lopen via de retrievalkern", () => {
-  const alle = new Set(Object.values(contextCensus()).flatMap((e) => (e as { tabellen: string[] }).tabellen));
-  const viaKern = new Set((contextRegister.contextbronnen["core/lib/rag.ts"]?.tabellen ?? []));
+test("F4-context — de klassenverdeling is hard gepind", () => {
+  const k = tabellenPerKlasse() as Record<string, string[]>;
+  // Deze vier getallen zijn de kern van besluit 0213 (R5): wat citeerbaar wordt,
+  // wat een eigen contextcontract krijgt, en wat expliciet géén contextlaag is.
+  // Verschuift er één zonder besluit, dan is de grens stil verlegd.
+  assert.equal(k.evidence.length, 5, `evidence: ${k.evidence.join(", ")}`);
+  assert.equal(k.modelcontext.length, 18, `modelcontext: ${k.modelcontext.join(", ")}`);
+  assert.equal(k.configuratie.length, 7, `configuratie: ${k.configuratie.join(", ")}`);
+  assert.equal(k.audit.length, 3, `audit: ${k.audit.join(", ")}`);
+  assert.equal(Object.keys(TABELKLASSE).length, 33, "TABELKLASSE bevat regels voor tabellen die het antwoordpad niet meer bereikt");
+});
+
+test("F4-context — configuratie en autorisatie tellen niet als modelcontext", () => {
+  const k = tabellenPerKlasse() as Record<string, string[]>;
+  // De bewuste correctie uit de review: deze vier stonden in de eerste ronde in
+  // het getal "31 contexttabellen" en horen daar niet.
+  for (const t of ["fonds_theming", "fonds_feature_flags", "profielen", "bron_whitelist"]) {
+    assert.equal(TABELKLASSE[t as keyof typeof TABELKLASSE], "configuratie", `${t} moet configuratie zijn, geen modelcontext`);
+    assert.ok(!k.modelcontext.includes(t));
+  }
+});
+
+test("F4-context — alleen de evidenceklasse loopt via de retrievalkern", () => {
+  const viaKern = contextRegister.contextbronnen["core/lib/rag.ts"]?.tabellen ?? [];
   assert.deepEqual([...viaKern].sort(), ["document_chunks", "documenten"]);
-  // De rest is de omzeilende oppervlakte die T2 expliciet moet adresseren
-  // (gaplijst G-1 in RETRIEVALCONTRACT-F4-ONTWERP.md). Het getal is bewust hard:
-  // groeit het zonder besluit, dan is de contextlaag stil uitgebreid.
-  const omzeilend = [...alle].filter((t) => !viaKern.has(t));
-  assert.equal(omzeilend.length, 31, `omzeilende tabellen op het antwoordpad: ${omzeilend.sort().join(", ")}`);
+  // De overige drie evidencebronnen (decision_objects, semantic_units, concepts)
+  // zijn vandaag NIET citeerbaar of versiebaar; besluit 0213 R5 brengt ze in T2
+  // achter het contract. Dat is gaplijst G-1.
+  const k = tabellenPerKlasse() as Record<string, string[]>;
+  const evidenceBuitenKern = k.evidence.filter((t) => !viaKern.includes(t));
+  assert.deepEqual(evidenceBuitenKern, ["concepts", "decision_objects", "semantic_units"]);
 });

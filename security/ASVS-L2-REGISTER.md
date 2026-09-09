@@ -152,21 +152,31 @@ afgeronde control, maar het bepaalt wél waar in T2 het bewijs moet landen.
   zoekvragen met persoonsgegevens, geen tokens of providerresponses. De
   karakterisering legt passages uitsluitend als sha256-prefix vast, niet als tekst.
   Openstaand: `GET /api/zoeken` kent geen PII-gate op de zoekterm (gap G-4).
-- **V11 bedrijfslogica / V13 API.** `AdapterCapabilities` draagt `ondersteundeFilters`,
-  `cancellation` en `timeout` expliciet: een adapter die een filter niet kan
-  uitvoeren moet dat melden in plaats van het stil te negeren. Vandaag kent de keten
-  geen `AbortSignal` en geen looptijdbegrenzing (gap G-3, risico R-50).
+- **V11 bedrijfslogica / V13 API.** De adapter levert **alleen kandidaten**
+  (`AdapterUitkomst`); selectie, samenvoeging, citatievorming en `RetrievalMeta` zijn
+  exclusief van de orkestratie — geen provider brengt eigen selectie- of citatieregels
+  mee. `AdapterCapabilities` draagt `ondersteundeFilters`, `cancellation` en `timeout`
+  expliciet, en een toelatingspoort vóór de selectie toetst elke kandidaat tegen de
+  capabilities die de adapter zélf claimt. Vandaag kent de keten geen `AbortSignal` en
+  geen looptijdbegrenzing (gap G-3, risico R-50); dat landt in T2-1 (besluit R6).
+- **V4 toegangscontrole, per resultaat.** `permissionProof` is niet langer alleen een
+  capability-boolean: elk resultaat draagt `toegangscontrole {toegestaan,
+  gecontroleerdOp, basis, bronconfiguratieVersie}`. Versie- en rechtenbewijs zijn
+  **gescheiden bewijzen met gescheiden tijdstippen**, zodat een verlopen rechtencheck op
+  een nog geldige versie herkenbaar blijft (gap G-3b, risico R-52).
 - **V14 configuratie.** Geen migratie, geen databaseobject, geen grant gewijzigd;
   rollback is `git revert`. Alleen gap G-7 introduceert eventueel één idempotente
   forwardmigratie voor de SQL-allowlist van `meta_basisniveau()`.
 
 **Regressiepoorten die nu draaien** (offline, in `npm run test:xtenant`):
-`retrieval-census.test.ts` (5 tests — de retrievalcensus van 17 bestanden én het
-contextregister van 10 bestanden/33 tabellen, met de 31 omzeilende tabellen hard
-gepind) en `retrieval-golden-gevoeligheid.test.ts` (15 negatieve controles die per
-mutatie — volgorde, citaat-ID, fondsfilter, versie-identiteit — bewijzen dat de
-goldens kantelen). Het resterende bewijs is de W1-harnasrun met de w322-scenario's,
-drie identiek opeenvolgende `--verify`-rondes in `karakterisering.yml`.
+`retrieval-census.test.ts` (8 tests — de retrievalcensus van 17 bestanden én het
+antwoordpadregister, dat **transitief** 106 bestanden aflegt, 13 lezers en 33 tabellen
+vastlegt, elke bereikte tabel in vier klassen indeelt en de klassengroottes 5/18/7/3
+hard pint; een tabel zónder klasse maakt de gate rood) en
+`retrieval-golden-gevoeligheid.test.ts` (15 negatieve controles die per mutatie —
+volgorde, citaat-ID, fondsfilter, versie-identiteit — bewijzen dat de goldens kantelen).
+Het resterende bewijs is de W1-harnasrun met de w322-scenario's, drie identiek
+opeenvolgende `--verify`-rondes in `karakterisering.yml`.
 
 ### Microsoft SharePoint fase 3 (Preview-only, #321)
 

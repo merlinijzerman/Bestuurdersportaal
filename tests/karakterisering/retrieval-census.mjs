@@ -77,46 +77,126 @@ export function census() {
 }
 
 // ============================================================================
-//  Tweede register — de CONTEXTBRONNEN op het antwoordpad (#348 §1).
+//  Tweede register — het ANTWOORDPAD: welke tabellen bereiken de chatroute, en
+//  in welke hoedanigheid? (#348 §1, reviewronde 2)
 // ----------------------------------------------------------------------------
 //  De census hierboven telt aanroepers van de retrievalkern. Dat is niet de hele
-//  waarheid: het antwoordpad vult de modelcontext óók met gestructureerde
-//  DB-inhoud die `rag.ts` nooit ziet — agendapunt-, vergadering-, proces-,
-//  risico- en portaalstandcontext. Die paden hebben geen ranking, geen
-//  citaat-ID en geen bronversie-audit, en zouden een toekomstige adaptergrens
-//  dus ONGEMERKT omzeilen.
+//  waarheid: het antwoordpad leest ook gestructureerde DB-inhoud die `rag.ts`
+//  nooit ziet. Twee correcties op de eerste opzet, uit de review:
 //
-//  Dit register bevriest ze: per bestand op het antwoordpad welke tabellen het
-//  rechtstreeks leest. `app/api/chat/route.ts` plus elke `core/lib`-module die
-//  de chatroute direct importeert. Een nieuwe tabel of een nieuwe lezende module
-//  is daarmee een bewuste, gereviewde handeling in plaats van een stille
-//  uitbreiding van wat er in de prompt belandt.
+//   1. DE SCAN IS TRANSITIEF. De eerste versie volgde alleen de DIRECTE imports
+//      van de chatroute; een tabellezing in een transitief geïmporteerde helper
+//      bleef onzichtbaar. De sluiting hieronder loopt de hele importgraaf af
+//      (vandaag 100+ bestanden). Gemeten resultaat: dezelfde 33 tabellen — de
+//      telling klopte dus, maar toevallig. Nu is ze ook gegarandeerd.
+//
+//   2. "31 CONTEXTTABELLEN" WAS EEN VERKEERDE CLASSIFICATIE. In dat getal zaten
+//      configuratie, autorisatie en bronbeleid (`fonds_theming`, featureflags,
+//      capabilities, de web-whitelist). Dat is geen modelcontext. Elke bereikte
+//      tabel krijgt daarom een expliciete klasse; een ONBEKENDE tabel maakt de
+//      gate rood, zodat classificeren een gereviewde handeling is en niet iets
+//      wat stilzwijgend meelift.
+//
+//  De vier klassen (besluit 0213, R5):
+//    evidence      — citeerbaar én versiebaar; hoort achter het retrievalcontract
+//    modelcontext  — gestructureerde context die de prompt in gaat, niet
+//                    citeerbaar; krijgt in T2 een eigen typed contextcontract
+//    configuratie  — autorisatie, feature-/fondsconfig, bronbeleid; raakt de
+//                    prompt niet als inhoud en is GEEN contextlaag
+//    audit         — auditspoor en persistentie van het antwoord zelf
 // ============================================================================
 export const ANTWOORDPAD_INGANG = join(ROOT, "app", "api", "chat", "route.ts");
 
-function directeCoreImports(bron) {
+/**
+ * Elke tabel die het antwoordpad bereikt, met haar hoedanigheid. Handmatig
+ * vastgesteld en gereviewd — dit is een ontwerpoordeel, geen afleiding uit de
+ * code. De gate faalt op elke bereikte tabel die hier ontbreekt.
+ */
+export const TABELKLASSE = {
+  // ── evidence: citeerbaar en versiebaar (achter het retrievalcontract) ──────
+  document_chunks: "evidence",
+  documenten: "evidence",
+  decision_objects: "evidence",   // besluitregistratie — "formele bron náást document_chunks"
+  semantic_units: "evidence",     // vergelijkpad: passages uit documenten
+  concepts: "evidence",           // vergelijkpad: geëxtraheerde begrippen
+
+  // ── modelcontext: gaat de prompt in, niet citeerbaar ──────────────────────
+  agendapunten: "modelcontext",
+  agendapunt_inbreng: "modelcontext",
+  vergaderingen: "modelcontext",
+  procedures: "modelcontext",
+  procedure_stappen: "modelcontext",
+  procedure_requirements: "modelcontext",
+  procedure_bewijs: "modelcontext",
+  procedure_eigenaars: "modelcontext",
+  risicos: "modelcontext",
+  risico_log: "modelcontext",
+  risico_maatregelen: "modelcontext",
+  organisatie_profielen: "modelcontext",
+  expertises: "modelcontext",
+  gremia: "modelcontext",
+  kritische_focusgebieden: "modelcontext",
+  profiel_expertises: "modelcontext",
+  profiel_focusgebieden: "modelcontext",
+  profiel_gremia: "modelcontext",
+
+  // ── configuratie/autorisatie/bronbeleid: GEEN contextlaag ─────────────────
+  profielen: "configuratie",          // identiteit, rol, fonds, wettelijk regime
+  fonds_feature_flags: "configuratie",
+  fonds_config_log: "configuratie",
+  fonds_content_overrides: "configuratie",
+  fonds_module_manifest: "configuratie",
+  fonds_theming: "configuratie",
+  bron_whitelist: "configuratie",     // bronbeleid van de webarm
+
+  // ── audit en persistentie van het antwoord ────────────────────────────────
+  governance_log: "audit",
+  governance_log_inhoud: "audit",
+  voorbereidingen: "audit",           // upsert van het bewaarde product
+};
+
+function importsVan(bron) {
   const uit = new Set();
-  for (const m of bron.matchAll(/from\s+"@\/core\/lib\/([a-z0-9-]+)"/g)) uit.add(m[1]);
-  return [...uit].sort();
+  for (const m of bron.matchAll(/from\s+"@\/core\/lib\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)"/g)) uit.add(`core/lib/${m[1]}.ts`);
+  for (const m of bron.matchAll(/from\s+"\.\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)"/g)) uit.add(`core/lib/${m[1]}.ts`);
+  return [...uit];
 }
 
 function tabellenIn(bron) {
   return [...new Set([...bron.matchAll(/\.from\(\s*"([a-z0-9_]+)"\s*\)/g)].map((m) => m[1]))].sort();
 }
 
+/**
+ * Transitieve sluiting vanaf de chatroute over `core/lib`. Levert per bereikt
+ * bestand de tabellen die het rechtstreeks leest of schrijft, plus de omvang van
+ * de graaf — zodat zichtbaar is hoe breed de claim van dit register reikt.
+ */
 export function contextCensus() {
-  const ingang = readFileSync(ANTWOORDPAD_INGANG, "utf8");
-  const register = {
-    "app/api/chat/route.ts": { tabellen: tabellenIn(ingang), directe_core_imports: directeCoreImports(ingang).length },
-  };
-  for (const mod of directeCoreImports(ingang)) {
-    const pad = join(ROOT, "core", "lib", `${mod}.ts`);
+  const gezien = new Set();
+  const rij = ["app/api/chat/route.ts"];
+  const register = {};
+  while (rij.length) {
+    const rel = rij.shift();
+    if (gezien.has(rel)) continue;
+    gezien.add(rel);
     let bron;
-    try { bron = readFileSync(pad, "utf8"); } catch { continue; }
+    try { bron = readFileSync(join(ROOT, rel), "utf8"); } catch { continue; }
     const tabellen = tabellenIn(bron);
-    if (tabellen.length) register[`core/lib/${mod}.ts`] = { tabellen };
+    if (tabellen.length) register[rel] = { tabellen };
+    for (const im of importsVan(bron)) if (!gezien.has(im)) rij.push(im);
   }
-  return Object.fromEntries(Object.entries(register).sort(([a], [b]) => a.localeCompare(b)));
+  return {
+    bereikte_bestanden: gezien.size,
+    bestanden: Object.fromEntries(Object.entries(register).sort(([a], [b]) => a.localeCompare(b))),
+  };
+}
+
+/** Alle bereikte tabellen, gegroepeerd per klasse. `onbekend` moet leeg zijn. */
+export function tabellenPerKlasse(cc = contextCensus()) {
+  const alle = [...new Set(Object.values(cc.bestanden).flatMap((e) => e.tabellen))].sort();
+  const uit = { evidence: [], modelcontext: [], configuratie: [], audit: [], onbekend: [] };
+  for (const t of alle) uit[TABELKLASSE[t] ?? "onbekend"].push(t);
+  return uit;
 }
 
 export const CONTEXT_REGISTER_PAD = join(ROOT, "tests", "cross-tenant", "retrieval-contextbronnen.expected.json");
@@ -126,10 +206,12 @@ if (process.argv[1] && fileURLToPath(new URL(import.meta.url)) === process.argv[
   const context = contextCensus();
   if (process.argv.includes("--schrijf")) {
     writeFileSync(CONTEXT_REGISTER_PAD, JSON.stringify({
-      _doc: "#322 F4-T1 — bevroren register van de CONTEXTBRONNEN op het antwoordpad: elke tabel die app/api/chat/route.ts en zijn direct geïmporteerde core/lib-modules rechtstreeks lezen. Alleen document_chunks en documenten lopen via rag.ts; al het overige vult de modelcontext buiten de retrievalkern om en zou een adaptergrens ongemerkt omzeilen. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
-      contextbronnen: context,
+      _doc: "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie per tabel (evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte tabel zonder klasse maakt de gate rood. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
+      bereikte_bestanden: context.bereikte_bestanden,
+      klassen: tabellenPerKlasse(context),
+      contextbronnen: context.bestanden,
     }, null, 2) + "\n");
-    console.log(`contextregister geschreven: ${Object.keys(context).length} bestanden`);
+    console.log(`contextregister geschreven: ${Object.keys(context.bestanden).length} lezende bestanden uit ${context.bereikte_bestanden} bereikte`);
   }
   if (process.argv.includes("--schrijf")) {
     writeFileSync(REGISTER_PAD, JSON.stringify({

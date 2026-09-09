@@ -1,5 +1,50 @@
 {
-  "_doc": "#322 F4-T1 — bevroren register van de CONTEXTBRONNEN op het antwoordpad: elke tabel die app/api/chat/route.ts en zijn direct geïmporteerde core/lib-modules rechtstreeks lezen. Alleen document_chunks en documenten lopen via rag.ts; al het overige vult de modelcontext buiten de retrievalkern om en zou een adaptergrens ongemerkt omzeilen. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
+  "_doc": "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie per tabel (evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte tabel zonder klasse maakt de gate rood. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
+  "bereikte_bestanden": 106,
+  "klassen": {
+    "evidence": [
+      "concepts",
+      "decision_objects",
+      "document_chunks",
+      "documenten",
+      "semantic_units"
+    ],
+    "modelcontext": [
+      "agendapunt_inbreng",
+      "agendapunten",
+      "expertises",
+      "gremia",
+      "kritische_focusgebieden",
+      "organisatie_profielen",
+      "procedure_bewijs",
+      "procedure_eigenaars",
+      "procedure_requirements",
+      "procedure_stappen",
+      "procedures",
+      "profiel_expertises",
+      "profiel_focusgebieden",
+      "profiel_gremia",
+      "risico_log",
+      "risico_maatregelen",
+      "risicos",
+      "vergaderingen"
+    ],
+    "configuratie": [
+      "bron_whitelist",
+      "fonds_config_log",
+      "fonds_content_overrides",
+      "fonds_feature_flags",
+      "fonds_module_manifest",
+      "fonds_theming",
+      "profielen"
+    ],
+    "audit": [
+      "governance_log",
+      "governance_log_inhoud",
+      "voorbereidingen"
+    ],
+    "onbekend": []
+  },
   "contextbronnen": {
     "app/api/chat/route.ts": {
       "tabellen": [
@@ -18,8 +63,7 @@
         "risico_maatregelen",
         "risicos",
         "voorbereidingen"
-      ],
-      "directe_core_imports": 45
+      ]
     },
     "core/lib/besluitvorming-bron.ts": {
       "tabellen": [
@@ -40,9 +84,19 @@
         "fonds_theming"
       ]
     },
+    "core/lib/fonds-sessie.ts": {
+      "tabellen": [
+        "profielen"
+      ]
+    },
     "core/lib/organisatieprofiel.ts": {
       "tabellen": [
         "organisatie_profielen"
+      ]
+    },
+    "core/lib/parent-context.ts": {
+      "tabellen": [
+        "document_chunks"
       ]
     },
     "core/lib/portaalcontext.ts": {
@@ -54,6 +108,11 @@
         "procedure_stappen",
         "profielen",
         "vergaderingen"
+      ]
+    },
+    "core/lib/profiel.ts": {
+      "tabellen": [
+        "profielen"
       ]
     },
     "core/lib/profielsturing.ts": {
