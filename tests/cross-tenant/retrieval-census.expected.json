@@ -1,0 +1,198 @@
+{
+  "_doc": "#322 F4-T1 — bevroren census van directe aanroepers van de retrievalkern (rag.ts en aangrenzende modules, zoek-RPC's, document_chunks). Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf. Elke toename is een bewuste, gereviewde handeling; in T2 krimpt dit register tot de adapter-/orkestratielaag.",
+  "census": {
+    "app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "app/api/chat/route.ts": {
+      "modules": {
+        "rag": [
+          "BronVerwijzing",
+          "DocumentChunk",
+          "DocumentChunkOphaalresultaat",
+          "RetrievalFilters",
+          "RetrievalMeta",
+          "VOLLEDIGE_DOCUMENT_CHUNK_CAP",
+          "haalBevrorenChunks",
+          "haalDocumentChunksMetDekking",
+          "maakBronSentinel",
+          "maakContext",
+          "telDocumentChunks",
+          "telNietActueleFondstreffers",
+          "verrijkDocumentmetadata",
+          "verrijkNotulenChunks",
+          "zoekRelevanteChunksMetMeta"
+        ],
+        "bronset": [
+          "bepaalBronset"
+        ],
+        "query-reformulatie": [
+          "heeftReformulatieNodig",
+          "reformuleerVraag"
+        ],
+        "weeg-bronsoort": [
+          "bepaalBronsoortprofiel"
+        ],
+        "web-retrieval": [
+          "beoordeelWebGate",
+          "bevraagdeDomeinen",
+          "bouwWebbronnen",
+          "extractWebResultaten"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "app/api/classificatie/backfill/route.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "app/api/documents/embeddings-backfill/route.ts": {
+      "modules": {
+        "embeddings": [
+          "EMBED_MODEL",
+          "embedTekst",
+          "embedTeksten",
+          "naarVectorLiteral"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "app/api/documents/reindex-backfill/route.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "app/api/notulen/segmenten/[id]/bevestig/route.ts": {
+      "modules": {
+        "rag": [
+          "maakChunksUitSegmenten"
+        ],
+        "embeddings": [
+          "EMBED_MODEL",
+          "embedTeksten",
+          "naarVectorLiteral"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "app/api/zoeken/route.ts": {
+      "modules": {
+        "rag": [
+          "DocumentChunk",
+          "RetrievalFilters",
+          "zoekRelevanteChunksMetMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/besluitvorming-bron.ts": {
+      "modules": {
+        "rag": [
+          "BronVerwijzing"
+        ],
+        "bronfragment": [
+          "bouwBronfragment"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/chunk-ingest.ts": {
+      "modules": {
+        "embeddings": [
+          "EMBED_MODEL",
+          "EmbedStats",
+          "embedTeksten",
+          "naarVectorLiteral"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "core/lib/organisatieprofiel.ts": {
+      "modules": {
+        "rag": [
+          "RetrievalMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/profielsturing.ts": {
+      "modules": {
+        "rag": [
+          "RetrievalMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/reindex.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "core/lib/vergelijk-productie.ts": {
+      "modules": {
+        "rag": [
+          "zoekRelevanteChunksMetMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "platform/lib/aqlab/generate-adapter.ts": {
+      "modules": {
+        "rag": [
+          "BronVerwijzing",
+          "DocumentChunk",
+          "maakContext"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "platform/lib/generiek-pipeline.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "platform/lib/ingest-orchestrator.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "platform/lib/semantische-extractie-job.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    }
+  }
+}

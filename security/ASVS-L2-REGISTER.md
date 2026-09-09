@@ -132,6 +132,60 @@ objecten, grant/RLS-export en herhaalbare migratieverificatie.
 
 ## Verplichte CI-poorten
 
+### Retrievalcontract fase 4 — T1 (#322/#348, besluit 0213)
+
+T1 legt ontwerpverplichtingen vast en verandert geen productiecode; het is dus geen
+afgeronde control, maar het bepaalt wél waar in T2 het bewijs moet landen.
+
+- **V1 architectuur / V4 toegangscontrole.** De adaptergrens ligt om de retrievalkern.
+  Fonds, bronbeleid en adapterkeuze komen uitsluitend server-side uit sessie en
+  fondsconfig; browser noch generatiemodel kan adapter, endpoint, tenant of fonds
+  kiezen. Rechten-, status-, geldigheids- en privacycontroles staan vóór ranking en
+  vóór iedere AI-call. Scopereferenties (proces, vergadering, agendapunt, document)
+  worden in T2 expliciet in de laag gevalideerd in plaats van impliciet aan RLS
+  overgelaten (gap G-6).
+- **V7 foutafhandeling en logging.** Negen genormaliseerde foutcategorieën; geen
+  providerdetail naar de client en geen enkele categorie die de bronset verruimt.
+  Eén correlation-id verbindt retrieval → AI-gateway → governance (gap G-7); vandaag
+  ontbreekt die schakel in `retrieval_meta`.
+- **V8 gegevensbescherming.** Auditregels blijven inhoudsvrij: geen passages, geen
+  zoekvragen met persoonsgegevens, geen tokens of providerresponses. De
+  karakterisering legt passages uitsluitend als sha256-prefix vast, niet als tekst.
+  Openstaand: `GET /api/zoeken` kent geen PII-gate op de zoekterm (gap G-4).
+- **V11 bedrijfslogica / V13 API.** De adapter levert **alleen kandidaten**
+  (`AdapterUitkomst`); selectie, samenvoeging, citatievorming en `RetrievalMeta` zijn
+  exclusief van de orkestratie — geen provider brengt eigen selectie- of citatieregels
+  mee. `AdapterCapabilities` draagt `ondersteundeFilters`, `cancellation` en `timeout`
+  expliciet, en een toelatingspoort vóór de selectie toetst elke kandidaat tegen de
+  capabilities die de adapter zélf claimt. Vandaag kent de keten geen `AbortSignal` en
+  geen looptijdbegrenzing (gap G-3, risico R-50); dat landt in T2-1 (besluit R6).
+- **V4 toegangscontrole, per resultaat en per verzoek.** `permissionProof` is niet
+  langer alleen een capability-boolean: elk resultaat draagt `toegangscontrole
+  {toegestaan, gebruikerId, correlationId, gecontroleerdOp, basis,
+  bronconfiguratieVersie}`, en een toelatingspoort toetst vijf voorwaarden (V1–V5,
+  ontwerp §4.2.1) vóór de selectie. Het bewijs is **gebonden aan deze actor en dit
+  verzoek**: zonder `gebruikerId` en `correlationId` zou een verse, op zichzelf geldige
+  proof van een andere gebruiker of uit een eerdere request door de poort komen.
+  Versie- en rechtenbewijs zijn **gescheiden bewijzen met gescheiden tijdstippen**,
+  zodat een verlopen rechtencheck op een nog geldige versie herkenbaar blijft
+  (gap G-3b, risico R-52).
+- **V14 configuratie.** Geen migratie, geen databaseobject, geen grant gewijzigd;
+  rollback is `git revert`. Alleen gap G-7 introduceert eventueel één idempotente
+  forwardmigratie voor de SQL-allowlist van `meta_basisniveau()`.
+
+**Regressiepoorten die nu draaien** (offline, in `npm run test:xtenant`):
+`retrieval-census.test.ts` (8 tests — de retrievalcensus van 17 bestanden én het
+antwoordpadregister, dat **transitief** 112 bestanden aflegt — met een resolver die de
+tsconfig-alias, `../` en indexbestanden aankan, en een negatieve controle op precies die
+gevallen — en 45 lezingen (`bestand::tabel`) over 33 tabellen in vier klassen indeelt met
+de verdeling 7/26/11/3 hard gepind; een bereikte lezing zónder klasse maakt de gate rood.
+Classificatie gaat per lezing omdat `profielen` op vijf plekken zowel autorisatie als
+modelcontext levert) en
+`retrieval-golden-gevoeligheid.test.ts` (15 negatieve controles die per mutatie —
+volgorde, citaat-ID, fondsfilter, versie-identiteit — bewijzen dat de goldens kantelen).
+Het resterende bewijs is de W1-harnasrun met de w322-scenario's, drie identiek
+opeenvolgende `--verify`-rondes in `karakterisering.yml`.
+
 ### Microsoft SharePoint fase 3 (Preview-only, #321)
 
 De fase-3-uitwerking dekt ASVS-toepassingen voor least privilege, server-side

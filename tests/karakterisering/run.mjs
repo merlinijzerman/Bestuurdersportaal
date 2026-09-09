@@ -9,6 +9,7 @@
 //    node --env-file=.env.local tests/karakterisering/run.mjs --record
 //    node --env-file=.env.local tests/karakterisering/run.mjs --verify
 //    …--verify --only=profiel.get.bestuurder     (één scenario)
+//    …--verify --only=w322                        (alle scenario's met dat voorvoegsel)
 // ============================================================================
 import { createHash, randomUUID } from "node:crypto";
 import http from "node:http";
@@ -246,7 +247,7 @@ async function main() {
     }
     const { matrix } = JSON.parse(await readFile(join(HIER, "authz-matrix.expected.json"), "utf8"));
     const perSlug = new Map(matrix.map((r) => [r.slug, r]));
-    const teDoen = only ? scenarios.filter((s) => s.slug === only) : scenarios;
+    const teDoen = only ? scenarios.filter((s) => (s.slug === only || s.slug.startsWith(`${only}.`))) : scenarios;
     let ok = 0, fout = 0;
     const mislukt = [];
     for (const s of teDoen) {
@@ -300,7 +301,7 @@ async function main() {
       );
     }
     // Deel 1 — geen over-strengheid.
-    const teDoen = only ? scenarios.filter((s) => s.slug === only) : scenarios;
+    const teDoen = only ? scenarios.filter((s) => (s.slug === only || s.slug.startsWith(`${only}.`))) : scenarios;
     let ok1 = 0;
     const gewijzigd = [];
     for (const s of teDoen) {
@@ -354,7 +355,7 @@ async function main() {
     return;
   }
 
-  const teDraaien = only ? scenarios.filter((s) => s.slug === only) : scenarios;
+  const teDraaien = only ? scenarios.filter((s) => (s.slug === only || s.slug.startsWith(`${only}.`))) : scenarios;
   if (only && teDraaien.length === 0) throw new Error(`geen scenario met slug ${only}`);
 
   let ok = 0, fout = 0, overgeslagen = 0;
