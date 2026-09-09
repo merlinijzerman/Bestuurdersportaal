@@ -8,14 +8,53 @@
 //  de Auth-hook bij de volgende tokenuitgifte de normale rol; één volledige
 //  navigatie is genoeg om daar te komen.
 // ============================================================================
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/core/lib/supabase";
+
+/** Koppelstatus van dit account (GET /api/microsoft-login/koppeling; ook voor de beperkte rol). */
+type KoppelStatus = { status?: "geen" | "pending" | "active" | "revoking" | "onbekend"; magKoppelen?: boolean; magOntkoppelen?: boolean };
 
 export default function BeperkteToegangPaneel({ naam, factorId }: { naam: string | null; factorId: string | null }) {
   const [code, setCode] = useState("");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState("");
+  const [koppel, setKoppel] = useState<KoppelStatus | null>(null);
   const supabase = createClient();
+
+  // Herstelsessie (#344 PR-B): eerst weten of er nog een oude koppeling in de weg
+  // zit. Die moet de gebruiker binnen het venster zelf losmaken vóór hij opnieuw
+  // koppelt (koppelen/start weigert met 409 zolang er een levende binding is).
+  useEffect(() => {
+    if (factorId) return;
+    let actief = true;
+    void fetch("/api/microsoft-login/koppeling", { cache: "no-store" })
+      .then(async (r) => (r.ok ? ((await r.json()) as KoppelStatus) : { status: "onbekend" as const }))
+      .catch(() => ({ status: "onbekend" as const }))
+      .then((s) => {
+        if (actief) setKoppel(s);
+      });
+    return () => {
+      actief = false;
+    };
+  }, [factorId]);
+
+  async function losmaken() {
+    if (!confirm("Oude Microsoft-koppeling losmaken? Daarna koppelt u uw (nieuwe) Microsoft-account opnieuw.")) return;
+    setBezig(true);
+    setFout("");
+    try {
+      const r = await fetch("/api/microsoft-login/koppeling", { method: "DELETE" });
+      if (!r.ok) {
+        setFout("De oude koppeling kon niet worden losgemaakt. Neem contact op met uw beheerder.");
+        return;
+      }
+      setKoppel({ status: "geen", magKoppelen: true });
+    } catch {
+      setFout("De oude koppeling kon niet worden losgemaakt. Probeer het opnieuw.");
+    } finally {
+      setBezig(false);
+    }
+  }
 
   async function verifieer(e: React.FormEvent) {
     e.preventDefault();
@@ -94,12 +133,33 @@ export default function BeperkteToegangPaneel({ naam, factorId }: { naam: string
               <p className="text-sm text-ink">
                 Koppel uw Microsoft-account om verder te gaan. Lukt dat niet, neem dan contact op met uw beheerder.
               </p>
-              <a
-                href="/api/microsoft-login/koppelen/start"
-                className="block w-full text-center border border-app-line-strong text-ink font-semibold py-2.5 rounded-lg text-sm hover:bg-app-bg transition-colors"
-              >
-                Microsoft-account koppelen
-              </a>
+              {fout && (
+                <div role="alert" className="bg-err-tint border border-err/30 rounded-lg px-3 py-2 text-sm text-err-ink">
+                  {fout}
+                </div>
+              )}
+              {koppel && koppel.status !== "geen" && koppel.status !== "onbekend" ? (
+                <>
+                  <p className="text-sm text-muted">
+                    Er staat nog een oude Microsoft-koppeling op uw account. Maak die eerst los; daarna koppelt u opnieuw.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={bezig}
+                    onClick={() => void losmaken()}
+                    className="w-full border border-app-line-strong text-ink font-semibold py-2.5 rounded-lg text-sm hover:bg-app-bg disabled:opacity-50 transition-colors"
+                  >
+                    Oude koppeling losmaken
+                  </button>
+                </>
+              ) : (
+                <a
+                  href="/api/microsoft-login/koppelen/start"
+                  className="block w-full text-center border border-app-line-strong text-ink font-semibold py-2.5 rounded-lg text-sm hover:bg-app-bg transition-colors"
+                >
+                  Microsoft-account koppelen
+                </a>
+              )}
             </div>
           )}
         </div>
