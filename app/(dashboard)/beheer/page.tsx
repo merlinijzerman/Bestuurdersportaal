@@ -15,6 +15,9 @@ export default async function BeheerPage() {
   // Stuurinformatie-invoer (T14): eigen sub-scherm, capability-gated
   // (stuurinformatie.manage; API + RLS blijven de echte schrijfrand).
   const magStuurinfoInvoeren = await requireCapability(sessie.userId, "stuurinformatie.manage");
+  // Microsoft-loginbeleid (#344 fase 1C): eigen sub-scherm, smalle capability
+  // login.beleid.manage (alleen beheerder); API + database blijven de echte grens.
+  const magLoginbeleidBeheren = await requireCapability(sessie.userId, "login.beleid.manage");
 
   return (
     <div className="p-8 max-w-6xl mx-auto w-full">
@@ -37,6 +40,22 @@ export default async function BeheerPage() {
             <div className="text-sm text-muted mt-0.5">
               Rapportageperiodes aanmaken, balans en reserves invoeren of via Excel-sjabloon
               uploaden. Elke wijziging wordt append-only gelogd.
+            </div>
+          </div>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
+
+      {magLoginbeleidBeheren && (
+        <Link
+          href="/beheer/microsoft-login"
+          className="mb-8 flex items-center justify-between rounded-xl border border-line bg-white px-5 py-4 hover:bg-app-bg"
+        >
+          <div>
+            <div className="font-semibold text-ink">Microsoft-login — beleid en koppelingen</div>
+            <div className="text-sm text-muted mt-0.5">
+              Loginmodus (uit, optioneel, verplicht), dekking per account, intrekken, noodtoegang en
+              herstel-uitnodigingen. Elke wijziging wordt append-only gelogd.
             </div>
           </div>
           <span className="text-muted">›</span>

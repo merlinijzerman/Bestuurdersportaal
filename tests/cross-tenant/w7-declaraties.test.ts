@@ -125,7 +125,12 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // (profile.manage.own, strikt zelfbeheer). Die route bestaat juist omdat het
   // openen géén bijwerking van een willekeurig verzoek mag zijn: de Auth-hook
   // geeft de volledige rol pas als het venster er al is (reviewbevinding P1).
-  assert.equal(HANDLERS.length, 142, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 149: Microsoft-loginbeleid fase 1C PR-B (#344) voegt zeven beheerhandlers toe
+  // onder app/api/microsoft-login/beheer — beleid (GET/PATCH), intrekking (POST),
+  // breakglass (POST, DELETE [id]) en uitnodiging (POST/DELETE) — allemaal op de
+  // smalle capability login.beleid.manage (alleen beheerder) mét inline
+  // requireCapability, zoals /api/profiel.
+  assert.equal(HANDLERS.length, 149, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

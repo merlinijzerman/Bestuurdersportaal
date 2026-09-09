@@ -157,6 +157,26 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // #344 PR-B: de herstelflow draagt het herkoppeltoken in het URL-fragment.
+        // Geen caching en geen referrer; de analytics van de root-layout is op
+        // dit pad uitgeschakeld (core/components/RouteBewusteAnalytics.tsx).
+        source: "/koppelen",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
+        // #344 PR-B: het activeringsendpoint van diezelfde flow (POST-only, token
+        // in de body). De globale Referrer-Policy hierboven zou de routeheader
+        // overschrijven; de latere regel wint.
+        source: "/auth/microsoft-login/uitnodiging",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
         source: "/video/(.*)",
         headers: [
           {

@@ -251,7 +251,7 @@ function routeBestanden(dir: string): string[] {
   return uit;
 }
 
-test("LK-10 CENSUS — app/auth/** telt precies vier routes, alle onder de registergate (B0)", () => {
+test("LK-10 CENSUS — app/auth/** telt precies vijf routes, alle onder de registergate (B0)", () => {
   // B0 (#335) bracht app/auth/** onder route-mechanismen.test.ts; deze census
   // blijft als tweede grendel: elke nieuwe OAuth-route is een bewuste wijziging
   // hier én in route-mechanismen.expected.json.
@@ -260,6 +260,7 @@ test("LK-10 CENSUS — app/auth/** telt precies vier routes, alle onder de regis
     "app/auth/callback/route.ts",
     "app/auth/microsoft-login/callback/route.ts",
     "app/auth/microsoft-login/start/route.ts",
+    "app/auth/microsoft-login/uitnodiging/route.ts",
     "app/auth/microsoft/callback/route.ts",
   ]);
 });

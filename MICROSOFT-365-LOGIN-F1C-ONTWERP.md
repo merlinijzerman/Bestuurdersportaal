@@ -295,9 +295,72 @@ Vercel-SSO vóór de applicatie, dus een kale `curl` strandt daar en zegt niets 
 Runbook §1C.7 beschrijft de twee wegen die dat wél meten (devtools-console van een ingelogde sessie,
 of het bypasstoken voor automatisering).
 
-## 13. Openstaand voor PR-B
+## 13. PR-B — beheer, herstelingang en browsertests (9 september 2026)
 
-Beheerpagina (modus + tenant, dekkingslijst, blokkeeroverzicht, intrekken/vrijgeven,
-break-glass en uitnodigingen), de profielkaart per modus, de HTTP-routes met W13-declaratie
-en registers, de `/koppelen/<token>`-ingang van de koppel-/herstelsessie, browsertests en
-het bijgewerkte Preview-smokeplan.
+PR-B levert wat §12 aan PR-A overliet, met drie aanscherpingen uit de review van 9 september.
+
+### 13.1 Beheerpagina `/beheer/microsoft-login`
+
+Server-side dubbele poort (`vereisModuleToegang("beheer", …)` én `requireCapability(…,
+"login.beleid.manage")`, anders terug naar `/beheer`). De pagina toont modus, dekkingsrapport,
+break-glassoverzicht en per account de beheeracties. Wat zij bewust **niet** toont: de tenant-id.
+`GET /api/microsoft-login/beheer/beleid` retourneert alleen `tenantGeconfigureerd: boolean`
+(`bouwBeheerBeleidRespons` in `core/lib/microsoft-login-beheer-core.ts`; de contracttest pint
+de verboden sleutels `entraTenantId`, `tid`, `oid`, `sub`, `email`).
+
+- **Modus** wijzigt via een expliciete `PATCH {modus}`; `verplicht` alleen na een bevestiging in de
+  browser én de preflight van de database (een rode preflight toont de weigeringstekst vooraf, de
+  route geeft 409 met dezelfde tekst als de UI wordt omzeild).
+- **Beheerintrekking** gaat standaard naar `revoking` (`POST intrekking {doelUserId}`). **Afronden**
+  is een afzonderlijke actie in een eigen dialoog met bevestigingswoord `AFRONDEN` — geen checkbox
+  naast de standaardactie — en vermeldt dat de Microsoft-identiteit in Supabase Auth achterblijft en
+  hergebruik van die identiteit kan blokkeren (`BEHEER_TEKSTEN.afrondenBevestiging`).
+- **Uitnodiging** (`POST uitnodiging {doelUserId}`) geeft de link precies eenmaal terug; de UI houdt
+  hem uitsluitend in React-state met een kopieerknop en slaat niets op. Intrekken via `DELETE`.
+- **Break-glass** verlenen/intrekken met vaste redencategorie en herzieningstermijn (standaard
+  90 dagen).
+
+Alle beheerhandlers: `withFondsRoute` met `capability: "login.beleid.manage"`, `hostGuard:
+"afdwingen"`, inline `requireCapability` (W7-3-patroon), eigen auditlabel, `Cache-Control: no-store`.
+
+### 13.2 Herstelingang: het token staat in het fragment, niet in het pad
+
+§6.2 sprak nog van `/koppelen/<token>`. Dat is verlaten: een token in het URL-pad komt in
+serverlogs, `Referer`-headers, browsergeschiedenis en in de fetch van linkpreviews en
+mailscanners terecht — en een eenmalig token dat door een scanner wordt "geopend" is daarna
+verbruikt. De uitnodigingslink is nu
+
+```
+https://<fondshost>/koppelen#<token>
+```
+
+- `/koppelen` is een vaste pagina (`app/(herstel)/koppelen`) met `robots: noindex`,
+  `Referrer-Policy: no-referrer` en `Cache-Control: no-store` (metadata én `next.config.ts`). De
+  geneste layout is **geen** eigen root-layout — zolang `app/layout.tsx` bestaat erft `/koppelen`
+  die, inclusief `<Analytics/>`. Daarom is de analytics in de root-layout zelf routebewust gemaakt
+  (`core/components/RouteBewusteAnalytics.tsx`, padregel `analyticsUitgesloten`): op `/koppelen`
+  rendert zij niets. Het fragment gaat nooit naar de server.
+- De client leest het fragment (`tokenUitFragment`, alleen exact `#<43 tekens base64url>`), wist
+  het direct met `history.replaceState`, rendert het nergens en verstuurt het uitsluitend in de body
+  van een `POST /auth/microsoft-login/uitnodiging` na een expliciete klik ("Herstel starten").
+- Die route heeft **geen GET**, dezelfde atomische startlimiet als de inlogstart (V9,
+  `tel_startpoging`, HMAC van IP+host), en één neutrale 403 voor ongeldig, verlopen, ingetrokken
+  en al gebruikt (`UITNODIGING_ONGELDIG_MELDING`). `activeer_uitnodiging` verzilvert onder de
+  fondslock, dus van twee gelijktijdige verzoeken slaagt er exact één.
+- Zonder fragment toont de pagina alleen uitleg; een gewone GET of linkpreview verbruikt niets.
+
+De beperkte sessie zelf (`/beperkte-toegang`) kreeg de ontbrekende stap: "Oude koppeling losmaken"
+(bestaande `DELETE koppeling`, toegestaan binnen het venster) vóór "Microsoft-account koppelen".
+
+### 13.3 Verificatie
+
+| Laag | Test |
+|---|---|
+| Contract (statisch) | `tests/cross-tenant/microsoft-login-beheer-contract.test.ts` — 7 handlers met capability + inline poort + audit; geen tenant-id in de respons; token alleen in fragment, nooit in log; root-layout rendert `<Analytics/>` alleen via de routebewuste wrapper en de herstel-layout nest geen `<html>/<body>`; POST-only + limiter; afronden zonder checkbox; registers |
+| Component | `KoppelActivering` (fragment gewist, token niet in DOM, POST-body, neutrale weigering) en `LoginBeleidBeheer` (geen tenant-id, verplicht geblokkeerd bij rode preflight, afronden met bevestigingswoord, link eenmalig + kopieerknop) |
+| E2E (wegwerpstack) | `microsoft-login.spec.ts`: beleid zonder tenant-id (403 voor bestuurder, 401 anoniem), beheerpagina, linkpreview verbruikt niets, activering eenmalig, replay = neutrale fout, gelijktijdige activering exact één 200, ongeldig/leeg/zonder-flag/GET/pad-token, beheerintrekking, en `/koppelen#<canary>` zonder enig verzoek naar `/_vercel/insights` of `*.vercel-insights.com` (met `/login` als negatieve controle) |
+| Preview (PGB) | runbook §1C.4, scenario's 6b en 7a–7d |
+
+Wat de contracttest níét kan bewijzen is dat het token nooit in een applicatielog belandt; dat
+volgt uit de code (de route logt alleen categorieën) en wordt in de smoke gecontroleerd door de
+Vercel-logs op het tokenpatroon te doorzoeken (§1C.4, scenario 7d).
