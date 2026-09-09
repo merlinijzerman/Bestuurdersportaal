@@ -22,7 +22,16 @@ import {
 
 type Status =
   | { beschikbaar: false }
-  | ({ beschikbaar: true; sessieViaMicrosoft?: boolean } & (
+  | ({
+      beschikbaar: true;
+      sessieViaMicrosoft?: boolean;
+      /** Fondsmodus (#344). In `verplicht` beheert de organisatie de koppeling. */
+      modus?: "uit" | "optioneel" | "verplicht";
+      /** Mag de gebruiker zelf koppelen/ontkoppelen? De server beslist; de kaart
+       *  toont alleen wat daadwerkelijk kan — geen knop die tóch wordt geweigerd. */
+      magKoppelen?: boolean;
+      magOntkoppelen?: boolean;
+    } & (
       | { status: "geen" }
       | { status: "pending"; herstelMogelijk: boolean; pendingVerlooptOp: string | null }
       | { status: "active"; geactiveerdOp: string | null; laatstGebruiktOp: string | null }
@@ -52,6 +61,24 @@ function meldingUitUrl(params: URLSearchParams): string | null {
 }
 
 const datum = (iso: string | null) => (iso ? new Date(iso).toLocaleString("nl-NL") : "onbekend");
+
+/** Beheert de ORGANISATIE deze koppeling? Fail-safe: ontbreekt het veld (oudere
+ *  respons), dan gaan we uit van zelfbeheer — precies het gedrag van vóór #344. */
+function organisatieBeheert(status: { magOntkoppelen?: boolean; modus?: string }): boolean {
+  return status.magOntkoppelen === false;
+}
+
+/** De reden uit de serverrespons, of de meegegeven terugval. De server stuurt bij
+ *  een weigering een vaste, neutrale tekst mee (nooit een ruwe fout); die is
+ *  specifieker dan onze generieke melding en dus bruikbaarder voor de gebruiker. */
+async function serverMelding(response: Response, terugval: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    return typeof body?.error === "string" && body.error.length > 0 ? body.error : terugval;
+  } catch {
+    return terugval;
+  }
+}
 
 export default function MicrosoftLoginKaart() {
   const params = useSearchParams();
@@ -84,7 +111,9 @@ export default function MicrosoftLoginKaart() {
     try {
       const response = await fetch("/api/microsoft-login/koppeling", { method: "DELETE" });
       if (!response.ok) {
-        setMelding(PROFIEL_MICROSOFT_LOGIN_MELDINGEN.ontkoppelen);
+        // De server draagt de reden (403 = de organisatie beheert de koppeling);
+        // die is specifieker dan onze generieke tekst.
+        setMelding(await serverMelding(response, PROFIEL_MICROSOFT_LOGIN_MELDINGEN.ontkoppelen));
         await laad();
         return;
       }
@@ -142,31 +171,43 @@ export default function MicrosoftLoginKaart() {
           <p className="text-xs text-muted">
             Gekoppeld op: {datum(status.geactiveerdOp)} · Laatst gebruikt: {datum(status.laatstGebruiktOp)}
           </p>
-          <p className="text-xs text-muted">
-            {viaMicrosoft
-              ? "U bent nu met Microsoft ingelogd. Ontkoppelen logt u direct uit."
-              : "U bent nu met uw wachtwoord ingelogd. Ontkoppelen laat deze sessie ongemoeid."}
-          </p>
-          <button
-            disabled={bezig}
-            onClick={() => void ontkoppel()}
-            className="border border-app-line-strong text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
-          >
-            Ontkoppelen
-          </button>
+          {organisatieBeheert(status) ? (
+            // Modus `verplicht`: geen knop die de server tóch weigert. De kaart
+            // zegt vooraf wat er geldt (UX-principe: maak blokkers expliciet).
+            <p className="text-xs text-muted">{PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer}</p>
+          ) : (
+            <>
+              <p className="text-xs text-muted">
+                {viaMicrosoft
+                  ? "U bent nu met Microsoft ingelogd. Ontkoppelen logt u direct uit."
+                  : "U bent nu met uw wachtwoord ingelogd. Ontkoppelen laat deze sessie ongemoeid."}
+              </p>
+              <button
+                disabled={bezig}
+                onClick={() => void ontkoppel()}
+                className="border border-app-line-strong text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+              >
+                Ontkoppelen
+              </button>
+            </>
+          )}
         </div>
       )}
 
       {status.status === "revoking" && (
         <div className="space-y-3 text-sm">
           <p className="text-muted">Ontkoppelen is nog niet afgerond. Inloggen met Microsoft is al geblokkeerd.</p>
-          <button
-            disabled={bezig}
-            onClick={() => void ontkoppel()}
-            className="border border-app-line-strong text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
-          >
-            Opnieuw proberen
-          </button>
+          {organisatieBeheert(status) ? (
+            <p className="text-xs text-muted">{PROFIEL_MICROSOFT_LOGIN_MELDINGEN.beheer}</p>
+          ) : (
+            <button
+              disabled={bezig}
+              onClick={() => void ontkoppel()}
+              className="border border-app-line-strong text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+            >
+              Opnieuw proberen
+            </button>
+          )}
         </div>
       )}
 

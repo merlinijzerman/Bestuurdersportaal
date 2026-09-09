@@ -296,7 +296,8 @@ het vast in de audit en houd het venster kort.
 | 2 | Wachtwoordlogin met correcte credentials, gewone gebruiker | 403 van de hook; loginscherm toont "Voor deze omgeving logt u in met Microsoft" |
 | 3 | Wachtwoordlogin met een fout wachtwoord | onveranderd de generieke melding (geen orakel) |
 | 4 | Sessievernieuwing na `jwt_exp` | oauth-sessie leeft door; een wachtwoordsessie is uiterlijk na `jwt_exp` weg en al eerder door de guard beëindigd — **meet dit en leg de tijd vast** |
-| 5 | `DELETE /api/microsoft-login/koppeling` (ook rechtstreeks, buiten de UI om) | 403; `ontkoppelen.geweigerd` in `login_private.audit_log` |
+| 5 | `DELETE /api/microsoft-login/koppeling` via de profielpagina | de knop is er niet (de kaart toont "Uw organisatie beheert deze koppeling"); forceer je het verzoek toch, dan 403 met diezelfde tekst én `ontkoppelen.geweigerd` in `login_private.audit_log` |
+| 5b | Hetzelfde verzoek rechtstreeks, buiten de browsersessie om | **Let op:** op Preview staat Vercel-SSO vóór het portaal, dus een kale `curl` strandt op het SSO-scherm en meet niets over het portaal. Gebruik de devtools-console van een ingelogde sessie (`fetch('/api/microsoft-login/koppeling', { method: 'DELETE' })`) of geef het bypasstoken mee (`x-vercel-protection-bypass`); zie §1C.7 |
 | 6 | Beheerintrekking, daarna login | 403; binding `revoking` |
 | 7 | Koppel-/herstelsessie: uitnodiging → venster → wachtwoordlogin → herkoppelen | sessie alleen binnen het venster, en dan uitsluitend met `role = portaal_beperkt` (portaal blijft dicht); venster gesloten (`voltooid_op`) na activering |
 | 8a | Break-glassaccount, alleen wachtwoord | login lukt, maar het token draagt `role = portaal_beperkt`; een rechtstreekse `GET /rest/v1/documenten` met dat token geeft 403 en het portaal stuurt naar `/beperkte-toegang` |
@@ -325,3 +326,22 @@ terug (binaire `actief` + `pilotstatus`, hook laat niet-oauth onvoorwaardelijk d
 eerst de PR-A-code terug of zet elk fonds op `optioneel`/`uit`** — draai je de rollback
 terwijl een fonds nog `verplicht` is, dan valt de afdwinging weg en kunnen die gebruikers
 weer met wachtwoord inloggen. `login_private.audit_log` blijft ongemoeid (append-only).
+
+## 1C.7 Rechtstreekse routeaanroepen meten op Preview
+
+De smoke wil bewijzen dat een weigering óók geldt als de UI wordt omzeild. Op Preview zit Vercel-SSO
+vóór de applicatie: een kale `curl` krijgt het SSO-scherm en raakt het portaal niet, dus zo'n test
+meet niets — hij lijkt alleen te slagen. Twee bruikbare wegen:
+
+1. **Devtools-console van een ingelogde sessie** (eenvoudigst, geen extra geheimen):
+   ```js
+   await fetch("/api/microsoft-login/koppeling", { method: "DELETE" }).then((r) => r.status);
+   ```
+   Verwacht `403`; controleer daarna `login_private.audit_log` op `ontkoppelen.geweigerd`.
+2. **Protection Bypass for Automation**: zet in het Vercel-project een bypasstoken en stuur dat mee
+   als header `x-vercel-protection-bypass`. Daarmee kan een script het portaal bereiken zonder SSO.
+   Het token hoort in de omgeving van het testharnas, nooit in de repo — de secretscan slaat er
+   terecht op aan.
+
+Beide wegen laten de portaalpoorten volledig intact: SSO staat vóór de app, de wrapper en de
+Auth-hook staan erachter. Wat je met bypass meet, is dus nog steeds het echte gedrag van de route.

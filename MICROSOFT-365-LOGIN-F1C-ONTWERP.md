@@ -275,6 +275,26 @@ De Custom Access Token Hook draait sinds deze tranche óók in de wegwerpstack
 | Activeringsvenster verlopen, daarna refresh | token zakt terug naar `portaal_beperkt`; PostgREST → 403 |
 | Venster openen via de gateway | precies één `breakglass.gebruikt` in `login_private.audit_log` |
 
+## 12c. Correctie na de Preview-smoke (9 september 2026)
+
+Scenario 5 wees twee dingen aan die lokaal groen leken maar in de echte omgeving niet klopten:
+
+1. **De auditregel ontbrak.** De DELETE-route weigerde zélf met 403 vóór de gatewayaanroep. Die
+   vroege poort was bedoeld als vriendelijkheid, maar sloeg daarmee de functie over die de weigering
+   vastlegt (`login_private.start_intrekking` schrijft `ontkoppelen.geweigerd`). De route beslist nu
+   niets meer: zij roept de gateway aan, laat de database weigeren en vertaalt alleen de categorie.
+   Eén poort, één beslissing, één auditregel — dezelfde regel die dit ontwerp elders al hanteert.
+2. **De profielkaart toonde nog een ontkoppelknop.** De statusrespons droeg `modus`, `stand` en
+   `magOntkoppelen` al, maar de kaart gebruikte ze niet. In `verplicht` toont zij nu alleen de
+   status plus "Uw organisatie beheert deze koppeling"; bij een weigering toont zij de tekst van de
+   server in plaats van haar eigen generieke melding. Dat is het UX-principe uit CLAUDE.md: maak een
+   blokker vooraf expliciet in plaats van er een foutmelding achteraf van te maken.
+
+Wat de smoke níét kon meten: een rechtstreeks verzoek buiten de browsersessie om. Op Preview staat
+Vercel-SSO vóór de applicatie, dus een kale `curl` strandt daar en zegt niets over de portaalpoorten.
+Runbook §1C.7 beschrijft de twee wegen die dat wél meten (devtools-console van een ingelogde sessie,
+of het bypasstoken voor automatisering).
+
 ## 13. Openstaand voor PR-B
 
 Beheerpagina (modus + tenant, dekkingslijst, blokkeeroverzicht, intrekken/vrijgeven,

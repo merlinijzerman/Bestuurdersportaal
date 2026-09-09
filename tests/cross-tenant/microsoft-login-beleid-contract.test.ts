@@ -240,9 +240,21 @@ test("1C: persoonlijk ontkoppelen is server-side dicht in `verplicht`", () => {
   assert.match(migratie, /'ontkoppelen\.geweigerd', 'ontkoppelen_verplicht'/);
   assert.match(migratie, /return query select null::uuid, 'ontkoppelen_verplicht'::text; return;/,
     "geeft een categorie terug in plaats van te raisen, zodat de audit blijft staan");
-  // … én in de route, met de backstop op de gatewaycategorie.
-  assert.match(koppelingRoute, /if \(!beleid \|\| !magZelfOntkoppelen\(beleid\.modus, beleid\.linkOnly\)\)/);
-  assert.match(koppelingRoute, /if \(categorie === "ontkoppelen_verplicht"\)/);
+  // … en de route laat die weigering ÚIT DE DATABASE komen. Een vroege 403 in de
+  // route zou de auditregel overslaan — dat was de bevinding uit de Preview-smoke
+  // (scenario 5): de weigering werkte, maar `ontkoppelen.geweigerd` ontbrak.
+  const deleteBlok = koppelingRoute.slice(koppelingRoute.indexOf("export const DELETE"), koppelingRoute.indexOf("export const POST"));
+  assert.doesNotMatch(deleteBlok, /magZelfOntkoppelen\(/, "geen app-poort vóór de gatewayaanroep");
+  const gatewayAanroep = deleteBlok.indexOf("flow.ontkoppel(");
+  const weigering = deleteBlok.indexOf('categorie === "ontkoppelen_verplicht"');
+  assert.ok(gatewayAanroep > 0 && weigering > gatewayAanroep, "de 403 volgt ná de gateway, niet ervoor");
+  assert.match(deleteBlok, /if \(categorie === "ontkoppelen_verplicht"\)[\s\S]{0,200}?PROFIEL_MICROSOFT_LOGIN_MELDINGEN\.beheer/);
+  // De kaart toont geen knop die de server tóch weigert.
+  const kaart = lees("app/(dashboard)/profiel/_components/MicrosoftLoginKaart.tsx");
+  assert.match(kaart, /function organisatieBeheert\(/);
+  assert.match(kaart, /organisatieBeheert\(status\) \? \(/);
+  assert.match(kaart, /await serverMelding\(response, PROFIEL_MICROSOFT_LOGIN_MELDINGEN\.ontkoppelen\)/,
+    "en toont bij een weigering de reden van de server");
   assert.match(koppelStart, /if \(!beleid \|\| !magZelfKoppelen\(beleid\.modus, beleid\.linkOnly\)\)/);
 });
 
