@@ -4,33 +4,46 @@
 //  direct uit de adresbalk en verstuurt het uitsluitend in de body van een POST
 //  (fase 1C, #344 PR-B; reviewafspraak: nooit in pad, log, referrer of HTML).
 // ----------------------------------------------------------------------------
-//  Het token leeft alleen in React-state en wordt niet gerenderd. Activering is
+//  Het token leeft alleen in een ref (nooit in state of DOM) en wordt niet
+//  gerenderd; de aanwezigheid ervan komt via useSyncExternalStore binnen, zodat
+//  de server "lezen" rendert en de client na hydratie de knop. Activering is
 //  een expliciete handeling (knop): een gewone GET, linkpreview of scanner
 //  verbruikt de eenmalige uitnodiging niet. Na activering gaat de gebruiker naar
 //  de login om met zijn WACHTWOORD in te loggen — het token authenticeert niet.
 // ============================================================================
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { tokenUitFragment, UITNODIGING_ONGELDIG_MELDING } from "@/core/lib/microsoft-login-meldingen-core";
 
-type Stand = "lezen" | "geen-token" | "klaar" | "bezig" | "geactiveerd" | "geweigerd";
+type Stand = "bezig" | "geactiveerd" | "geweigerd" | null;
+
+const geenAbonnement = () => () => {};
 
 export default function KoppelActivering() {
-  const [token, setToken] = useState<string | null>(null);
-  const [stand, setStand] = useState<Stand>("lezen");
+  // undefined = nog niet gelezen (server/hydratie); null = geen (geldig) fragment.
+  const tokenRef = useRef<string | null | undefined>(undefined);
+  const heeftToken = useSyncExternalStore(
+    geenAbonnement,
+    () => {
+      if (tokenRef.current === undefined) tokenRef.current = tokenUitFragment(window.location.hash);
+      return tokenRef.current !== null;
+    },
+    () => null,
+  );
+  const [stand, setStand] = useState<Stand>(null);
   const [melding, setMelding] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = tokenUitFragment(window.location.hash);
     // Fragment direct wissen: niet in browserhistorie of adresbalk laten staan.
     if (window.location.hash) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    setToken(t);
-    setStand(t ? "klaar" : "geen-token");
   }, []);
 
   async function activeer() {
+    const token = tokenRef.current;
     if (!token) return;
+    // Token na één gebruik uit het geheugen; ongeacht de uitkomst.
+    tokenRef.current = null;
     setStand("bezig");
     setMelding(null);
     try {
@@ -41,8 +54,6 @@ export default function KoppelActivering() {
         cache: "no-store",
         referrerPolicy: "no-referrer",
       });
-      // Token na één gebruik uit het geheugen; ongeacht de uitkomst.
-      setToken(null);
       if (!r.ok) {
         setStand("geweigerd");
         setMelding(UITNODIGING_ONGELDIG_MELDING);
@@ -50,7 +61,6 @@ export default function KoppelActivering() {
       }
       setStand("geactiveerd");
     } catch {
-      setToken(null);
       setStand("geweigerd");
       setMelding(UITNODIGING_ONGELDIG_MELDING);
     }
@@ -62,16 +72,16 @@ export default function KoppelActivering() {
         <div className="bg-white rounded-2xl border border-line p-8 shadow-sm">
           <h1 className="text-lg font-bold text-ink mb-2">Microsoft-koppeling herstellen</h1>
 
-          {stand === "lezen" && <p className="text-sm text-muted">Een ogenblik…</p>}
+          {heeftToken === null && <p className="text-sm text-muted">Een ogenblik…</p>}
 
-          {stand === "geen-token" && (
+          {heeftToken === false && stand === null && (
             <p className="text-sm text-muted" role="status">
               Deze pagina werkt alleen via een uitnodigingslink van uw beheerder. Vraag een nieuwe link aan als u er
               geen heeft.
             </p>
           )}
 
-          {(stand === "klaar" || stand === "bezig") && (
+          {heeftToken === true && (stand === null || stand === "bezig") && (
             <div className="space-y-4">
               <p className="text-sm text-muted">
                 Uw beheerder heeft u uitgenodigd om uw Microsoft-koppeling te herstellen. Na het starten heeft u
