@@ -1,6 +1,6 @@
 # 0212 — Microsoft-loginbeleid (fase 1C): drie fondsmodi, afdwinging in de Auth-hook, en een beheerde bindingslifecycle met twee begrensde herstelpaden
 
-- **Status:** Voorgesteld (PR-A geïmplementeerd en na vier reviewrondes herzien; PR-B — beheer- en profielinterface — volgt)
+- **Status:** Voorgesteld (PR-A gemerged op `preview`; PR-B — beheerpagina, herstelingang en browsertests — als draft-PR geopend, zie de aanvulling van 9 september)
 - **Datum:** 2026-09-07
 - **Betrokkenen:** Merlin (opdrachtgever/productowner, vier expliciete keuzes hieronder), Claude (ontwerp en implementatie)
 - **Ticket:** [#344](https://github.com/merlinijzerman/Bestuurdersportaal/issues/344) — M365 fase 1C, organisatiebreed Microsoft-loginbeleid en beheerde ontkoppeling
@@ -210,6 +210,28 @@ had een vroege 403 vóór de gatewayaanroep. Functioneel klopte de uitkomst, maa
 daar kwam het verzoek nooit. Vroege poorten mogen dus alleen bestaan waar zij géén geaudite
 beslissing overslaan. Aanvullend toont de profielkaart in `verplicht` geen ontkoppelknop meer en
 gebruikt zij bij een weigering de tekst van de server.
+
+## Aanvulling PR-B (9 september 2026)
+
+Drie aanscherpingen uit de review vóór de bouw van PR-B, alle drie overgenomen:
+
+**D17 — het herkoppeltoken staat in het URL-fragment, nooit in het pad.** De uitnodigingslink is
+`https://<fondshost>/koppelen#<token>`. Een token in het pad komt in serverlogs, `Referer`,
+browsergeschiedenis en in de fetch van linkpreviews en mailscanners — en een eenmalig token dat
+door een scanner wordt "geopend" is daarna verbruikt. Het fragment gaat niet naar de server; de
+client wist het direct (`history.replaceState`), rendert het niet, en verstuurt het uitsluitend in
+de body van een `POST` naar een vast endpoint zonder GET, achter dezelfde atomische startlimiet als
+de inlogstart. De pagina heeft een eigen root-layout zonder analytics, `no-store` en `no-referrer`.
+
+**D18 — afronden is een afzonderlijke, nadrukkelijk bevestigde beheeractie.** Beheerintrekking
+gaat standaard naar `revoking`. "Intrekking afronden" is een eigen dialoog met bevestigingswoord
+(`AFRONDEN`), geen checkbox naast de standaardactie, en vermeldt dat de GoTrue-identiteit
+achterblijft en hergebruik van die identiteit kan blokkeren.
+
+**D19 — het beheerbeleid toont geen tenant-id.** `GET beleid` retourneert `tenantGeconfigureerd`,
+niet `entraTenantId`; de contracttest pint de verboden sleutels. Ongeldige, verlopen en al gebruikte
+uitnodigingen delen één neutrale fout; de uitnodigingslink wordt na uitgifte eenmaal getoond,
+uitsluitend in client-state, met een kopieerknop.
 
 ## Overwogen alternatieven
 

@@ -272,12 +272,20 @@ haar nooit iets anders — dat is precies de begrenzing waarop het beleid rust.
 
 ## 1C.3 Herkoppelen (beperkte koppel-/herstelsessie)
 
-1. Beheer geeft een uitnodiging uit voor exact één account; de app stuurt uitsluitend
-   `sha256(token)` naar de database. Het token zelf komt nergens in database, log of audit —
-   dus **bewaar het niet**: is het kwijt, geef dan een nieuwe uit (de vorige vervalt).
-2. De gebruiker opent de link, activeert daarmee het venster (eenmalig, standaard 15 min) en
-   logt in **met zijn bestaande wachtwoord**. Het token authenticeert niet.
-3. Binnen het venster maakt de gebruiker de oude identiteit los en koppelt hij de nieuwe.
+1. Beheer geeft op `/beheer/microsoft-login` een uitnodiging uit voor exact één account; de app
+   stuurt uitsluitend `sha256(token)` naar de database. De link heeft de vorm
+   `https://<fondshost>/koppelen#<token>` en wordt **één keer** getoond, alleen in de browser
+   van de beheerder, met een kopieerknop. Het token zelf komt nergens in database, log of audit
+   — dus **bewaar het niet**: is het kwijt, geef dan een nieuwe uit (de vorige vervalt).
+   Verstuur de link via een kanaal dat de gebruiker al gebruikt; het fragment (`#…`) gaat nooit
+   naar een server, dus een linkpreview of mailscanner kan de uitnodiging niet verbruiken.
+2. De gebruiker opent de link. `/koppelen` wist het fragment direct uit de adresbalk en
+   activeert het venster pas na een klik op **Herstel starten** (eenmalig, standaard 15 min;
+   verzoek uitsluitend als `POST` met het token in de body). Daarna logt de gebruiker in **met
+   zijn bestaande wachtwoord**. Het token authenticeert niet. Elke weigering (ongeldig, verlopen,
+   ingetrokken, al gebruikt) toont dezelfde neutrale melding.
+3. Binnen het venster maakt de gebruiker op `/beperkte-toegang` de oude identiteit los ("Oude
+   koppeling losmaken") en koppelt hij de nieuwe ("Microsoft-account koppelen").
    Zodra `tid + oid` actief is, sluit het venster onmiddellijk en logt hij voortaan met
    Microsoft in.
 4. Heeft de gebruiker zijn wachtwoord ook niet meer, dan is aanvullende identiteitscontrole
@@ -298,8 +306,13 @@ het vast in de audit en houd het venster kort.
 | 4 | Sessievernieuwing na `jwt_exp` | oauth-sessie leeft door; een wachtwoordsessie is uiterlijk na `jwt_exp` weg en al eerder door de guard beëindigd — **meet dit en leg de tijd vast** |
 | 5 | `DELETE /api/microsoft-login/koppeling` via de profielpagina | de knop is er niet (de kaart toont "Uw organisatie beheert deze koppeling"); forceer je het verzoek toch, dan 403 met diezelfde tekst én `ontkoppelen.geweigerd` in `login_private.audit_log` |
 | 5b | Hetzelfde verzoek rechtstreeks, buiten de browsersessie om | **Let op:** op Preview staat Vercel-SSO vóór het portaal, dus een kale `curl` strandt op het SSO-scherm en meet niets over het portaal. Gebruik de devtools-console van een ingelogde sessie (`fetch('/api/microsoft-login/koppeling', { method: 'DELETE' })`) of geef het bypasstoken mee (`x-vercel-protection-bypass`); zie §1C.7 |
-| 6 | Beheerintrekking, daarna login | 403; binding `revoking` |
+| 6 | Beheerintrekking ("Intrekken" op `/beheer/microsoft-login`), daarna login | 403; binding `revoking`; de gebruiker maakt de koppeling daarna zelf los |
+| 6b | "Intrekking afronden…" | aparte dialoog, knop pas actief na het bevestigingswoord `AFRONDEN`, met de waarschuwing dat de Microsoft-identiteit in Supabase Auth achterblijft; binding `revoked` |
 | 7 | Koppel-/herstelsessie: uitnodiging → venster → wachtwoordlogin → herkoppelen | sessie alleen binnen het venster, en dan uitsluitend met `role = portaal_beperkt` (portaal blijft dicht); venster gesloten (`voltooid_op`) na activering |
+| 7a | Uitnodigingslink uitgeven | vorm `https://<pgb-host>/koppelen#<43 tekens>`; éénmaal getoond met kopieerknop; `GET /api/microsoft-login/beheer/beleid` bevat géén `entraTenantId` (alleen `tenantGeconfigureerd: true`) |
+| 7b | Link openen, **niet** klikken; dan nogmaals openen en wél klikken | het fragment verdwijnt direct uit de adresbalk; de eerste keer is niets verbruikt (de tweede activering slaagt); de responsheaders van `/koppelen` dragen `no-store` en `no-referrer` |
+| 7c | Dezelfde link nog eens activeren; een willekeurig token; twee gelijktijdige activeringen (devtools: twee `fetch`-POSTs in één `Promise.all`) | alle weigeringen 403 met dezelfde tekst "Deze uitnodiging is niet (meer) geldig…"; van de twee gelijktijdige slaagt er exact één |
+| 7d | Vercel-logs van de deployment doorzoeken op het tokenpatroon `[A-Za-z0-9_-]{43}` en op de tokenwaarde | nul treffers; `login_private.audit_log` bevat alleen `herkoppelen.uitgenodigd` / `herkoppelen.venster_geopend` zonder token |
 | 8a | Break-glassaccount, alleen wachtwoord | login lukt, maar het token draagt `role = portaal_beperkt`; een rechtstreekse `GET /rest/v1/documenten` met dat token geeft 403 en het portaal stuurt naar `/beperkte-toegang` |
 | 8b | Break-glassaccount, ná MFA-verificatie én verhoging | normale rol; portaal bereikbaar; precies één `breakglass.gebruikt` in de audit |
 | 8b' | Break-glassaccount, ná MFA maar **zonder** verhoging (bijv. rechtstreeks refreshen) | blijft `portaal_beperkt`; geen auditregel — dit is de regressie uit reviewbevinding P1 |
