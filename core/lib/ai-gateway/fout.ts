@@ -82,6 +82,17 @@ function meldingVan(e: unknown): string {
  *  * 400/404/413/422               → provider, niet herhaalbaar;
  *  * overig (5xx, netwerk)         → provider, herhaalbaar.
  */
+/**
+ * De afbrekingsreden uit een `signal.reason`, duck-typed. Onze grendels zetten
+ * daar een fout met een `reden`-veld in; iets anders levert `null` en dus de
+ * conservatieve behandeling.
+ */
+function afbrekingsredenVan(reason: unknown): "annulering" | "timeout" | null {
+  if (typeof reason !== "object" || reason === null) return null;
+  const r = (reason as { reden?: unknown }).reden;
+  return r === "timeout" || r === "annulering" ? r : null;
+}
+
 export function classificeerProviderFout(e: unknown, signal?: AbortSignal): GatewayFout {
   if (isGatewayFout(e)) return e;
   if (isPoortGesloten(e)) {
@@ -92,6 +103,19 @@ export function classificeerProviderFout(e: unknown, signal?: AbortSignal): Gate
   const status = statusVan(e);
 
   if (signal?.aborted || /abort/i.test(naam)) {
+    // #356 — WAAROM er is afgebroken bepaalt de auditcategorie, en dat weet
+    // alleen de afbreker. Een verlopen eigen deadline en een weggelopen
+    // bestuurder breken hetzelfde signaal af; zonder deze uitlezing zou
+    // `gateway_log` beide als `geannuleerd` vastleggen en is achteraf niet te
+    // zien of het systeem te traag was of de gebruiker weg. De reden is
+    // duck-typed: de gateway hoeft de retrievallaag niet te kennen.
+    const reden = afbrekingsredenVan(signal?.reason);
+    if (reden === "timeout") {
+      return new GatewayFout("timeout", "budget_verlopen", { oorzaak: e });
+    }
+    // Onbekende abort → conservatief `geannuleerd`: liever een afbreking
+    // toeschrijven aan de gebruiker dan een systeemtimeout verzinnen die er
+    // misschien niet was.
     return new GatewayFout("geannuleerd", "verzoek_afgebroken", { oorzaak: e });
   }
   if (/timeout/i.test(naam) || /\bETIMEDOUT\b|timed out|_timeout$/i.test(melding)) {

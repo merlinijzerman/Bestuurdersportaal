@@ -712,6 +712,43 @@ Een foutvorm is een bibliotheekdetail dat per versie kan veranderen — het sign
 weet of er is afgebroken. De controle staat na élke PostgREST-call en vóór élke
 terugval.
 
+**Het generatiebudget (#356).** De generatie krijgt een EIGEN deadline, los van
+de retrievalgrens: ander werk, ander profiel. Drie dingen die de bouw uitwees en
+die niet in de bibliotheekdocumentatie staan:
+
+| Grens | Wat er werkelijk gebeurt |
+|---|---|
+| SDK-`timeout` op een stream | begrenst alléén time-to-first-byte — `clearTimeout` staat in de `.finally()` van de fetch, die resolvet zodra de headers binnen zijn (`@anthropic-ai/sdk@0.39.0`, `core.js:414-416`). De duur van het streamen wordt uitsluitend door het SIGNAAL begrensd |
+| SDK-abortfouten | `APIUserAbortError` en `APIConnectionTimeoutError` dragen beide `name: "Error"`, niet `AbortError`. Herkenning loopt daarom via `signal.aborted`, niet via de vorm |
+| SDK-retry | `ANTHROPIC_MAX_RETRIES = 1`, en de signaalcontrole staat vóór de retry. Mét signaal geen retry; met alleen `timeout` kost een uitval tot 2× |
+
+**De klem.** Retrieval (5–60 s) en generatie (30–285 s) zijn onafhankelijk
+configureerbaar en tellen op binnen één invocatie; aan de bovenkant is dat 345 s
+tegen een functieduur van 300 s. Het budget wordt daarom geklemd op
+`maxDuration − marge − reedsVerstreken`, met een monotone klok. Blijft er minder
+dan 30 s over, dan start er geen providercall meer: die kost geld en levert een
+respons op die de functie toch niet kan afmaken.
+
+**De auditcategorie volgt de OORZAAK, niet de vorm.** Onze deadline en een
+weggelopen bestuurder breken hetzelfde signaal af. `classificeerProviderFout`
+leest daarom `signal.reason`: eigen deadline → `timeout` (reden
+`budget_verlopen`), clientdisconnect → `geannuleerd`, onbekende abort →
+conservatief `geannuleerd`. Een PROVIDERtimeout (`provider_timeout`) is
+uitdrukkelijk géén afbreking — anders zou een trage provider de fail-safes
+uitschakelen die juist voor providerfouten bestaan.
+
+**Duurzame vastlegging langs twee onafhankelijke sporen.** `ai_actie` is
+gezaghebbend voor de levenscyclus (`status = mislukt` + gesloten vocabulaire in
+`resultaat_ref`), `gateway_log` is het aanvullende append-only callspoor.
+Bewust geen `eindreden`-kolom: die zou een wijziging van
+`fn_ai_actie_bevries_kolommen` vergen — sleutelen aan de bevriezing van een
+audit-kritieke tabel voor informatie die elders al append-only staat. De strikte
+afronding telt zowel een RPC-`error` als `data === false` als mislukking
+(`false` = geen rij bijgewerkt, dus levenscyclus nog open) en is zelf begrensd,
+zodat een vastlopende RPC de afrondmarge niet opeet. Mislukken beide sporen, dan
+volgt een expliciet `[chat][ALARM]` en blijft de oorspronkelijke afbreekreden
+intact.
+
 **Eén publieke ingang, en die BEZIT de grendel (reviewronde 3).** De
 tweefasen-API gaf de aanroeper een levend handvat in handen: slaagde
 `voerRetrievalUit()` en bleef `citeer()` uit, dan bleven timer en
@@ -860,7 +897,7 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 | **G-10** | Hybride pad niet gekarakteriseerd | C1 | **hoog** (was: laag) | het is in productie het **primaire** pad; de goldens dekken alleen de FTS-terugval. R3: eigen tranche vóór T2-1 | **T1b** |
 | **G-11** | `regimeWeging` niet per fonds stuurbaar | kern | laag | enige vlag met default aan, buiten `RetrievalVlaggen` | T2-2 |
 | **G-12** | De hybride fusie kent geen verslapte OR-terugval; die bestaat alleen op het FTS-pad (`rag.ts:1519`). Een lange vraag levert daardoor een vector-only fusie | C1 op het hybride pad | **midden** | asymmetrie tussen de twee paden: dezelfde vraag krijgt op FTS wél een tweede, bredere poging en op hybride niet. Gemeten in T1b, gepind in `w322b.chat…hybride-retrieval-meta` (`fts_rang: null` op elke chunk) | T2-1 |
-| **G-13** | De **hoofdgeneratiecall** krijgt geen signaal: `gateway.stream()` accepteert `verzoek.signal` (`contract.ts:146`), maar `chat/route.ts:3534` geeft er geen mee. Verbreekt de bestuurder de verbinding tijdens het genereren, dan loopt de modelcall door en betalen we hem alsnog | C1, ná de retrievalketen | midden | PR-B dekt de RETRIEVALketen (D5: 20 s vanaf binnenkomst in de orkestratie); de generatie valt daarbuiten. Bewust niet stilzwijgend meegenomen: afbreken betekent dat er géén `schrijf_ai_interactie`-regel volgt, en dat is een auditkeuze, geen implementatiedetail | **T2-1/PR-B2 — #356, eerstvolgende tranche** |
+| **G-13** | De **hoofdgeneratiecall** krijgt geen signaal: `gateway.stream()` accepteert `verzoek.signal` (`contract.ts:146`), maar `chat/route.ts:3534` geeft er geen mee. Verbreekt de bestuurder de verbinding tijdens het genereren, dan loopt de modelcall door en betalen we hem alsnog | C1, ná de retrievalketen | midden | PR-B dekt de RETRIEVALketen (D5: 20 s vanaf binnenkomst in de orkestratie); de generatie valt daarbuiten. Bewust niet stilzwijgend meegenomen: afbreken betekent dat er géén `schrijf_ai_interactie`-regel volgt, en dat is een auditkeuze, geen implementatiedetail | **T2-1/PR-B2 — #356, GEBOUWD** |
 
 ### 5.2 Werkpakketten
 

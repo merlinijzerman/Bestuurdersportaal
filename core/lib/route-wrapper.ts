@@ -88,6 +88,17 @@ export type FondsContext = {
   readonly naam: string | null;
   readonly supabase: RlsClient; // RLS-client (anon-key)
   readonly requestId: string;
+  /**
+   * #356 — MONOTOON tijdstip van binnenkomst in de wrapper, vóór authenticatie,
+   * sessieguard en profielresolutie. De platformklok (Vercel: 300 s) loopt vanaf
+   * het verzoek, niet vanaf het moment dat de handler begint; startte de meting
+   * pas in de handler, dan telde die voorbereiding niet mee en kon een
+   * budgetberekening over de functieduur heen schieten.
+   *
+   * `performance.now()`, niet `Date.now()`: een NTP-correctie mag het
+   * resterende budget niet laten springen.
+   */
+  readonly startMonotoonMs: number;
 };
 
 export type RouteSpecV1 = {
@@ -315,6 +326,10 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
     // parameter; die verschilt tussen statische en [id]-routes. Eén wrapper dekt
     // beide, dus typen we de context bewust los en normaliseren hem intern.
     return async function (request: NextRequest, invocatie?: any): Promise<Response> {
+      // #356 — als ALLEREERSTE: de platformklok loopt al, dus alles wat de
+      // wrapper hierna doet (auth, guards, profiel) hoort in het verbruikte deel
+      // van de functieduur te vallen.
+      const startMonotoonMs = performance.now();
       const requestId = crypto.randomUUID();
 
       // 1. Authenticatie.
@@ -501,6 +516,7 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
         naam: profiel?.naam ?? null,
         supabase,
         requestId,
+        startMonotoonMs,
       };
 
       // Laatste vangnet: alleen wat de route zélf niet vangt. Dezelfde vorm als

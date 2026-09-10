@@ -158,7 +158,20 @@ export function createAiProviderStub({
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { server } = createAiProviderStub();
+  // #356 — instelbare vertraging, alleen via de CLI-ingang. De DEFAULTS van
+  // `createAiProviderStub()` blijven ongemoeid, zodat de karakteriseringsgoldens
+  // en de stubtests exact hetzelfde gedrag houden. Een traag streamende stub is
+  // nodig om een ECHTE clientdisconnect middenin een generatie te kunnen
+  // uitlokken — een gesimuleerd AbortController-signaal bewijst niets over
+  // `req.signal` en een gesloten ReadableStream.
+  const getal = (naam, standaard) => {
+    const n = Number.parseInt(process.env[naam] ?? "", 10);
+    return Number.isFinite(n) && n >= 0 ? n : standaard;
+  };
+  const { server } = createAiProviderStub({
+    eersteDeltaVertragingMs: getal("WP4_AI_STUB_DELTA1_MS", 700),
+    tweedeDeltaVertragingMs: getal("WP4_AI_STUB_DELTA2_MS", 700),
+  });
   server.listen(AI_PROVIDER_POORT, "127.0.0.1", () => {
     process.stdout.write(`WP4 AI-providerstub luistert op 127.0.0.1:${AI_PROVIDER_POORT}\n`);
   });
