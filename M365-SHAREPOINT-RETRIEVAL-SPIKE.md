@@ -1,6 +1,6 @@
 # #353 — M365 Fase 5 · T0 live SharePoint-retrievalspike
 
-Status: **gecontroleerde live-pilotvoorbereiding gereed; permissionprobe nog niet uitgevoerd; productiewiring blijft geblokkeerd**
+Status: **gecontroleerde live-pilotvoorbereiding gereed; permissionprobe operationeel geblokkeerd vóór Graph; productiewiring blijft geblokkeerd**
 Onderzoeksdatum: **10 september 2026**
 Productiewiring: **geen**
 
@@ -81,9 +81,21 @@ Negatieve scenario's zijn hermetisch gedekt voor ingetrokken of afwezige toegang
 | Word/PDF/PowerPoint passage en locator | PPTX bewezen; productextractors voor DOCX/PDF hergebruikt | **Open — #354** |
 | drie rondes, recall, mediaan/p95, calls en bytes | Harnas gereed | **Open — #354** |
 | geen persistente inhoud/chunks/embeddings | Ja, code- en boundarygate | Nog te controleren in runbewijs |
-| drive/root permissionprobe met bestaande `Sites.Selected` | Harnas en veilige uitvoervorm gereed | Niet uitgevoerd: benodigde `preview-stable` vaultsecrets zijn niet lokaal beschikbaar |
+| drive/root permissionprobe met bestaande `Sites.Selected` | Harnas en veilige uitvoervorm gereed | Uitvoering gestart op 10-09-2026, maar vóór tokenuitgifte/Graph gestopt: benodigde `preview-stable`-waarden met type `Secret` zijn niet lokaal exporteerbaar; **0 Graph-calls**, dus geen latency- of permissionuitkomst |
 
 Er worden bewust geen gesimuleerde milliseconden als live latency gerapporteerd. Na #354 schrijft de runner per vraag en route drie of meer inhoudsvrije meetrijen en berekent hij mediaan/p95, recall, locator-, versie- en previewdekking, Graph-calls, response-/contentbytes, retries, throttles en foutcategorieën.
+
+### Operationeel bewijs permissionprobe — 10 september 2026
+
+De acht vereiste `MICROSOFT_*`-namen zijn exact eenmaal aanwezig in Vercel custom environment `preview-stable`. Vier waarden zijn `Config`; de overige waarden die de probe nodig heeft zijn als niet-uitleesbaar `Secret` opgeslagen. De volgende veilige paden zijn beproefd zonder waarden te loggen of blijvend op te slaan:
+
+- Vercel REST: metadata en `Config` zijn leesbaar, maar de gedecrypte endpoint geeft voor `Secret` bewust geen waarde terug;
+- Vercel-dashboard: `Config` heeft *Reveal Value*, `Secret` niet; *Copy to Clipboard* is voor `Secret` uitgeschakeld;
+- Vercel CLI 59.15.1 `env run -e preview-stable`: meldt dat 24 secretwaarden niet kunnen worden opgehaald en injecteert ze niet in het childproces.
+
+Daarom heeft de runner geen vaultverbinding of delegated token geopend en is geen Graph-request gedaan. Tijdelijke helpers en de `0600`-config zijn verwijderd; er is geen secretbestand en geen meetbestand achtergebleven. Dit is een operationele blokkade, geen negatieve permissionmeting: over `Sites.Selected` versus `Files.Read` kan hieruit niets worden geconcludeerd.
+
+Veilige vervolgroutes zijn beperkt tot: (a) de vier oorspronkelijke secretwaarden vanuit de bronsecretmanager tijdelijk in een lokaal, genegeerd `0600`-bestand aanbieden en daarna verwijderen, of (b) een afzonderlijk geautoriseerde, niet-productie uitvoercontext waarin die secrets runtime-only beschikbaar zijn. Secrets tijdelijk zichtbaar maken, scopes verbreden of een probe-endpoint in de applicatie toevoegen hoort niet bij deze spike.
 
 ## Beslismatrix live Graph versus Azure AI Search
 
