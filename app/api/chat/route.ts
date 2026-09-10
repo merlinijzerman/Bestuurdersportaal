@@ -2580,7 +2580,6 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // wát geciteerd wordt en in welke volgorde; de ADAPTER weet hoe zijn eigen
       // bron eruitziet en rendert (notulenlabels, documenttype, bronkop).
       const voltooid = await citeer(retrievalContext, retrievalAdapter, retrievalResultaat, {
-        maxContextTekens: MAX_CONTEXT_TEKENS,
         // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
         // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
         primaireDocumentIds: primaireIds,

@@ -82,6 +82,44 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
 }
 
 /**
+ * Bouwt het auditspoor over EXACT de meegegeven bronnen. Eén functie, gebruikt
+ * door fase 1 én opnieuw door `citeer()` zodra de contextgrens blokken heeft
+ * afgekapt — anders noemt `meta.geselecteerd`, `meta.chunks`,
+ * `bronversie_audit` of `aanvullend` bronnen die nooit naar het model gingen.
+ */
+function bouwRetrievalMeta(
+  opgenomen: Bronresultaat[],
+  basis: RetrievalTussenresultaat["metaBasis"]
+): RetrievalMeta {
+  const primair = opgenomen.filter((b) => basis.primaireRefs.has(b.ref));
+  const aanvullend = opgenomen.filter((b) => !basis.primaireRefs.has(b.ref));
+  const basisMeta = bouwMeta(basis.methode, basis.opgehaald, primair.map(alsAuditBron));
+  return {
+    ...basisMeta,
+    ...basis.diagnostiek,
+    ...basis.extra,
+    chunks: [
+      ...basisMeta.chunks,
+      ...aanvullend.map((b) => ({
+        id: b.ref,
+        document_id: b.documentIdentiteit.documentId,
+        rang: b.rang.score ?? null,
+      })),
+    ],
+    opgehaald: basis.opgehaald,
+    geselecteerd: opgenomen.length,
+    ...(basis.meerdereSporen
+      ? {
+          aanvullend: {
+            chunks: aanvullend.length,
+            documenten: new Set(aanvullend.map((b) => b.documentIdentiteit.documentId)).size,
+          },
+        }
+      : {}),
+  };
+}
+
+/**
  * Fase 1: kandidaten ophalen, selecteren, samenvoegen en begrenzen. Levert een
  * ONVOLTOOID resultaat — er zijn nog geen citaties. Zie `citeer()`.
  */
@@ -103,10 +141,15 @@ export async function voerRetrievalUit(
   //    gedeelde scope zou het aanvullende spoor mee-scopen op de primaire
   //    documenten, en dan zoekt de verbreding naar de bibliotheek niet meer
   //    breder — precies wat zij moet doen.
+  //    `ctx.scope.documentIds` is voor een adapter de ENIGE bron van waarheid;
+  //    de orkestratie zet de spoorscope hier één keer en gebruikt diezelfde
+  //    afgeleide context ook voor `verrijkSelectie`.
+  const spoorContext = sporen.map(({ query }) => ({
+    ...ctx,
+    scope: { ...ctx.scope, documentIds: query.documentScope },
+  }));
   const uitkomsten: AdapterUitkomst[] = await Promise.all(
-    sporen.map(({ query }) =>
-      opdracht.adapter.zoek({ ...ctx, scope: { ...ctx.scope, documentIds: query.documentScope } }, query)
-    )
+    sporen.map(({ query }, i) => opdracht.adapter.zoek(spoorContext[i], query))
   );
 
   // 2. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
@@ -153,7 +196,10 @@ export async function voerRetrievalUit(
     // Providerspecifieke uitbreiding (Supabase: parent-context). Per spoor, op
     // exact dezelfde plek als vóór T2-1.
     if (opdracht.adapter.verrijkSelectie && gekozen.length > 0) {
-      const v = await opdracht.adapter.verrijkSelectie(ctx, gekozen);
+      const v = await opdracht.adapter.verrijkSelectie(spoorContext[i], gekozen, {
+        // De peildatum van DIT spoor — nooit "vandaag" afleiden.
+        peildatum: sporen[i].query.filters?.peildatum ?? "",
+      });
       gekozen = v.resultaten;
       Object.assign(extra, v.meta ?? {});
     }
@@ -176,36 +222,17 @@ export async function voerRetrievalUit(
   //    meetellen, en dan is de grens geen grens. Zij geldt in `citeer()`, op de
   //    werkelijk gerenderde blokken.
 
-  // 7. Auditspoor. De basis komt van het primaire spoor; de aanvullende bronnen
-  //    dragen alleen ref/document/rang — dezelfde asymmetrie als vóór T2-1,
-  //    want deze lijst voedt de bronset-hash van de bevroren reflectiebronset.
-  const primairGekozen = geselecteerd.filter((b) => primair.includes(b));
-  const aanvullendGekozen = geselecteerd.filter((b) => !primair.includes(b));
-  const basis = uitkomsten[0];
-  const basisMeta = bouwMeta(basis.methode as RetrievalMeta["methode"], basis.opgehaald, primairGekozen.map(alsAuditBron));
-  const meta: RetrievalMeta = {
-    ...basisMeta,
-    ...(basis.diagnostiek ?? {}),
-    ...extraPerSpoor[0],
-    chunks: [
-      ...basisMeta.chunks,
-      ...aanvullendGekozen.map((b) => ({
-        id: b.ref,
-        document_id: b.documentIdentiteit.documentId,
-        rang: b.rang.score ?? null,
-      })),
-    ],
+  // 7. Auditspoor over de HUIDIGE selectie. Kapt `citeer()` later blokken af,
+  //    dan wordt deze meta daar opnieuw gebouwd over exact de opgenomen bronnen.
+  const metaBasis = {
+    methode: uitkomsten[0].methode as RetrievalMeta["methode"],
     opgehaald: uitkomsten.reduce((s, u) => s + u.opgehaald, 0),
-    geselecteerd: geselecteerd.length,
-    ...(uitkomsten.length > 1
-      ? {
-          aanvullend: {
-            chunks: aanvullendGekozen.length,
-            documenten: new Set(aanvullendGekozen.map((b) => b.documentIdentiteit.documentId)).size,
-          },
-        }
-      : {}),
+    diagnostiek: uitkomsten[0].diagnostiek ?? {},
+    extra: extraPerSpoor[0] ?? {},
+    primaireRefs: new Set(primair.map((b) => b.ref)),
+    meerdereSporen: uitkomsten.length > 1,
   };
+  const meta = bouwRetrievalMeta(geselecteerd, metaBasis);
 
   return {
     kandidaten: begrensd.flat(),
@@ -215,6 +242,10 @@ export async function voerRetrievalUit(
     truncatie,
     fout: uitkomsten.find((u) => u.fout)?.fout,
     meta,
+    // De gezaghebbende grens komt van de primaire query en reist mee, zodat
+    // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).
+    maxContextTekens: sporen[0].query.maxContextTekens,
+    metaBasis,
   };
 }
 
@@ -242,10 +273,16 @@ export async function citeer(
 
   // Nummering, sentinel, neutralisatie, BronVerwijzing en de contextgrens:
   // centraal, identiek voor elke provider.
-  const c = bouwCitaties(verrijkt, opdracht);
+  // Eerst de DEFINITIEVE context bouwen — inclusief de harde grens — en pas
+  // daarna alle metadata afleiden van exact de bronnen die erin staan.
+  const c = bouwCitaties(verrijkt, {
+    ...opdracht,
+    maxContextTekens: opdracht.maxContextTekens ?? tussen.maxContextTekens,
+  });
   return {
     ...tussen,
     geselecteerd: c.opgenomen,
+    meta: bouwRetrievalMeta(c.opgenomen, tussen.metaBasis),
     bronverwijzingen: c.bronnen,
     contextTekst: c.contextTekst,
     sentinel: c.sentinel,

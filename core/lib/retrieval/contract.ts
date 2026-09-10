@@ -63,7 +63,10 @@ export interface RetrievalQuery {
    * gekozen documenten en het aanvullende spoor bewust ZONDER documentscope —
    * dat is juist de verbreding naar de bibliotheek. Eén gedeelde scope op de
    * context zou dat aanvullende spoor mee-scopen en de verbreding stil opheffen.
-   * `undefined` = geen documentafbakening voor dit spoor.
+   *
+   * DE ADAPTER LEEST DIT VELD NIET. De orkestratie zet het in de afgeleide
+   * spoorcontext; `ctx.scope.documentIds` is de enige bron van waarheid voor
+   * een adapter. Twee leesplekken zouden opnieuw uiteen kunnen lopen.
    */
   documentScope?: string[];
   origineleVraag: string;
@@ -99,8 +102,14 @@ export interface RetrievalQuery {
 export interface Versiebewijs {
   soort: "etag" | "ctag" | "hash" | "status-datum" | "onbekend";
   waarde: string | null;
-  /** Moment waarop de VERSIE is vastgesteld — niet de rechtencheck. */
-  gecontroleerdOp: string;
+  /**
+   * Moment waarop de VERSIE is vastgesteld — niet de rechtencheck. **`null` =
+   * onbekend**, en dat is een geldige uitkomst: op het Supabase-pad bestaat er
+   * (tot T2-3/R1) geen controlemoment. Een lege string zou een tijdstempel
+   * suggereren die er niet is, en de toelatingspoort van PR-C gaat hierop
+   * toetsen — dan is schijnzekerheid het gevaarlijkst.
+   */
+  gecontroleerdOp: string | null;
 }
 
 /**
@@ -237,8 +246,24 @@ export interface RetrievalTussenresultaat {
   latencyMs: number;
   truncatie?: { reden: "kandidaten" | "tekens" | "tijd" | "annulering" };
   fout?: RetrievalFoutcategorie;
-  /** Bestaande audit-vorm, byte-compatibel met vóór de verplaatsing. */
+  /**
+   * Auditvorm over de op DIT moment geselecteerde bronnen. Kapt de
+   * contextopbouw later blokken af, dan bouwt `citeer()` deze meta opnieuw op
+   * exact de opgenomen bronnen — anders noemt het auditspoor bronnen die nooit
+   * naar het model zijn gegaan.
+   */
   meta: RetrievalMeta;
+  /** De gezaghebbende contextgrens, overgenomen van de primaire query. */
+  maxContextTekens: number;
+  /** Ingrediënten om de meta opnieuw te bouwen na afkappen. Intern. */
+  metaBasis: {
+    methode: RetrievalMeta["methode"];
+    opgehaald: number;
+    diagnostiek: Partial<RetrievalMeta>;
+    extra: Partial<RetrievalMeta>;
+    primaireRefs: ReadonlySet<string>;
+    meerdereSporen: boolean;
+  };
 }
 
 /** VOLTOOID. Het enige dat de generatielaag mag gebruiken. */
@@ -255,8 +280,13 @@ export interface CitaatOpdracht {
   primaireDocumentIds: ReadonlySet<string>;
   peildatum: string;
   hoofddocumentLabel: string;
-  /** Harde bovengrens op de GERENDERDE context; zie ontwerp §4.1. */
-  maxContextTekens: number;
+  /**
+   * Harde bovengrens op de GERENDERDE context. Hoort NIET in de citaatopdracht
+   * van de aanroeper: de gezaghebbende waarde staat op de query en reist mee in
+   * `RetrievalTussenresultaat.maxContextTekens`. Twee plekken zouden uiteen
+   * kunnen lopen. Alleen tests zetten hem hier rechtstreeks.
+   */
+  maxContextTekens?: number;
   /** Vaste sentinel (tests); anders per beurt onvoorspelbaar. */
   sentinel?: string;
   startIndex?: number;
@@ -273,7 +303,10 @@ export interface RetrievalAdapter {
    */
   verrijkSelectie?(
     ctx: RetrievalContext,
-    geselecteerd: Bronresultaat[]
+    geselecteerd: Bronresultaat[],
+    /** De peildatum van DIT spoor. Nooit "vandaag" afleiden: dan zou een
+     *  historische retrieval ongemerkt met de datum van nu worden verrijkt. */
+    opties: { peildatum: string }
   ): Promise<{ resultaten: Bronresultaat[]; meta?: Partial<RetrievalMeta> }>;
   /**
    * Providerspecifieke WEERGAVEMETADATA aanvullen (notulenlabel, documenttype,

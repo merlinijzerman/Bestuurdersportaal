@@ -114,7 +114,6 @@ const LEGE_OPDRACHT: CitaatOpdracht = {
   primaireDocumentIds: new Set<string>(),
   peildatum: "2026-09-10",
   hoofddocumentLabel: " [hoofddocument]",
-  maxContextTekens: 100_000,
   sentinel: "S",
 };
 
@@ -386,4 +385,118 @@ test("T2-1 — de contextgrens geldt op de GERENDERDE blokken, inclusief kop en 
   // De uitgebreide passage telt mee: op de kale `passage` (4 + 8 tekens) zou
   // niets zijn afgekapt.
   assert.match(voltooid.contextTekst, /P{100}/);
+});
+
+// ── Reviewronde 3 ───────────────────────────────────────────────────────────
+
+test("T2-1 — GEEN adapter leest de scope uit de query", async () => {
+  // Blokker uit de review: de orkestratie zette de spoorscope in de afgeleide
+  // context, maar de Supabase-adapter las opnieuw `query.documentScope`. Twee
+  // leesplekken kunnen uiteenlopen, en dan zoekt een spoor stil breder of
+  // smaller dan bedoeld. `ctx.scope.documentIds` is de enige bron van waarheid.
+  //
+  // Dit is een STATISCHE controle over de hele adaptermap: ESM-bindings zijn
+  // read-only, dus de echte functie is niet te onderscheppen, en een
+  // gedragstest zou een database vereisen. De orkestratietest hierboven bewijst
+  // dat de context de spoorscope draagt; deze bewijst dat geen adapter een
+  // tweede bron raadpleegt.
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const map = new URL("../../core/lib/retrieval/", import.meta.url);
+  const adapters = readdirSync(map).filter((b) => b.endsWith("-adapter.ts"));
+  assert.ok(adapters.length >= 1, "verwacht ten minste één adapterbestand");
+  for (const bestand of adapters) {
+    const bron = readFileSync(new URL(bestand, map), "utf8");
+    const zonderCommentaar = bron.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    assert.ok(
+      !/query\.documentScope/.test(zonderCommentaar),
+      `${bestand} leest query.documentScope — de scope hoort uitsluitend uit ctx.scope te komen`
+    );
+    assert.match(bron, /ctx\.scope\?\.documentIds/, `${bestand} moet de scope uit de context lezen`);
+  }
+});
+
+test("T2-1 — een limiet kleiner dan het eerste bronblok levert een lege, consistente context", async () => {
+  const adapter = nepAdapter({
+    perQuery: { primair: [sharepointBron(1, "doc-a", "Een passage die er niet in past.")] },
+  });
+  const tussen = await voerRetrievalUit(CTX, {
+    adapter,
+    sporen: [{ query: QUERY("primair", { maxContextTekens: 10 }), grenzen: GRENZEN }],
+  });
+  const voltooid = await citeer(CTX, adapter, tussen, LEGE_OPDRACHT);
+
+  assert.equal(voltooid.geselecteerd.length, 0, "geen enkel blok past binnen 10 tekens");
+  assert.equal(voltooid.bronverwijzingen.length, 0);
+  assert.deepEqual(voltooid.truncatie, { reden: "tekens" });
+  // En het auditspoor mag geen bron noemen die nooit naar het model ging.
+  assert.equal(voltooid.meta.geselecteerd, 0);
+  assert.deepEqual(voltooid.meta.chunks, []);
+  assert.deepEqual(voltooid.meta.bronversie_audit, []);
+});
+
+test("T2-1 — na afkappen noemt het auditspoor exact de opgenomen bronnen", async () => {
+  // Blokker uit de review: `citeer()` gaf wél de afgekapte selectie terug maar
+  // nam de metadata van vóór het afkappen over. Dan noemt `meta.chunks` of
+  // `bronversie_audit` bronnen die het model nooit heeft gezien.
+  const groot = sharepointBron(1, "doc-primair", "P".repeat(300));
+  const tweede = sharepointBron(2, "doc-aanvullend", "Q".repeat(300));
+  const adapter = nepAdapter({
+    perQuery: { primair: [groot], aanvullend: [tweede] },
+  });
+  const tussen = await voerRetrievalUit(CTX, {
+    adapter,
+    sporen: [
+      { query: QUERY("primair", { maxContextTekens: 400 }), grenzen: GRENZEN },
+      { query: QUERY("aanvullend"), grenzen: GRENZEN },
+    ],
+  });
+  assert.equal(tussen.meta.geselecteerd, 2, "vóór het afkappen staan er twee in");
+
+  const voltooid = await citeer(CTX, adapter, tussen, LEGE_OPDRACHT);
+  assert.equal(voltooid.geselecteerd.length, 1, "de tweede bron past niet meer");
+  assert.equal(voltooid.meta.geselecteerd, 1);
+  assert.deepEqual(voltooid.meta.chunks.map((c) => c.id), ["sp-1"]);
+  assert.deepEqual(voltooid.meta.bronversie_audit?.map((b) => b.document_id), ["doc-primair"]);
+  // `aanvullend` telde één bron; die is afgekapt, dus moet nu op nul staan.
+  assert.deepEqual(voltooid.meta.aanvullend, { chunks: 0, documenten: 0 });
+});
+
+test("T2-1 — parent-verrijking krijgt de peildatum van het spoor, niet die van vandaag", async () => {
+  let gezienPeildatum: string | null = null;
+  const basis = nepAdapter({ perQuery: { primair: [sharepointBron(1, "doc-a", "A")] } });
+  const adapter: RetrievalAdapter = {
+    ...basis,
+    async verrijkSelectie(_ctx, geselecteerd, opties) {
+      gezienPeildatum = opties.peildatum;
+      return { resultaten: geselecteerd };
+    },
+  };
+  await voerRetrievalUit(CTX, {
+    adapter,
+    sporen: [
+      {
+        query: QUERY("primair", { filters: { modus: "historisch", peildatum: "2019-01-01" } }),
+        grenzen: GRENZEN,
+      },
+    ],
+  });
+  assert.equal(gezienPeildatum, "2019-01-01", "een historische retrieval mag niet met de datum van nu worden verrijkt");
+});
+
+test("T2-1 — ontbrekend versiebewijs is expliciet onbekend, geen lege tijdstempel", async () => {
+  const { chunkAlsBronresultaat } = await import("../../core/lib/rag");
+  const zonderDatum = chunkAlsBronresultaat({
+    id: "c1", document_id: "d1", tekst: "t", pagina: null, paragraaf: null, chunk_index: 0,
+    documenten: { titel: "T", bron: "B", bibliotheek: "fonds", opslag_pad: null },
+  } as Parameters<typeof chunkAlsBronresultaat>[0]);
+  assert.equal(zonderDatum.versie.soort, "onbekend");
+  assert.equal(zonderDatum.versie.waarde, null);
+  assert.equal(zonderDatum.versie.gecontroleerdOp, null, "een lege string suggereert een tijdstempel die er niet is");
+
+  const metDatum = chunkAlsBronresultaat({
+    id: "c2", document_id: "d2", tekst: "t", pagina: null, paragraaf: null, chunk_index: 0,
+    documenten: { titel: "T", bron: "B", bibliotheek: "fonds", opslag_pad: null, documentdatum: "2026-01-31" },
+  } as Parameters<typeof chunkAlsBronresultaat>[0]);
+  assert.equal(metDatum.versie.soort, "status-datum");
+  assert.equal(metDatum.versie.gecontroleerdOp, null, "er is op dit pad (tot T2-3/R1) geen controlemoment");
 });

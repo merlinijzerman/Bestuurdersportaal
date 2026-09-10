@@ -1710,7 +1710,12 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       bron: d.bron ?? null,
       fondsId: d.fonds_id ?? null,
     },
-    versie: { soort: "status-datum", waarde: d.documentdatum ?? null, gecontroleerdOp: "" },
+    // R1 (T2-3) brengt de volledige hash. Tot dan is de documentdatum de ZWAKKE
+    // legacyfallback, en is er geen controlemoment: `gecontroleerdOp: null` zegt
+    // dat expliciet. Zonder documentdatum is er helemaal geen versiebewijs.
+    versie: d.documentdatum
+      ? { soort: "status-datum" as const, waarde: d.documentdatum, gecontroleerdOp: null }
+      : { soort: "onbekend" as const, waarde: null, gecontroleerdOp: null },
     locator: { pagina: chunk.pagina, paragraaf: chunk.paragraaf, chunkIndex: chunk.chunk_index },
     passage: chunk.tekst,
     status: {

@@ -106,7 +106,10 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
         ctx.fondsId,
         query.maxResultaten,
         query.hybrideAan,
-        query.documentScope,
+        // ENIGE bron van waarheid voor de scope: de (spoor)context. De adapter
+        // leest bewust NIET `query.documentScope` — twee leesplekken kunnen
+        // uiteenlopen, en dan zoekt een spoor stil breder of smaller.
+        ctx.scope?.documentIds,
         query.filters,
         {
           ...vlaggen,
@@ -136,13 +139,15 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
      * Supabase-werk, dus een adapterhook — de orkestratie roept hem per spoor
      * aan, direct ná de selectie, op exact dezelfde plek als vóór T2-1.
      */
-    async verrijkSelectie(ctx: RetrievalContext, geselecteerd: Bronresultaat[]) {
+    async verrijkSelectie(ctx: RetrievalContext, geselecteerd: Bronresultaat[], opties: { peildatum: string }) {
       if (!vlaggen.parentRetrieval) return { resultaten: geselecteerd };
       const chunks = geselecteerd
         .map((b) => chunkPerRef.get(b.ref))
         .filter((c): c is DocumentChunk => Boolean(c));
       if (chunks.length === 0) return { resultaten: geselecteerd };
-      const p = await verrijkMetParents(chunks, ctx.fondsId, new Date().toISOString().slice(0, 10));
+      // De peildatum van HET SPOOR, nooit "vandaag": anders zou een historische
+      // retrieval ongemerkt met de datum van nu worden verrijkt.
+      const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum);
       for (const c of p.chunks) chunkPerRef.set(c.id, c);
       return { resultaten: p.chunks.map((c, i) => chunkAlsBronresultaat(c, i)), meta: { parent: p.meta } };
     },

@@ -36,7 +36,10 @@ export interface Citaatuitkomst {
 
 const GEEN_TREFFERS = "Er zijn geen relevante documenten gevonden in de bibliotheek.";
 
-export function bouwCitaties(bronnen: Bronresultaat[], opdracht: CitaatOpdracht): Citaatuitkomst {
+export function bouwCitaties(
+  bronnen: Bronresultaat[],
+  opdracht: CitaatOpdracht & { maxContextTekens: number }
+): Citaatuitkomst {
   const sentinel = opdracht.sentinel ?? maakBronSentinel();
   const startIndex = opdracht.startIndex ?? 0;
   if (bronnen.length === 0) {
