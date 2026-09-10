@@ -361,6 +361,24 @@ gebruiken meet de vectorarm gelijkenis in plaats van ruis. Het is een hashing-ve
 bij elkaar, zodat de vastgelegde rangorde betekenisvol is en verschuift als de tekst
 verandert.
 
+**De één uitzondering op "geen productiecode", expliciet goedgekeurd.** `EMBED_URL`
+in `core/lib/embeddings.ts` was een hardcoded constante, dus zonder omleiding is het
+hybride pad niet te karakteriseren — de keten valt dan altijd terug op FTS. T1b voegt
+daarom `resolveMistralBaseUrl` toe aan `core/lib/ai-provider-endpoint.mjs` plus één
+aanroep in `embeddings.ts`: **twee regels productiecode**. De omleiding volgt exact het
+patroon van de Anthropic-seam uit #311 — dezelfde dubbele grendel (expliciet `local`,
+`SEED_DOELOMGEVING=local` én de lokale Supabase-URL) — maar met een **eigen vlag**,
+zodat gebruik van de chatstub de embeddingsomleiding niet stilzwijgend aanzet en
+altijd zichtbaar blijft wélke provider is omgeleid.
+
+Zonder lokale testvlaggen verandert er niets aan het productiegedrag, en elke
+onvolledige of niet-lokale configuratie **faalt gesloten** (vier tests dekken de
+niet-lokale omgeving, een externe URL, credentials in de URL, een pad in de URL en een
+ontbrekende URL). De opdrachtgever heeft deze afwijking van de ticketvoorwaarde op
+10 september 2026 expliciet goedgekeurd; zij is daarmee een **gemotiveerde
+test-seam-uitzondering**, geen precedent voor productiewijzigingen in een
+karakteriseringstranche.
+
 De vier `w322b.*`-scenario's draaien tegen een **aparte serverinstantie** met
 `HYBRID_SEARCH=on` (CI: poort 3003). Reden: met hybride aan verandert `methode` op elk
 retrievalpad, dus zouden de 390 bestaande snapshots omvallen. Zonder de stub-URL worden
