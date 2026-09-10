@@ -166,6 +166,10 @@ const CHUNK_BUDGET = 10;
 // afkapt. T2-1 introduceert de grens; het bijstellen ervan is een aparte,
 // gemotiveerde keuze — en de orkestratie meldt afkappen als truncatie."tekens".
 const MAX_CONTEXT_TEKENS = 120_000;
+/** Kandidatenpool: ruimer dan de eindselectie, zodat de centrale weging een
+ *  kandidaat van plek 15 alsnog in de top kan halen. Spiegelt de overfetch die
+ *  de RPC al deed, zodat de pool niet twee keer wordt opgerekt. */
+const kandidatenpool = (maxResultaten: number) => Math.max(maxResultaten * 3, 20);
 // 12-08-2026 — budget voor het AANVULLENDE spoor bij een primair document.
 // Bewust een eigen budget bovenop CHUNK_BUDGET in plaats van een verdeling
 // binnen dat budget: zo houdt het gekozen hoofddocument exact de ruimte die het
@@ -2468,7 +2472,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
         taaktype: "chat_generatie" as const,
         bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
-        // ctx.scope is de ENIGE bron van waarheid voor scope.
+        // De BEURTscope (audit, vergadering/agendapunt); de DOCUMENTscope is
+        // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
         scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
         correlationId: ctx.requestId,
       };
@@ -2480,17 +2485,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             {
               query: {
                 naam: "primair",
+                // Scope PER SPOOR: het primaire spoor is afgebakend tot het
+                // gekozen stuk of de gekoppelde stukken.
+                documentScope: scopeDocumentIds,
                 origineleVraag: gereformuleerd ? vraag : zoekVraag,
                 zoekvraag: zoekVraag,
                 strategie: "gericht" as const,
-                maxKandidaten: CHUNK_BUDGET,
+                maxResultaten: CHUNK_BUDGET,
+                maxKandidaten: kandidatenpool(CHUNK_BUDGET),
                 maxContextTekens: MAX_CONTEXT_TEKENS,
                 hybrideAan,
                 // Spoor A draagt géén filters in de primaire modi.
                 filters: primairPadActief ? undefined : retrievalFilters,
               },
               grenzen: {
-                maxResults: CHUNK_BUDGET,
                 maxPerDoc: maxPerDocVoor(CHUNK_BUDGET),
                 representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
                 regimeWeging: geresolveerdeVlaggen.regimeWeging,
@@ -2502,17 +2510,21 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                   {
                     query: {
                       naam: "aanvullend",
+                      // GEEN documentscope: dit spoor is juist de verbreding
+                      // naar de bibliotheek. Zou het de primaire scope erven,
+                      // dan zocht het alleen in dezelfde stukken.
+                      documentScope: undefined,
                       origineleVraag: gereformuleerd ? vraag : zoekVraag,
                       zoekvraag: zoekVraag,
                       strategie: "gericht" as const,
-                      maxKandidaten: AANVULLEND_BUDGET,
+                      maxResultaten: AANVULLEND_BUDGET,
+                      maxKandidaten: kandidatenpool(AANVULLEND_BUDGET),
                       maxContextTekens: MAX_CONTEXT_TEKENS,
                       hybrideAan,
                       // Altijd de bibliotheekfilters, óók in agendapunt-modus.
                       filters: bibliotheekFilters,
                     },
                     grenzen: {
-                      maxResults: AANVULLEND_BUDGET,
                       maxPerDoc: maxPerDocVoor(AANVULLEND_BUDGET),
                       representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
                       regimeWeging: geresolveerdeVlaggen.regimeWeging,
@@ -2568,6 +2580,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // wát geciteerd wordt en in welke volgorde; de ADAPTER weet hoe zijn eigen
       // bron eruitziet en rendert (notulenlabels, documenttype, bronkop).
       const voltooid = await citeer(retrievalContext, retrievalAdapter, retrievalResultaat, {
+        maxContextTekens: MAX_CONTEXT_TEKENS,
         // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
         // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
         primaireDocumentIds: primaireIds,

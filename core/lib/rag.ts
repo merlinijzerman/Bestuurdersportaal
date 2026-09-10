@@ -58,6 +58,8 @@ function bouwMeta(methode: RetrievalMeta["methode"], opgehaald: number, geselect
   return bouwMetaNeutraal(methode, opgehaald, geselecteerd.map(alsAuditBron));
 }
 import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
+import { bouwCitaties } from "./retrieval/citatie";
+import type { Bronresultaat } from "./retrieval/contract";
 export type { SelectieAfvalReden, SelectieDiagnostiek } from "./retrieval/selectie";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
@@ -1694,148 +1696,76 @@ export { neutraliseerBrontekst, maakBronSentinel };
 // je hem weg, dan wordt er één gegenereerd — maar geef bij een prompt met
 // MEERDERE contextblokken dezelfde sentinel mee, anders sluit het model de
 // blokken niet consistent.
+/** Chunk → contract-`Bronresultaat`, inclusief de weergavemetadata die de
+ *  centrale citaatopbouw nodig heeft. Eén plek voor rag.ts en de adapter. */
+export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronresultaat {
+  const d = chunk.documenten;
+  return {
+    ref: chunk.id,
+    bronsoort: d.bibliotheek === "generiek" ? "generiek" : chunk.notulen ? "notulen" : "fonds",
+    titel: d.titel,
+    documentIdentiteit: {
+      documentId: chunk.document_id,
+      bibliotheek: d.bibliotheek ?? null,
+      bron: d.bron ?? null,
+      fondsId: d.fonds_id ?? null,
+    },
+    versie: { soort: "status-datum", waarde: d.documentdatum ?? null, gecontroleerdOp: "" },
+    locator: { pagina: chunk.pagina, paragraaf: chunk.paragraaf, chunkIndex: chunk.chunk_index },
+    passage: chunk.tekst,
+    status: {
+      documentstatus: d.documentstatus ?? null,
+      bronstatus: d.bronstatus ?? null,
+      geldigTot: d.geldig_tot ?? null,
+      actueel: (d.documentstatus ?? null) === "van_kracht",
+    },
+    rang: { positie, score: chunk.rang ?? null, fts: chunk.fts_rang ?? null, vec: chunk.vec_rang ?? null },
+    curatie: { normgewicht: d.normgewicht ?? null, wettelijkRegime: d.wettelijk_regime ?? null },
+    weergave: {
+      bronorganisatie: d.bronorganisatie ?? null,
+      documentdatum: d.documentdatum ?? null,
+      opslagPad: d.opslag_pad ?? null,
+      externUrl: d.extern_url ?? null,
+      documenttype: d.documenttype ?? null,
+      bestandstype: d.bestandstype ?? null,
+      notulen: chunk.notulen
+        ? {
+            vergaderingTitel: chunk.notulen.vergadering_titel,
+            agendapuntVolgnummer: chunk.notulen.agendapunt_volgnummer,
+            agendapuntTitel: chunk.notulen.agendapunt_titel,
+          }
+        : null,
+      aangeleverdePassage: chunk.aangeleverde_passage ?? null,
+    },
+  };
+}
+
+/**
+ * T2-1 — DUNNE WRAPPER. De citaatopbouw leeft centraal in
+ * `core/lib/retrieval/citatie.ts`: nummering, sentinel, neutralisatie en
+ * `BronVerwijzing` mogen niet per provider verschillen (besluit 0213 punt 5).
+ * Deze wrapper houdt de bestaande aanroepers (reflectiepad, breed pad, AQLab)
+ * ongewijzigd. Zonder contextgrens — die geldt op het contractpad.
+ */
 export function maakContext(
   chunks: DocumentChunk[],
   startIndex = 0,
   sentinel: string = maakBronSentinel(),
-  // 12-08-2026 — primaire-documentmodus. Is er een door de gebruiker gekozen
-  // hoofddocument, dan krijgt elke bron in de kop een herkomstmarkering, zodat
-  // het model (en daarmee de lezer) ziet welke uitspraak uit het gekozen stuk
-  // komt en welke uit de rest van de bibliotheek. Leeg/afwezig = geen enkele
-  // markering, exact het gedrag van vóór deze wijziging.
   primaireDocumentIds?: ReadonlySet<string> | null,
-  // Peildatum voor het geldigheidsdeel van het statuslabel. Zonder peildatum
-  // doet het label géén uitspraak over verlopen geldigheid (geen schijnzekerheid).
   peildatum?: string,
-  // Het label voor een PRIMAIRE bron. Op /ai is dat het door de gebruiker
-  // gekozen stuk ("hoofddocument"); in agendapunt-modus zijn het de aan het
-  // agendapunt gekoppelde stukken, en dan leest "[gekoppeld stuk]" correcter.
   primairLabel: string = " [hoofddocument]"
-): {
-  contextTekst: string;
-  bronnen: BronVerwijzing[];
-  geneutraliseerd: number;
-  sentinel: string;
-} {
-  if (chunks.length === 0) {
-    return {
-      contextTekst: "Er zijn geen relevante documenten gevonden in de bibliotheek.",
-      bronnen: [],
-      geneutraliseerd: 0,
-      sentinel,
-    };
-  }
-
-  const bronnen: BronVerwijzing[] = [];
-  const contextDelen: string[] = [];
-  let geneutraliseerdTotaal = 0;
-
-  chunks.forEach((chunk, index) => {
-    const doc = chunk.documenten;
-    const bronLabel = `[Bron ${startIndex + index + 1}]`;
-    const locatie = [
-      chunk.paragraaf && `${chunk.paragraaf}`,
-      chunk.pagina && `pag. ${chunk.pagina}`,
-    ]
-      .filter(Boolean)
-      .join(", ");
-
-    // Increment D — notulensegmenten dragen een agendapunt-specifieke bronvermelding
-    // ("Vastgestelde notulen [verg], agendapunt N — [titel]"); overige chunks houden
-    // het bestaande "[bron] — [titel]"-label.
-    const bronTitel = chunk.notulen
-      ? notulenBronLabel(
-          chunk.notulen.vergadering_titel,
-          chunk.notulen.agendapunt_volgnummer,
-          chunk.notulen.agendapunt_titel
-        )
-      : `${doc.bron} — ${doc.titel}`;
-
-    // Increment G — generieke bronnen expliciet labelen, zodat het model ze niet
-    // presenteert als door het fonds bestuurlijk vastgesteld (#22/#23). Het label
-    // staat in de contextregel; de gestructureerde velden gaan mee in `bronnen`.
-    const bronsoortLabel =
-      doc.bibliotheek === "generiek"
-        ? ` [generiek/extern kader${doc.bronorganisatie ? ` — ${doc.bronorganisatie}` : ""}]`
-        : "";
-
-    // R1.6 — is de treffer uitgebreid tot zijn structuur-unit, dan leveren we die
-    // samengevoegde passage als brontekst; het bronlabel/locatie/fragment-preview
-    // blijft op de treffer-chunk. Bewuste small-to-big-afweging: de aangeleverde
-    // passage kan tekst van een náást-liggende pagina/paragraaf bevatten, terwijl
-    // de getoonde locatie die van de treffer-chunk is. De citatie-ANKER (welk
-    // document/welke unit) blijft dus exact; de pagina-aanduiding kan de bredere
-    // unit onder-specificeren. Alleen achter de parent-vlag; kale chunk = default.
-    const ruweBrontekst = chunk.aangeleverde_passage ?? chunk.tekst;
-    const { tekst: brontekst, geneutraliseerd } = neutraliseerBrontekst(ruweBrontekst);
-    geneutraliseerdTotaal += geneutraliseerd;
-
-    // H-10: elke bron in een eigen, met een onvoorspelbare sentinel afgebakend
-    // blok. Alles tussen de openings- en sluittag is DATA, nooit instructie.
-    // 12-08-2026 — statuslabel. Tot nu toe reisde de documentstatus alleen mee
-    // naar de bronkaart in de UI en niet naar de prompt; het model kon dus niet
-    // zien dat een aangeleverde bron nog niet was vastgesteld. Met de bredere
-    // retrieval van deze release is dit label het verschil tussen bruikbare
-    // duiding en versieverwarring. Enige bron: core/lib/documentstatus-label.ts.
-    const statusLabel = statuslabelVoorBron(
-      {
-        documentstatus: doc.documentstatus,
-        bronstatus: doc.bronstatus,
-        geldig_tot: doc.geldig_tot,
-      },
-      peildatum
-    );
-
-    // Herkomstmarkering in de primaire-documentmodus (zie de parameter hierboven).
-    const herkomstLabel =
-      primaireDocumentIds && primaireDocumentIds.size > 0
-        ? primaireDocumentIds.has(chunk.document_id)
-          ? primairLabel
-          : " [aanvullend uit de bibliotheek]"
-        : "";
-
-    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${statusLabel}${herkomstLabel}${locatie ? ` (${locatie})` : ""}`;
-    contextDelen.push(
-      `<bron s="${sentinel}" nr="${startIndex + index + 1}">\n${kop}:\n${brontekst}\n</bron s="${sentinel}">`
-    );
-
-    bronnen.push({
-      document_id: chunk.document_id,
-      titel: chunk.notulen ? bronTitel : doc.titel,
-      bron: doc.bron,
-      pagina: chunk.pagina,
-      paragraaf: chunk.paragraaf,
-      // Het citaat is sinds tranche 2 het bewijsstuk in de hover-preview op de
-      // pill: afkappen op een zinsgrens i.p.v. blind op 150 tekens, en alleen
-      // een beletselteken als er écht is afgekapt (zie core/lib/bronfragment.ts).
-      // Bewust de KALE chunk-tekst, niet `aangeleverde_passage`: de vindplaats
-      // die erbij staat is die van de treffer-chunk.
-      fragment: bouwBronfragment(chunk.tekst),
-      heeft_origineel: !!doc.opslag_pad,
-      documentstatus: doc.documentstatus ?? null,
-      bronstatus: doc.bronstatus ?? null,
-      documentdatum: doc.documentdatum ?? null,
-      geldig_tot: doc.geldig_tot ?? null,
-      bibliotheek: doc.bibliotheek ?? null,
-      bronorganisatie: doc.bronorganisatie ?? null,
-      normgewicht: doc.normgewicht ?? null,
-      extern_url: doc.extern_url ?? null,
-      // Tranche 2B — doorgeefvelden voor de documentlijst. Ze staan hier ná de
-      // context-opbouw hierboven en raken die niet: `contextTekst` wordt uit
-      // expliciet benoemde velden gebouwd, het bronnen-array wordt nergens
-      // geserialiseerd. Zie verrijkDocumentmetadata().
-      documenttype: doc.documenttype ?? null,
-      bestandstype: doc.bestandstype ?? null,
-    });
-  });
-
-  return {
-    contextTekst: contextDelen.join("\n\n"),
-    bronnen,
-    geneutraliseerd: geneutraliseerdTotaal,
+): { contextTekst: string; bronnen: BronVerwijzing[]; geneutraliseerd: number; sentinel: string } {
+  const r = bouwCitaties(chunks.map((c, i) => chunkAlsBronresultaat(c, i)), {
+    primaireDocumentIds: primaireDocumentIds ?? new Set<string>(),
+    peildatum: peildatum ?? "",
+    hoofddocumentLabel: primairLabel,
+    maxContextTekens: 0,
     sentinel,
-  };
+    startIndex,
+  });
+  return { contextTekst: r.contextTekst, bronnen: r.bronnen, geneutraliseerd: r.geneutraliseerd, sentinel: r.sentinel };
 }
+
 
 // Haalt alle technisch toegestane chunks van de gescopete document(en) op,
 // geordend op document en chunk-index — voor full-document en map-reduce. Géén

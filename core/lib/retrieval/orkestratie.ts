@@ -19,6 +19,7 @@
 import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
+import { bouwCitaties } from "./citatie";
 import type {
   AdapterUitkomst,
   Bronresultaat,
@@ -33,7 +34,6 @@ import type {
 
 /** Grenzen en vlaggen die de selectie stuurt; per query geresolveerd. */
 export interface SelectiegrenzenPerQuery {
-  maxResults: number;
   maxPerDoc: number;
   representatieConstraints: boolean;
   regimeWeging: boolean;
@@ -99,8 +99,14 @@ export async function voerRetrievalUit(
   }
 
   // 1. Adapters bevragen. De sporen draaien parallel, net als vóór T2-1.
+  //    Elk spoor krijgt een AFGELEIDE context met zijn EIGEN documentscope. Eén
+  //    gedeelde scope zou het aanvullende spoor mee-scopen op de primaire
+  //    documenten, en dan zoekt de verbreding naar de bibliotheek niet meer
+  //    breder — precies wat zij moet doen.
   const uitkomsten: AdapterUitkomst[] = await Promise.all(
-    sporen.map(({ query }) => opdracht.adapter.zoek(ctx, query))
+    sporen.map(({ query }) =>
+      opdracht.adapter.zoek({ ...ctx, scope: { ...ctx.scope, documentIds: query.documentScope } }, query)
+    )
   );
 
   // 2. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
@@ -115,8 +121,10 @@ export async function voerRetrievalUit(
     fout: u.fout,
   }));
 
-  // 3. Harde kandidatengrens per spoor. De adapter mag intern ruimer ophalen;
-  //    wat het contract verlaat is begrensd.
+  // 3. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
+  //    bewust ruimer (`max(3 × maxResultaten, 20)`), want de centrale weging mag
+  //    een kandidaat van plek 15 alsnog in de top halen. Terugkappen naar
+  //    `maxResultaten` zou die promotie stil wegnemen.
   let truncatie: RetrievalTussenresultaat["truncatie"];
   const begrensd = uitkomsten.map((u, i) => {
     const max = sporen[i].query.maxKandidaten;
@@ -134,7 +142,7 @@ export async function voerRetrievalUit(
     const perRef = new Map(begrensd[i].map((b) => [b.ref, b]));
     const sel = await selecteerEnVerrijk(begrensd[i].map(alsSelectieBron), u.methode as RetrievalMeta["methode"], {
       filters: sporen[i].query.filters,
-      maxResults: g.maxResults,
+      maxResults: sporen[i].query.maxResultaten,
       maxPerDoc: g.maxPerDoc,
       representatieConstraints: g.representatieConstraints,
       regimeWeging: g.regimeWeging,
@@ -161,24 +169,12 @@ export async function voerRetrievalUit(
     .slice(1)
     .flat()
     .filter((b) => !primaireDocIds.has(b.documentIdentiteit.documentId));
-  let geselecteerd = [...primair, ...aanvullend];
+  const geselecteerd = [...primair, ...aanvullend];
 
-  // 6. Harde contextgrens: de som van de passages. De grens van het primaire
-  //    spoor is leidend — dat is de query die de beurt draagt.
-  const maxTekens = sporen[0].query.maxContextTekens;
-  if (maxTekens > 0) {
-    let som = 0;
-    const passend: Bronresultaat[] = [];
-    for (const b of geselecteerd) {
-      som += b.passage.length;
-      if (som > maxTekens) {
-        truncatie = { reden: "tekens" };
-        break;
-      }
-      passend.push(b);
-    }
-    geselecteerd = passend;
-  }
+  // 6. De contextgrens wordt NIET hier afgedwongen. Meten op de kale passage zou
+  //    de parent-uitbreiding, de bronkoppen en de scheidingstekens niet
+  //    meetellen, en dan is de grens geen grens. Zij geldt in `citeer()`, op de
+  //    werkelijk gerenderde blokken.
 
   // 7. Auditspoor. De basis komt van het primaire spoor; de aanvullende bronnen
   //    dragen alleen ref/document/rang — dezelfde asymmetrie als vóór T2-1,
@@ -238,13 +234,22 @@ export async function citeer(
   tussen: RetrievalTussenresultaat,
   opdracht: CitaatOpdracht
 ): Promise<RetrievalUitkomst> {
-  const c = await adapter.citeer(ctx, tussen.geselecteerd, opdracht);
+  // De adapter vult providerspecifieke WEERGAVEMETADATA aan (notulenlabel,
+  // documenttype, de uitgebreide parent-passage). Hij bouwt geen citaties.
+  const verrijkt = adapter.verrijkWeergave
+    ? await adapter.verrijkWeergave(ctx, tussen.geselecteerd)
+    : tussen.geselecteerd;
+
+  // Nummering, sentinel, neutralisatie, BronVerwijzing en de contextgrens:
+  // centraal, identiek voor elke provider.
+  const c = bouwCitaties(verrijkt, opdracht);
   return {
     ...tussen,
-    geselecteerd: c.resultaten,
-    bronverwijzingen: c.bronverwijzingen,
+    geselecteerd: c.opgenomen,
+    bronverwijzingen: c.bronnen,
     contextTekst: c.contextTekst,
     sentinel: c.sentinel,
     geneutraliseerd: c.geneutraliseerd,
+    truncatie: c.afgekapt ? { reden: "tekens" } : tussen.truncatie,
   };
 }

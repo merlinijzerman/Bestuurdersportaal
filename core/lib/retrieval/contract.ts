@@ -58,16 +58,31 @@ export interface RetrievalContext {
 export interface RetrievalQuery {
   /** Herkenbaar label voor audit en diagnostiek, bv. "primair" of "aanvullend". */
   naam: string;
+  /**
+   * SCOPE PER SPOOR, server-side vastgesteld. C1 draait het primaire spoor op de
+   * gekozen documenten en het aanvullende spoor bewust ZONDER documentscope —
+   * dat is juist de verbreding naar de bibliotheek. Eén gedeelde scope op de
+   * context zou dat aanvullende spoor mee-scopen en de verbreding stil opheffen.
+   * `undefined` = geen documentafbakening voor dit spoor.
+   */
+  documentScope?: string[];
   origineleVraag: string;
   /** Gevalideerd/geherformuleerd. Kan de scope NOOIT wijzigen. */
   zoekvraag: string;
   filters?: RetrievalFilters;
   strategie: Retrievalstrategie;
   /**
-   * Harde bovengrens op het aantal kandidaten dat de adapter TERUGGEEFT. Een
-   * adapter mag intern ruimer ophalen (de Supabase-RPC overfetcht 3×) — dat is
-   * zijn eigen zaak — maar wat het contract verlaat is begrensd, en de
-   * orkestratie kapt alsnog af met `truncatie.reden = "kandidaten"`.
+   * Omvang van de EINDSELECTIE: hoeveel passages er uiteindelijk de prompt in
+   * gaan. Dit is wat vóór T2-1 `maxResults` heette.
+   */
+  maxResultaten: number;
+  /**
+   * Omvang van de KANDIDATENPOOL die de adapter mag teruggeven. Bewust ruimer
+   * dan `maxResultaten` — vuistregel `max(3 × maxResultaten, 20)` — want de
+   * centrale weging (bronsoort, regime, representatie) mag een kandidaat van
+   * plek 15 alsnog in de top halen. Kapte de orkestratie hier terug naar
+   * `maxResultaten`, dan zou die promotie verdwijnen en verandert de selectie
+   * stil ten opzichte van vóór T2-1.
    */
   maxKandidaten: number;
   /**
@@ -131,6 +146,31 @@ export interface Bronresultaat {
    * centraal (zie de kop van selectie.ts).
    */
   curatie?: { normgewicht?: string | null; wettelijkRegime?: string | null };
+  /**
+   * WEERGAVEMETADATA voor de centrale citaatopbouw. De adapter levert de
+   * gegevens; de orkestratie bepaalt als enige de VORM — nummering, sentinel,
+   * neutralisatie en `BronVerwijzing`. Zou de adapter dat zelf doen, dan kan
+   * elke provider bronlabels simuleren, neutralisatie overslaan of een andere
+   * citaat-ID-semantiek gebruiken: precies de divergentie die dit contract
+   * moet voorkomen.
+   */
+  weergave?: {
+    bronorganisatie?: string | null;
+    documentdatum?: string | null;
+    opslagPad?: string | null;
+    externUrl?: string | null;
+    documenttype?: string | null;
+    bestandstype?: string | null;
+    /** Notulensegment: levert een eigen bronvermelding. */
+    notulen?: { vergaderingTitel: string; agendapuntVolgnummer: number | null; agendapuntTitel: string | null } | null;
+    /**
+     * R1.6 small-to-big: de tot de structuur-unit uitgebreide passage. Is hij
+     * gezet, dan gaat DEZE tekst de prompt in — en telt hij dus ook mee voor de
+     * contextgrens. `passage` blijft de kale treffer, want die draagt het
+     * fragment en de vindplaats in de bronkaart.
+     */
+    aangeleverdePassage?: string | null;
+  };
 }
 
 export type RetrievalFoutcategorie =
@@ -215,14 +255,11 @@ export interface CitaatOpdracht {
   primaireDocumentIds: ReadonlySet<string>;
   peildatum: string;
   hoofddocumentLabel: string;
-}
-
-export interface CitaatResultaat {
-  resultaten: Bronresultaat[];
-  contextTekst: string;
-  bronverwijzingen: BronVerwijzing[];
-  sentinel: string;
-  geneutraliseerd: number;
+  /** Harde bovengrens op de GERENDERDE context; zie ontwerp §4.1. */
+  maxContextTekens: number;
+  /** Vaste sentinel (tests); anders per beurt onvoorspelbaar. */
+  sentinel?: string;
+  startIndex?: number;
 }
 
 export interface RetrievalAdapter {
@@ -239,15 +276,12 @@ export interface RetrievalAdapter {
     geselecteerd: Bronresultaat[]
   ): Promise<{ resultaten: Bronresultaat[]; meta?: Partial<RetrievalMeta> }>;
   /**
-   * Providercorrecte weergave van de geselecteerde passages. De ORKESTRATIE
-   * bepaalt wát geciteerd wordt en in welke volgorde; de adapter weet hoe zijn
-   * eigen bron eruitziet. Zo blijft `DocumentChunk` buiten het contract.
+   * Providerspecifieke WEERGAVEMETADATA aanvullen (notulenlabel, documenttype,
+   * de uitgebreide parent-passage). De adapter levert gegevens; hij bouwt GEEN
+   * citaties. Nummering, sentinel, neutralisatie en `BronVerwijzing` zijn
+   * exclusief van de orkestratie.
    */
-  citeer(
-    ctx: RetrievalContext,
-    geselecteerd: Bronresultaat[],
-    opdracht: CitaatOpdracht
-  ): Promise<CitaatResultaat>;
+  verrijkWeergave?(ctx: RetrievalContext, geselecteerd: Bronresultaat[]): Promise<Bronresultaat[]>;
 }
 
 /** Hulptype voor de orkestratie: de modus die de filters dragen. */

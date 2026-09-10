@@ -154,6 +154,22 @@
         "document_chunks"
       ]
     },
+    "core/lib/retrieval/citatie.ts": {
+      "modules": {
+        "bron-afbakening": [
+          "maakBronSentinel",
+          "neutraliseerBrontekst"
+        ],
+        "bronfragment": [
+          "bouwBronfragment"
+        ],
+        "rag": [
+          "BronVerwijzing"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
     "core/lib/retrieval/contract.ts": {
       "modules": {
         "rag": [
@@ -208,7 +224,7 @@
           "DocumentChunk",
           "RetrievalMeta",
           "RetrievalOpties",
-          "maakContext",
+          "chunkAlsBronresultaat",
           "verrijkDocumentmetadata",
           "verrijkNotulenChunks",
           "zoekRelevanteChunksMetMeta"
