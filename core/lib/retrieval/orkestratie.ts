@@ -21,6 +21,7 @@ import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
+import { maakAfbreekgrendel, isAfbreking, redenVan, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type {
   AdapterUitkomst,
   Bronresultaat,
@@ -50,6 +51,8 @@ export interface Orkestratieopdracht {
   adapter: RetrievalAdapter;
   /** Het primaire spoor staat vooraan: het krijgt de laagste bronnummers. */
   sporen: Queries<Spoor>;
+  /** Deadline over de HELE retrievalketen (D5). Default 20 s. */
+  timeoutMs?: number;
 }
 
 /** Providerneutrale kijk voor de selectie — geen chunk, geen opslagvorm. */
@@ -142,6 +145,13 @@ export async function voerRetrievalUit(
   //    gedeelde scope zou het aanvullende spoor mee-scopen op de primaire
   //    documenten, en dan zoekt de verbreding naar de bibliotheek niet meer
   //    breder — precies wat zij moet doen.
+  // PR-B — één samengesteld signaal voor de hele keten: de clientverbinding én
+  // de deadline. Het onthoudt waaróm het afging, zodat een verbroken
+  // verbinding `annulering` oplevert en een verlopen deadline `timeout` — twee
+  // verschillende dingen die een kaal AbortSignal niet uit elkaar houdt.
+  const grendel = maakAfbreekgrendel(ctx.signal, opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS);
+  const ctxMetGrendel = { ...ctx, signal: grendel.signal };
+
   //    `ctx.scope.documentIds` is voor een adapter de ENIGE bron van waarheid;
   //    de orkestratie zet de spoorscope hier één keer en gebruikt diezelfde
   //    afgeleide context ook voor `verrijkSelectie`.
@@ -153,12 +163,16 @@ export async function voerRetrievalUit(
   const peildatumVanSpoor = (q: RetrievalQuery) => q.filters?.peildatum ?? vandaagVoorDezeBeurt;
 
   const spoorContext = sporen.map(({ query }) => ({
-    ...ctx,
+    ...ctxMetGrendel,
     scope: { ...ctx.scope, documentIds: query.documentScope },
   }));
+  try {
   const uitkomsten: AdapterUitkomst[] = await Promise.all(
     sporen.map(({ query }, i) => opdracht.adapter.zoek(spoorContext[i], query))
   );
+  // Tussen twee stappen door: is er afgebroken, dan stopt de keten hier — ook
+  // als de I/O zelf toevallig al klaar was.
+  grendel.bewaak();
 
   // 2. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
   //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
@@ -215,6 +229,7 @@ export async function voerRetrievalUit(
     }
     geselecteerdPerSpoor.push(gekozen);
     extraPerSpoor.push(extra);
+    grendel.bewaak();
   }
 
   // 5. Samenvoegen. Het primaire spoor vooraan; een document dat daar al in zit
@@ -257,6 +272,19 @@ export async function voerRetrievalUit(
     maxContextTekens: sporen[0].query.maxContextTekens,
     metaBasis,
   };
+  } catch (e) {
+    // Een afbreking is een EIGEN foutcategorie, geen providerfout — en er volgt
+    // geen terugval: de keten stopt volledig.
+    if (isAfbreking(e)) throw e;
+    throw e;
+  } finally {
+    grendel.stop();
+  }
+}
+
+/** Vertaalt een afbreking naar de contract-foutcategorie (§4.4). */
+export function foutcategorieVoor(e: unknown): "timeout" | "annulering" | null {
+  return isAfbreking(e) ? redenVan(e) : null;
 }
 
 /**

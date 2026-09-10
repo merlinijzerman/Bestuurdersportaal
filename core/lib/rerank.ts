@@ -24,6 +24,7 @@
 
 import type { AiGateway, GatewayContext } from "./ai-gateway/contract";
 import { isGatewayFout } from "./ai-gateway/fout";
+import { isAfbreking } from "./retrieval/afbreken";
 import { HAIKU_MODEL } from "./llm-modellen";
 
 // Tijdsbudget voor de rerank-call. Bewust krap: de rerank staat in het kritieke
@@ -77,6 +78,8 @@ export interface RerankMeta {
 export interface RerankOpties {
   client?: RerankClient;
   timeoutMs?: number;
+  /** PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt. */
+  signal?: AbortSignal;
   model?: string;
   /**
    * AI-BEGRENZING (besluit 0180). Verplicht op het productiepad; alleen bij een
@@ -183,6 +186,15 @@ export async function rerankChunks<T extends { id: string }>(
     .join("\n\n");
 
   const timeoutMs = opties?.timeoutMs ?? RERANK_TIMEOUT_MS;
+  // PR-B — een EIGEN controller voor deze call. Wint de timeout (of breekt de
+  // beurt af), dan wordt de onderliggende modelcall daadwerkelijk afgebroken;
+  // met alleen `Promise.race` bleef hij doorlopen en betaalden we hem alsnog.
+  const callCtrl = new AbortController();
+  const opBuitenAbort = () => callCtrl.abort(opties?.signal?.reason);
+  if (opties?.signal) {
+    if (opties.signal.aborted) callCtrl.abort(opties.signal.reason);
+    else opties.signal.addEventListener("abort", opBuitenAbort, { once: true });
+  }
   const c = opties?.client ?? null;
   // Zonder injecteerbare client (productiepad) is een poortcontext verplicht:
   // anders zou hier een ongemeten providercall ontstaan.
@@ -224,6 +236,7 @@ export async function rerankChunks<T extends { id: string }>(
             berichten: params.messages,
             maxTokens: 1024,
             temperature: 0,
+            signal: callCtrl.signal,
           })
           .then((r) => ({ tekst: r.tekst, model: r.model }));
     const timeout = new Promise<never>((_, reject) => {
@@ -233,6 +246,11 @@ export async function rerankChunks<T extends { id: string }>(
     ruw = response.tekst;
     effectiefModel = response.model;
   } catch (e) {
+    // PR-B — een afbreking van de BEURT is geen rerankfout. De fallback op de
+    // RRF-volgorde bestaat voor een dichte poort, een providerfout of een
+    // onparseerbaar antwoord; vangt hij ook een annulering of deadline, dan
+    // gaat de keten ná het afbreken gewoon door met selecteren en genereren.
+    if (isAfbreking(e)) throw e;
     const reden = isGatewayFout(e) && e.categorie === "poort_gesloten"
       ? `poort_dicht:${e.reden}`
       : e instanceof Error && e.message === "rerank_timeout"
@@ -242,6 +260,9 @@ export async function rerankChunks<T extends { id: string }>(
     return metFallback(kandidaten, reden, model);
   } finally {
     if (timer) clearTimeout(timer);
+    // Verloor de call de race, dan mag hij niet doorlopen.
+    callCtrl.abort();
+    opties?.signal?.removeEventListener("abort", opBuitenAbort);
   }
 
   const scores = parseRerankScores(ruw, set.length);

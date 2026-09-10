@@ -93,9 +93,10 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
         // `toegangscontrole` voor leveren, dus claimt hij het ook niet.
         permissionProof: false,
         preview: false,
-        // PR-B voert `AbortSignal` en de deadline door de hele keten.
-        cancellation: false,
-        timeout: false,
+        // PR-B: het signaal bereikt elke RPC, de embedding-fetch, de
+        // retry-backoff en de gateway; de deadline geldt over de hele keten.
+        cancellation: true,
+        timeout: true,
       };
     },
 
@@ -117,6 +118,8 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
           rerankClient: rerank.client,
           origineleVraag: query.origineleVraag,
           stopNaRangschikking: true,
+          // PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt.
+          signal: ctx.signal,
         }
       );
 

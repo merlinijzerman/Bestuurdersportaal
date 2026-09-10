@@ -14,6 +14,7 @@ import {
 } from "@/core/lib/ai-preflight";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { voerRetrievalUit, citeer } from "@/core/lib/retrieval/orkestratie";
+import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
@@ -2461,6 +2462,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const geresolveerdeVlaggen = resolveerRetrievalVlaggen(retrievalOpties);
       // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
       // providerprivaat bij, en `citeer()` heeft die later nodig.
+      const retrievalTimeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
       const retrieval = maakSupabaseAdapter(retrievalVlaggen, { gateway: { gateway, ctx: gatewayCtx } });
       const retrievalAdapter = retrieval.adapter;
       // De route consumeert (nog) chunks. De adapter houdt de koppeling
@@ -2476,11 +2478,18 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
         scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
         correlationId: ctx.requestId,
+        // PR-B — de clientverbinding. Verbreekt de bestuurder de verbinding,
+        // dan stopt de retrievalketen; zonder dit liep zij door en betaalden we
+        // de model- en embeddingcalls van een beurt die niemand meer leest.
+        signal: req.signal,
       };
       const retrievalResultaat = await voerRetrievalUit(
         retrievalContext,
         {
           adapter: retrievalAdapter,
+          // D5 — deadline over de hele retrievalketen; fondsvlag met veilige
+          // default (20 s) bij een ontbrekende of buiten-bereik-waarde.
+          timeoutMs: retrievalTimeoutMs,
           sporen: [
             {
               query: {

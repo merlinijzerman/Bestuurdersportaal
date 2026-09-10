@@ -20,6 +20,7 @@
 // ============================================================
 
 import { bewaakteProviderCall, type PoortContext } from "./ai-poort";
+import { slaapMetSignaal, isAfbreking } from "./retrieval/afbreken";
 import { resolveMistralBaseUrl } from "./ai-provider-endpoint.mjs";
 
 const EMBED_ORIGIN = "https://api.mistral.ai";
@@ -72,7 +73,8 @@ export interface EmbedStats {
 async function embedBatch(
   ctx: PoortContext,
   teksten: string[],
-  stats?: EmbedStats
+  stats?: EmbedStats,
+  signal?: AbortSignal
 ): Promise<number[][]> {
   const key = process.env.MISTRAL_API_KEY;
   if (!key) throw new Error("MISTRAL_API_KEY ontbreekt in de omgeving");
@@ -83,6 +85,9 @@ async function embedBatch(
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
     const res = await fetch(embedUrl(), {
       method: "POST",
+      // PR-B — het samengestelde afbreek-/deadlinesignaal. Zonder dit loopt een
+      // embeddingcall van een geannuleerde beurt gewoon door.
+      signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${key}`,
@@ -101,7 +106,9 @@ async function embedBatch(
         stats.retries++;
         if (res.status === 429) stats.rate429++;
       }
-      await slaap(500 * 2 ** poging); // 0,5s → 1s → 2s
+      // De backoff moet MEEBREKEN: anders wacht de keten na een annulering
+      // eerst nog twee seconden en doet dáárna een poging die niet meer mag.
+      await slaapMetSignaal(500 * 2 ** poging, signal); // 0,5s → 1s → 2s
       continue;
     }
     throw new Error(`Mistral embeddings ${res.status}`);
@@ -117,7 +124,8 @@ async function embedBatch(
 export async function embedTeksten(
   ctx: PoortContext,
   teksten: string[],
-  stats?: EmbedStats
+  stats?: EmbedStats,
+  signal?: AbortSignal
 ): Promise<number[][]> {
   const resultaat: number[][] = [];
   let i = 0;
@@ -133,14 +141,14 @@ export async function embedTeksten(
       batch.push(teksten[i]);
       i++;
     }
-    resultaat.push(...(await embedBatch(ctx, batch, stats)));
+    resultaat.push(...(await embedBatch(ctx, batch, stats, signal)));
   }
   return resultaat;
 }
 
 // Eén tekst embedden (bijv. een zoekvraag bij retrieval).
-export async function embedTekst(ctx: PoortContext, tekst: string): Promise<number[]> {
-  const [vector] = await embedTeksten(ctx, [tekst]);
+export async function embedTekst(ctx: PoortContext, tekst: string, signal?: AbortSignal): Promise<number[]> {
+  const [vector] = await embedTeksten(ctx, [tekst], undefined, signal);
   return vector;
 }
 

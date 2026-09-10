@@ -9,6 +9,7 @@ import {
 } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { isPoortGesloten } from "./ai-poort";
+import { isAfbreking } from "./retrieval/afbreken";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
@@ -110,6 +111,12 @@ export interface RetrievalFilters {
  *  bron, zodat de parent-verrijking niet met een andere datum werkt dan de
  *  retrieval zelf: dan zou de review-vervalcontrole op generieke siblings
  *  ongemerkt uitvallen. */
+/** PR-B — koppelt het afbreeksignaal aan een PostgREST-builder. Conditioneel,
+ *  want `.abortSignal()` accepteert geen `undefined`. */
+function metSignaal<T extends { abortSignal(s: AbortSignal): T }>(q: T, signal?: AbortSignal): T {
+  return signal ? q.abortSignal(signal) : q;
+}
+
 export function effectievePeildatum(filters?: { peildatum?: string }): string {
   return filters?.peildatum ?? vandaagISO();
 }
@@ -281,6 +288,12 @@ export interface RetrievalOpties {
    * krijgt het volledige, ongewijzigde gedrag.
    */
   stopNaRangschikking?: boolean;
+  /**
+   * PR-B — het samengestelde afbreek-/deadlinesignaal. Gaat naar ELKE RPC, naar
+   * de embedding-fetch, naar de retry-backoff en naar de gateway. Zonder dit
+   * loopt de keten van een geannuleerde beurt gewoon door.
+   */
+  signal?: AbortSignal;
   // Besluit 0139 (M-R3) — de OORSPRONKELIJKE gebruikersvraag, meegegeven wanneer
   // `vraag` een geherformuleerde zoekvraag is. Is deze gezet en wijkt hij af, dan
   // draait de hybride retrieval een EXTRA poging met de originele vraag en fuseert
@@ -305,6 +318,7 @@ type VolledigeOpties = {
   rerankClient?: RerankClient;
   gateway?: RetrievalOpties["gateway"];
   stopNaRangschikking: boolean;
+  signal?: AbortSignal;
 };
 
 /**
@@ -335,6 +349,7 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     rerankClient: o?.rerankClient,
     gateway: o?.gateway,
     stopNaRangschikking: o?.stopNaRangschikking ?? false,
+    signal: o?.signal,
   };
 }
 
@@ -353,19 +368,22 @@ function ftsQueryVoor(vraag: string, opties: VolledigeOpties): {
 // consistent met wat geëmbed/geïndexeerd wordt (spiegelt lib/chunk-ingest.verrijkTekst).
 // De prefix zit niet op de RPC-return; we halen hem gebatcht op via de id's. De
 // chunks zijn al RLS-geautoriseerd (kwamen via de RPC); dit is puur her-lezen.
-async function haalContextPrefixes(ids: string[]): Promise<Map<string, string | null>> {
+async function haalContextPrefixes(ids: string[], signal?: AbortSignal): Promise<Map<string, string | null>> {
   const map = new Map<string, string | null>();
   if (ids.length === 0) return map;
   try {
     const supabase = await createServerSupabase();
-    const { data } = await supabase
-      .from("document_chunks")
-      .select("id, context_prefix")
-      .in("id", ids);
+    const { data } = await metSignaal(
+      supabase.from("document_chunks").select("id, context_prefix").in("id", ids),
+      signal
+    );
     for (const r of (data ?? []) as { id: string; context_prefix: string | null }[]) {
       map.set(r.id, r.context_prefix ?? null);
     }
   } catch (e) {
+    // Een afbreking is geen "prefix niet beschikbaar": doorgooien, anders
+    // rerankt de keten ná de annulering alsnog over kale tekst.
+    if (isAfbreking(e)) throw e;
     console.error("[rag] context_prefix ophalen mislukt — rerank over kale tekst:", e);
   }
   return map;
@@ -406,13 +424,15 @@ async function naVerwerking(
   // A — Haiku-reranker (alleen op de sterke paden: hybride + Dutch-FTS-ranked).
   let rerankScores: Record<string, number> | null = null;
   if (opties.rerank && rerankToegestaan && kandidaten.length >= 2) {
-    const prefixMap = await haalContextPrefixes(kandidaten.map((c) => c.id));
+    const prefixMap = await haalContextPrefixes(kandidaten.map((c) => c.id), opties.signal);
     const r = await rerankChunks(
       zoekvraag,
       kandidaten,
       (c) => verrijkTekst(prefixMap.get(c.id), c.tekst),
       {
         client: opties.rerankClient,
+        // PR-B — hetzelfde samengestelde signaal als de rest van de keten.
+        signal: opties.signal,
         // AI-BEGRENZING (besluit 0180) + #311. Zonder geïnjecteerde testclient
         // loopt de reranker door de gateway (fondsconfiguratie → poort → audit);
         // is de poort dicht, dan valt hij terug op de RRF-volgorde in plaats van
@@ -1226,8 +1246,13 @@ export async function zoekRelevanteChunksMetMeta(
   // en blokkers expliciet" verbiedt.
   let vector: number[];
   try {
-    vector = await embedTekst({ supabase, label: "rag.hybride" }, vraag);
+    vector = await embedTekst({ supabase, label: "rag.hybride" }, vraag, opt.signal);
   } catch (e) {
+    // PR-B — een AFBREKING is geen providerfout. De terugval hieronder bestaat
+    // voor een dichte kill-switch of een falende provider; vangt hij ook een
+    // annulering of deadline, dan doet de keten ná het afbreken alsnog een
+    // volledige FTS-retrieval. Doorgooien dus.
+    if (isAfbreking(e)) throw e;
     const gestopt = isPoortGesloten(e);
     if (gestopt) {
       console.warn(`Hybride: Mistral-poort dicht (${e.reden}) — terugval op FTS.`);
@@ -1263,12 +1288,17 @@ export async function zoekRelevanteChunksMetMeta(
     ftsQ: string,
     emb: number[]
   ): Promise<DocumentChunk[] | null> {
-    const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
-      p_query: ftsQ,
-      p_embedding: naarVectorLiteral(emb),
-      ...gedeeldeRpcParams,
-    });
+    const { data, error } = await metSignaal(
+      supabase.rpc("zoek_chunks_hybride", {
+        p_query: ftsQ,
+        p_embedding: naarVectorLiteral(emb),
+        ...gedeeldeRpcParams,
+      }),
+      opt.signal
+    );
     if (error) {
+      // Een afgebroken RPC mag niet als "providerfout" op FTS terugvallen.
+      if (isAfbreking(error)) throw error;
       console.error("Hybride RPC-fout:", error);
       return null;
     }
@@ -1301,7 +1331,7 @@ export async function zoekRelevanteChunksMetMeta(
     if (pogingen.length < MAX_HYBRIDE_POGINGEN) {
       const { ftsQuery: origFts } = ftsQueryVoor(origineel, opt);
       try {
-        const origVec = await embedTekst({ supabase, label: "rag.hybride.origineel" }, origineel);
+        const origVec = await embedTekst({ supabase, label: "rag.hybride.origineel" }, origineel, opt.signal);
         const origChunks = await draaiHybridePoging(origFts, origVec);
         if (origChunks === null) {
           pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });
@@ -1310,6 +1340,7 @@ export async function zoekRelevanteChunksMetMeta(
           pogingMeta.push({ naam: "origineel", query: origFts, rijen: origChunks.length });
         }
       } catch (e) {
+        if (isAfbreking(e)) throw e;
         console.error("Hybride: embedding originele vraag mislukt (M-R3), primair blijft:", e);
         pogingMeta.push({ naam: "origineel", query: origFts, rijen: null, overgeslagen: true });
       }
@@ -1394,13 +1425,13 @@ async function zoekViaFTS(
   // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af.
   // R1.4 — de FTS-query is hier (evt.) jargon-verbreed (websearch-arm).
   const { ftsQuery, jargon } = ftsQueryVoor(vraag, opt);
-  const { data, error } = await supabase.rpc("zoek_chunks", {
+  const { data, error } = await metSignaal(supabase.rpc("zoek_chunks", {
     p_query: ftsQuery,
     p_limit: overFetch,
     p_document_ids: scope,
     ...rpcFilterParams(filters),
     p_fonds_id: fondsFilter,
-  });
+  }), opt.signal);
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
@@ -1435,13 +1466,16 @@ async function zoekViaFTS(
   // waar streng zoeken niets oplevert.
   const terugval = bouwTerugvalFtsQuery(vraag);
   if (terugval) {
-    const { data: dataT, error: errorT } = await supabase.rpc("zoek_chunks", {
-      p_query: terugval.query,
-      p_limit: overFetch,
-      p_document_ids: scope,
-      ...rpcFilterParams(filters),
-      p_fonds_id: fondsFilter,
-    });
+    const { data: dataT, error: errorT } = await metSignaal(
+      supabase.rpc("zoek_chunks", {
+        p_query: terugval.query,
+        p_limit: overFetch,
+        p_document_ids: scope,
+        ...rpcFilterParams(filters),
+        p_fonds_id: fondsFilter,
+      }),
+      opt.signal
+    );
 
     if (!errorT && Array.isArray(dataT) && dataT.length > 0) {
       const gerangschikt = (dataT as ZoekChunkRij[]).map(rijNaarChunk);
@@ -1517,7 +1551,7 @@ async function zoekViaFTS(
     if (filters?.documentstatus) q2 = q2.in("documentstatus", filters.documentstatus);
     if (filters?.procesinstantie_ids) q2 = q2.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q2 = q2.in("bibliotheek", filters.bronsoort);
-    const { data: data2, error: error2 } = await q2;
+    const { data: data2, error: error2 } = await metSignaal(q2, opt.signal);
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
@@ -1563,7 +1597,7 @@ async function zoekViaFTS(
     if (filters?.documentstatus) q3 = q3.in("documentstatus", filters.documentstatus);
     if (filters?.procesinstantie_ids) q3 = q3.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q3 = q3.in("bibliotheek", filters.bronsoort);
-    const { data: data3 } = await q3;
+    const { data: data3 } = await metSignaal(q3, opt.signal);
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
