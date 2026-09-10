@@ -1,6 +1,6 @@
 # #353 — M365 Fase 5 · T0 live SharePoint-retrievalspike
 
-Status: **prototype en hermetisch securitybewijs gereed; live PGB-meting geblokkeerd door open issue #354**
+Status: **gecontroleerde live-pilotvoorbereiding gereed; permissionprobe nog niet uitgevoerd; productiewiring blijft geblokkeerd**
 Onderzoeksdatum: **10 september 2026**
 Productiewiring: **geen**
 
@@ -48,6 +48,8 @@ De bestaande code en besluit 0210 staan alleen delegated `Sites.Selected` toe. G
 
 De standalone adapter staat onder `scripts/spike/sharepoint-retrieval/` en kan alleen via de lokale CLI worden gestart. Hij gebruikt voor een live run de bestaande `sharepointAccessToken`, `leesSharePointBron` en `leesSharePointDocument`-grenzen. Er is geen service-roleclient.
 
+De delegated identiteit wordt nu op drie punten exact gebonden: portaalactor aan de configuratiegebruiker, tenant aan de bron en `actorObjectId` uit het opgehaalde token aan de private `microsoft_object_id` uit diezelfde verbinding. Een gevulde maar afwijkende OID binnen dezelfde tenant faalt vóór de eerste Graph-call.
+
 Per kandidaat is de toelatingsketen:
 
 ```text
@@ -59,7 +61,9 @@ vaultconfig A → delegated search → lokale ref-match → GET item A
 
 Het bewijs is gebonden aan lokale `ref`, fonds, portaalactor, correlation-id, configuratieversie en controletijd. Site-, drive- en item-id blijven binnen de adapter. De veilige meetvorm bevat alleen fixturecodes, geaggregeerde tellingen en een twaalftekens SHA-256-vingerafdruk van eTag/cTag.
 
-Harde grenzen: maximaal 50 zoekhits, 3 pagina's, concurrency 3, JSON-responses 5 MiB, content 25 MiB, passage 1.200 tekens, 2 retries en standaard 15 seconden. `AbortSignal` loopt door alle fetches en retrywachttijden. Een 429 volgt begrensd `Retry-After`; 401/403, 404, 412, timeout, cancellation en providerfouten worden genormaliseerd.
+Harde grenzen: maximaal 50 zoekhits, 3 pagina's, concurrency 3, JSON-responses 5 MiB, content 25 MiB, passage 1.200 tekens, 2 retries en standaard 15 seconden. `AbortSignal` loopt door alle fetches en retrywachttijden; normale retrywachttijden verwijderen hun abort-listener direct na afloop. Een 429 volgt begrensd `Retry-After`; 401/403, 404, 412, timeout, cancellation en providerfouten worden genormaliseerd.
+
+Voor `/content` staat automatische redirectvolging uit. Graph moet exact `302` met een HTTPS-`Location` naar de eigen geconfigureerde SharePoint-host of `*.files.1drv.com` retourneren. Alleen de eerste call draagt het Bearer-token; de vooraf geautoriseerde downloadcall krijgt geen Authorization-header en mag niet nogmaals redirecten.
 
 Negatieve scenario's zijn hermetisch gedekt voor ingetrokken of afwezige toegang, actor-/tenantmismatch, gewijzigde bronconfiguratie, onbekend of gemanipuleerd item/drive/site, verplaatsing buiten de root, gewijzigde/ontbrekende versie, onveilige paginering, ongeldige preview, providerfout, timeout, cancellation en throttling. De PGB-run moet revoke, move, rename, change en delete daarnaast nog met echte SharePoint-mutaties bewijzen.
 
@@ -76,6 +80,7 @@ Negatieve scenario's zijn hermetisch gedekt voor ingetrokken of afwezige toegang
 | Word/PDF/PowerPoint passage en locator | PPTX bewezen; productextractors voor DOCX/PDF hergebruikt | **Open — #354** |
 | drie rondes, recall, mediaan/p95, calls en bytes | Harnas gereed | **Open — #354** |
 | geen persistente inhoud/chunks/embeddings | Ja, code- en boundarygate | Nog te controleren in runbewijs |
+| drive/root permissionprobe met bestaande `Sites.Selected` | Harnas en veilige uitvoervorm gereed | Niet uitgevoerd: benodigde `preview-stable` vaultsecrets zijn niet lokaal beschikbaar |
 
 Er worden bewust geen gesimuleerde milliseconden als live latency gerapporteerd. Na #354 schrijft de runner per vraag en route drie of meer inhoudsvrije meetrijen en berekent hij mediaan/p95, recall, locator-, versie- en previewdekking, Graph-calls, response-/contentbytes, retries, throttles en foutcategorieën.
 
@@ -135,7 +140,7 @@ De live runner weigert productie/CI, vereist een genegeerde `.local.json` met mo
 
 | Controle | Resultaat |
 |---|---|
-| spike-adaptertests | 12/12 groen |
+| spike-adaptertests | 14/14 groen |
 | statische productiegrens | 3/3 groen |
 | TypeScript | groen |
 | bestaande lokale PR-gates | groen; 513 cross-tenant tests groen |

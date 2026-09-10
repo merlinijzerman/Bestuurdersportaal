@@ -34,6 +34,7 @@
     "test:spike-boundary": "node --test scripts/sharepoint-retrieval-spike-boundary.test.mjs",
     "test:spike:m365-retrieval": "node --import tsx --test scripts/spike/sharepoint-retrieval/prototype.test.ts && npm run test:spike-boundary",
     "spike:m365-retrieval": "M365_RETRIEVAL_SPIKE=local tsx scripts/spike/sharepoint-retrieval/run.ts",
+    "spike:m365-permission-probe": "M365_RETRIEVAL_SPIKE=local tsx scripts/spike/sharepoint-retrieval/run.ts --permission-probe",
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:e2e:tenantpoort": "playwright test --config=playwright.config.ts tests/e2e/specs/tenantpoort.spec.ts --project=chromium",
     "test:e2e:guard": "node --test tests/e2e/fixtures/omgeving.test.mjs tests/e2e/fixtures/totp.test.mjs tests/e2e/fixtures/scanner-stub.test.mjs tests/e2e/fixtures/ai-provider-endpoint.test.mjs tests/e2e/fixtures/ai-provider-stub.test.mjs tests/e2e/fixtures/embed-stub.test.mjs tests/e2e/fixtures/oidc-stub.test.mjs scripts/playwright-workflow.test.mjs scripts/sanitize-e2e-log.test.mjs scripts/sanitize-e2e-artifacts.test.mjs",

@@ -21,6 +21,22 @@ Beide routes volgen dezelfde toelatingsvolgorde:
 
 Intrekking, verwijdering, verplaatsing buiten de bron, versiedrift, configuratiedrift, timeout, annulering, throttling of onvolledig bewijs levert nul toegelaten kandidaten op. Er is geen fallback naar Supabase of een andere provider.
 
+De contentroute volgt redirects niet automatisch. De eerste Graph-call verwacht exact een `302`, waarna alleen de eigen geconfigureerde SharePoint-host of een Microsoft `*.files.1drv.com`-downloadhost wordt geaccepteerd. De tweede call bevat geen Graph-token en weigert verdere redirects. Microsoft documenteert dat deze tijdelijke URL vooraf geautoriseerd is en geen `Authorization`-header nodig heeft: [Download driveItem content](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0).
+
+## Inhoudsvrije permissionprobe
+
+De permissionprobe heeft geen fixtures of tweede identiteit nodig. Hij valideert fonds, bron, configuratiegebruiker, tenant en de exacte private Microsoft-object-id, en doet daarna uitsluitend één drive/root-search met een vaste onwaarschijnlijke term. Eventuele hits worden genegeerd. De uitvoer bevat exact `status`, `latencyMs` en `microsoftCalls`.
+
+Kopieer de minimale voorbeeldconfig, vul de bestaande lokale fonds- en gebruiker-id in en zet modus 0600:
+
+```bash
+cp scripts/spike/sharepoint-retrieval/permission-probe.example.json .m365-permission-probe.local.json
+chmod 600 .m365-permission-probe.local.json
+npm run spike:m365-permission-probe -- --config=.m365-permission-probe.local.json
+```
+
+Gebruik uitsluitend de reeds verleende `Sites.Selected`-verbinding. Een uitkomst `toestemming_geweigerd` is bewijs om eerst een afzonderlijk consentbesluit voor delegated `Files.Read` voor te leggen, geen toestemming om scopes automatisch te wijzigen.
+
 ## Voorwaarden voor een live run
 
 Issue #354 moet eerst de synthetische PGB-bibliotheek, vragen, rechtenmatrix en lokale refs opleveren. Er is geen consentwijziging in deze spike opgenomen. Begin met de bestaande delegated `Sites.Selected`-verbinding en registreer de werkelijke Graph-uitkomst. Als zoeken 403 geeft, stop: voeg niet zelf `Files.Read`, `Files.Read.All` of `Sites.Read.All` toe. Het spike-rapport beschrijft de beslisroute.
@@ -64,4 +80,4 @@ npm run typecheck
 npm run security:secrets
 ```
 
-De hermetische suite gebruikt geen netwerk of database en dekt het echte adaptercontract, delegated proofvorm, dubbele rechten-/versiecontrole, previewbewijs, in-memory PPTX-extractie, throttling, timeout, cancellation, vreemde identifiers, onveilige paginering, move-out, ontbrekende versie, intrekking en configuratiedrift.
+De hermetische suite gebruikt geen netwerk of database en dekt het echte adaptercontract, delegated proofvorm inclusief same-tenant/wrong-OID, handmatige tokenvrije contentredirect, abort-listener-opruiming, de inhoudsvrije permissionprobe, dubbele rechten-/versiecontrole, previewbewijs, in-memory PPTX-extractie, throttling, timeout, cancellation, vreemde identifiers, onveilige paginering, move-out, ontbrekende versie, intrekking en configuratiedrift.

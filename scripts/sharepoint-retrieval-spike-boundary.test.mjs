@@ -29,6 +29,8 @@ test("#353-runner is alleen een expliciet lokaal npm-script en hangt niet onder 
   const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
   assert.match(pkg.scripts["spike:m365-retrieval"], /M365_RETRIEVAL_SPIKE=local/);
   assert.match(pkg.scripts["spike:m365-retrieval"], /scripts\/spike\/sharepoint-retrieval\/run\.ts/);
+  assert.match(pkg.scripts["spike:m365-permission-probe"], /M365_RETRIEVAL_SPIKE=local/);
+  assert.match(pkg.scripts["spike:m365-permission-probe"], /--permission-probe/);
   for (const naam of ["dev", "prebuild", "build", "start", "gates", "test", "test:unit", "test:component"]) {
     assert.doesNotMatch(pkg.scripts[naam] ?? "", /spike:m365-retrieval|sharepoint-retrieval\/run/);
   }
