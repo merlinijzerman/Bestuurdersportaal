@@ -93,9 +93,10 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
         // `toegangscontrole` voor leveren, dus claimt hij het ook niet.
         permissionProof: false,
         preview: false,
-        // PR-B voert `AbortSignal` en de deadline door de hele keten.
-        cancellation: false,
-        timeout: false,
+        // PR-B: het signaal bereikt elke RPC, de embedding-fetch, de
+        // retry-backoff en de gateway; de deadline geldt over de hele keten.
+        cancellation: true,
+        timeout: true,
       };
     },
 
@@ -117,6 +118,8 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
           rerankClient: rerank.client,
           origineleVraag: query.origineleVraag,
           stopNaRangschikking: true,
+          // PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt.
+          signal: ctx.signal,
         }
       );
 
@@ -147,7 +150,7 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
       if (chunks.length === 0) return { resultaten: geselecteerd };
       // De peildatum van HET SPOOR, nooit "vandaag": anders zou een historische
       // retrieval ongemerkt met de datum van nu worden verrijkt.
-      const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum);
+      const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum, { signal: ctx.signal });
       for (const c of p.chunks) chunkPerRef.set(c.id, c);
       return { resultaten: p.chunks.map((c, i) => chunkAlsBronresultaat(c, i)), meta: { parent: p.meta } };
     },
@@ -163,8 +166,8 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
         .map((b) => chunkPerRef.get(b.ref))
         .filter((c): c is DocumentChunk => Boolean(c));
       if (chunks.length === 0) return geselecteerd;
-      chunks = await verrijkNotulenChunks(chunks);
-      chunks = await verrijkDocumentmetadata(chunks, ctx.fondsId);
+      chunks = await verrijkNotulenChunks(chunks, ctx.signal);
+      chunks = await verrijkDocumentmetadata(chunks, ctx.fondsId, ctx.signal);
       for (const c of chunks) chunkPerRef.set(c.id, c);
       return chunks.map((c, i) => chunkAlsBronresultaat(c, i));
     },

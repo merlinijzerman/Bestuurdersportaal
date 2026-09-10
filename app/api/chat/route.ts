@@ -13,7 +13,8 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { voerRetrievalUit, citeer } from "@/core/lib/retrieval/orkestratie";
+import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
@@ -2460,7 +2461,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // omdat de fondsvlag nog niet bestaat (gaplijst G-11).
       const geresolveerdeVlaggen = resolveerRetrievalVlaggen(retrievalOpties);
       // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
-      // providerprivaat bij, en `citeer()` heeft die later nodig.
+      // providerprivaat bij, en de citaatvorming heeft die later nodig.
+      const retrievalTimeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
       const retrieval = maakSupabaseAdapter(retrievalVlaggen, { gateway: { gateway, ctx: gatewayCtx } });
       const retrievalAdapter = retrieval.adapter;
       // De route consumeert (nog) chunks. De adapter houdt de koppeling
@@ -2476,11 +2478,22 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
         scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
         correlationId: ctx.requestId,
+        // PR-B — de clientverbinding. Verbreekt de bestuurder de verbinding,
+        // dan stopt de retrievalketen; zonder dit liep zij door en betaalden we
+        // de model- en embeddingcalls van een beurt die niemand meer leest.
+        signal: req.signal,
       };
-      const retrievalResultaat = await voerRetrievalUit(
+      // ÉÉN aanroep, en die bezit de afbreekgrendel: hij sluit timer en
+      // clientluisteraar langs elke uitgang, ook als de weergaveverrijking
+      // halverwege faalt. De twee losse fasen zijn intern — een route die ze
+      // zelf sequencet erft een resource waarvan zij de levensduur moet kennen.
+      const voltooid = await voerVolledigeRetrievalUit(
         retrievalContext,
         {
           adapter: retrievalAdapter,
+          // D5 — deadline over de hele retrievalketen; fondsvlag met veilige
+          // default (20 s) bij een ontbrekende of buiten-bereik-waarde.
+          timeoutMs: retrievalTimeoutMs,
           sporen: [
             {
               query: {
@@ -2534,24 +2547,25 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 ]
               : []),
           ] as const,
+        },
+        // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
+        // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
+        // Ze draait BEWUST binnen dezelfde aanroep en dus vóór het
+        // voortgangsevent en het scope-auditspoor: de harde contextgrens kan
+        // blokken afkappen, en dan bouwt de orkestratie de meta opnieuw over
+        // exact de opgenomen bronnen. Zou dit later staan, dan meldden de
+        // voortgangsregel en het auditspoor bronnen die nooit naar het model
+        // zijn gegaan.
+        {
+          // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
+          // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
+          primaireDocumentIds: primaireIds,
+          peildatum: vandaag,
+          // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
+          // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
+          hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
         }
       );
-      // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
-      // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
-      // Ze draait BEWUST hier, vóór het voortgangsevent en het scope-auditspoor:
-      // de harde contextgrens kan blokken afkappen, en dan bouwt de orkestratie
-      // de meta opnieuw over exact de opgenomen bronnen. Zou dit later staan,
-      // dan meldden de voortgangsregel en het auditspoor bronnen die nooit naar
-      // het model zijn gegaan.
-      const voltooid = await citeer(retrievalContext, retrievalAdapter, retrievalResultaat, {
-        // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
-        // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
-        primaireDocumentIds: primaireIds,
-        peildatum: vandaag,
-        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
-        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
-        hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
-      });
       chunks = retrieval.chunksVoor(voltooid.geselecteerd);
       contextTekst = voltooid.contextTekst;
       bronnen = voltooid.bronverwijzingen;
@@ -4174,11 +4188,32 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             },
           });
         } catch (streamFout) {
-          console.error("Chat stream fout:", streamFout);
-          send({
-            type: "error",
-            error: "Er is een fout opgetreden bij het verwerken van uw vraag.",
-          });
+          // PR-B — een AFBREKING is geen serverfout. `annulering` betekent dat
+          // de bestuurder zelf weg is: dan is er niemand om iets aan te melden,
+          // en een foutregel in de log zou een storing suggereren die er niet
+          // is. `timeout` is wél een gebeurtenis die de gebruiker moet zien.
+          // Beide landen als genormaliseerde foutcategorie op de ai_actie
+          // (ontwerp §4.4). Zonder die vastlegging bestaat het onderscheid
+          // alleen in een console-regel, en is achteraf niet te zien waaróm
+          // een beurt stopte — een mislukking door een providerstoring en een
+          // bewust weggelopen gebruiker zouden er identiek uitzien.
+          const afbreekreden = foutcategorieVoor(streamFout);
+          if (afbreekreden) {
+            await rondAf(supabase, aiActieId, "mislukt", `retrieval:${afbreekreden}`).catch(() => {});
+            if (afbreekreden === "timeout") {
+              send({
+                type: "error",
+                error: "Het zoeken in de bronnen duurde te lang. Probeer het opnieuw of stel uw vraag gerichter.",
+              });
+            }
+            console.warn(`[chat] beurt afgebroken (${afbreekreden}) — correlatie ${ctx.requestId}`);
+          } else {
+            console.error("Chat stream fout:", streamFout);
+            send({
+              type: "error",
+              error: "Er is een fout opgetreden bij het verwerken van uw vraag.",
+            });
+          }
         } finally {
           controller.close();
         }

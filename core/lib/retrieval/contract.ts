@@ -255,6 +255,19 @@ export interface RetrievalTussenresultaat {
   meta: RetrievalMeta;
   /** De gezaghebbende contextgrens, overgenomen van de primaire query. */
   maxContextTekens: number;
+  /**
+   * De afbreekgrendel van DEZE beurt — een LEVEND handvat, geen waarde. Hij is
+   * GELEEND: `voerVolledigeRetrievalUit()` maakt hem, geeft hem aan beide fasen
+   * en sluit hem in zijn eigen `finally`. Geen van beide fasen is eigenaar.
+   *
+   * Hij loopt door tot en met de citaatvorming, want de weergaveverrijking en
+   * de contextopbouw doen nog database-werk en horen binnen dezelfde deadline.
+   *
+   * `RetrievalUitkomst` draagt hem bewust niet. Een grendel in het eindresultaat
+   * zou een handvat zijn waarvan de ontvanger de levensduur niet kent — en het
+   * hoort niet thuis in een object dat verder alleen data is en gelogd wordt.
+   */
+  grendel?: import("./afbreken").Afbreekgrendel;
   /** Ingrediënten om de meta opnieuw te bouwen na afkappen. Intern. */
   metaBasis: {
     methode: RetrievalMeta["methode"];
@@ -266,8 +279,14 @@ export interface RetrievalTussenresultaat {
   };
 }
 
-/** VOLTOOID. Het enige dat de generatielaag mag gebruiken. */
-export interface RetrievalUitkomst extends RetrievalTussenresultaat {
+/**
+ * VOLTOOID. Het enige dat de generatielaag mag gebruiken.
+ *
+ * `Omit<…, "grendel">`: het eindresultaat is pure data. De grendel is een
+ * levend handvat dat bij de afronding is gesloten; hem meedragen nodigt uit tot
+ * gebruik ná zijn levensduur.
+ */
+export interface RetrievalUitkomst extends Omit<RetrievalTussenresultaat, "grendel"> {
   /** Bestaande vorm, ongewijzigd voor C1/C7. */
   bronverwijzingen: BronVerwijzing[];
   contextTekst: string;
