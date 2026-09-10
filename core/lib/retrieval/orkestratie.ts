@@ -283,10 +283,11 @@ export async function voerRetrievalUit(
       // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).
       maxContextTekens: sporen[0].query.maxContextTekens,
       metaBasis,
-      // De grendel loopt DOOR tot en met `citeer()`: de weergaveverrijking
-      // (parent, notulen, documentmetadata) en de contextopbouw horen binnen
-      // dezelfde deadline. Sloot hij hier, dan viel dat werk erbuiten en claimde
-      // de adapter ten onrechte `timeout: true`.
+      // De grendel reist mee naar fase 2: de weergaveverrijking (parent,
+      // notulen, documentmetadata) en de contextopbouw horen binnen dezelfde
+      // deadline. Sloot hij hier, dan viel dat werk erbuiten en claimde de
+      // adapter ten onrechte `timeout: true`. Sluiten doet de EIGENAAR —
+      // `voerVolledigeRetrievalUit()` — niet deze fase en niet de volgende.
       grendel,
     };
   } catch (e) {
@@ -349,9 +350,10 @@ export async function citeer(
 ): Promise<RetrievalUitkomst> {
   // De adapter vult providerspecifieke WEERGAVEMETADATA aan (notulenlabel,
   // documenttype, de uitgebreide parent-passage). Hij bouwt geen citaties.
+  // De grendel is GELEEND van `voerVolledigeRetrievalUit()`; die sluit hem in
+  // zijn `finally`. Hier wordt hij alleen uit het tussenresultaat gelicht,
+  // zodat het eindresultaat pure data blijft.
   const grendel = tussen.grendel;
-  // De grendel is een levend handvat en hoort niet in het eindresultaat; hij
-  // wordt hier uit het tussenresultaat gelicht en na afloop gesloten.
   const { grendel: _grendel, ...tussenData } = tussen;
   const ctxMetGrendel = grendel ? { ...ctx, signal: grendel.signal } : ctx;
   // Tweemaal citeren op hetzelfde tussenresultaat zou de tweede keer ZONDER

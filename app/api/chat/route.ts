@@ -2461,7 +2461,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // omdat de fondsvlag nog niet bestaat (gaplijst G-11).
       const geresolveerdeVlaggen = resolveerRetrievalVlaggen(retrievalOpties);
       // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
-      // providerprivaat bij, en `citeer()` heeft die later nodig.
+      // providerprivaat bij, en de citaatvorming heeft die later nodig.
       const retrievalTimeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
       const retrieval = maakSupabaseAdapter(retrievalVlaggen, { gateway: { gateway, ctx: gatewayCtx } });
       const retrievalAdapter = retrieval.adapter;

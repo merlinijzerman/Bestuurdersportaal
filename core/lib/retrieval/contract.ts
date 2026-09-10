@@ -256,13 +256,15 @@ export interface RetrievalTussenresultaat {
   /** De gezaghebbende contextgrens, overgenomen van de primaire query. */
   maxContextTekens: number;
   /**
-   * De afbreekgrendel van DEZE beurt — een LEVEND handvat, geen waarde. Loopt
-   * door tot en met `citeer()`, want de weergaveverrijking en de contextopbouw
-   * doen nog database-werk en horen binnen dezelfde deadline.
+   * De afbreekgrendel van DEZE beurt — een LEVEND handvat, geen waarde. Hij is
+   * GELEEND: `voerVolledigeRetrievalUit()` maakt hem, geeft hem aan beide fasen
+   * en sluit hem in zijn eigen `finally`. Geen van beide fasen is eigenaar.
    *
-   * `citeer()` sluit hem en laat hem VALLEN: `RetrievalUitkomst` draagt hem
-   * bewust niet. Een gesloten grendel in het eindresultaat zou een handvat zijn
-   * dat niets meer bewaakt maar er nog uitziet alsof het dat wel doet — en het
+   * Hij loopt door tot en met de citaatvorming, want de weergaveverrijking en
+   * de contextopbouw doen nog database-werk en horen binnen dezelfde deadline.
+   *
+   * `RetrievalUitkomst` draagt hem bewust niet. Een grendel in het eindresultaat
+   * zou een handvat zijn waarvan de ontvanger de levensduur niet kent — en het
    * hoort niet thuis in een object dat verder alleen data is en gelogd wordt.
    */
   grendel?: import("./afbreken").Afbreekgrendel;
