@@ -21,11 +21,12 @@
           "haalDocumentChunksMetDekking",
           "maakBronSentinel",
           "maakContext",
+          "maxPerDocVoor",
+          "resolveerRetrievalVlaggen",
           "telDocumentChunks",
           "telNietActueleFondstreffers",
           "verrijkDocumentmetadata",
-          "verrijkNotulenChunks",
-          "zoekRelevanteChunksMetMeta"
+          "verrijkNotulenChunks"
         ],
         "bronset": [
           "bepaalBronset"
@@ -152,6 +153,89 @@
       "tabellen": [
         "document_chunks"
       ]
+    },
+    "core/lib/retrieval/citatie.ts": {
+      "modules": {
+        "bron-afbakening": [
+          "maakBronSentinel",
+          "neutraliseerBrontekst"
+        ],
+        "bronfragment": [
+          "bouwBronfragment"
+        ],
+        "rag": [
+          "BronVerwijzing"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/retrieval/contract.ts": {
+      "modules": {
+        "rag": [
+          "BronVerwijzing",
+          "RetrievalFilters",
+          "RetrievalMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/retrieval/meta.ts": {
+      "modules": {
+        "rag": [
+          "RetrievalMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/retrieval/orkestratie.ts": {
+      "modules": {
+        "rag": [
+          "RetrievalMeta",
+          "effectievePeildatum"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/retrieval/selectie.ts": {
+      "modules": {
+        "rag": [
+          "RetrievalFilters",
+          "RetrievalMeta"
+        ],
+        "weeg-bronsoort": [
+          "constraintsVoorProfiel",
+          "weegBronsoort"
+        ],
+        "rag-select": [
+          "RepresentatieConstraints",
+          "selecteerChunksMetTrace",
+          "selecteerMetConstraintsMetTrace"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/retrieval/supabase-adapter.ts": {
+      "modules": {
+        "rag": [
+          "DocumentChunk",
+          "RetrievalMeta",
+          "RetrievalOpties",
+          "chunkAlsBronresultaat",
+          "verrijkDocumentmetadata",
+          "verrijkNotulenChunks",
+          "zoekRelevanteChunksMetMeta"
+        ],
+        "parent-context": [
+          "verrijkMetParents"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
     },
     "core/lib/vergelijk-productie.ts": {
       "modules": {

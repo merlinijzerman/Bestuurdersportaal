@@ -609,7 +609,7 @@ toegelaten op een zwakker bewijs.
 | V2 | `gebruikerId === ctx.actor.gebruikerId` | een verse, geldige proof die bij een **andere gebruiker** hoort (gedeelde cache, verkeerd doorgegeven token) |
 | V3 | `correlationId === ctx.correlationId` | een proof uit een **eerdere request** van dezelfde gebruiker — hergebruik over verzoeken heen |
 | V4 | `verzoekStart ≤ gecontroleerdOp ≤ nu`, met ten hoogste 2 s klokspeling naar de toekomst, en `nu − gecontroleerdOp ≤ 60 s` | een check van vóór dit verzoek, een tijdstip uit de toekomst, en een proof die tijdens een lange beurt is verouderd |
-| V5 | `bronconfiguratieVersie === de versie die de orkestratie op het moment van de poort **opnieuw uit de bronregistratie leest**, én de bron is dan nog steeds verbonden | een bron die **tijdens** het verzoek is herconfigureerd, ontkoppeld of ingetrokken |
+| V5 | `bronconfiguratieVersie` === de versie die de orkestratie op het moment van de poort **opnieuw uit de bronregistratie leest**, én de bron is dan nog steeds verbonden | een bron die **tijdens** het verzoek is herconfigureerd, ontkoppeld of ingetrokken |
 
 V3 is de scherpste: `correlationId` is dezelfde waarde die naar de AI-gateway en het
 auditspoor gaat, dus de rechtencheck, de modelaanroep en de governanceregel hangen aan

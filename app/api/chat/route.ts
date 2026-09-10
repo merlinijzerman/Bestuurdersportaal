@@ -13,7 +13,10 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { voerRetrievalUit, citeer } from "@/core/lib/retrieval/orkestratie";
+import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import type { Bronsoort } from "@/core/lib/retrieval/contract";
+import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
 // `actief` in deze route al een half dozijn andere betekenissen heeft.
 import { effectieveStatus, isActief as isReflectieActief, isReflectieIngang, type ReflectieStatus, type ReflectieActie, type ReflectieIngang } from "@/core/lib/reflectie-flow";
@@ -157,6 +160,16 @@ import {
 // leven in lib/generatie-kern.ts en worden hierboven geïmporteerd — één gedeelde
 // kern voor route én Lab.
 const CHUNK_BUDGET = 10;
+// T2-1 — harde bovengrens op de omvang van de modelcontext (ontwerp §4.1).
+// Bewust een VANGNET en geen sturing: de huidige budgetten (10 + 5 passages,
+// plus parent-context) blijven er ruim onder, zodat deze grens vandaag niets
+// afkapt. T2-1 introduceert de grens; het bijstellen ervan is een aparte,
+// gemotiveerde keuze — en de orkestratie meldt afkappen als truncatie."tekens".
+const MAX_CONTEXT_TEKENS = 120_000;
+/** Kandidatenpool: ruimer dan de eindselectie, zodat de centrale weging een
+ *  kandidaat van plek 15 alsnog in de top kan halen. Spiegelt de overfetch die
+ *  de RPC al deed, zodat de pool niet twee keer wordt opgerekt. */
+const kandidatenpool = (maxResultaten: number) => Math.max(maxResultaten * 3, 20);
 // 12-08-2026 — budget voor het AANVULLENDE spoor bij een primair document.
 // Bewust een eigen budget bovenop CHUNK_BUDGET in plaats van een verdeling
 // binnen dat budget: zo houdt het gekozen hoofddocument exact de ruimte die het
@@ -2437,73 +2450,119 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const primaireIds = new Set<string>(
         primairPadActief ? scopeDocumentIds ?? [] : []
       );
-      const [res, resAanvullend] = await Promise.all([
-        zoekRelevanteChunksMetMeta(
-          zoekVraag,
-          fondsId,
-          CHUNK_BUDGET,
-          hybrideAan,
-          scopeDocumentIds,
-          // Spoor A draagt géén filters in de primaire modi. In agendapunt-modus
-          // was `retrievalFilters` daar al `undefined`; dit is dus geen
-          // gedragswijziging, alleen expliciet gemaakt.
-          primairPadActief ? undefined : retrievalFilters,
-          retrievalOpties
-        ),
-        primairPadActief
-          ? zoekRelevanteChunksMetMeta(
-              zoekVraag,
-              fondsId,
-              AANVULLEND_BUDGET,
-              hybrideAan,
-              undefined,
-              // Altijd de bibliotheekfilters, óók in agendapunt-modus waar het
-              // primaire spoor ongefilterd draait. Zonder dit zou de hele
-              // bibliotheek inclusief historische stukken ongefilterd meekomen.
-              bibliotheekFilters,
-              retrievalOpties
-            )
-          : Promise.resolve(null),
-      ]);
-
-      // Het hoofddocument zit al in spoor A; overlap eruit zodat een passage
-      // nooit twee bronnummers krijgt.
-      const aanvullendeChunks = (resAanvullend?.chunks ?? []).filter(
-        (c) => !primaireIds.has(c.document_id)
-      );
-      // Volgorde is betekenisdragend: het hoofddocument krijgt de laagste
-      // bronnummers, de aanvullende bronnen komen erachter.
-      chunks = [...res.chunks, ...aanvullendeChunks];
-      retrievalMeta = {
-        ...res.meta,
-        // De promptset is de SOM van beide sporen. `chunks` voedt de bronset-hash
-        // en daarmee de bevroren reflectiebronset (core/lib/bronset.ts,
-        // bepaalBronset). Stond hier alleen spoor A in, dan zou een reflectie op
-        // dit antwoord de aanvullende bronnen niet terugzien terwijl ze wél in
-        // het antwoord zijn gebruikt — en zou de TS-hash afwijken van de
-        // SQL-spiegel in reflectie_transitie().
-        chunks: [
-          ...res.meta.chunks,
-          ...aanvullendeChunks.map((c) => ({
-            id: c.id,
-            document_id: c.document_id,
-            rang: c.rang ?? null,
-          })),
-        ],
-        opgehaald: res.meta.opgehaald + (resAanvullend?.meta.opgehaald ?? 0),
-        geselecteerd: res.meta.geselecteerd + aanvullendeChunks.length,
-        // Wat de verbreding daadwerkelijk toevoegde. Alleen aanwezig als er een
-        // aanvullend spoor draaide; geldt voor /ai én de agendapuntchat.
-        ...(resAanvullend
-          ? {
-              aanvullend: {
-                chunks: aanvullendeChunks.length,
-                documenten: new Set(
-                  aanvullendeChunks.map((c) => c.document_id)
-                ).size,
+      // ── T2-1 — C1 loopt door het retrievalcontract ───────────────────────
+      //  De adapter levert kandidaten; de orkestratie selecteert per spoor,
+      //  voegt samen en bouwt het auditspoor (besluit 0213 punt 5). De twee
+      //  sporen, hun budgetten en hun filters zijn ONGEWIJZIGD — dit is een
+      //  verplaatsing, geen gedragswijziging.
+      // Dezelfde resolutie die de adapter intern gebruikt — zie
+      // resolveerRetrievalVlaggen(): `regimeWeging` valt terug op de env-default
+      // omdat de fondsvlag nog niet bestaat (gaplijst G-11).
+      const geresolveerdeVlaggen = resolveerRetrievalVlaggen(retrievalOpties);
+      // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
+      // providerprivaat bij, en `citeer()` heeft die later nodig.
+      const retrieval = maakSupabaseAdapter(retrievalVlaggen, { gateway: { gateway, ctx: gatewayCtx } });
+      const retrievalAdapter = retrieval.adapter;
+      // De route consumeert (nog) chunks. De adapter houdt de koppeling
+      // ref → chunk providerprivaat; deze helper haalt op ná de citatie de
+      // chunkvorm terug voor de bestaande, ongewijzigde downstreamlogica.
+      // T2-2/T2-4 laten die consumenten op Bronresultaat werken.
+      const retrievalContext = {
+        fondsId,
+        actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
+        taaktype: "chat_generatie" as const,
+        bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+        // De BEURTscope (audit, vergadering/agendapunt); de DOCUMENTscope is
+        // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
+        scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
+        correlationId: ctx.requestId,
+      };
+      const retrievalResultaat = await voerRetrievalUit(
+        retrievalContext,
+        {
+          adapter: retrievalAdapter,
+          sporen: [
+            {
+              query: {
+                naam: "primair",
+                // Scope PER SPOOR: het primaire spoor is afgebakend tot het
+                // gekozen stuk of de gekoppelde stukken.
+                documentScope: scopeDocumentIds,
+                origineleVraag: gereformuleerd ? vraag : zoekVraag,
+                zoekvraag: zoekVraag,
+                strategie: "gericht" as const,
+                maxResultaten: CHUNK_BUDGET,
+                maxKandidaten: kandidatenpool(CHUNK_BUDGET),
+                maxContextTekens: MAX_CONTEXT_TEKENS,
+                hybrideAan,
+                // Spoor A draagt géén filters in de primaire modi.
+                filters: primairPadActief ? undefined : retrievalFilters,
               },
-            }
-          : {}),
+              grenzen: {
+                maxPerDoc: maxPerDocVoor(CHUNK_BUDGET),
+                representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+                regimeWeging: geresolveerdeVlaggen.regimeWeging,
+                relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+              },
+            },
+            ...(primairPadActief
+              ? [
+                  {
+                    query: {
+                      naam: "aanvullend",
+                      // GEEN documentscope: dit spoor is juist de verbreding
+                      // naar de bibliotheek. Zou het de primaire scope erven,
+                      // dan zocht het alleen in dezelfde stukken.
+                      documentScope: undefined,
+                      origineleVraag: gereformuleerd ? vraag : zoekVraag,
+                      zoekvraag: zoekVraag,
+                      strategie: "gericht" as const,
+                      maxResultaten: AANVULLEND_BUDGET,
+                      maxKandidaten: kandidatenpool(AANVULLEND_BUDGET),
+                      maxContextTekens: MAX_CONTEXT_TEKENS,
+                      hybrideAan,
+                      // Altijd de bibliotheekfilters, óók in agendapunt-modus.
+                      filters: bibliotheekFilters,
+                    },
+                    grenzen: {
+                      maxPerDoc: maxPerDocVoor(AANVULLEND_BUDGET),
+                      representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+                      regimeWeging: geresolveerdeVlaggen.regimeWeging,
+                      relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+                    },
+                  },
+                ]
+              : []),
+          ] as const,
+        }
+      );
+      // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
+      // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
+      // Ze draait BEWUST hier, vóór het voortgangsevent en het scope-auditspoor:
+      // de harde contextgrens kan blokken afkappen, en dan bouwt de orkestratie
+      // de meta opnieuw over exact de opgenomen bronnen. Zou dit later staan,
+      // dan meldden de voortgangsregel en het auditspoor bronnen die nooit naar
+      // het model zijn gegaan.
+      const voltooid = await citeer(retrievalContext, retrievalAdapter, retrievalResultaat, {
+        // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
+        // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
+        primaireDocumentIds: primaireIds,
+        peildatum: vandaag,
+        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
+        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
+        hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
+      });
+      chunks = retrieval.chunksVoor(voltooid.geselecteerd);
+      contextTekst = voltooid.contextTekst;
+      bronnen = voltooid.bronverwijzingen;
+      // H-10: bron-afbakening en het aantal geneutraliseerde bronlabel-patronen
+      // door naar respectievelijk de systeemprompt en het auditspoor.
+      bronSentinel = voltooid.sentinel;
+      contextGeneutraliseerd = voltooid.geneutraliseerd;
+      retrievalMeta = {
+        // De HERBOUWDE meta: hij beschrijft exact de bronnen die in de context
+        // staan, ook wanneer de grens blokken heeft afgekapt.
+        ...voltooid.meta,
         zoekvraag: zoekVraag,
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
@@ -2540,34 +2599,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           modus: "primair",
         };
       }
-      // Increment D — verrijk notulensegment-chunks met vergadering/agendapunt
-      // zodat de bronvermelding "Vastgestelde notulen …, agendapunt N — …" klopt.
-      chunks = await verrijkNotulenChunks(chunks);
-      // Tranche 2B — documenttype/bestandstype voor de documentlijst bij
-      // antwoordmodus `bronoverzicht`. Bewust hier, ná retrieval, ranking en
-      // fondsdiscipline: het zijn doorgeefvelden voor de WEERGAVE en ze mogen
-      // niets aan de selectie veranderen. Zie verrijkDocumentmetadata().
-      chunks = await verrijkDocumentmetadata(chunks, fondsId);
-      // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
-      // bibliotheek] in de bronkop; `vandaag` → geldigheidsdeel van het
-      // statuslabel. Zonder scope is primaireIds leeg en verandert er niets.
-      const ctx = maakContext(
-        chunks,
-        0,
-        undefined,
-        primaireIds,
-        vandaag,
-        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
-        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
-        agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]"
-      );
-      contextTekst = ctx.contextTekst;
-      bronnen = ctx.bronnen;
-      // H-10: de bron-afbakening en het aantal geneutraliseerde bronlabel-
-      // patronen doorgeven aan respectievelijk de systeemprompt en het
-      // auditspoor.
-      bronSentinel = ctx.sentinel;
-      contextGeneutraliseerd = ctx.geneutraliseerd;
+
 
       // Besluitvorming-modus (Increment G): voeg de Decision Object-
       // besluitregistratie van de relevante procesinstantie(s) toe als LEIDENDE
