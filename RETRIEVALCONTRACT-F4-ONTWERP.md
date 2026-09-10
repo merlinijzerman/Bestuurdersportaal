@@ -696,6 +696,32 @@ inhoudsvrij en gaat naar de audit; de gebruiker ziet een generieke melding.
 Geen enkele categorie mag leiden tot het verruimen van de bronset. Dat is de
 belangrijkste invariant van het foutmodel.
 
+**Het signaal is gezaghebbend, niet de foutvorm (PR-B, reviewronde 1).** Twee
+bibliotheken vertalen een abort naar iets dat er niet als abort uitziet, en beide
+zouden `timeout`/`annulering` stilzwijgend als `providerfout` laten passeren — met
+precies de terugval die hierboven verboden is:
+
+| Grens | Wat de bibliotheek doet | Geverifieerd in |
+|---|---|---|
+| PostgREST | gooit de abort **niet** door: vangt hem en levert `{ message: "AbortError: …", hint: "Request was aborted (timeout or manual cancellation)" }` als gewoon foutresultaat | `postgrest-js` `dist/index.cjs:311-325` |
+| AI-gateway | normaliseert de abort naar `GatewayFout` met categorie `geannuleerd` | `core/lib/ai-gateway/fout.ts:95` |
+
+Daarom controleert `bewaakNaIO(signal, e)` **eerst `signal.aborted`** en gooit het
+`signal.reason` door; vormherkenning in `isAfbreking()` is nog slechts een vangnet.
+Een foutvorm is een bibliotheekdetail dat per versie kan veranderen — het signaal
+weet of er is afgebroken. De controle staat na élke PostgREST-call en vóór élke
+terugval.
+
+**De deadline omvat de hele C1-keten.** Eén grendel dekt fase 1
+(`voerRetrievalUit`) én fase 2 (`citeer`, inclusief `verrijkWeergave`, parent-,
+notulen- en documentmetadata en de contextopbouw). Sloot hij na fase 1, dan viel
+databasewerk buiten de begrenzing terwijl de adapter `timeout: true` claimt.
+
+De categorie bereikt de route én het auditspoor: de `ai_actie` sluit met
+`retrieval:timeout` respectievelijk `retrieval:annulering`, zodat een providerstoring
+en een weggelopen gebruiker achteraf te onderscheiden zijn. Een annulering levert géén
+foutmelding aan de client — er is niemand meer om iets aan te melden.
+
 ### 4.5 Securitygrenzen
 
 | Grens | Regel | Waar afgedwongen |
@@ -806,6 +832,7 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 | **G-10** | Hybride pad niet gekarakteriseerd | C1 | **hoog** (was: laag) | het is in productie het **primaire** pad; de goldens dekken alleen de FTS-terugval. R3: eigen tranche vóór T2-1 | **T1b** |
 | **G-11** | `regimeWeging` niet per fonds stuurbaar | kern | laag | enige vlag met default aan, buiten `RetrievalVlaggen` | T2-2 |
 | **G-12** | De hybride fusie kent geen verslapte OR-terugval; die bestaat alleen op het FTS-pad (`rag.ts:1519`). Een lange vraag levert daardoor een vector-only fusie | C1 op het hybride pad | **midden** | asymmetrie tussen de twee paden: dezelfde vraag krijgt op FTS wél een tweede, bredere poging en op hybride niet. Gemeten in T1b, gepind in `w322b.chat…hybride-retrieval-meta` (`fts_rang: null` op elke chunk) | T2-1 |
+| **G-13** | De **hoofdgeneratiecall** krijgt geen signaal: `gateway.stream()` accepteert `verzoek.signal` (`contract.ts:146`), maar `chat/route.ts:3534` geeft er geen mee. Verbreekt de bestuurder de verbinding tijdens het genereren, dan loopt de modelcall door en betalen we hem alsnog | C1, ná de retrievalketen | midden | PR-B dekt de RETRIEVALketen (D5: 20 s vanaf binnenkomst in de orkestratie); de generatie valt daarbuiten. Bewust niet stilzwijgend meegenomen: afbreken betekent dat er géén `schrijf_ai_interactie`-regel volgt, en dat is een auditkeuze, geen implementatiedetail | **open — ter besluitvorming** |
 
 ### 5.2 Werkpakketten
 
