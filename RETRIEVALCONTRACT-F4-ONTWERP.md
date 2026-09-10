@@ -557,7 +557,7 @@ toegelaten op een zwakker bewijs.
 | V2 | `gebruikerId === ctx.actor.gebruikerId` | een verse, geldige proof die bij een **andere gebruiker** hoort (gedeelde cache, verkeerd doorgegeven token) |
 | V3 | `correlationId === ctx.correlationId` | een proof uit een **eerdere request** van dezelfde gebruiker — hergebruik over verzoeken heen |
 | V4 | `verzoekStart ≤ gecontroleerdOp ≤ nu`, met ten hoogste 2 s klokspeling naar de toekomst, en `nu − gecontroleerdOp ≤ 60 s` | een check van vóór dit verzoek, een tijdstip uit de toekomst, en een proof die tijdens een lange beurt is verouderd |
-| V5 | `bronconfiguratieVersie === de versie die de orkestratie bij verzoekstart voor die bron vaststelde` | een bron die **tijdens** het verzoek is herconfigureerd of ontkoppeld |
+| V5 | `bronconfiguratieVersie === de versie die de orkestratie op het moment van de poort **opnieuw uit de bronregistratie leest**, én de bron is dan nog steeds verbonden | een bron die **tijdens** het verzoek is herconfigureerd, ontkoppeld of ingetrokken |
 
 V3 is de scherpste: `correlationId` is dezelfde waarde die naar de AI-gateway en het
 auditspoor gaat, dus de rechtencheck, de modelaanroep en de governanceregel hangen aan
@@ -569,6 +569,23 @@ check vlak vóór de retrieval te gebeuren. De grens bestaat voor de lange beurt
 documentpad, reranker, trage provider) waarin tussen check en modelcontext meer tijd
 zit dan verwacht. `basis: "rls"` kent geen eigen venster — daar is de tenant-client zelf
 het bewijs — maar V2 en V3 gelden onverkort.
+
+**V5 toetst tegen de ACTUELE stand, niet tegen een momentopname.** Dit is een correctie
+op de eerste formulering, die de meegeleverde `bronconfiguratieVersie` vergeleek met de
+versie die de orkestratie *bij verzoekstart* had vastgelegd. Die vergelijking is
+rondzingend: beide waarden komen uit hetzelfde moment, dus precies het geval dat V5 moet
+vangen — een intrekking of herconfiguratie **tijdens** het verzoek — blijft onzichtbaar.
+Een beurt op het brede documentpad duurt tientallen seconden; een beheerder die in dat
+venster de SharePointbron ontkoppelt, zou met de oude formulering alsnog passages in de
+modelcontext krijgen.
+
+De poort leest daarom bij het toelaten opnieuw uit de bronregistratie
+(`microsoft_private.sharepoint_bronnen`) en eist twee dingen: de bron is op dát moment
+nog verbonden, en haar versie is gelijk aan de `bronconfiguratieVersie` in het bewijs.
+Is de bron verdwenen of opgehoogd, dan wordt de kandidaat geweigerd met
+`toestemming_geweigerd` — nooit gedegradeerd, en nooit alsnog toegelaten omdat de
+retrieval al gedaan was. Één herlezing per bron per verzoek volstaat (gedeeld over alle
+kandidaten van die bron), zodat de poort geen N+1 op de registratie veroorzaakt.
 
 ### 4.3 Datastroom
 
@@ -742,7 +759,7 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 | # | Pakket | Raakt | Gate |
 |---|---|---|---|
 | **T1b** ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349)) | Embeddingstub naast de Anthropic-stub + geëmbedde fixtures; hybride golden op het `zoek_chunks_hybride`-pad. **Nog steeds geen productiecode.** | tests, fixtures | nieuwe hybride golden; bestaande 390 ongewijzigd |
-| T2-1 | Contract + orkestratie + Supabase-adapter; C1 erdoorheen. **Inclusief `AbortSignal`, timeout en de toelatingspoort** (R6, G-3, G-3b) | chatroute, `rag.ts` (wrapper) | w311/w322-goldens identiek volgens §3.2; contracttests op cancellation/timeout |
+| T2-1 | Contract + orkestratie + Supabase-adapter; C1 erdoorheen. **Inclusief `AbortSignal`, timeout en de toelatingspoort** (R6, G-3, G-3b) | chatroute, `rag.ts` (wrapper) | w311/w322-goldens identiek volgens §3.2; contracttests op cancellation/timeout; **acceptatievoorwaarde: V5 toetst tegen de actuele bronregistratie, met een test die een intrekking *tijdens* het verzoek simuleert en aantoont dat de kandidaat alsnog wordt geweigerd** |
 | T2-2 | C5 en C6 door de orkestratie (vlaggen, bronvorm, scopevalidatie, PII-gate op C5). **C6 behoudt zijn filtergedrag** (R2) | zoeken, vergelijk | nieuwe goldens vóór en ná |
 | T2-3 | Versie-identiteit (volledige hash, R1) in `bronversie_audit`; `correlationId` in `retrieval_meta` (R4, één forwardmigratie) | `audit-meta.ts`, SQL-projectie, migratie | audit-meta-sanity + karakterisering + R1-gates |
 | T2-4 | Evidencebronnen achter het contract (G-1a); **typed contextcontract + audit voor de 26 modelcontextlezingen** (G-1b); census krimpt tot adapter/orkestratie; chunkpresentie en `parent-context` via de adapter | chatroute, contextmodules | census-gate + contextgate (klassengroottes verschuiven bewust) |
