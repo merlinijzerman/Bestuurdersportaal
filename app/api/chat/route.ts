@@ -4268,12 +4268,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               `${fase}:${afbreekreden}`
             );
             if (!afgerond) {
-              // Beide sporen zijn best-effort: de gatewaylogregel wordt door de
-              // gateway zelf geschreven en kan óók stil mislukken. Blijft er
-              // niets over, dan is dit een OPERATIONEEL signaal, geen ruis — en
-              // het mag de oorspronkelijke afbreekreden nooit overschrijven.
+              // Het GEZAGHEBBENDE spoor is niet gesloten: de levenscyclus van
+              // deze actie staat nog open. De gatewaylogregel kan er intussen
+              // wél zijn — die wordt door de gateway zelf geschreven — dus dit
+              // is niet "beide sporen ontbreken" maar precies dit ene feit.
+              // Operationeel signaal, geen ruis, en het mag de oorspronkelijke
+              // afbreekreden nooit overschrijven.
               console.error(
-                `[chat][ALARM] afbreking niet duurzaam vastgelegd — fase=${fase} reden=${afbreekreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
+                `[chat][ALARM] ai_actie niet afgerond — fase=${fase} reden=${afbreekreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
               );
             }
             if (afbreekreden === "timeout") {

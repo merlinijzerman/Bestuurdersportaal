@@ -745,9 +745,10 @@ Bewust geen `eindreden`-kolom: die zou een wijziging van
 audit-kritieke tabel voor informatie die elders al append-only staat. De strikte
 afronding telt zowel een RPC-`error` als `data === false` als mislukking
 (`false` = geen rij bijgewerkt, dus levenscyclus nog open) en is zelf begrensd,
-zodat een vastlopende RPC de afrondmarge niet opeet. Mislukken beide sporen, dan
-volgt een expliciet `[chat][ALARM]` en blijft de oorspronkelijke afbreekreden
-intact.
+zodat een vastlopende RPC de afrondmarge niet opeet. Kan het gezaghebbende spoor niet worden
+gesloten, dan volgt `[chat][ALARM] ai_actie niet afgerond` — precies dat ene
+feit, want de gatewaylogregel kan er intussen wél zijn — en blijft de
+oorspronkelijke afbreekreden intact.
 
 **Eén publieke ingang, en die BEZIT de grendel (reviewronde 3).** De
 tweefasen-API gaf de aanroeper een levend handvat in handen: slaagde

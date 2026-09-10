@@ -397,7 +397,7 @@ test("PR-B — de route vertaalt een afbreking naar een eigen pad, niet naar een
     "de afbrekingsreden hoort via de strikte afronding op de ai_actie te landen"
   );
   assert.match(bron, /let fase: "retrieval" \| "generatie" = "retrieval";/, "de fase is expliciet, niet afgeleid");
-  assert.match(bron, /\[chat\]\[ALARM\]/, "mislukken van beide sporen hoort een operationeel signaal te geven");
+  assert.match(bron, /\[chat\]\[ALARM\] ai_actie niet afgerond/, "een niet-gesloten levenscyclus hoort een operationeel signaal te geven");
 });
 
 // ── Reviewronde 2: de LEVENSLOOP van de grendel ─────────────────────────────

@@ -72,37 +72,79 @@ async function gatewayRegels(sinds) {
   return rows;
 }
 
-async function actieRegels(sinds) {
+/**
+ * DE actie die bij deze beurt hoort, opgezocht via het `actie_id` uit de
+ * gatewaylogregel. "Nieuwste rij sinds tijdstip" kan bij parallel werk de
+ * verkeerde beurt beoordelen — en dan toetst de test iets anders dan het
+ * scenario dat hij net heeft uitgelokt.
+ */
+async function actieVoor(actieId) {
   const { rows } = await db.query(
-    `select id, status, resultaat_ref, gestart_op
-       from public.ai_actie
-      where gestart_op >= $1
-      order by gestart_op desc limit 20`,
-    [sinds]
+    `select id, status, resultaat_ref, gestart_op from public.ai_actie where id = $1`,
+    [actieId]
   );
-  return rows;
+  return rows[0] ?? null;
 }
 
-async function zetGeneratieBudget(ms) {
-  if (ms === null) {
-    await db.query(
-      `delete from public.fonds_feature_flags where fonds_id = $1 and flag_key = 'generatie_timeout_ms'`,
-      [FONDS_ID]
-    );
-    return;
-  }
+/** De vlag zoals we hem AANTROFFEN — inclusief "bestond niet". */
+async function leesGeneratieBudget() {
+  const { rows } = await db.query(
+    `select waarde from public.fonds_feature_flags
+      where fonds_id = $1 and flag_key = 'generatie_timeout_ms'`,
+    [FONDS_ID]
+  );
+  return rows.length === 0 ? { bestond: false } : { bestond: true, waarde: rows[0].waarde };
+}
+
+async function zetGeneratieBudget(waarde) {
   await db.query(
     `insert into public.fonds_feature_flags (fonds_id, flag_key, waarde)
           values ($1, 'generatie_timeout_ms', $2::jsonb)
      on conflict (fonds_id, flag_key) do update set waarde = excluded.waarde`,
-    [FONDS_ID, JSON.stringify(ms)]
+    [FONDS_ID, JSON.stringify(waarde)]
   );
 }
 
-/** Tellers van de providerstub: bewijst of er een TWEEDE call kwam (retry). */
+/**
+ * Herstelt EXACT de aangetroffen toestand. Blind verwijderen zou een fonds dat
+ * de vlag wél had stilzwijgend terugzetten op de default — een test hoort de
+ * omgeving achter te laten zoals hij hem vond.
+ */
+async function herstelGeneratieBudget(begintoestand) {
+  if (begintoestand.bestond) {
+    await zetGeneratieBudget(begintoestand.waarde);
+    console.log(`  · generatie_timeout_ms hersteld op ${JSON.stringify(begintoestand.waarde)}`);
+  } else {
+    await db.query(
+      `delete from public.fonds_feature_flags where fonds_id = $1 and flag_key = 'generatie_timeout_ms'`,
+      [FONDS_ID]
+    );
+    console.log("  · generatie_timeout_ms verwijderd (bestond niet vooraf)");
+  }
+}
+
+/** Tellers van de providerstub: hoeveel calls er kwamen (retry-bewijs). */
 async function stubTellers() {
   const res = await fetch("http://127.0.0.1:8790/stats").catch(() => null);
   return res && res.ok ? await res.json() : null;
+}
+
+/**
+ * LEVENSLOOP van de providerstreams. `streams +1` bewijst alleen dat er geen
+ * tweede call kwam; deze tellers bewijzen dat de OORSPRONKELIJKE verbinding
+ * werkelijk is afgebroken en niet stilletjes is uitgelopen.
+ */
+async function stubLevensloop() {
+  const res = await fetch("http://127.0.0.1:8790/levensloop").catch(() => null);
+  return res && res.ok ? await res.json() : null;
+}
+
+function toetsLevensloop(voor, na, label) {
+  if (!voor || !na) return;
+  toets(`${label}: precies één stream vroegtijdig gesloten`, na.afgebroken - voor.afgebroken === 1, `${na.afgebroken - voor.afgebroken}`);
+  toets(`${label}: geen actieve stream meer bij de provider`, na.actief === 0, `${na.actief} actief`);
+  toets(`${label}: de stream is NIET netjes voltooid`, na.voltooid - voor.voltooid === 0, `${na.voltooid - voor.voltooid}`);
+  toets(`${label}: geen tweede delta geschreven`, na.tweedeDeltas - voor.tweedeDeltas === 0, `${na.tweedeDeltas - voor.tweedeDeltas}`);
 }
 
 /**
@@ -140,22 +182,35 @@ async function beurt({ bijGeneratie, signal } = {}) {
   }
 
   const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  // BUFFEREND parsen: één SSE-event kan over meerdere netwerkchunks verdeeld
+  // aankomen. Per chunk splitsen zou zo'n event stilzwijgend missen — en dan
+  // ziet de test het generatie-voortgangsevent niet, breekt hij te laat af, en
+  // slaagt hij om de verkeerde reden.
+  let buffer = "";
   try {
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
-      for (const regel of new TextDecoder().decode(value).split("\n")) {
-        if (!regel.startsWith("data: ")) continue;
-        let o;
-        try {
-          o = JSON.parse(regel.slice(6));
-        } catch {
-          continue;
-        }
-        gebeurtenissen.push(o);
-        if (!generatieBegonnen && o.type === "progress" && o.fase === "generatie" && o.status === "bezig") {
-          generatieBegonnen = true;
-          if (bijGeneratie) await bijGeneratie();
+      buffer += decoder.decode(value, { stream: true });
+      // SSE-events worden gescheiden door een lege regel.
+      let grens;
+      while ((grens = buffer.indexOf("\n\n")) !== -1) {
+        const blok = buffer.slice(0, grens);
+        buffer = buffer.slice(grens + 2);
+        for (const regel of blok.split("\n")) {
+          if (!regel.startsWith("data: ")) continue;
+          let o;
+          try {
+            o = JSON.parse(regel.slice(6));
+          } catch {
+            continue;
+          }
+          gebeurtenissen.push(o);
+          if (!generatieBegonnen && o.type === "progress" && o.fase === "generatie" && o.status === "bezig") {
+            generatieBegonnen = true;
+            if (bijGeneratie) await bijGeneratie();
+          }
         }
       }
     }
@@ -165,13 +220,39 @@ async function beurt({ bijGeneratie, signal } = {}) {
   return { gebeurtenissen, generatieBegonnen };
 }
 
+// ── Gedeelde controles op de vastlegging ────────────────────────────────────
+
+/**
+ * Toetst het duurzame spoor. De `ai_actie` wordt opgezocht via het `actie_id`
+ * uit de gatewaylogregel, zodat we gegarandeerd DEZE beurt beoordelen.
+ */
+async function toetsVastlegging(sinds, verwachtResultaat, verwachtRef) {
+  const generatie = (await gatewayRegels(sinds)).filter((r) => r.taaktype === "chat_generatie");
+  toets("er is een gatewaylogregel voor de generatie", generatie.length > 0, `${generatie.length} regels`);
+  if (generatie.length === 0) return;
+
+  const regel = generatie[0];
+  toets(`\`gateway_log.resultaat = ${verwachtResultaat}\``, regel.resultaat === verwachtResultaat, `${regel.resultaat}`);
+  toets("de regel draagt een correlatie-id", (regel.correlatie_id ?? "").length >= 8);
+  toets("de regel draagt het actie-id van deze beurt", Boolean(regel.actie_id), `${regel.actie_id}`);
+  if (!regel.actie_id) return;
+
+  const actie = await actieVoor(regel.actie_id);
+  toets("de bijbehorende ai_actie bestaat", actie !== null);
+  if (!actie) return;
+  toets("de actie eindigt NIET als voltooid", actie.status !== "voltooid", `status=${actie.status}`);
+  toets("`ai_actie.status = mislukt`", actie.status === "mislukt", `status=${actie.status}`);
+  toets(`\`resultaat_ref = ${verwachtRef}\``, actie.resultaat_ref === verwachtRef, `${actie.resultaat_ref}`);
+}
+
 // ── A. Clientdisconnect ─────────────────────────────────────────────────────
 
 async function scenarioAnnulering() {
   console.log("\n── A. de bestuurder verbreekt de verbinding tijdens het genereren ──");
   const sinds = new Date(Date.now() - 2_000).toISOString();
   const ctrl = new AbortController();
-  const voor = await stubTellers();
+  const tellersVoor = await stubTellers();
+  const levensloopVoor = await stubLevensloop();
 
   let uitkomst;
   try {
@@ -193,30 +274,17 @@ async function scenarioAnnulering() {
   toets("geen `done`-event", !uitkomst.gebeurtenissen.some((e) => e.type === "done"));
 
   await new Promise((r) => setTimeout(r, 3_000));
+  await toetsVastlegging(sinds, "geannuleerd", "generatie:annulering");
 
-  const generatie = (await gatewayRegels(sinds)).filter((r) => r.taaktype === "chat_generatie");
-  toets("er is een gatewaylogregel voor de generatie", generatie.length > 0, `${generatie.length} regels`);
-  if (generatie.length > 0) {
-    toets("`gateway_log.resultaat = geannuleerd`", generatie[0].resultaat === "geannuleerd", `${generatie[0].resultaat}`);
-    toets("de regel draagt een correlatie-id", (generatie[0].correlatie_id ?? "").length >= 8);
-  }
-
-  const acties = await actieRegels(sinds);
-  toets("er is een ai_actie voor deze beurt", acties.length > 0);
-  if (acties.length > 0) {
-    toets("de actie eindigt NIET als voltooid", acties[0].status !== "voltooid", `status=${acties[0].status}`);
-    toets("`ai_actie.status = mislukt`", acties[0].status === "mislukt", `status=${acties[0].status}`);
+  const tellersNa = await stubTellers();
+  if (tellersVoor && tellersNa) {
     toets(
-      "`resultaat_ref = generatie:annulering`",
-      acties[0].resultaat_ref === "generatie:annulering",
-      `${acties[0].resultaat_ref}`
+      "geen tweede providercall (geen retry)",
+      tellersNa.streams - tellersVoor.streams === 1,
+      `${tellersNa.streams - tellersVoor.streams} streams`
     );
   }
-
-  const na = await stubTellers();
-  if (voor && na) {
-    toets("geen tweede providercall (geen retry)", na.streams - voor.streams === 1, `${na.streams - voor.streams} streams`);
-  }
+  toetsLevensloop(levensloopVoor, await stubLevensloop(), "annulering");
 }
 
 // ── B. Verlopen deadline ────────────────────────────────────────────────────
@@ -224,8 +292,11 @@ async function scenarioAnnulering() {
 async function scenarioTimeout() {
   console.log("\n── B. de deadline verloopt terwijl de provider nog streamt ──");
   const sinds = new Date(Date.now() - 2_000).toISOString();
-  const voor = await stubTellers();
+  const tellersVoor = await stubTellers();
+  const levensloopVoor = await stubLevensloop();
 
+  // Wat we AANTREFFEN, zodat we exact dat kunnen terugzetten.
+  const begintoestand = await leesGeneratieBudget();
   // Ondergrens van de band: 30 s. De stub zwijgt langer, dus de deadline wint.
   // Let op: dit schrijft een APPEND-ONLY regel in `fonds_config_log` die niet
   // meer weg kan — zie de waarschuwing bovenaan dit bestand.
@@ -254,41 +325,19 @@ async function scenarioTimeout() {
     toets("geen `done`-event", !gebeurtenissen.some((e) => e.type === "done"));
 
     await new Promise((r) => setTimeout(r, 3_000));
+    await toetsVastlegging(sinds, "timeout", "generatie:timeout");
 
-    const generatie = (await gatewayRegels(sinds)).filter((r) => r.taaktype === "chat_generatie");
-    toets("er is een gatewaylogregel voor de generatie", generatie.length > 0, `${generatie.length} regels`);
-    if (generatie.length > 0) {
-      toets(
-        "`gateway_log.resultaat = timeout` (NIET `geannuleerd`)",
-        generatie[0].resultaat === "timeout",
-        `${generatie[0].resultaat}`
-      );
-    }
-
-    const acties = await actieRegels(sinds);
-    toets("er is een ai_actie voor deze beurt", acties.length > 0);
-    if (acties.length > 0) {
-      toets("de actie eindigt NIET als voltooid", acties[0].status !== "voltooid", `status=${acties[0].status}`);
-      toets("`ai_actie.status = mislukt`", acties[0].status === "mislukt", `status=${acties[0].status}`);
-      toets(
-        "`resultaat_ref = generatie:timeout`",
-        acties[0].resultaat_ref === "generatie:timeout",
-        `${acties[0].resultaat_ref}`
-      );
-    }
-
-    const na = await stubTellers();
-    if (voor && na) {
+    const tellersNa = await stubTellers();
+    if (tellersVoor && tellersNa) {
       toets(
         "geen tweede providercall (geen retry)",
-        na.streams - voor.streams === 1,
-        `${na.streams - voor.streams} streams`
+        tellersNa.streams - tellersVoor.streams === 1,
+        `${tellersNa.streams - tellersVoor.streams} streams`
       );
     }
+    toetsLevensloop(levensloopVoor, await stubLevensloop(), "timeout");
   } finally {
-    // De configuratie hoort terug zoals we hem aantroffen, ook als de test faalt.
-    await zetGeneratieBudget(null);
-    console.log("  · generatie_timeout_ms hersteld");
+    await herstelGeneratieBudget(begintoestand);
   }
 }
 
