@@ -167,118 +167,122 @@ export async function voerRetrievalUit(
     scope: { ...ctx.scope, documentIds: query.documentScope },
   }));
   try {
-  const uitkomsten: AdapterUitkomst[] = await Promise.all(
-    sporen.map(({ query }, i) => opdracht.adapter.zoek(spoorContext[i], query))
-  );
-  // Tussen twee stappen door: is er afgebroken, dan stopt de keten hier — ook
-  // als de I/O zelf toevallig al klaar was.
-  grendel.bewaak();
-
-  // 2. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
-  //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
-  //    responstijd de volgorde en was de samenvoeging niet meer deterministisch.
-  const perAdapter: RetrievalTussenresultaat["perAdapter"] = uitkomsten.map((u, i) => ({
-    naam: opdracht.adapter.naam,
-    query: sporen[i].query.naam,
-    methode: u.methode,
-    latencyMs: u.latencyMs,
-    kandidaten: u.kandidaten.length,
-    fout: u.fout,
-  }));
-
-  // 3. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
-  //    bewust ruimer (`max(3 × maxResultaten, 20)`), want de centrale weging mag
-  //    een kandidaat van plek 15 alsnog in de top halen. Terugkappen naar
-  //    `maxResultaten` zou die promotie stil wegnemen.
-  let truncatie: RetrievalTussenresultaat["truncatie"];
-  const begrensd = uitkomsten.map((u, i) => {
-    const max = sporen[i].query.maxKandidaten;
-    if (u.kandidaten.length <= max) return u.kandidaten;
-    truncatie = { reden: "kandidaten" };
-    return u.kandidaten.slice(0, max);
-  });
-
-  // 4. Selectie PER SPOOR — zie de kopnoot — gevolgd door de providerhook.
-  const geselecteerdPerSpoor: Bronresultaat[][] = [];
-  const extraPerSpoor: Partial<RetrievalMeta>[] = [];
-  for (let i = 0; i < uitkomsten.length; i++) {
-    const u = uitkomsten[i];
-    const g = sporen[i].grenzen;
-    const perRef = new Map(begrensd[i].map((b) => [b.ref, b]));
-    const sel = await selecteerEnVerrijk(begrensd[i].map(alsSelectieBron), u.methode as RetrievalMeta["methode"], {
-      filters: sporen[i].query.filters,
-      maxResults: sporen[i].query.maxResultaten,
-      maxPerDoc: g.maxPerDoc,
-      representatieConstraints: g.representatieConstraints,
-      regimeWeging: g.regimeWeging,
-      relevantieDrempel: g.relevantieDrempel,
-    });
-    let gekozen = sel.chunks.map((b) => perRef.get(b.id)).filter((b): b is Bronresultaat => Boolean(b));
-    const extra = { ...sel.extra };
-    // Providerspecifieke uitbreiding (Supabase: parent-context). Per spoor, op
-    // exact dezelfde plek als vóór T2-1.
-    if (opdracht.adapter.verrijkSelectie && gekozen.length > 0) {
-      const v = await opdracht.adapter.verrijkSelectie(spoorContext[i], gekozen, {
-        // De EFFECTIEVE peildatum van dit spoor: dezelfde waarde waarmee de
-        // retrieval draaide. Een lege string zou de review-vervalcontrole op
-        // generieke siblings uitschakelen.
-        peildatum: peildatumVanSpoor(sporen[i].query),
-      });
-      gekozen = v.resultaten;
-      Object.assign(extra, v.meta ?? {});
-    }
-    geselecteerdPerSpoor.push(gekozen);
-    extraPerSpoor.push(extra);
+    const uitkomsten: AdapterUitkomst[] = await Promise.all(
+      sporen.map(({ query }, i) => opdracht.adapter.zoek(spoorContext[i], query))
+    );
+    // Tussen twee stappen door: is er afgebroken, dan stopt de keten hier — ook
+    // als de I/O zelf toevallig al klaar was.
     grendel.bewaak();
-  }
 
-  // 5. Samenvoegen. Het primaire spoor vooraan; een document dat daar al in zit
-  //    komt niet nóg eens uit een volgend spoor (één passage, één bronnummer).
-  const primair = geselecteerdPerSpoor[0] ?? [];
-  const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.documentId));
-  const aanvullend = geselecteerdPerSpoor
-    .slice(1)
-    .flat()
-    .filter((b) => !primaireDocIds.has(b.documentIdentiteit.documentId));
-  const geselecteerd = [...primair, ...aanvullend];
+    // 2. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
+    //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
+    //    responstijd de volgorde en was de samenvoeging niet meer deterministisch.
+    const perAdapter: RetrievalTussenresultaat["perAdapter"] = uitkomsten.map((u, i) => ({
+      naam: opdracht.adapter.naam,
+      query: sporen[i].query.naam,
+      methode: u.methode,
+      latencyMs: u.latencyMs,
+      kandidaten: u.kandidaten.length,
+      fout: u.fout,
+    }));
 
-  // 6. De contextgrens wordt NIET hier afgedwongen. Meten op de kale passage zou
-  //    de parent-uitbreiding, de bronkoppen en de scheidingstekens niet
-  //    meetellen, en dan is de grens geen grens. Zij geldt in `citeer()`, op de
-  //    werkelijk gerenderde blokken.
+    // 3. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
+    //    bewust ruimer (`max(3 × maxResultaten, 20)`), want de centrale weging mag
+    //    een kandidaat van plek 15 alsnog in de top halen. Terugkappen naar
+    //    `maxResultaten` zou die promotie stil wegnemen.
+    let truncatie: RetrievalTussenresultaat["truncatie"];
+    const begrensd = uitkomsten.map((u, i) => {
+      const max = sporen[i].query.maxKandidaten;
+      if (u.kandidaten.length <= max) return u.kandidaten;
+      truncatie = { reden: "kandidaten" };
+      return u.kandidaten.slice(0, max);
+    });
 
-  // 7. Auditspoor over de HUIDIGE selectie. Kapt `citeer()` later blokken af,
-  //    dan wordt deze meta daar opnieuw gebouwd over exact de opgenomen bronnen.
-  const metaBasis = {
-    methode: uitkomsten[0].methode as RetrievalMeta["methode"],
-    opgehaald: uitkomsten.reduce((s, u) => s + u.opgehaald, 0),
-    diagnostiek: uitkomsten[0].diagnostiek ?? {},
-    extra: extraPerSpoor[0] ?? {},
-    primaireRefs: new Set(primair.map((b) => b.ref)),
-    meerdereSporen: uitkomsten.length > 1,
-  };
-  const meta = bouwRetrievalMeta(geselecteerd, metaBasis);
+    // 4. Selectie PER SPOOR — zie de kopnoot — gevolgd door de providerhook.
+    const geselecteerdPerSpoor: Bronresultaat[][] = [];
+    const extraPerSpoor: Partial<RetrievalMeta>[] = [];
+    for (let i = 0; i < uitkomsten.length; i++) {
+      const u = uitkomsten[i];
+      const g = sporen[i].grenzen;
+      const perRef = new Map(begrensd[i].map((b) => [b.ref, b]));
+      const sel = await selecteerEnVerrijk(begrensd[i].map(alsSelectieBron), u.methode as RetrievalMeta["methode"], {
+        filters: sporen[i].query.filters,
+        maxResults: sporen[i].query.maxResultaten,
+        maxPerDoc: g.maxPerDoc,
+        representatieConstraints: g.representatieConstraints,
+        regimeWeging: g.regimeWeging,
+        relevantieDrempel: g.relevantieDrempel,
+      });
+      let gekozen = sel.chunks.map((b) => perRef.get(b.id)).filter((b): b is Bronresultaat => Boolean(b));
+      const extra = { ...sel.extra };
+      // Providerspecifieke uitbreiding (Supabase: parent-context). Per spoor, op
+      // exact dezelfde plek als vóór T2-1.
+      if (opdracht.adapter.verrijkSelectie && gekozen.length > 0) {
+        const v = await opdracht.adapter.verrijkSelectie(spoorContext[i], gekozen, {
+          // De EFFECTIEVE peildatum van dit spoor: dezelfde waarde waarmee de
+          // retrieval draaide. Een lege string zou de review-vervalcontrole op
+          // generieke siblings uitschakelen.
+          peildatum: peildatumVanSpoor(sporen[i].query),
+        });
+        gekozen = v.resultaten;
+        Object.assign(extra, v.meta ?? {});
+      }
+      geselecteerdPerSpoor.push(gekozen);
+      extraPerSpoor.push(extra);
+      grendel.bewaak();
+    }
 
-  return {
-    kandidaten: begrensd.flat(),
-    geselecteerd,
-    perAdapter,
-    latencyMs: Date.now() - t0,
-    truncatie,
-    fout: uitkomsten.find((u) => u.fout)?.fout,
-    meta,
-    // De gezaghebbende grens komt van de primaire query en reist mee, zodat
-    // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).
-    maxContextTekens: sporen[0].query.maxContextTekens,
-    metaBasis,
-  };
+    // 5. Samenvoegen. Het primaire spoor vooraan; een document dat daar al in zit
+    //    komt niet nóg eens uit een volgend spoor (één passage, één bronnummer).
+    const primair = geselecteerdPerSpoor[0] ?? [];
+    const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.documentId));
+    const aanvullend = geselecteerdPerSpoor
+      .slice(1)
+      .flat()
+      .filter((b) => !primaireDocIds.has(b.documentIdentiteit.documentId));
+    const geselecteerd = [...primair, ...aanvullend];
+
+    // 6. De contextgrens wordt NIET hier afgedwongen. Meten op de kale passage zou
+    //    de parent-uitbreiding, de bronkoppen en de scheidingstekens niet
+    //    meetellen, en dan is de grens geen grens. Zij geldt in `citeer()`, op de
+    //    werkelijk gerenderde blokken.
+
+    // 7. Auditspoor over de HUIDIGE selectie. Kapt `citeer()` later blokken af,
+    //    dan wordt deze meta daar opnieuw gebouwd over exact de opgenomen bronnen.
+    const metaBasis = {
+      methode: uitkomsten[0].methode as RetrievalMeta["methode"],
+      opgehaald: uitkomsten.reduce((s, u) => s + u.opgehaald, 0),
+      diagnostiek: uitkomsten[0].diagnostiek ?? {},
+      extra: extraPerSpoor[0] ?? {},
+      primaireRefs: new Set(primair.map((b) => b.ref)),
+      meerdereSporen: uitkomsten.length > 1,
+    };
+    const meta = bouwRetrievalMeta(geselecteerd, metaBasis);
+
+    return {
+      kandidaten: begrensd.flat(),
+      geselecteerd,
+      perAdapter,
+      latencyMs: Date.now() - t0,
+      truncatie,
+      fout: uitkomsten.find((u) => u.fout)?.fout,
+      meta,
+      // De gezaghebbende grens komt van de primaire query en reist mee, zodat
+      // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).
+      maxContextTekens: sporen[0].query.maxContextTekens,
+      metaBasis,
+      // De grendel loopt DOOR tot en met `citeer()`: de weergaveverrijking
+      // (parent, notulen, documentmetadata) en de contextopbouw horen binnen
+      // dezelfde deadline. Sloot hij hier, dan viel dat werk erbuiten en claimde
+      // de adapter ten onrechte `timeout: true`.
+      grendel,
+    };
   } catch (e) {
     // Een afbreking is een EIGEN foutcategorie, geen providerfout — en er volgt
-    // geen terugval: de keten stopt volledig.
-    if (isAfbreking(e)) throw e;
-    throw e;
-  } finally {
+    // geen terugval: de keten stopt volledig. De grendel wordt hier gesloten;
+    // op het geslaagde pad doet `citeer()` dat, want die valt er nog binnen.
     grendel.stop();
+    throw e;
   }
 }
 
@@ -305,24 +309,33 @@ export async function citeer(
 ): Promise<RetrievalUitkomst> {
   // De adapter vult providerspecifieke WEERGAVEMETADATA aan (notulenlabel,
   // documenttype, de uitgebreide parent-passage). Hij bouwt geen citaties.
-  const verrijkt = adapter.verrijkWeergave
-    ? await adapter.verrijkWeergave(ctx, tussen.geselecteerd)
-    : tussen.geselecteerd;
+  const grendel = tussen.grendel;
+  const ctxMetGrendel = grendel ? { ...ctx, signal: grendel.signal } : ctx;
+  try {
+    // De weergaveverrijking valt BINNEN de deadline: parent-context, notulen- en
+    // documentmetadata doen alle drie nog database-werk.
+    const verrijkt = adapter.verrijkWeergave
+      ? await adapter.verrijkWeergave(ctxMetGrendel, tussen.geselecteerd)
+      : tussen.geselecteerd;
+    grendel?.bewaak();
 
-  // Nummering, sentinel, neutralisatie, BronVerwijzing en de contextgrens:
-  // centraal, identiek voor elke provider.
-  // Eerst de DEFINITIEVE context bouwen — inclusief de harde grens — en pas
-  // daarna alle metadata afleiden van exact de bronnen die erin staan.
-  // De grens komt UITSLUITEND van de query, via het tussenresultaat.
-  const c = bouwCitaties(verrijkt, { ...opdracht, maxContextTekens: tussen.maxContextTekens });
-  return {
-    ...tussen,
-    geselecteerd: c.opgenomen,
-    meta: bouwRetrievalMeta(c.opgenomen, tussen.metaBasis),
-    bronverwijzingen: c.bronnen,
-    contextTekst: c.contextTekst,
-    sentinel: c.sentinel,
-    geneutraliseerd: c.geneutraliseerd,
-    truncatie: c.afgekapt ? { reden: "tekens" } : tussen.truncatie,
-  };
+    // Nummering, sentinel, neutralisatie, BronVerwijzing en de contextgrens:
+    // centraal, identiek voor elke provider.
+    // Eerst de DEFINITIEVE context bouwen — inclusief de harde grens — en pas
+    // daarna alle metadata afleiden van exact de bronnen die erin staan.
+    // De grens komt UITSLUITEND van de query, via het tussenresultaat.
+    const c = bouwCitaties(verrijkt, { ...opdracht, maxContextTekens: tussen.maxContextTekens });
+    return {
+      ...tussen,
+      geselecteerd: c.opgenomen,
+      meta: bouwRetrievalMeta(c.opgenomen, tussen.metaBasis),
+      bronverwijzingen: c.bronnen,
+      contextTekst: c.contextTekst,
+      sentinel: c.sentinel,
+      geneutraliseerd: c.geneutraliseerd,
+      truncatie: c.afgekapt ? { reden: "tekens" } : tussen.truncatie,
+    };
+  } finally {
+    grendel?.stop();
+  }
 }

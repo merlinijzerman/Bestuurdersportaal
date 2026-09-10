@@ -13,7 +13,7 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { voerRetrievalUit, citeer } from "@/core/lib/retrieval/orkestratie";
+import { voerRetrievalUit, citeer, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
 import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
@@ -4183,11 +4183,32 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             },
           });
         } catch (streamFout) {
-          console.error("Chat stream fout:", streamFout);
-          send({
-            type: "error",
-            error: "Er is een fout opgetreden bij het verwerken van uw vraag.",
-          });
+          // PR-B — een AFBREKING is geen serverfout. `annulering` betekent dat
+          // de bestuurder zelf weg is: dan is er niemand om iets aan te melden,
+          // en een foutregel in de log zou een storing suggereren die er niet
+          // is. `timeout` is wél een gebeurtenis die de gebruiker moet zien.
+          // Beide landen als genormaliseerde foutcategorie op de ai_actie
+          // (ontwerp §4.4). Zonder die vastlegging bestaat het onderscheid
+          // alleen in een console-regel, en is achteraf niet te zien waaróm
+          // een beurt stopte — een mislukking door een providerstoring en een
+          // bewust weggelopen gebruiker zouden er identiek uitzien.
+          const afbreekreden = foutcategorieVoor(streamFout);
+          if (afbreekreden) {
+            await rondAf(supabase, aiActieId, "mislukt", `retrieval:${afbreekreden}`).catch(() => {});
+            if (afbreekreden === "timeout") {
+              send({
+                type: "error",
+                error: "Het zoeken in de bronnen duurde te lang. Probeer het opnieuw of stel uw vraag gerichter.",
+              });
+            }
+            console.warn(`[chat] beurt afgebroken (${afbreekreden}) — correlatie ${ctx.requestId}`);
+          } else {
+            console.error("Chat stream fout:", streamFout);
+            send({
+              type: "error",
+              error: "Er is een fout opgetreden bij het verwerken van uw vraag.",
+            });
+          }
         } finally {
           controller.close();
         }

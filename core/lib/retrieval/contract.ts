@@ -255,6 +255,12 @@ export interface RetrievalTussenresultaat {
   meta: RetrievalMeta;
   /** De gezaghebbende contextgrens, overgenomen van de primaire query. */
   maxContextTekens: number;
+  /**
+   * De afbreekgrendel van DEZE beurt. Loopt door tot en met `citeer()`, want de
+   * weergaveverrijking en de contextopbouw doen nog database-werk en horen
+   * binnen dezelfde deadline. `citeer()` sluit hem.
+   */
+  grendel?: import("./afbreken").Afbreekgrendel;
   /** Ingrediënten om de meta opnieuw te bouwen na afkappen. Intern. */
   metaBasis: {
     methode: RetrievalMeta["methode"];

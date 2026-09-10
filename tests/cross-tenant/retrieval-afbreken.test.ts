@@ -13,14 +13,16 @@ import {
   isAfbreking,
   redenVan,
   slaapMetSignaal,
+  bewaakNaIO,
   timeoutUitConfig,
   RetrievalAfgebroken,
   TIMEOUT_DEFAULT_MS,
   TIMEOUT_MIN_MS,
   TIMEOUT_MAX_MS,
 } from "../../core/lib/retrieval/afbreken";
-import { voerRetrievalUit, foutcategorieVoor } from "../../core/lib/retrieval/orkestratie";
+import { voerRetrievalUit, citeer, foutcategorieVoor } from "../../core/lib/retrieval/orkestratie";
 import type {
+  Bronresultaat,
   AdapterUitkomst,
   RetrievalAdapter,
   RetrievalContext,
@@ -45,6 +47,16 @@ const QUERY = (over: Partial<RetrievalQuery> = {}): RetrievalQuery => ({
   maxContextTekens: 100_000,
   ...over,
 });
+
+/** Minimale chunkloze bron voor de gedragstests. */
+function bron(ref: string, doc: string, passage: string): Bronresultaat {
+  return {
+    ref, bronsoort: "sharepoint", titel: "T",
+    documentIdentiteit: { documentId: doc, bibliotheek: "fonds", bron: "SharePoint" },
+    versie: { soort: "etag", waarde: "e", gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
+    locator: {}, passage, status: { actueel: true }, rang: { positie: 1, score: 1 },
+  };
+}
 
 const GRENZEN = {
   maxPerDoc: 5,
@@ -242,4 +254,143 @@ test("PR-B — elke I/O in de retrievalketen draagt het signaal", async () => {
   const embed = readFileSync(new URL("../../core/lib/embeddings.ts", import.meta.url), "utf8");
   assert.match(embed, /fetch\(embedUrl\(\), \{[\s\S]{0,200}?signal,/, "de embedding-fetch moet het signaal dragen");
   assert.match(embed, /slaapMetSignaal\(/, "de retry-backoff moet meebreken");
+});
+
+// ── Reviewronde 2: de grendel dekt de HELE keten ────────────────────────────
+
+test("PR-B — een timeout tijdens verrijkSelectie stopt de keten", async () => {
+  // De naad: parent-context draait ná de selectie en doet nog database-werk.
+  const stappen: string[] = [];
+  const adapter: RetrievalAdapter = {
+    naam: "microsoft-sharepoint",
+    capabilities: () => ({
+      bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
+      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+    }),
+    async zoek(): Promise<AdapterUitkomst> {
+      stappen.push("zoek");
+      return {
+        kandidaten: [bron("sp-1", "doc-a", "passage")],
+        methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
+      };
+    },
+    async verrijkSelectie(ctx, g) {
+      stappen.push("verrijkSelectie");
+      await slaapMetSignaal(5_000, ctx.signal); // trage sibling-fetch
+      stappen.push("verrijkSelectie-klaar");
+      return { resultaten: g };
+    },
+    async verrijkWeergave(_c, g) {
+      stappen.push("verrijkWeergave");
+      return g;
+    },
+  };
+  await assert.rejects(
+    () => voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY(), grenzen: GRENZEN }], timeoutMs: TIMEOUT_MIN_MS }),
+    (e: unknown) => isAfbreking(e) && foutcategorieVoor(e) === "timeout"
+  );
+  assert.deepEqual(stappen, ["zoek", "verrijkSelectie"], "de trage verrijking mag niet afronden");
+});
+
+test("PR-B — de deadline loopt DOOR tot en met citeer(); verrijkWeergave valt er niet buiten", async () => {
+  // Blokker uit de review: de grendel stopte na fase 1, waardoor de
+  // weergaveverrijking (notulen- en documentmetadata, parent-passage) en de
+  // contextopbouw buiten de 20 s vielen — en de adapter dus ten onrechte
+  // `timeout: true` claimde.
+  const stappen: string[] = [];
+  const adapter: RetrievalAdapter = {
+    naam: "microsoft-sharepoint",
+    capabilities: () => ({
+      bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
+      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+    }),
+    async zoek(): Promise<AdapterUitkomst> {
+      stappen.push("zoek");
+      return {
+        kandidaten: [bron("sp-1", "doc-a", "passage")],
+        methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
+      };
+    },
+    async verrijkWeergave(ctx, g) {
+      stappen.push("verrijkWeergave");
+      assert.ok(ctx.signal, "de weergaveverrijking hoort het beurtsignaal te krijgen");
+      await slaapMetSignaal(5_000, ctx.signal);
+      stappen.push("verrijkWeergave-klaar");
+      return g;
+    },
+  };
+  const tussen = await voerRetrievalUit(CTX, {
+    adapter,
+    sporen: [{ query: QUERY(), grenzen: GRENZEN }],
+    timeoutMs: TIMEOUT_MIN_MS,
+  });
+  await assert.rejects(
+    () =>
+      citeer(CTX, adapter, tussen, {
+        primaireDocumentIds: new Set<string>(),
+        peildatum: "2026-09-10",
+        hoofddocumentLabel: " [hoofddocument]",
+        sentinel: "S",
+      }),
+    (e: unknown) => isAfbreking(e) && foutcategorieVoor(e) === "timeout"
+  );
+  assert.deepEqual(stappen, ["zoek", "verrijkWeergave"], "de trage weergaveverrijking mag niet afronden");
+});
+
+// ── De twee bibliotheekgrenzen ─────────────────────────────────────────────
+
+test("PR-B — een PostgREST-abortRESULTAAT wordt als afbreking herkend, niet als providerfout", async () => {
+  // `postgrest-js` GOOIT een abort niet door: hij vangt hem en levert een
+  // gewoon `{ error }`-resultaat. Zonder deze herkenning zou een afgebroken
+  // hybride RPC als providerfout doorgaan en de FTS-terugval starten.
+  const postgrestAbort = {
+    message: "AbortError: This operation was aborted",
+    details: "",
+    hint: "Request was aborted (timeout or manual cancellation)",
+    code: "",
+  };
+  assert.ok(isAfbreking(postgrestAbort), "de vorm die postgrest-js oplevert moet herkend worden");
+
+  // En belangrijker: het SIGNAAL is gezaghebbend, ook als de vorm afwijkt.
+  const ac = new AbortController();
+  ac.abort(new RetrievalAfgebroken("timeout"));
+  assert.throws(
+    () => bewaakNaIO(ac.signal, { message: "iets heel anders", code: "500" }),
+    (e: unknown) => isAfbreking(e) && redenVan(e) === "timeout"
+  );
+});
+
+test("PR-B — een gateway-abort (`geannuleerd`) laat de rerank niet terugvallen", () => {
+  // De AI-gateway normaliseert een abort naar een eigen fout met categorie
+  // `geannuleerd`. Werd die niet herkend, dan viel de reranker terug op de
+  // RRF-volgorde en liep de keten na de annulering gewoon door.
+  const gatewayAbort = { name: "GatewayFout", categorie: "geannuleerd", reden: "verzoek_afgebroken" };
+  assert.ok(isAfbreking(gatewayAbort));
+});
+
+test("PR-B — elke PostgREST-call in de keten wordt gevolgd door een signaalcontrole", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const pad of ["../../core/lib/rag.ts", "../../core/lib/parent-context.ts"]) {
+    const bron = readFileSync(new URL(pad, import.meta.url), "utf8");
+    const calls = [...bron.matchAll(/await metSignaal\(/g)].length;
+    const controles = [...bron.matchAll(/bewaakNaIO\(/g)].length;
+    assert.ok(
+      controles >= calls,
+      `${pad}: ${calls} gesignaleerde calls maar ${controles} controles — postgrest-js gooit een abort niet door`
+    );
+  }
+});
+
+test("PR-B — de route vertaalt een afbreking naar een eigen pad, niet naar een serverfout", async () => {
+  const { readFileSync } = await import("node:fs");
+  const bron = readFileSync(new URL("../../app/api/chat/route.ts", import.meta.url), "utf8");
+  assert.match(bron, /const afbreekreden = foutcategorieVoor\(streamFout\)/, "de route moet de categorie afleiden");
+  // Een annulering betekent dat er niemand meer luistert: geen foutmelding.
+  assert.match(bron, /if \(afbreekreden === "timeout"\)/, "alleen een timeout hoort de gebruiker te bereiken");
+  // …en de categorie moet DUURZAAM landen, niet alleen in een console-regel.
+  assert.match(
+    bron,
+    /rondAf\(supabase, aiActieId, "mislukt", `retrieval:\$\{afbreekreden\}`\)/,
+    "de afbrekingsreden hoort op de ai_actie te worden vastgelegd"
+  );
 });

@@ -9,7 +9,7 @@ import {
 } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { isPoortGesloten } from "./ai-poort";
-import { isAfbreking } from "./retrieval/afbreken";
+import { isAfbreking, bewaakNaIO } from "./retrieval/afbreken";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
@@ -1252,7 +1252,7 @@ export async function zoekRelevanteChunksMetMeta(
     // voor een dichte kill-switch of een falende provider; vangt hij ook een
     // annulering of deadline, dan doet de keten ná het afbreken alsnog een
     // volledige FTS-retrieval. Doorgooien dus.
-    if (isAfbreking(e)) throw e;
+    bewaakNaIO(opt.signal, e);
     const gestopt = isPoortGesloten(e);
     if (gestopt) {
       console.warn(`Hybride: Mistral-poort dicht (${e.reden}) — terugval op FTS.`);
@@ -1296,9 +1296,10 @@ export async function zoekRelevanteChunksMetMeta(
       }),
       opt.signal
     );
+    // PostgREST GOOIT een abort niet door — hij levert een gewoon
+    // foutresultaat. Het SIGNAAL is dus gezaghebbend, niet de vorm van de fout.
+    bewaakNaIO(opt.signal, error);
     if (error) {
-      // Een afgebroken RPC mag niet als "providerfout" op FTS terugvallen.
-      if (isAfbreking(error)) throw error;
       console.error("Hybride RPC-fout:", error);
       return null;
     }
@@ -1311,6 +1312,8 @@ export async function zoekRelevanteChunksMetMeta(
   // Poging 1 (primair): de (mogelijk geherformuleerde) vraag.
   const primair = await draaiHybridePoging(ftsQuery, vector);
   if (primair === null) {
+    // Vóór de terugval: is er intussen afgebroken, dan start hij niet.
+    bewaakNaIO(opt.signal);
     // RPC faalde → terugval op FTS (embedding lukte wél).
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
@@ -1353,6 +1356,7 @@ export async function zoekRelevanteChunksMetMeta(
   const { chunks: gefuseerd, herkomstPerId } = fuseerHybridePogingen(pogingen);
 
   if (gefuseerd.length === 0) {
+    bewaakNaIO(opt.signal);
     // Geen enkele poging leverde treffers → terugval op FTS (embedding lukte wél).
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
@@ -1432,6 +1436,7 @@ async function zoekViaFTS(
     ...rpcFilterParams(filters),
     p_fonds_id: fondsFilter,
   }), opt.signal);
+  bewaakNaIO(opt.signal, error);
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
@@ -1476,6 +1481,7 @@ async function zoekViaFTS(
       }),
       opt.signal
     );
+    bewaakNaIO(opt.signal, errorT);
 
     if (!errorT && Array.isArray(dataT) && dataT.length > 0) {
       const gerangschikt = (dataT as ZoekChunkRij[]).map(rijNaarChunk);
@@ -1552,6 +1558,7 @@ async function zoekViaFTS(
     if (filters?.procesinstantie_ids) q2 = q2.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q2 = q2.in("bibliotheek", filters.bronsoort);
     const { data: data2, error: error2 } = await metSignaal(q2, opt.signal);
+    bewaakNaIO(opt.signal, error2);
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
@@ -1597,7 +1604,8 @@ async function zoekViaFTS(
     if (filters?.documentstatus) q3 = q3.in("documentstatus", filters.documentstatus);
     if (filters?.procesinstantie_ids) q3 = q3.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q3 = q3.in("bibliotheek", filters.bronsoort);
-    const { data: data3 } = await metSignaal(q3, opt.signal);
+    const { data: data3, error: error3 } = await metSignaal(q3, opt.signal);
+    bewaakNaIO(opt.signal, error3);
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
@@ -1993,13 +2001,14 @@ export async function haalBevrorenChunks(
 // is één gebatchte vervolgquery op de chunk-id's. RLS-veilig (anon-client). Muteert
 // de meegegeven chunks in-place en geeft ze terug.
 export async function verrijkNotulenChunks(
-  chunks: DocumentChunk[]
+  chunks: DocumentChunk[],
+  signal?: AbortSignal
 ): Promise<DocumentChunk[]> {
   if (chunks.length === 0) return chunks;
   const supabase = await createServerSupabase();
   const ids = chunks.map((c) => c.id);
 
-  const { data, error } = await supabase
+  const { data, error } = await metSignaal(supabase
     .from("document_chunks")
     .select(
       `id,
@@ -2011,7 +2020,8 @@ export async function verrijkNotulenChunks(
        )`
     )
     .in("id", ids)
-    .not("notulen_segment_id", "is", null);
+    .not("notulen_segment_id", "is", null), signal);
+  bewaakNaIO(signal, error);
 
   if (error || !data || data.length === 0) return chunks;
 
@@ -2076,18 +2086,24 @@ interface DocumentmetadataRij {
 
 export async function verrijkDocumentmetadata(
   chunks: DocumentChunk[],
-  fondsId: string | null = null
+  fondsId: string | null = null,
+  signal?: AbortSignal
 ): Promise<DocumentChunk[]> {
   if (chunks.length === 0) return chunks;
   const ids = [...new Set(chunks.map((c) => c.document_id))];
   const supabase = await createServerSupabase();
 
-  const { data, error } = await supabase
+  const { data, error } = await metSignaal(supabase
     .from("documenten")
     .select(
       "id, fonds_id, bibliotheek, documenttype, bestandstype, documentdatum, geldig_tot, normgewicht, bronorganisatie, extern_url"
     )
-    .in("id", ids);
+    .in("id", ids), signal);
+
+  // Een AFBREKING is geen "metadata niet beschikbaar": doorgooien vóór de
+  // fail-safe hieronder, anders bouwt de keten na een annulering alsnog de
+  // volledige weergave op.
+  bewaakNaIO(signal, error);
 
   // Fail-safe: zonder deze metadata valt de weergave netjes terug (geen chip,
   // geen badge). Een fout mag het antwoord nooit tegenhouden.

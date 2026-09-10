@@ -24,7 +24,7 @@
 
 import type { AiGateway, GatewayContext } from "./ai-gateway/contract";
 import { isGatewayFout } from "./ai-gateway/fout";
-import { isAfbreking } from "./retrieval/afbreken";
+import { bewaakNaIO } from "./retrieval/afbreken";
 import { HAIKU_MODEL } from "./llm-modellen";
 
 // Tijdsbudget voor de rerank-call. Bewust krap: de rerank staat in het kritieke
@@ -250,7 +250,9 @@ export async function rerankChunks<T extends { id: string }>(
     // RRF-volgorde bestaat voor een dichte poort, een providerfout of een
     // onparseerbaar antwoord; vangt hij ook een annulering of deadline, dan
     // gaat de keten ná het afbreken gewoon door met selecteren en genereren.
-    if (isAfbreking(e)) throw e;
+    // De gateway normaliseert een abort naar GatewayFout("geannuleerd"); die
+    // vorm is niet altijd te herkennen, dus het SIGNAAL is gezaghebbend.
+    bewaakNaIO(opties?.signal, e);
     const reden = isGatewayFout(e) && e.categorie === "poort_gesloten"
       ? `poort_dicht:${e.reden}`
       : e instanceof Error && e.message === "rerank_timeout"

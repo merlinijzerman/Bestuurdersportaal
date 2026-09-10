@@ -102,14 +102,36 @@ export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeou
 export function isAfbreking(e: unknown): boolean {
   if (e instanceof RetrievalAfgebroken) return true;
   if (typeof e === "object" && e !== null) {
-    const f = e as { name?: string; cause?: unknown };
+    const f = e as { name?: string; cause?: unknown; categorie?: string; message?: string; hint?: string };
     if (f.name === "AbortError" || f.name === "TimeoutError") return true;
     if (f.cause instanceof RetrievalAfgebroken) return true;
+    // De AI-gateway NORMALISEERT een abort naar een eigen fout. Zonder deze
+    // regel ziet de reranker dat als providerfout en valt hij alsnog terug op
+    // de RRF-volgorde — precies wat na een afbreking niet mag.
+    if (f.categorie === "geannuleerd") return true;
+    // PostgREST GOOIT een abort niet door: `postgrest-js` vangt hem en levert
+    // een gewoon `{ error: { message: "AbortError: …", hint: "Request was
+    // aborted …" } }`-resultaat op. Een afgebroken RPC zou daarmee als
+    // providerfout doorgaan en de FTS-terugval starten.
+    if (typeof f.message === "string" && /^AbortError|^TimeoutError/.test(f.message)) return true;
+    if (typeof f.hint === "string" && /Request was aborted/i.test(f.hint)) return true;
+    if (f.cause && isAfbreking(f.cause)) return true;
   }
   return false;
 }
 
 /** De afbrekingsreden uit een fout, of `null` als het er geen is. */
+/**
+ * DE GEZAGHEBBENDE controle na een I/O-stap. Vorm-herkenning is een vangnet;
+ * of er is afgebroken weet alleen het signaal zelf. `postgrest-js` levert een
+ * abort als gewoon foutresultaat en de gateway als eigen foutcategorie — beide
+ * zouden anders als providerfout een terugval starten.
+ */
+export function bewaakNaIO(signal: AbortSignal | undefined, e?: unknown): void {
+  if (signal?.aborted) throw signal.reason ?? new RetrievalAfgebroken("annulering");
+  if (e !== undefined && isAfbreking(e)) throw e;
+}
+
 export function redenVan(e: unknown): Afbrekingsreden | null {
   if (e instanceof RetrievalAfgebroken) return e.reden;
   if (typeof e === "object" && e !== null) {
@@ -117,6 +139,11 @@ export function redenVan(e: unknown): Afbrekingsreden | null {
     if (c instanceof RetrievalAfgebroken) return c.reden;
     if ((e as { name?: string }).name === "TimeoutError") return "timeout";
     if ((e as { name?: string }).name === "AbortError") return "annulering";
+    const c2 = (e as { cause?: unknown }).cause;
+    if (c2) {
+      const r = redenVan(c2);
+      if (r) return r;
+    }
   }
   return null;
 }
