@@ -29,6 +29,7 @@ const CTX: RetrievalContext = {
   taaktype: "chat_generatie",
   bronbeleid: { bronsoorten: ["fonds", "sharepoint"] },
   correlationId: "corr-1",
+  verzoekStartOp: new Date().toISOString(),
 };
 
 /** Een SharePoint-resultaat: geen chunk, geen chunk-id, wel volledig bewijs. */
@@ -41,9 +42,13 @@ function sharepointBron(n: number, doc: string, passage: string): Bronresultaat 
     versie: { soort: "etag", waarde: `etag-${n}`, gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
     toegangscontrole: {
       toegestaan: true,
+      resultaatRef: `sp-${n}`,
+      bronregistratieRef: "bron-1",
       gebruikerId: CTX.actor.soort === "gebruiker" ? CTX.actor.id : "",
       correlationId: CTX.correlationId,
-      gecontroleerdOp: "2026-09-10T10:00:00.000Z",
+      gecontroleerdOp: new Date().toISOString(),
+      // VERS: V4 eist `verzoekStartOp ≤ gecontroleerdOp ≤ nu`, met een venster
+      // van 60 s. Een vaste tijdstempel uit het verleden wordt terecht geweigerd.
       basis: "delegated_user",
       bronconfiguratieVersie: 3,
     },
@@ -92,6 +97,12 @@ function nepAdapter(opties: {
       cancellation: true,
       timeout: true,
     }),
+    // V5 — de nepadapter belooft bewijs, dus hij moet de herlezing ook kunnen.
+    // Standaard: bron verbonden op versie 3, gelijk aan het bewijs in
+    // `sharepointBron`. Losse tests overschrijven dit om intrekking te simuleren.
+    async verifieerBronregistratie(_ctx, refs) {
+      return new Map(refs.map((r) => [r, { verbonden: true, versie: 3 }]));
+    },
     async zoek(ctxVanSpoor, query): Promise<AdapterUitkomst> {
       const ms = opties.vertragingMs?.[query.naam] ?? 0;
       if (ms > 0) await new Promise((r) => setTimeout(r, ms));

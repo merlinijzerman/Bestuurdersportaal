@@ -622,6 +622,42 @@ documentpad, reranker, trage provider) waarin tussen check en modelcontext meer 
 zit dan verwacht. `basis: "rls"` kent geen eigen venster — daar is de tenant-client zelf
 het bewijs — maar V2 en V3 gelden onverkort.
 
+**Twee bindingen maken het bewijs NIET-OVERDRAAGBAAR (PR-C).** `Toegangsbewijs`
+was tot PR-C alleen aan actor, verzoek en configuratieversie gebonden — en die
+drie zijn binnen één verzoek per definitie gelijk voor álle kandidaten. Een
+geldig bewijs voor bron A paste daarmee naadloos op kandidaat B. Het bewijs
+draagt daarom nu:
+
+| Veld | Moet exact gelijk zijn aan |
+|---|---|
+| `resultaatRef` | `Bronresultaat.ref` van de kandidaat die het bewijs draagt |
+| `bronregistratieRef` | de opaque bronreferentie waaronder V5 de actuele stand herleest |
+
+**Waar de poort draait: vóór de kandidatenbegrenzing.** Niet pas vóór de
+selectie. Kapt de pool eerst af op `maxKandidaten`, dan kan een geweigerde bron
+een toelaatbare kandidaat uit de pool hebben verdrongen — die telt dan alsnog
+mee, en wel onzichtbaar, want hij staat nergens meer in.
+
+**De poort is providerneutraal, en dat wordt statisch afgedwongen.** Wat een
+resultaat moet meebrengen volgt uitsluitend uit `capabilities().permissionProof`;
+een gate leest `toelatingspoort.ts` en verbiedt in de CODE elke vergelijking op
+`microsoft`, `sharepoint`, `supabase`, `bronsoort` of `provider`. Een adapter die
+`permissionProof: false` declareert mag bovendien **geen** bewijs meesturen —
+anders claimt hij stilzwijgend iets dat nergens wordt getoetst.
+
+**Fail-closed, met onderscheidbare gronden.** Ontbrekend bewijs, een verwisselde
+binding, een onleesbaar tijdstip, een ontbrekende V5-hook, een ontbrekende
+map-entry én een hook die GOOIT weigeren alle zes. Die laatste twee zijn bewust
+gescheiden (`v5_hook_ontbreekt` versus `v5_hook_fout`): een Graph-storing hoort
+in het auditspoor niet op een ontwerpfout te lijken. `poortNu` wordt één keer
+bepaald voor alle kandidaten — anders hangt de uitkomst bij een venstergrens af
+van de volgorde waarin toevallig is geïtereerd.
+
+**Het auditspoor telt geen geweigerde bron mee.** `perAdapter.kandidaten` telt wat
+de poort doorliet; `geweigerd` verschijnt **alleen** als er werkelijk iets is
+geweigerd. Een veld dat altijd op 0 staat zou elke bestaande snapshot veranderen
+zonder iets te melden.
+
 **V5 toetst tegen de ACTUELE stand, niet tegen een momentopname.** Dit is een correctie
 op de eerste formulering, die de meegeleverde `bronconfiguratieVersie` vergeleek met de
 versie die de orkestratie *bij verzoekstart* had vastgelegd. Die vergelijking is

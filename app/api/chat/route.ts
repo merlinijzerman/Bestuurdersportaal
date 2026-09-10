@@ -2513,6 +2513,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
         scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
         correlationId: ctx.requestId,
+        // V4 — server-side vastgelegd bij binnenkomst in de wrapper.
+        verzoekStartOp: ctx.verzoekStartOp,
         // PR-B — de clientverbinding. Verbreekt de bestuurder de verbinding,
         // dan stopt de retrievalketen; zonder dit liep zij door en betaalden we
         // de model- en embeddingcalls van een beurt die niemand meer leest.

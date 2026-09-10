@@ -21,6 +21,7 @@ import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
+import { verifieerToelating } from "./toelatingspoort";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type { Afbreekgrendel } from "./afbreken";import type {
   AdapterUitkomst,
@@ -186,31 +187,48 @@ export async function voerRetrievalUit(
     // als de I/O zelf toevallig al klaar was.
     grendel.bewaak();
 
-    // 2. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
+    // 2. TOELATINGSPOORT (V1–V5, ontwerp §4.2.1) — direct ná de adapteruitkomst
+    //    en VÓÓR de kandidatenbegrenzing. Niet pas vóór de selectie: kapt de pool
+    //    eerst af op `maxKandidaten`, dan kan een geweigerde bron een toelaatbare
+    //    kandidaat uit de pool hebben verdrongen. Die telt dan alsnog mee, en wel
+    //    onzichtbaar — hij staat nergens meer in.
+    const poorten = await Promise.all(
+      uitkomsten.map((u, i) => verifieerToelating(spoorContext[i], opdracht.adapter, u.kandidaten))
+    );
+    grendel.bewaak();
+    const toegelatenPerSpoor = poorten.map((p) => p.toegelaten);
+    const geweigerdTotaal = poorten.flatMap((p) => p.geweigerd);
+
+    // 3. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
     //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
     //    responstijd de volgorde en was de samenvoeging niet meer deterministisch.
+    //    `kandidaten` telt wat de poort HEEFT TOEGELATEN: een geweigerde bron mag
+    //    ook in het auditspoor niet meetellen.
     const perAdapter: RetrievalTussenresultaat["perAdapter"] = uitkomsten.map((u, i) => ({
       naam: opdracht.adapter.naam,
       query: sporen[i].query.naam,
       methode: u.methode,
       latencyMs: u.latencyMs,
-      kandidaten: u.kandidaten.length,
+      kandidaten: toegelatenPerSpoor[i].length,
       fout: u.fout,
+      // Alleen aanwezig als er werkelijk iets is geweigerd: een veld dat altijd
+      // op 0 staat zou elke bestaande snapshot veranderen zonder iets te melden.
+      ...(poorten[i].geweigerd.length > 0 ? { geweigerd: poorten[i].geweigerd.length } : {}),
     }));
 
-    // 3. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
+    // 4. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
     //    bewust ruimer (`max(3 × maxResultaten, 20)`), want de centrale weging mag
     //    een kandidaat van plek 15 alsnog in de top halen. Terugkappen naar
     //    `maxResultaten` zou die promotie stil wegnemen.
     let truncatie: RetrievalTussenresultaat["truncatie"];
-    const begrensd = uitkomsten.map((u, i) => {
+    const begrensd = toegelatenPerSpoor.map((toegelaten, i) => {
       const max = sporen[i].query.maxKandidaten;
-      if (u.kandidaten.length <= max) return u.kandidaten;
+      if (toegelaten.length <= max) return toegelaten;
       truncatie = { reden: "kandidaten" };
-      return u.kandidaten.slice(0, max);
+      return toegelaten.slice(0, max);
     });
 
-    // 4. Selectie PER SPOOR — zie de kopnoot — gevolgd door de providerhook.
+    // 5. Selectie PER SPOOR — zie de kopnoot — gevolgd door de providerhook.
     const geselecteerdPerSpoor: Bronresultaat[][] = [];
     const extraPerSpoor: Partial<RetrievalMeta>[] = [];
     for (let i = 0; i < uitkomsten.length; i++) {
@@ -281,6 +299,8 @@ export async function voerRetrievalUit(
       meta,
       // De gezaghebbende grens komt van de primaire query en reist mee, zodat
       // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).
+      // Alleen als er iets is geweigerd — zie het contract.
+      ...(geweigerdTotaal.length > 0 ? { toelating: { geweigerd: geweigerdTotaal } } : {}),
       maxContextTekens: sporen[0].query.maxContextTekens,
       metaBasis,
       // De grendel reist mee naar fase 2: de weergaveverrijking (parent,

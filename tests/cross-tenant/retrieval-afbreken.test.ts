@@ -36,6 +36,7 @@ const CTX: RetrievalContext = {
   taaktype: "chat_generatie",
   bronbeleid: { bronsoorten: ["fonds"] },
   correlationId: "corr-b",
+  verzoekStartOp: new Date().toISOString(),
 };
 
 const QUERY = (over: Partial<RetrievalQuery> = {}): RetrievalQuery => ({
@@ -72,7 +73,9 @@ function traagAdapter(msPerCall: number, gezien: { signal?: AbortSignal }): Retr
     naam: "microsoft-sharepoint",
     capabilities: () => ({
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
-      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+      // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
+      // bewijs, dus de toelatingspoort eist er ook geen.
+      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(ctx): Promise<AdapterUitkomst> {
       gezien.signal = ctx.signal;
@@ -182,7 +185,9 @@ test("PR-B — na een afbreking draait er geen enkele vervolgstap meer", async (
     naam: "microsoft-sharepoint",
     capabilities: () => ({
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
-      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+      // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
+      // bewijs, dus de toelatingspoort eist er ook geen.
+      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -266,7 +271,9 @@ test("PR-B — een timeout tijdens verrijkSelectie stopt de keten", async () => 
     naam: "microsoft-sharepoint",
     capabilities: () => ({
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
-      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+      // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
+      // bewijs, dus de toelatingspoort eist er ook geen.
+      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -303,7 +310,9 @@ test("PR-B — de deadline loopt DOOR tot en met citeer(); verrijkWeergave valt 
     naam: "microsoft-sharepoint",
     capabilities: () => ({
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
-      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+      // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
+      // bewijs, dus de toelatingspoort eist er ook geen.
+      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -425,7 +434,9 @@ test("PR-B — `citeer()` laat de grendel niet achter in het eindresultaat", asy
     naam: "microsoft-sharepoint",
     capabilities: () => ({
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
-      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+      // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
+      // bewijs, dus de toelatingspoort eist er ook geen.
+      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       return {
@@ -456,7 +467,9 @@ test("PR-B — tweemaal citeren draait de tweede keer niet ZONDER deadline", asy
     naam: "microsoft-sharepoint",
     capabilities: () => ({
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
-      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+      // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
+      // bewijs, dus de toelatingspoort eist er ook geen.
+      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       return {
