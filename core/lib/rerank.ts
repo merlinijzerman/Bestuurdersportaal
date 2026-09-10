@@ -191,15 +191,22 @@ export async function rerankChunks<T extends { id: string }>(
   // met alleen `Promise.race` bleef hij doorlopen en betaalden we hem alsnog.
   const callCtrl = new AbortController();
   const opBuitenAbort = () => callCtrl.abort(opties?.signal?.reason);
-  if (opties?.signal) {
-    if (opties.signal.aborted) callCtrl.abort(opties.signal.reason);
-    else opties.signal.addEventListener("abort", opBuitenAbort, { once: true });
-  }
+
   const c = opties?.client ?? null;
   // Zonder injecteerbare client (productiepad) is een poortcontext verplicht:
   // anders zou hier een ongemeten providercall ontstaan.
+  //
+  // LET OP DE VOLGORDE: deze uitgang ligt vóór de `try`, dus vóór het `finally`
+  // dat opruimt. Stond het aanhaken van de luisteraar hierboven, dan bleef hij
+  // op dit pad achter op het beurtsignaal — dezelfde levensloopfout als bij de
+  // afbreekgrendel, in het klein. Eerst weigeren, dan pas resources aanhaken.
   if (!c && !opties?.gateway) {
     return metFallback(kandidaten, "geen_poortcontext", model);
+  }
+
+  if (opties?.signal) {
+    if (opties.signal.aborted) callCtrl.abort(opties.signal.reason);
+    else opties.signal.addEventListener("abort", opBuitenAbort, { once: true });
   }
 
   let ruw: string;

@@ -483,3 +483,19 @@ test("PR-B — een grendel die `stop()` nooit haalt, laat geen luisteraar achter
   ac.abort();
   assert.equal(g.reden(), "timeout");
 });
+
+test("PR-B — de rerank haakt pas aan ná de poortweigering, niet ervóór", async () => {
+  // Statisch, want de weigering ligt vóór de `try` en dus vóór het `finally`
+  // dat opruimt. Stond het aanhaken erboven, dan bleef er op dat pad een
+  // luisteraar op het beurtsignaal achter — dezelfde levensloopfout als bij de
+  // grendel, in het klein.
+  const { readFileSync } = await import("node:fs");
+  const bron = readFileSync(new URL("../../core/lib/rerank.ts", import.meta.url), "utf8");
+  const weigering = bron.indexOf('metFallback(kandidaten, "geen_poortcontext"');
+  const aanhaken = bron.indexOf('addEventListener("abort", opBuitenAbort');
+  assert.ok(weigering > 0 && aanhaken > 0, "beide plekken moeten bestaan");
+  assert.ok(
+    aanhaken > weigering,
+    "eerst weigeren, dan pas resources aanhaken — anders lekt de weigeringsuitgang"
+  );
+});
