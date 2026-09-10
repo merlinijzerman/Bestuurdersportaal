@@ -280,13 +280,6 @@ export interface CitaatOpdracht {
   primaireDocumentIds: ReadonlySet<string>;
   peildatum: string;
   hoofddocumentLabel: string;
-  /**
-   * Harde bovengrens op de GERENDERDE context. Hoort NIET in de citaatopdracht
-   * van de aanroeper: de gezaghebbende waarde staat op de query en reist mee in
-   * `RetrievalTussenresultaat.maxContextTekens`. Twee plekken zouden uiteen
-   * kunnen lopen. Alleen tests zetten hem hier rechtstreeks.
-   */
-  maxContextTekens?: number;
   /** Vaste sentinel (tests); anders per beurt onvoorspelbaar. */
   sentinel?: string;
   startIndex?: number;

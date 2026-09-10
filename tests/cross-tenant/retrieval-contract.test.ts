@@ -372,10 +372,13 @@ test("T2-1 — de contextgrens geldt op de GERENDERDE blokken, inclusief kop en 
   tweede.weergave = { aangeleverdePassage: "Q".repeat(500) };
   const adapter = nepAdapter({ perQuery: { primair: [groot, tweede] } });
 
-  const tussen = await voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }] });
+  const tussen = await voerRetrievalUit(CTX, {
+    adapter,
+    sporen: [{ query: QUERY("primair", { maxContextTekens: 600 }), grenzen: GRENZEN }],
+  });
   assert.equal(tussen.geselecteerd.length, 2, "fase 1 kapt niet af op tekens");
 
-  const voltooid = await citeer(CTX, adapter, tussen, { ...LEGE_OPDRACHT, maxContextTekens: 600 });
+  const voltooid = await citeer(CTX, adapter, tussen, LEGE_OPDRACHT);
   assert.ok(
     voltooid.contextTekst.length <= 600,
     `de gerenderde context moet binnen de grens blijven, was ${voltooid.contextTekst.length}`
@@ -426,6 +429,13 @@ test("T2-1 — een limiet kleiner dan het eerste bronblok levert een lege, consi
   const voltooid = await citeer(CTX, adapter, tussen, LEGE_OPDRACHT);
 
   assert.equal(voltooid.geselecteerd.length, 0, "geen enkel blok past binnen 10 tekens");
+  // En de context zelf moet óók binnen de grens blijven: de terugvalzin
+  // "Er zijn geen relevante documenten…" is langer dan 10 tekens en zou de
+  // grens alsnog overschrijden.
+  assert.ok(
+    voltooid.contextTekst.length <= 10,
+    `contextTekst was ${voltooid.contextTekst.length} tekens: ${JSON.stringify(voltooid.contextTekst)}`
+  );
   assert.equal(voltooid.bronverwijzingen.length, 0);
   assert.deepEqual(voltooid.truncatie, { reden: "tekens" });
   // En het auditspoor mag geen bron noemen die nooit naar het model ging.
@@ -499,4 +509,56 @@ test("T2-1 — ontbrekend versiebewijs is expliciet onbekend, geen lege tijdstem
   } as Parameters<typeof chunkAlsBronresultaat>[0]);
   assert.equal(metDatum.versie.soort, "status-datum");
   assert.equal(metDatum.versie.gecontroleerdOp, null, "er is op dit pad (tot T2-3/R1) geen controlemoment");
+});
+
+// ── Reviewronde 4 ───────────────────────────────────────────────────────────
+
+test("T2-1 — de chatroute citeert VÓÓR het voortgangsevent en de scope-audit", async () => {
+  // Blokker uit de review: de herbouwde meta was correct geïmplementeerd maar
+  // bereikte audit en gebruikersmelding niet, omdat `retrievalMeta` en het
+  // progress-event vóór `citeer()` werden opgebouwd. Volgordecontrole op de
+  // bron: `citeer(` moet vóór het retrieval-voortgangsevent staan, en
+  // `retrievalMeta` moet uit `voltooid.meta` komen — niet uit
+  // `retrievalResultaat.meta`.
+  const { readFileSync } = await import("node:fs");
+  const bron = readFileSync(new URL("../../app/api/chat/route.ts", import.meta.url), "utf8");
+
+  const iCiteer = bron.indexOf("await citeer(retrievalContext");
+  const iMeta = bron.indexOf("...voltooid.meta");
+  const iProgress = bron.indexOf('fase: "retrieval",\n        status: "klaar"');
+  assert.ok(iCiteer > 0 && iMeta > 0 && iProgress > 0, "verwachte ankers niet gevonden in de chatroute");
+  assert.ok(iCiteer < iProgress, "citeer() moet vóór het retrieval-voortgangsevent draaien");
+  assert.ok(iMeta < iProgress, "de voortgangsmelding moet op de HERBOUWDE meta rusten");
+  assert.ok(
+    !/\.\.\.retrievalResultaat\.meta/.test(bron),
+    "de route mag de meta van vóór het afkappen niet meer gebruiken"
+  );
+});
+
+test("T2-1 — zonder filter krijgt de parent-verrijking de effectieve peildatum, niet een lege string", async () => {
+  // Blokker uit de review: `filters?.peildatum ?? ""` schakelde de
+  // review-vervalcontrole op generieke siblings uit zodra een spoor geen
+  // expliciet peildatumfilter had. Het oude pad gebruikte dan vandaag.
+  let gezien: string | null = null;
+  const basis = nepAdapter({ perQuery: { primair: [sharepointBron(1, "doc-a", "A")] } });
+  const adapter: RetrievalAdapter = {
+    ...basis,
+    async verrijkSelectie(_ctx, geselecteerd, opties) {
+      gezien = opties.peildatum;
+      return { resultaten: geselecteerd };
+    },
+  };
+  // Query ZONDER peildatumfilter.
+  await voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }] });
+  assert.match(String(gezien), /^\d{4}-\d{2}-\d{2}$/, "verwacht de effectieve peildatum (vandaag), geen lege string");
+});
+
+test("T2-1 — de contextgrens staat alleen op de query, niet ook in de citaatopdracht", async () => {
+  const { readFileSync } = await import("node:fs");
+  const contract = readFileSync(new URL("../../core/lib/retrieval/contract.ts", import.meta.url), "utf8");
+  const opdracht = contract.slice(contract.indexOf("interface CitaatOpdracht"), contract.indexOf("interface CitaatOpdracht") + 500);
+  assert.ok(
+    !/maxContextTekens/.test(opdracht),
+    "twee plekken voor dezelfde limiet kunnen uiteenlopen; de query is gezaghebbend"
+  );
 });

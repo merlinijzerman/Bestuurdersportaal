@@ -16,6 +16,7 @@
 //  budget, en werden pas daarna de twee GESELECTEERDE sets samengevoegd. De
 //  orkestratie doet dat hier bewust net zo: selectie per query, dan samenvoegen.
 // ============================================================================
+import { effectievePeildatum } from "../rag";
 import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
@@ -197,8 +198,10 @@ export async function voerRetrievalUit(
     // exact dezelfde plek als vóór T2-1.
     if (opdracht.adapter.verrijkSelectie && gekozen.length > 0) {
       const v = await opdracht.adapter.verrijkSelectie(spoorContext[i], gekozen, {
-        // De peildatum van DIT spoor — nooit "vandaag" afleiden.
-        peildatum: sporen[i].query.filters?.peildatum ?? "",
+        // De EFFECTIEVE peildatum van dit spoor: dezelfde waarde waarmee de
+        // retrieval draaide. Een lege string zou de review-vervalcontrole op
+        // generieke siblings uitschakelen.
+        peildatum: effectievePeildatum(sporen[i].query.filters),
       });
       gekozen = v.resultaten;
       Object.assign(extra, v.meta ?? {});
@@ -275,10 +278,8 @@ export async function citeer(
   // centraal, identiek voor elke provider.
   // Eerst de DEFINITIEVE context bouwen — inclusief de harde grens — en pas
   // daarna alle metadata afleiden van exact de bronnen die erin staan.
-  const c = bouwCitaties(verrijkt, {
-    ...opdracht,
-    maxContextTekens: opdracht.maxContextTekens ?? tussen.maxContextTekens,
-  });
+  // De grens komt UITSLUITEND van de query, via het tussenresultaat.
+  const c = bouwCitaties(verrijkt, { ...opdracht, maxContextTekens: tussen.maxContextTekens });
   return {
     ...tussen,
     geselecteerd: c.opgenomen,

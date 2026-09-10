@@ -2536,8 +2536,33 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ] as const,
         }
       );
+      // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
+      // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
+      // Ze draait BEWUST hier, vóór het voortgangsevent en het scope-auditspoor:
+      // de harde contextgrens kan blokken afkappen, en dan bouwt de orkestratie
+      // de meta opnieuw over exact de opgenomen bronnen. Zou dit later staan,
+      // dan meldden de voortgangsregel en het auditspoor bronnen die nooit naar
+      // het model zijn gegaan.
+      const voltooid = await citeer(retrievalContext, retrievalAdapter, retrievalResultaat, {
+        // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
+        // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
+        primaireDocumentIds: primaireIds,
+        peildatum: vandaag,
+        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
+        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
+        hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
+      });
+      chunks = retrieval.chunksVoor(voltooid.geselecteerd);
+      contextTekst = voltooid.contextTekst;
+      bronnen = voltooid.bronverwijzingen;
+      // H-10: bron-afbakening en het aantal geneutraliseerde bronlabel-patronen
+      // door naar respectievelijk de systeemprompt en het auditspoor.
+      bronSentinel = voltooid.sentinel;
+      contextGeneutraliseerd = voltooid.geneutraliseerd;
       retrievalMeta = {
-        ...retrievalResultaat.meta,
+        // De HERBOUWDE meta: hij beschrijft exact de bronnen die in de context
+        // staan, ook wanneer de grens blokken heeft afgekapt.
+        ...voltooid.meta,
         zoekvraag: zoekVraag,
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
@@ -2574,27 +2599,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           modus: "primair",
         };
       }
-      // T2-1 — citaatvorming is orkestratiewerk (besluit 0213 punt 5). Ze staat
-      // bewust hier, ná het voortgangsevent en het scope-auditspoor: die
-      // volgorde zit byte-voor-byte in de SSE-snapshots. De ORKESTRATIE bepaalt
-      // wát geciteerd wordt en in welke volgorde; de ADAPTER weet hoe zijn eigen
-      // bron eruitziet en rendert (notulenlabels, documenttype, bronkop).
-      const voltooid = await citeer(retrievalContext, retrievalAdapter, retrievalResultaat, {
-        // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
-        // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
-        primaireDocumentIds: primaireIds,
-        peildatum: vandaag,
-        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
-        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
-        hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
-      });
-      chunks = retrieval.chunksVoor(voltooid.geselecteerd);
-      contextTekst = voltooid.contextTekst;
-      bronnen = voltooid.bronverwijzingen;
-      // H-10: bron-afbakening en het aantal geneutraliseerde bronlabel-patronen
-      // door naar respectievelijk de systeemprompt en het auditspoor.
-      bronSentinel = voltooid.sentinel;
-      contextGeneutraliseerd = voltooid.geneutraliseerd;
+
 
       // Besluitvorming-modus (Increment G): voeg de Decision Object-
       // besluitregistratie van de relevante procesinstantie(s) toe als LEIDENDE

@@ -42,8 +42,14 @@ export function bouwCitaties(
 ): Citaatuitkomst {
   const sentinel = opdracht.sentinel ?? maakBronSentinel();
   const startIndex = opdracht.startIndex ?? 0;
+  const past = (tekst: string) => opdracht.maxContextTekens <= 0 || tekst.length <= opdracht.maxContextTekens;
   if (bronnen.length === 0) {
-    return { contextTekst: GEEN_TREFFERS, bronnen: [], geneutraliseerd: 0, sentinel, afgekapt: false, opgenomen: [] };
+    // Ook de terugvalzin telt mee: een grens die zijn eigen foutmelding niet
+    // begrenst, is geen grens.
+    return {
+      contextTekst: past(GEEN_TREFFERS) ? GEEN_TREFFERS : "",
+      bronnen: [], geneutraliseerd: 0, sentinel, afgekapt: false, opgenomen: [],
+    };
   }
 
   const verwijzingen: BronVerwijzing[] = [];
@@ -140,8 +146,12 @@ export function bouwCitaties(
     } as BronVerwijzing);
   }
 
+  // Kapte de grens ALLES weg, dan is er geen context — en dan is de
+  // "geen documenten gevonden"-zin misleidend én mogelijk zelf te lang.
+  const contextTekst =
+    contextDelen.length > 0 ? contextDelen.join(SCHEIDING) : afgekapt ? "" : past(GEEN_TREFFERS) ? GEEN_TREFFERS : "";
   return {
-    contextTekst: contextDelen.length === 0 ? GEEN_TREFFERS : contextDelen.join(SCHEIDING),
+    contextTekst,
     bronnen: verwijzingen,
     geneutraliseerd: geneutraliseerdTotaal,
     sentinel,

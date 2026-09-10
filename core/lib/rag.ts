@@ -105,6 +105,15 @@ export interface RetrievalFilters {
 // bronstatus) heeft geselecteerd; alle aanroepers hieronder doen dat.
 /** T2-1 — één bron voor de per-document-cap, zodat de orkestratie exact
  *  dezelfde grens hanteert als de adapter intern deed. */
+/** De peildatum waarmee de retrieval FEITELIJK draait. Zonder expliciet filter
+ *  is dat vandaag — precies wat `zoekRelevanteChunksMetMeta` intern doet. Eén
+ *  bron, zodat de parent-verrijking niet met een andere datum werkt dan de
+ *  retrieval zelf: dan zou de review-vervalcontrole op generieke siblings
+ *  ongemerkt uitvallen. */
+export function effectievePeildatum(filters?: { peildatum?: string }): string {
+  return filters?.peildatum ?? vandaagISO();
+}
+
 export function maxPerDocVoor(maxResults: number): number {
   return Math.max(3, Math.ceil(maxResults / 2));
 }

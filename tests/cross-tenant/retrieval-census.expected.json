@@ -193,7 +193,8 @@
     "core/lib/retrieval/orkestratie.ts": {
       "modules": {
         "rag": [
-          "RetrievalMeta"
+          "RetrievalMeta",
+          "effectievePeildatum"
         ]
       },
       "rpcs": [],
