@@ -389,11 +389,15 @@ test("PR-B — de route vertaalt een afbreking naar een eigen pad, niet naar een
   // Een annulering betekent dat er niemand meer luistert: geen foutmelding.
   assert.match(bron, /if \(afbreekreden === "timeout"\)/, "alleen een timeout hoort de gebruiker te bereiken");
   // …en de categorie moet DUURZAAM landen, niet alleen in een console-regel.
+  // Sinds #356 via de STRIKTE variant: die telt een RPC-fout én `data === false`
+  // als mislukking, waar `rondAf` beide inslikt.
   assert.match(
     bron,
-    /rondAf\(supabase, aiActieId, "mislukt", `retrieval:\$\{afbreekreden\}`\)/,
-    "de afbrekingsreden hoort op de ai_actie te worden vastgelegd"
+    /await rondAfStrikt\(\s*supabase,\s*aiActieId,\s*"mislukt",\s*`\$\{fase\}:\$\{afbreekreden\}`/,
+    "de afbrekingsreden hoort via de strikte afronding op de ai_actie te landen"
   );
+  assert.match(bron, /let fase: "retrieval" \| "generatie" = "retrieval";/, "de fase is expliciet, niet afgeleid");
+  assert.match(bron, /\[chat\]\[ALARM\] ai_actie niet afgerond/, "een niet-gesloten levenscyclus hoort een operationeel signaal te geven");
 });
 
 // ── Reviewronde 2: de LEVENSLOOP van de grendel ─────────────────────────────

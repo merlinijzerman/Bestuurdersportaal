@@ -336,11 +336,20 @@ export function foutcategorieVoor(e: unknown): "timeout" | "annulering" | null {
  * Fase 2: citaatvorming. Maakt van een ONVOLTOOID tussenresultaat het
  * definitieve resultaat dat de generatielaag mag gebruiken.
  *
- * BEWUST GESCHEIDEN van `voerRetrievalUit`. De chatroute stuurt tussen beide
- * stappen een voortgangsevent en schrijft het scope-auditspoor; die volgorde zit
- * byte-voor-byte in de SSE-snapshots. Beide stappen zijn orkestratiewerk; de
- * route sequencet alleen. De ADAPTER rendert — hij weet hoe zijn bron eruitziet
- * — maar de orkestratie bepaalt wát en in welke volgorde.
+ * INTERN — zie `voerVolledigeRetrievalUit()`. De route sequencet deze fasen NIET
+ * meer: beide draaien binnen die ene aanroep, en het voortgangsevent en het
+ * scope-auditspoor komen erná. Daardoor is de volgorde-eis uit PR-A structureel
+ * geborgd in plaats van afhankelijk van een aanroeper die haar aanhoudt.
+ *
+ * Waarom de fasen dan nog gescheiden zijn: citaatvorming is eigen werk met een
+ * eigen adapterhook (`verrijkWeergave`), en het tussenresultaat maakt zichtbaar
+ * dat een selectie zónder citaties bestaat. De ADAPTER rendert — hij weet hoe
+ * zijn bron eruitziet — maar de orkestratie bepaalt wát en in welke volgorde.
+ *
+ * De grendel in `tussen` is GELEEND van `voerVolledigeRetrievalUit()`; die sluit
+ * hem. Deze functie sluit hem ook aan het eind van haar eigen werk, zodat de
+ * deadline niet doorloopt als de aanroeper nog iets doet — dubbel sluiten is
+ * veilig, want `stop()` is idempotent.
  */
 export async function citeer(
   ctx: RetrievalContext,

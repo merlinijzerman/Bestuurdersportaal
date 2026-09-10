@@ -22,7 +22,9 @@ export type Afbrekingsreden = "annulering" | "timeout";
 export class RetrievalAfgebroken extends Error {
   readonly reden: Afbrekingsreden;
   constructor(reden: Afbrekingsreden) {
-    super(reden === "timeout" ? "retrieval: deadline verlopen" : "retrieval: door de client afgebroken");
+    // Neutrale melding: deze klasse is sinds #356 het BEURT-brede
+    // afbrekingsprimitief — retrieval én generatie gebruiken hem.
+    super(reden === "timeout" ? "beurt: deadline verlopen" : "beurt: door de client afgebroken");
     this.name = "RetrievalAfgebroken";
     this.reden = reden;
   }
@@ -142,13 +144,19 @@ export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeou
 export function isAfbreking(e: unknown): boolean {
   if (e instanceof RetrievalAfgebroken) return true;
   if (typeof e === "object" && e !== null) {
-    const f = e as { name?: string; cause?: unknown; categorie?: string; message?: string; hint?: string };
+    const f = e as { name?: string; cause?: unknown; categorie?: string; reden?: string; message?: string; hint?: string };
     if (f.name === "AbortError" || f.name === "TimeoutError") return true;
     if (f.cause instanceof RetrievalAfgebroken) return true;
     // De AI-gateway NORMALISEERT een abort naar een eigen fout. Zonder deze
     // regel ziet de reranker dat als providerfout en valt hij alsnog terug op
     // de RRF-volgorde — precies wat na een afbreking niet mag.
     if (f.categorie === "geannuleerd") return true;
+    // #356 — ONS budget dat verloopt is een afbreking; een PROVIDERtimeout is
+    // dat niet. Beide komen als `categorie: "timeout"` uit de gateway, dus het
+    // onderscheid zit in de reden. Zouden we elke gateway-timeout als afbreking
+    // aanmerken, dan zou een trage provider de fail-safes uitschakelen die
+    // juist voor providerfouten bestaan.
+    if (f.categorie === "timeout" && f.reden === "budget_verlopen") return true;
     // PostgREST GOOIT een abort niet door: `postgrest-js` vangt hem en levert
     // een gewoon `{ error: { message: "AbortError: …", hint: "Request was
     // aborted …" } }`-resultaat op. Een afgebroken RPC zou daarmee als
@@ -179,10 +187,19 @@ export function redenVan(e: unknown): Afbrekingsreden | null {
     if (c instanceof RetrievalAfgebroken) return c.reden;
     if ((e as { name?: string }).name === "TimeoutError") return "timeout";
     if ((e as { name?: string }).name === "AbortError") return "annulering";
-    const c2 = (e as { cause?: unknown }).cause;
-    if (c2) {
-      const r = redenVan(c2);
-      if (r) return r;
+    // #356 — de AI-gateway normaliseert een afbreking naar een EIGEN vorm met
+    // een `categorie`. `isAfbreking()` herkende die al, maar `redenVan()` niet,
+    // waardoor `foutcategorieVoor()` `null` gaf en de route een afgebroken
+    // generatie als gewone serverfout behandelde. De gateway hangt de oorzaak
+    // bovendien aan `oorzaak`, niet aan `cause` — vandaar beide.
+    const categorie = (e as { categorie?: unknown }).categorie;
+    if (categorie === "geannuleerd") return "annulering";
+    if (categorie === "timeout" && (e as { reden?: unknown }).reden === "budget_verlopen") return "timeout";
+    for (const kandidaat of [(e as { cause?: unknown }).cause, (e as { oorzaak?: unknown }).oorzaak]) {
+      if (kandidaat) {
+        const r = redenVan(kandidaat);
+        if (r) return r;
+      }
     }
   }
   return null;

@@ -261,6 +261,7 @@ export interface RetrievalVlaggen {
   /** D5 — deadline over de hele retrievalketen, in ms. Ontbrekend of buiten
    *  5.000–60.000 → de veilige default van 20 s (zie timeoutUitConfig). */
   retrievalTimeoutMs?: number;
+  generatieTimeoutMs?: number;
 }
 
 export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<RetrievalVlaggen> {
@@ -278,6 +279,8 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
       "relevantie_drempel_waarde",
       // D5 — deadline over de retrievalketen (ms).
       "retrieval_timeout_ms",
+      // #356 — eigen deadline over de GENERATIE (ms); ander werk, ander profiel.
+      "generatie_timeout_ms",
     ]);
 
   const m = new Map<string, JsonWaarde>();
@@ -292,6 +295,8 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
   // default, zodat er één plek is die weet wat een geldige waarde is.
   const timeoutRuw = m.get("retrieval_timeout_ms");
   const retrievalTimeoutMs = typeof timeoutRuw === "number" ? timeoutRuw : undefined;
+  const generatieTimeoutRuw = m.get("generatie_timeout_ms");
+  const generatieTimeoutMs = typeof generatieTimeoutRuw === "number" ? generatieTimeoutRuw : undefined;
 
   return {
     rerank: vlag("rerank", "RERANK"),
@@ -301,6 +306,7 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
     representatieConstraints: vlag("representatie_constraints", "REPRESENTATIE_CONSTRAINTS"),
     drempelWaarde,
     retrievalTimeoutMs,
+    generatieTimeoutMs,
   };
 }
 

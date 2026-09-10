@@ -12,9 +12,12 @@ import {
   sleutelUitRequest,
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
+import { rondAfStrikt } from "@/core/lib/ai-actie-afronding";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
-import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
+import { timeoutUitConfig, maakAfbreekgrendel, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
+import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
+import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
@@ -366,6 +369,14 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
 // Response met de ReadableStream is teruggegeven (het "stream-openpunt", besluit
 // 0087) is status 200 verzonden en doet de wrapper niets meer — bewezen met een
 // geïnjecteerde throw ná het eerste enqueue in core/lib/route-wrapper.sanity.ts.
+/**
+ * #356 — de platformgrens expliciet in code. Vercel Pro met Fluid Compute geeft
+ * 300 s als standaard maximale functieduur en er is geen projectoverride; die
+ * grens hier vastleggen maakt hem zichtbaar in de repo in plaats van alleen in
+ * een dashboard. Het generatiebudget wordt hierop geklemd (generatie-budget.ts).
+ */
+export const maxDuration = 300;
+
 export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route-eigen", audit: { handeling: "chat.gebruiken" }, capability: "chat.use", schema: z.object({ "actieve_antwoordmodus": z.unknown().optional(), "agendapunt_context": z.unknown().optional(), "algemeen_perspectief": z.unknown().optional(), "alleen_fondsdocumenten": z.unknown().optional(), "bron_intent_bron": z.unknown().optional(), "bron_intent_herkomst": z.unknown().optional(), "bron_intent_override": z.unknown().optional(), "bronkeuze_vorige_log_id": z.unknown().optional(), "const": z.unknown().optional(), "document_scope": z.unknown().optional(), "doorgrond": z.unknown().optional(), "fonds_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "messages": z.unknown().optional(), "module_scope": z.unknown().optional(), "neem_niet_vastgestelde_mee": z.unknown().optional(), "reflectie_antwoord": z.unknown().optional(), "reflectie_herformuleren": z.unknown().optional(), "reflectie_start": z.unknown().optional(), "reflectie_tegenperspectief": z.unknown().optional(), "reflectie_verdiepen": z.unknown().optional(), "startvraag_bron": z.unknown().optional(), "stukvoorbereiding": z.unknown().optional(), "transformatie": z.unknown().optional(), "volledige_analyse": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json()) as {
@@ -2055,8 +2066,29 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const send = (obj: unknown) =>
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        // #356 — ná een clientdisconnect gooit `enqueue` een TypeError
+        // ("Invalid state"). Ongeguard zou die de OORSPRONKELIJKE fout
+        // overschrijven, precies op het pad dat we duurzaam willen vastleggen.
+        // Er is dan ook niemand meer die het event zou lezen.
+        const send = (obj: unknown) => {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          } catch {
+            /* verbinding weg — er is niemand om iets aan te melden */
+          }
+        };
+        // De eigenaar van het generatiebudget. Gezet zodra de generatie begint;
+        // gesloten in de `finally` hieronder, langs élke uitgang.
+        let generatieGrendel: Afbreekgrendel | null = null;
+        // #356 — de FASE expliciet, niet afgeleid uit het bestaan van de
+        // grendel. Bij "te weinig tijd over" gooien we vóórdat de grendel
+        // bestaat; afleiden zou die afbreking dan als `retrieval` bestempelen —
+        // verkeerde melding aan de bestuurder én een verkeerde reden in het
+        // auditspoor.
+        let fase: "retrieval" | "generatie" = "retrieval";
+        // Het GECONFIGUREERDE budget, gezet zodra de fondsvlaggen bekend zijn.
+        // Blijft het ongezet (een pad zonder retrieval), dan geldt de default.
+        let generatieBudgetMs = generatieTimeoutUitConfig(undefined);
 
         try {
     // Retrieval-modus (verborgen) volgt Design A "combineren-vloer": tenzij de
@@ -2463,6 +2495,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
       // providerprivaat bij, en de citaatvorming heeft die later nodig.
       const retrievalTimeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
+      // #356 — eigen budget voor de generatie, hier vastgesteld omdat de
+      // fondsvlaggen op dit punt bekend zijn; gebruikt bij de generatiecall.
+      generatieBudgetMs = generatieTimeoutUitConfig(retrievalVlaggen.generatieTimeoutMs);
       const retrieval = maakSupabaseAdapter(retrievalVlaggen, { gateway: { gateway, ctx: gatewayCtx } });
       const retrievalAdapter = retrieval.adapter;
       // De route consumeert (nog) chunks. De adapter houdt de koppeling
@@ -3536,7 +3571,30 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // P5 signaal 3: duur van de generatie, gemeten vanaf de aanroep tot en
           // met afronden(), dus inclusief wachttijd bij de provider.
           const generatieStart = Date.now();
+
+          // ── #356 — het tijdsbudget van de generatie ────────────────────────
+          // Geklemd op wat er van de functieduur ná de afrondmarge nog over is
+          // (besluit §5b): retrieval- en generatiebudget zijn onafhankelijk
+          // configureerbaar en tellen op binnen dezelfde invocatie. Zonder klem
+          // kan het platform de functie doden vóórdat onze eigen deadline vuurt,
+          // en dan verdampt precies de marge die audit en afronding nodig hebben.
+          fase = "generatie";
+          const budget = effectiefGeneratiebudget(
+            generatieBudgetMs,
+            performance.now() - ctx.startMonotoonMs
+          );
+          if (!budget.genoeg) {
+            // Te weinig tijd om nog iets zinnigs te doen. Géén providercall
+            // starten: die kost geld en levert een respons op die de functie
+            // toch niet kan afmaken. Meteen gecontroleerd afronden.
+            throw new BeurtAfgebroken("timeout");
+          }
+          // De grendel BEZIT de deadline en sluit in `finally` langs elke
+          // uitgang — de les uit PR-B. Samengesteld met het clientsignaal, zodat
+          // een weggelopen bestuurder de providercall óók afbreekt.
+          generatieGrendel = maakAfbreekgrendel(req.signal, budget.budgetMs);
           const claudeStream = await gateway.stream(gatewayCtx, {
+            signal: generatieGrendel.signal,
             taaktype: "chat_generatie",
             systeem: streamSysteem,
             berichten: streamMessages,
@@ -3584,6 +3642,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
 
           const finaleMsg = await claudeStream.afronden();
           const generatieDuurMs = Date.now() - generatieStart;
+          generatieGrendel.bewaak();
 
           if (bufferReflectievraag) {
             // ── B-opt tranche 3b — genereren → valideren → tonen (guardrail 6) ──
@@ -4199,14 +4258,36 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // bewust weggelopen gebruiker zouden er identiek uitzien.
           const afbreekreden = foutcategorieVoor(streamFout);
           if (afbreekreden) {
-            await rondAf(supabase, aiActieId, "mislukt", `retrieval:${afbreekreden}`).catch(() => {});
+            // STRIKTE afronding op het afbreekpad: hier is geen antwoord, en het
+            // spoor dat zegt waaróm de beurt stopte is het enige dat de beurt
+            // nog oplevert. Stil mislukken is hier geen optie.
+            const afgerond = await rondAfStrikt(
+              supabase,
+              aiActieId,
+              "mislukt",
+              `${fase}:${afbreekreden}`
+            );
+            if (!afgerond) {
+              // Het GEZAGHEBBENDE spoor is niet gesloten: de levenscyclus van
+              // deze actie staat nog open. De gatewaylogregel kan er intussen
+              // wél zijn — die wordt door de gateway zelf geschreven — dus dit
+              // is niet "beide sporen ontbreken" maar precies dit ene feit.
+              // Operationeel signaal, geen ruis, en het mag de oorspronkelijke
+              // afbreekreden nooit overschrijven.
+              console.error(
+                `[chat][ALARM] ai_actie niet afgerond — fase=${fase} reden=${afbreekreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
+              );
+            }
             if (afbreekreden === "timeout") {
               send({
                 type: "error",
-                error: "Het zoeken in de bronnen duurde te lang. Probeer het opnieuw of stel uw vraag gerichter.",
+                error:
+                  fase === "generatie"
+                    ? "Het opstellen van het antwoord duurde te lang. Probeer het opnieuw of stel uw vraag gerichter."
+                    : "Het zoeken in de bronnen duurde te lang. Probeer het opnieuw of stel uw vraag gerichter.",
               });
             }
-            console.warn(`[chat] beurt afgebroken (${afbreekreden}) — correlatie ${ctx.requestId}`);
+            console.warn(`[chat] beurt afgebroken (${fase}:${afbreekreden}) — correlatie ${ctx.requestId}`);
           } else {
             console.error("Chat stream fout:", streamFout);
             send({
@@ -4215,7 +4296,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             });
           }
         } finally {
-          controller.close();
+          // De eigenaar sluit, langs élke uitgang — de les uit PR-B.
+          generatieGrendel?.stop();
+          try {
+            controller.close();
+          } catch {
+            /* al gesloten doordat de client wegviel; niets meer te doen */
+          }
         }
       },
     });
