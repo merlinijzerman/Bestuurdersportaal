@@ -22,7 +22,7 @@ import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
-import type {
+import type { Afbreekgrendel } from "./afbreken";import type {
   AdapterUitkomst,
   Bronresultaat,
   CitaatOpdracht,
@@ -125,11 +125,20 @@ function bouwRetrievalMeta(
 
 /**
  * Fase 1: kandidaten ophalen, selecteren, samenvoegen en begrenzen. Levert een
- * ONVOLTOOID resultaat — er zijn nog geen citaties. Zie `citeer()`.
+ * ONVOLTOOID resultaat — er zijn nog geen citaties.
+ *
+ * INTERN. Gebruik `voerVolledigeRetrievalUit()`. Deze functie levert een
+ * tussenresultaat dat een LEVENDE grendel draagt; wie haar los aanroept erft
+ * daarmee een resource waarvan hij de levensduur moet kennen. Een productiepad
+ * dat dat vergeet, laat timer en clientluisteraar staan tot de deadline vuurt.
+ * De contractgate verbiedt zo'n import buiten deze module en de tests.
+ *
+ * `geleendeGrendel` — de eigenaar geeft zijn grendel mee en sluit hem zelf.
  */
 export async function voerRetrievalUit(
   ctx: RetrievalContext,
-  opdracht: Orkestratieopdracht
+  opdracht: Orkestratieopdracht,
+  geleendeGrendel?: Afbreekgrendel
 ): Promise<RetrievalTussenresultaat> {
   const t0 = Date.now();
   const sporen = opdracht.sporen;
@@ -149,7 +158,10 @@ export async function voerRetrievalUit(
   // de deadline. Het onthoudt waaróm het afging, zodat een verbroken
   // verbinding `annulering` oplevert en een verlopen deadline `timeout` — twee
   // verschillende dingen die een kaal AbortSignal niet uit elkaar houdt.
-  const grendel = maakAfbreekgrendel(ctx.signal, opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS);
+  // Is er een grendel geleend, dan is de UITLENER de eigenaar en sluit hij hem;
+  // deze functie mag dat dan niet doen, ook niet op het foutpad.
+  const eigenGrendel = geleendeGrendel === undefined;
+  const grendel = geleendeGrendel ?? maakAfbreekgrendel(ctx.signal, opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS);
   const ctxMetGrendel = { ...ctx, signal: grendel.signal };
 
   //    `ctx.scope.documentIds` is voor een adapter de ENIGE bron van waarheid;
@@ -279,10 +291,38 @@ export async function voerRetrievalUit(
     };
   } catch (e) {
     // Een afbreking is een EIGEN foutcategorie, geen providerfout — en er volgt
-    // geen terugval: de keten stopt volledig. De grendel wordt hier gesloten;
-    // op het geslaagde pad doet `citeer()` dat, want die valt er nog binnen.
-    grendel.stop();
+    // geen terugval: de keten stopt volledig. Een EIGEN grendel wordt hier
+    // gesloten; een geleende laat je met rust — die is van de uitlener, en die
+    // sluit hem in zijn eigen `finally`.
+    if (eigenGrendel) grendel.stop();
     throw e;
+  }
+}
+
+/**
+ * DE PUBLIEKE INGANG. Voert beide fasen uit en BEZIT de afbreekgrendel.
+ *
+ * De tweefasen-API bestaat omdat de citaatvorming een eigen stap is, maar zij
+ * gaf de aanroeper een levend handvat in handen: slaagde fase 1 en bleef fase 2
+ * uit, dan bleven timer en clientluisteraar staan tot de deadline vuurde. Dat
+ * was geen theoretisch lek — het was een verplichting die nergens stond.
+ *
+ * Hier is de eigenaar expliciet: deze functie maakt de grendel, leent hem uit
+ * aan beide fasen, en sluit hem in `finally` — langs élke uitgang, ook als
+ * `verrijkWeergave` halverwege faalt. Productiepaden roepen uitsluitend deze
+ * functie aan; de contractgate bewaakt dat.
+ */
+export async function voerVolledigeRetrievalUit(
+  ctx: RetrievalContext,
+  opdracht: Orkestratieopdracht,
+  citaatOpdracht: CitaatOpdracht
+): Promise<RetrievalUitkomst> {
+  const grendel = maakAfbreekgrendel(ctx.signal, opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS);
+  try {
+    const tussen = await voerRetrievalUit(ctx, opdracht, grendel);
+    return await citeer(ctx, opdracht.adapter, tussen, citaatOpdracht);
+  } finally {
+    grendel.stop();
   }
 }
 

@@ -88,7 +88,10 @@ export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeou
   // alle drie de uitgangen bereikt: afbreken, sluiten, en de deadline die vuurt.
   // Zonder dat laatste zou een keten die `stop()` nooit haalt — omdat fase 2
   // niet wordt aangeroepen — een luisteraar op het clientsignaal achterlaten.
+  let opgeruimd = false;
   const ruimOp = () => {
+    if (opgeruimd) return;
+    opgeruimd = true;
     clearTimeout(timer);
     clientSignal?.removeEventListener("abort", opClientAbort);
   };
@@ -121,6 +124,10 @@ export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeou
       if (gesloten) throw new GrendelGesloten();
     },
     stop() {
+      // Écht idempotent: de eigenaar sluit in zijn `finally`, en de laatste fase
+      // kan hem al hebben gesloten. Twee keer opruimen is geen fout, maar het
+      // maakt "hoe vaak is er afgemeld" onbruikbaar als bewijs — en dat is
+      // precies waarmee de opruimtest meet dat er niets achterblijft.
       gesloten = true;
       ruimOp();
     },

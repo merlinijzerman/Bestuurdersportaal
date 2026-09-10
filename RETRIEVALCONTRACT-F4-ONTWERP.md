@@ -712,6 +712,22 @@ Een foutvorm is een bibliotheekdetail dat per versie kan veranderen — het sign
 weet of er is afgebroken. De controle staat na élke PostgREST-call en vóór élke
 terugval.
 
+**Eén publieke ingang, en die BEZIT de grendel (reviewronde 3).** De
+tweefasen-API gaf de aanroeper een levend handvat in handen: slaagde
+`voerRetrievalUit()` en bleef `citeer()` uit, dan bleven timer en
+clientluisteraar staan tot de deadline vuurde. Zelfopruiming begrenst dat lek
+tot de deadline maar heft het niet op, en `Omit<…, "grendel">` maakt alleen het
+EINDresultaat schoon — het tussenresultaat bleef een publiek object met een
+resource waarvan de aanroeper de levensduur moest kennen. Die verplichting stond
+nergens.
+
+`voerVolledigeRetrievalUit(ctx, opdracht, citaatOpdracht)` is nu de enige
+productie-ingang: hij maakt de grendel, leent hem uit aan beide fasen en sluit
+hem in `finally` langs élke uitgang — ook wanneer `verrijkWeergave` halverwege
+faalt. De twee fasefuncties zijn intern; een contractgate verbiedt dat een
+bestand in `app/`, `core/` of `platform/` ze importeert. `voerRetrievalUit()`
+sluit een GELEENDE grendel niet: die is van de uitlener.
+
 **De grendel is enkelvoudig en zegt dat zelf (reviewronde 2).** Een gesloten
 grendel was van buiten niet te onderscheiden van een lopende — `reden()` bleef
 `null`, `signal.aborted` bleef `false` en `bewaak()` gaf stil `void` terug. Wie

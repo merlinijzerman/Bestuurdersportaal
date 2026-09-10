@@ -13,7 +13,7 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { voerRetrievalUit, citeer, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
 import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
@@ -2483,7 +2483,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // de model- en embeddingcalls van een beurt die niemand meer leest.
         signal: req.signal,
       };
-      const retrievalResultaat = await voerRetrievalUit(
+      // ÉÉN aanroep, en die bezit de afbreekgrendel: hij sluit timer en
+      // clientluisteraar langs elke uitgang, ook als de weergaveverrijking
+      // halverwege faalt. De twee losse fasen zijn intern — een route die ze
+      // zelf sequencet erft een resource waarvan zij de levensduur moet kennen.
+      const voltooid = await voerVolledigeRetrievalUit(
         retrievalContext,
         {
           adapter: retrievalAdapter,
@@ -2543,24 +2547,25 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 ]
               : []),
           ] as const,
+        },
+        // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
+        // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
+        // Ze draait BEWUST binnen dezelfde aanroep en dus vóór het
+        // voortgangsevent en het scope-auditspoor: de harde contextgrens kan
+        // blokken afkappen, en dan bouwt de orkestratie de meta opnieuw over
+        // exact de opgenomen bronnen. Zou dit later staan, dan meldden de
+        // voortgangsregel en het auditspoor bronnen die nooit naar het model
+        // zijn gegaan.
+        {
+          // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
+          // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
+          primaireDocumentIds: primaireIds,
+          peildatum: vandaag,
+          // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
+          // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
+          hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
         }
       );
-      // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
-      // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
-      // Ze draait BEWUST hier, vóór het voortgangsevent en het scope-auditspoor:
-      // de harde contextgrens kan blokken afkappen, en dan bouwt de orkestratie
-      // de meta opnieuw over exact de opgenomen bronnen. Zou dit later staan,
-      // dan meldden de voortgangsregel en het auditspoor bronnen die nooit naar
-      // het model zijn gegaan.
-      const voltooid = await citeer(retrievalContext, retrievalAdapter, retrievalResultaat, {
-        // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
-        // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
-        primaireDocumentIds: primaireIds,
-        peildatum: vandaag,
-        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
-        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
-        hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
-      });
       chunks = retrieval.chunksVoor(voltooid.geselecteerd);
       contextTekst = voltooid.contextTekst;
       bronnen = voltooid.bronverwijzingen;

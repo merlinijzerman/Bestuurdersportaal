@@ -13,7 +13,7 @@
 // ============================================================================
 import test from "node:test";
 import assert from "node:assert/strict";
-import { voerRetrievalUit, citeer } from "../../core/lib/retrieval/orkestratie";
+import { voerRetrievalUit, citeer, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
 import type {
   AdapterUitkomst,
   Bronresultaat,
@@ -533,7 +533,10 @@ test("T2-1 — de chatroute citeert VÓÓR het voortgangsevent en de scope-audit
   const { readFileSync } = await import("node:fs");
   const bron = readFileSync(new URL("../../app/api/chat/route.ts", import.meta.url), "utf8");
 
-  const iCiteer = bron.indexOf("await citeer(retrievalContext");
+  // Sinds de eigenaarschapscorrectie draait de citaatvorming BINNEN
+  // `voerVolledigeRetrievalUit`, dus de volgorde is structureel geborgd; het
+  // anker verschuift mee naar die ene aanroep.
+  const iCiteer = bron.indexOf("await voerVolledigeRetrievalUit(");
   const iMeta = bron.indexOf("...voltooid.meta");
   const iProgress = bron.indexOf('fase: "retrieval",\n        status: "klaar"');
   assert.ok(iCiteer > 0 && iMeta > 0 && iProgress > 0, "verwachte ankers niet gevonden in de chatroute");
@@ -571,4 +574,87 @@ test("T2-1 — de contextgrens staat alleen op de query, niet ook in de citaatop
     !/maxContextTekens/.test(opdracht),
     "twee plekken voor dezelfde limiet kunnen uiteenlopen; de query is gezaghebbend"
   );
+});
+
+// ── Reviewronde 3: EIGENAARSCHAP van de afbreekgrendel ──────────────────────
+
+test("T2-1 — geen productiepad importeert de losse fasefuncties", async () => {
+  // De tweefasen-API geeft een tussenresultaat met een LEVENDE grendel terug.
+  // Wie fase 1 los aanroept en fase 2 overslaat, laat timer en clientluisteraar
+  // staan tot de deadline vuurt. Dat is geen fout die je in gedrag ziet — hij
+  // is alleen te voorkomen door de losse fasen buiten productie te houden.
+  const { readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  // `URL.pathname` percent-encodeert spaties in het pad; deze repo staat in een
+  // map met een spatie erin.
+  const wortel = fileURLToPath(new URL("../../", import.meta.url));
+  const EIGEN = join("core", "lib", "retrieval", "orkestratie.ts");
+
+  const overtreders: string[] = [];
+  const loop = (map: string) => {
+    for (const naam of readdirSync(join(wortel, map))) {
+      if (naam === "node_modules" || naam === ".next" || naam.startsWith(".")) continue;
+      const rel = join(map, naam);
+      if (statSync(join(wortel, rel)).isDirectory()) { loop(rel); continue; }
+      if (!/\.(ts|tsx|mjs)$/.test(naam) || rel === EIGEN) continue;
+      const bron = readFileSync(join(wortel, rel), "utf8");
+      // Alleen ECHTE imports uit de orkestratiemodule tellen; een naam in een
+      // commentaar of een gelijknamige regex elders is geen aanroep.
+      for (const m of bron.matchAll(/import\s*\{([^}]*)\}\s*from\s*["'][^"']*retrieval\/orkestratie["']/g)) {
+        const namen = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim());
+        for (const n of ["voerRetrievalUit", "citeer"]) {
+          if (namen.includes(n)) overtreders.push(`${rel} → ${n}`);
+        }
+      }
+    }
+  };
+  for (const map of ["app", "core", "platform"]) loop(map);
+  assert.deepEqual(
+    overtreders, [],
+    "productie roept uitsluitend voerVolledigeRetrievalUit() aan — die bezit de grendel en sluit hem in finally"
+  );
+});
+
+test("T2-1 — de volledige ingang ruimt DIRECT op als de weergaveverrijking faalt", async () => {
+  // De naad die de reviewronde blootlegde: fase 1 slaagt, fase 2 klapt eruit.
+  // Zonder eigenaar bleef de grendel dan leven tot de deadline. Hier meten we
+  // het aan het clientsignaal zelf: even veel afmeldingen als aanmeldingen, en
+  // ruim vóór de deadline.
+  let aangemeld = 0;
+  let afgemeld = 0;
+  const echt = new AbortController();
+  const bespiedSignaal = {
+    get aborted() { return echt.signal.aborted; },
+    get reason() { return echt.signal.reason; },
+    addEventListener(t: string, l: EventListenerOrEventListenerObject, o?: AddEventListenerOptions) {
+      aangemeld++; echt.signal.addEventListener(t, l, o);
+    },
+    removeEventListener(t: string, l: EventListenerOrEventListenerObject) {
+      afgemeld++; echt.signal.removeEventListener(t, l);
+    },
+  } as unknown as AbortSignal;
+
+  const DEADLINE = 30_000; // ruim: de opruiming mag hier niet op wachten
+  const adapter = nepAdapter({ perQuery: { primair: [sharepointBron(1, "doc-a", "passage over uitbesteding")] } });
+  const stukAdapter: RetrievalAdapter = {
+    ...adapter,
+    async verrijkWeergave() {
+      throw new Error("weergaveverrijking mislukt");
+    },
+  };
+
+  const t0 = Date.now();
+  await assert.rejects(
+    () =>
+      voerVolledigeRetrievalUit(
+        { ...CTX, signal: bespiedSignaal },
+        { adapter: stukAdapter, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }], timeoutMs: DEADLINE },
+        { primaireDocumentIds: new Set<string>(), peildatum: "2026-09-10", hoofddocumentLabel: " [h]", sentinel: "S" }
+      ),
+    /weergaveverrijking mislukt/
+  );
+  assert.ok(aangemeld > 0, "de grendel moet zich op het clientsignaal hebben aangemeld");
+  assert.equal(afgemeld, aangemeld, "…en zich even vaak hebben afgemeld");
+  assert.ok(Date.now() - t0 < DEADLINE / 10, "de opruiming wacht niet op de deadline");
 });
