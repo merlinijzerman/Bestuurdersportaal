@@ -50,6 +50,7 @@ import { leesScannerHealth, scanSignedUrl } from "@/platform/lib/malware-scan-cl
 import { signatureOordeel } from "@/core/lib/malware-scan-beleid";
 import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 import { isProviderAuthenticatieFout } from "@/core/lib/provider-fout";
+import { bepaalDocumentIngestAiScope } from "@/core/lib/document-ingest-ai-scope";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
 const TIJDBUDGET_MS = 240_000; // ruim binnen maxDuration 300s
@@ -653,18 +654,20 @@ async function extracteerEnChunk(
   }
   const buffer = Buffer.from(await blob.arrayBuffer());
   const bestandstype = (doc.bestandstype ?? "pdf") as Bestandstype;
+  const aiScope = bepaalDocumentIngestAiScope(doc.bibliotheek, job.fonds_id);
 
   // AI-BEGRENZING (besluit 0180). Eén document-ingest is ÉÉN AI-actie, ongeacht
   // hoeveel modelcalls (samenvatting, tientallen prefixes, embeddings) eruit
   // voortkomen. Het fonds komt van de job-rij, niet van een sessie; er is hier
   // geen gebruiker om tegen af te rekenen. De reservering staat vóór de eerste
   // providercall en is idempotent op (job, stap): een hervatte job na een
-  // backoff reserveert niet opnieuw zolang dezelfde poging loopt.
+  // backoff reserveert niet opnieuw zolang dezelfde poging loopt. Generieke
+  // documenten hebben bewust geen fonds en tellen via generiek_curatie globaal.
   const ingestPf = await preflightSysteem(svc, {
-    actietype: "document_ingest",
-    fondsId: job.fonds_id ?? null,
+    actietype: aiScope.ingestActietype,
+    fondsId: aiScope.fondsId,
     provider: "anthropic",
-    idempotentie: systeemSleutel(job.id, "document_ingest", (job.retry_count ?? 0) + 1),
+    idempotentie: systeemSleutel(job.id, aiScope.ingestActietype, (job.retry_count ?? 0) + 1),
     vingerafdruk: vingerafdruk({ documentId: doc.id, opslagPad: doc.opslag_pad }),
   });
   if (ingestPf.uitkomst === "geweigerd") {
@@ -689,12 +692,12 @@ async function extracteerEnChunk(
       // poging reserveert opnieuw: Mistral factureert een retry ook opnieuw.
       reserveerOcr: async (paginas, poging) => {
         const uitkomst = await preflightSysteem(svc, {
-          actietype: "ocr",
-          fondsId: job.fonds_id ?? null,
+          actietype: aiScope.ocrActietype,
+          fondsId: aiScope.fondsId,
           provider: "mistral",
           model: "mistral-ocr-latest",
           ocrPaginas: paginas,
-          idempotentie: systeemSleutel(job.id, "ocr", poging),
+          idempotentie: systeemSleutel(job.id, aiScope.ocrActietype, poging),
           vingerafdruk: vingerafdruk({ documentId: doc.id, paginas }),
         });
         return uitkomst.uitkomst === "nieuw";
