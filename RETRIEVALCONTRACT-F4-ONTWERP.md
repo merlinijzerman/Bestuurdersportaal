@@ -3,8 +3,8 @@
 > **Status:** T1 afgerond; ontwerp gereviewd en R1–R6 **beslist** (9 september 2026).
 > Geen productiecode, geen migratie en geen databaseobject gewijzigd.
 > Fase 3 (#323, #324) en de AI-gateway-cutover (#325) zijn op `preview` gemerged.
-> Wat vóór T2-1 nog moet gebeuren is **T1b** (embeddingstub + hybride golden, besluit R3, ticket [#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349));
-> de ontwerpvragen zijn dicht — zie §6.
+> T1b ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349)) is uitgevoerd: het hybride pad is gekarakteriseerd (§3.6).
+> De ontwerpvragen zijn dicht — zie §6. T2-1 kan starten.
 > Bron van waarheid voor de huidige keten: `core/lib/rag.ts` en de migraties. Dit
 > document beschrijft wat er **is** (gemeten, met vindplaats) en wat het contract
 > moet dragen.
@@ -329,11 +329,13 @@ geen `AbortSignal` en geen looptijdbegrenzing in de retrievalketen (§2.3), dus 
 geen bestaand gedrag om vast te leggen. Een golden verzinnen zou karakterisering
 verwarren met ontwerp.
 
-Deze scenario's horen daarom bij **T2-5**, als contracttest op de nieuwe
+Deze scenario's horen daarom bij **T2-1**, als contracttest op de nieuwe
 `RetrievalAdapter` — niet bij T1. Hetzelfde geldt voor het **hybride pad**: zonder
 Mistral-sleutel valt de keten lokaal deterministisch terug op FTS
 (`embedding_query_success:false`); een embeddingstub naast de Anthropic-stub is
-voorwaarde voor een hybride golden. Besluit R3: dat gebeurt in een eigen tranche **T1b**, vóór enige productiecode in T2-1 — het hybride pad is in productie het primaire pad, dus de goldens dekken vandaag alleen de terugval.
+voorwaarde voor een hybride golden. Besluit R3 belegde dat in een eigen tranche
+**T1b** ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349)),
+die inmiddels is uitgevoerd — zie §3.6.
 
 Wél karakteriseerbaar en opgenomen: lege resultaten (drie scenario's), truncatie
 (fragmentafkapping op 220 tekens), en manipulatie met een **procesreferentie** uit de
@@ -347,6 +349,38 @@ herhaald: die staat al in `tests/cross-tenant/rag-discipline.test.ts` — T11
 een vreemd fonds in de passage). Manipulatie met een **vergaderingreferentie** loopt
 niet via de retrievalfilters maar via de contextlaag (`portaalcontext.ts`, klasse B)
 en is daarmee onderdeel van gaplijst G-1, niet van de retrievalkarakterisering.
+
+### 3.6 Het hybride pad (T1b, #349)
+
+Het FTS-terugvalpad hierboven is niet het pad dat in productie het meest loopt. T1b
+voegt een deterministische **embeddingstub** toe (`tests/e2e/fixtures/embed-stub.mjs`)
+plus een gedeelde vectorizer (`embed-vector.mjs`) die zowel de vraag-embedding als de
+chunk-embeddings in de W1-seed levert — alleen als beide kanten dezelfde vectoren
+gebruiken meet de vectorarm gelijkenis in plaats van ruis. Het is een hashing-vectorizer
+(tokens → dimensies), geen semantisch model: teksten die woorden delen liggen dichter
+bij elkaar, zodat de vastgelegde rangorde betekenisvol is en verschuift als de tekst
+verandert.
+
+De vier `w322b.*`-scenario's draaien tegen een **aparte serverinstantie** met
+`HYBRID_SEARCH=on` (CI: poort 3003). Reden: met hybride aan verandert `methode` op elk
+retrievalpad, dus zouden de 390 bestaande snapshots omvallen. Zonder de stub-URL worden
+ze **zichtbaar overgeslagen** (`vereist: "embed-stub"` / `"hybride"`), nooit stil.
+
+Vastgelegd: `methode: "hybride_rrf"`, `embedding_query_success: true`, de fusievolgorde
+via de volgordeprojectie, `vec_rang` en `fts_rang` per chunk, en — inhoudsvrij — dat de
+vraag-embedding daadwerkelijk is opgehaald (model, aantal, dimensie; nooit tekst). Die
+laatste regel is er met opzet: zonder haar zou een stille terugval op FTS een groen
+snapshot met een andere methode kunnen opleveren.
+
+**Bevinding T1b — de hybride fusie kent geen verslapte terugval.** In de hybride
+chatgolden is `fts_rang` op **elke** chunk `null`: de FTS-arm draagt niets bij en de
+fusie is feitelijk vector-only. De oorzaak staat in de code, niet in de fixtures: de
+verslapte OR-terugval (`fts_dutch_terugval`, `rag.ts:1519`) leeft uitsluitend in
+`zoekViaFTS`. Het hybride pad roept `zoek_chunks_hybride` aan met de **strikte** query;
+levert die niets, dan is er binnen hybride geen tweede, bredere poging. Een lange
+natuurlijketaalvraag valt daardoor op het hybride pad terug op de vectorarm alleen,
+terwijl dezelfde vraag op het FTS-pad wél de verslapte poging krijgt. Dat is een
+asymmetrie tussen de twee paden die T2 moet adresseren — opgenomen als **G-12**.
 
 ### 3.5 Reproduceerbare uitvoerinstructie
 
@@ -753,12 +787,13 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 | **G-9** | Drie onverenigbare bronvormen | C1/C7, C5, C6 | midden | alleen `BronVerwijzing` draagt citation-id en sentinel | T2-2 |
 | **G-10** | Hybride pad niet gekarakteriseerd | C1 | **hoog** (was: laag) | het is in productie het **primaire** pad; de goldens dekken alleen de FTS-terugval. R3: eigen tranche vóór T2-1 | **T1b** |
 | **G-11** | `regimeWeging` niet per fonds stuurbaar | kern | laag | enige vlag met default aan, buiten `RetrievalVlaggen` | T2-2 |
+| **G-12** | De hybride fusie kent geen verslapte OR-terugval; die bestaat alleen op het FTS-pad (`rag.ts:1519`). Een lange vraag levert daardoor een vector-only fusie | C1 op het hybride pad | **midden** | asymmetrie tussen de twee paden: dezelfde vraag krijgt op FTS wél een tweede, bredere poging en op hybride niet. Gemeten in T1b, gepind in `w322b.chat…hybride-retrieval-meta` (`fts_rang: null` op elke chunk) | T2-1 |
 
 ### 5.2 Werkpakketten
 
 | # | Pakket | Raakt | Gate |
 |---|---|---|---|
-| **T1b** ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349)) | Embeddingstub naast de Anthropic-stub + geëmbedde fixtures; hybride golden op het `zoek_chunks_hybride`-pad. **Nog steeds geen productiecode.** | tests, fixtures | nieuwe hybride golden; bestaande 390 ongewijzigd |
+| **T1b** ✅ ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349), uitgevoerd) | Embeddingstub naast de Anthropic-stub + geëmbedde fixtures; hybride golden op het `zoek_chunks_hybride`-pad. **Eén expliciet goedgekeurde test-seam** in productiecode (§3.6): `resolveMistralBaseUrl` + één aanroep in `embeddings.ts` | tests, fixtures, 2 regels productiecode | nieuwe hybride golden; bestaande 390 ongewijzigd; seam fail-closed |
 | T2-1 | Contract + orkestratie + Supabase-adapter; C1 erdoorheen. **Inclusief `AbortSignal`, timeout en de toelatingspoort** (R6, G-3, G-3b) | chatroute, `rag.ts` (wrapper) | w311/w322-goldens identiek volgens §3.2; contracttests op cancellation/timeout; **acceptatievoorwaarde: V5 toetst tegen de actuele bronregistratie, met een test die een intrekking *tijdens* het verzoek simuleert en aantoont dat de kandidaat alsnog wordt geweigerd** |
 | T2-2 | C5 en C6 door de orkestratie (vlaggen, bronvorm, scopevalidatie, PII-gate op C5). **C6 behoudt zijn filtergedrag** (R2) | zoeken, vergelijk | nieuwe goldens vóór en ná |
 | T2-3 | Versie-identiteit (volledige hash, R1) in `bronversie_audit`; `correlationId` in `retrieval_meta` (R4, één forwardmigratie) | `audit-meta.ts`, SQL-projectie, migratie | audit-meta-sanity + karakterisering + R1-gates |
@@ -787,4 +822,4 @@ Vastgelegd in [`decisions/0213`](./decisions/0213-retrievalcontract-adaptergrens
 | **R5** | Reikwijdte contextlaag | **Hybride.** Besluitregistratie en andere formele evidence worden **citeerbaar en versiebaar**; agenda-, vergadering-, proces- en profielcontext blijft buiten documentretrieval maar krijgt een **eigen typed contextcontract met eigen audit**. Configuratie/autorisatie is **geen contextlaag** | G-1 gesplitst in G-1a/G-1b; de vier tabelklassen zijn hierop gebouwd en door de gate afgedwongen |
 | **R6** | Cancellation/timeout | **Meteen in T2-1**, met de contracttests erbij. Het hoort bij de orkestratiegrens en de kostenbeheersing, niet bij de tests | G-3 verplaatst van T2-5 naar T2-1 |
 
-**Wat nu nog openstaat vóór T2-1:** alleen T1b, als zelfstandig te volgen ticket [#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349). De ontwerpvragen zijn beslist.
+**Wat nu nog openstaat vóór T2-1:** niets meer. T1b (#349) is uitgevoerd en het hybride pad is gekarakteriseerd (§3.6); de ontwerpvragen zijn beslist. T2-1 neemt G-12 mee als nieuw gevonden gap.

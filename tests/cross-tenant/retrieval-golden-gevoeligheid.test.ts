@@ -60,12 +60,13 @@ const ZOEKBODY = {
 };
 
 const RETRIEVAL_META = {
-  methode: "fts_dutch_ranked",
+  methode: "fts_dutch_ranked" as string,
+  embedding_query_success: false,
   opgehaald: 2,
   geselecteerd: 2,
   chunks: [
-    { id: CHUNK_A, document_id: DOC_A, rang: 0.9, fts_rang: 1, vec_rang: null },
-    { id: CHUNK_B, document_id: DOC_B, rang: 0.4, fts_rang: 2, vec_rang: null },
+    { id: CHUNK_A, document_id: DOC_A, rang: 0.9, fts_rang: 1, vec_rang: null as number | null },
+    { id: CHUNK_B, document_id: DOC_B, rang: 0.4, fts_rang: 2, vec_rang: null as number | null },
   ],
   bronversie_audit: [
     { document_id: DOC_A, bron: "Intern", bibliotheek: "fonds", fonds_id: FONDS, documentstatus: "vastgesteld", bronstatus: null, documentdatum: "2026-01-31" },
@@ -214,10 +215,54 @@ test("F4-golden — negatieve controle: een gewijzigde passage maakt de golden r
   assert.notEqual(vorm(zoekWaarneming(ZOEKBODY)), vorm(zoekWaarneming(m)));
 });
 
+// ── (5) #349 T1b — het hybride pad ─────────────────────────────────────────
+//  Een hybride golden moet kantelen bij precies de twee dingen die het FTS-pad
+//  niet kan opleveren: een andere RRF-fusievolgorde, en een gewijzigde
+//  armherkomst (vec_rang naast fts_rang). Zonder deze controles zou een stille
+//  terugval op FTS -- die `vec_rang: null` geeft -- als groen kunnen passeren.
+const HYBRIDE_META = {
+  ...RETRIEVAL_META,
+  methode: "hybride_rrf",
+  embedding_query_success: true,
+  chunks: [
+    { id: CHUNK_A, document_id: DOC_A, rang: 0.9, fts_rang: 1, vec_rang: 2 as number | null },
+    { id: CHUNK_B, document_id: DOC_B, rang: 0.4, fts_rang: 2, vec_rang: 1 as number | null },
+  ],
+};
+
+test("F4-golden — negatieve controle: een omgekeerde RRF-fusie maakt de hybride golden rood", () => {
+  const m = kloon(HYBRIDE_META);
+  m.chunks.reverse();
+  assert.notEqual(vorm(metaWaarneming(HYBRIDE_META)), vorm(metaWaarneming(m)));
+});
+
+test("F4-golden — negatieve controle: een gewijzigde vectorrang maakt de hybride golden rood", () => {
+  const m = kloon(HYBRIDE_META);
+  m.chunks[0].vec_rang = 5;
+  assert.notEqual(vorm(metaWaarneming(HYBRIDE_META)), vorm(metaWaarneming(m)));
+});
+
+test("F4-golden — negatieve controle: een stille terugval op FTS maakt de hybride golden rood", () => {
+  // De belangrijkste: zonder embeddingprovider zet rag.ts methode op
+  // fts_dutch_ranked, embedding_query_success op false en vec_rang op null.
+  // Dat MOET zichtbaar zijn, anders karakteriseert de golden het verkeerde pad.
+  const m = kloon(HYBRIDE_META);
+  m.methode = "fts_dutch_ranked";
+  m.embedding_query_success = false;
+  for (const c of m.chunks) c.vec_rang = null;
+  assert.notEqual(vorm(metaWaarneming(HYBRIDE_META)), vorm(metaWaarneming(m)));
+});
+
+test("F4-golden — de hybride armherkomst is per chunk zichtbaar in de projectie", () => {
+  const tekst = vorm(metaWaarneming(HYBRIDE_META));
+  assert.ok(tekst.includes("fts=1 vec=2"), "de volgordeprojectie moet beide armrangen dragen");
+  assert.ok(tekst.includes("fts=2 vec=1"));
+});
+
 // ── De opgenomen snapshots dragen de projectie daadwerkelijk ────────────────
 
-test("F4-golden — elk opgenomen w322-snapshot draagt een volgordeprojectie", () => {
-  const bestanden = readdirSync(SNAPSHOTS).filter((b) => b.startsWith("w322.") && b.endsWith(".json"));
+test("F4-golden — elk opgenomen w322/w322b-snapshot draagt een volgordeprojectie", () => {
+  const bestanden = readdirSync(SNAPSHOTS).filter((b) => /^w322b?\./.test(b) && b.endsWith(".json"));
   assert.ok(bestanden.length >= 6, `verwacht ten minste 6 w322-snapshots, gevonden ${bestanden.length}`);
   for (const b of bestanden) {
     const snap = JSON.parse(readFileSync(join(SNAPSHOTS, b), "utf8")) as { nawerk?: { volgorde?: unknown } };

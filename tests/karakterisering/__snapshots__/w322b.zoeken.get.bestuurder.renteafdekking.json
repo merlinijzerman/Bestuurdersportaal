@@ -1,0 +1,68 @@
+{
+  "body": {
+    "meta": {
+      "geselecteerd": 5,
+      "methode": "hybride_rrf",
+      "modus": "alles",
+      "opgehaald": 5
+    },
+    "procesinstanties": [],
+    "resultaten": [
+      {
+        "bibliotheek": "fonds",
+        "bron": "Intern",
+        "bronorganisatie": null,
+        "bronstatus": null,
+        "document_id": "<uuid:1>",
+        "documentdatum": null,
+        "documentstatus": "concept",
+        "extern_url": null,
+        "geldig_tot": null,
+        "heeft_origineel": true,
+        "normgewicht": null,
+        "procesinstantie_id": null,
+        "titel": "W1 Document",
+        "treffers": [
+          {
+            "fragment": "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
+            "pagina": 1,
+            "paragraaf": null
+          },
+          {
+            "fragment": "De renteafdekking van de matchingportefeuille is per ultimo verhoogd naar 60 procent van de verplichtingen. De strategische bandbreedte voor de renteafdekking loopt van 50 tot 70 procent.",
+            "pagina": 2,
+            "paragraaf": null
+          },
+          {
+            "fragment": "Het uitbestedingsbeleid regelt de selectie en de monitoring van de fiduciair beheerder en de pensioenuitvoerder. De uitvoering van de renteafdekking valt onder het mandaat van de fiduciair beheerder.",
+            "pagina": 4,
+            "paragraaf": null
+          }
+        ]
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "nawerk": {
+    "embed": [
+      {
+        "aantal": 1,
+        "dims": 1024,
+        "model": "mistral-embed"
+      }
+    ],
+    "volgorde": {
+      "documenten": [
+        "00 doc=<uuid:1> bib=fonds status=concept"
+      ],
+      "treffers": [
+        "00.00 doc=<uuid:1> pagina=2 paragraaf=geen lengte=187 sha=f21ed9a89346",
+        "00.01 doc=<uuid:1> pagina=4 paragraaf=geen lengte=199 sha=0e58c50289e5",
+        "00.02 doc=<uuid:1> pagina=1 paragraaf=geen lengte=172 sha=9bf86c15fc88"
+      ]
+    }
+  },
+  "status": 200
+}

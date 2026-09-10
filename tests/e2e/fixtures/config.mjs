@@ -104,3 +104,8 @@ export function authStateBestand(fondsSleutel, rol) {
 export function platformAuthStateBestand(account, niveau) {
   return `tests/e2e/.auth/platform-${account}-${niveau}.json`;
 }
+
+// #349 (F4-T1b) — modelnaam die de embeddingstub teruggeeft; moet gelijk zijn
+// aan EMBED_MODEL in core/lib/embeddings.ts, zodat de gepersisteerde chunks en
+// de vraag-embedding aantoonbaar uit hetzelfde "model" komen.
+export const EMBED_STUB_MODEL = "mistral-embed";
