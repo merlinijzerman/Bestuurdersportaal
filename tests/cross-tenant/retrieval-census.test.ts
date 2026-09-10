@@ -33,12 +33,21 @@ test("F4-census — zoek-RPC's leven uitsluitend in rag.ts; directe document_chu
   assert.deepEqual(antwoordpad, ["app/api/chat/route.ts"]);
 });
 
-test("F4-census — de vier productie-ingangen van zoekRelevanteChunksMetMeta zijn bekend", () => {
+test("F4-census — de productie-ingangen van zoekRelevanteChunksMetMeta zijn bekend, en de chatroute hoort er niet meer bij", () => {
   const nu = census();
   const ingangen = Object.entries(nu)
     .filter(([, e]) => ((e as { modules: Record<string, string[]> }).modules.rag ?? []).includes("zoekRelevanteChunksMetMeta"))
     .map(([b]) => b).sort();
-  assert.deepEqual(ingangen, ["app/api/chat/route.ts", "app/api/zoeken/route.ts", "core/lib/vergelijk-productie.ts"]);
+  // T2-1/PR-A: C1 loopt door het contract, dus `app/api/chat/route.ts` roept de
+  // retrievalkern niet langer rechtstreeks aan — de adapter doet dat. Dit is de
+  // krimp die T2-4 voor de hele census beoogt, hier alvast voor het antwoordpad.
+  // C5 (zoeken) en C6 (vergelijk) volgen in T2-2; blijven die staan, dan is de
+  // cutover onvolledig en hoort deze lijst rood te worden.
+  assert.deepEqual(ingangen, [
+    "app/api/zoeken/route.ts",
+    "core/lib/retrieval/supabase-adapter.ts",
+    "core/lib/vergelijk-productie.ts",
+  ]);
 });
 
 // ── #348 §1 — het antwoordpadregister (reviewronde 3) ───────────────────────

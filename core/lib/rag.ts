@@ -32,6 +32,11 @@ import type { DocumentDekking } from "./document-dekking";
 import { expandeerFtsQuery } from "./jargon-expansie";
 import { rerankChunks, type RerankMeta, type RerankClient } from "./rerank";
 import { verrijkMetParents, type ParentMeta } from "./parent-context";
+// T2-1 — verplaatst naar de orkestratielaag (besluit 0213 punt 5); tijdelijk
+// teruggeïmporteerd zodat C5/C6/C7 in PR-A ongewijzigd blijven. T2-2 ruimt dit op.
+import { bouwMeta } from "./retrieval/meta";
+import { selecteerEnVerrijk } from "./retrieval/selectie";
+export type { SelectieAfvalReden, SelectieDiagnostiek } from "./retrieval/selectie";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
 // RPC's; defaults reproduceren huidig gedrag). De velden zijn gedenormaliseerd
@@ -65,18 +70,6 @@ export interface RetrievalFilters {
 // om vroeg (toonZwakkeGeneriek).
 // Niet-generieke chunks (fondsdocumenten) blijven altijd staan. Gedeelde bron-
 // van-waarheid: isStandaardZichtbaarInRag (zelfde regel als de platform-UI-label).
-function filterZwakkeGeneriek(
-  chunks: DocumentChunk[],
-  filters?: RetrievalFilters
-): DocumentChunk[] {
-  if (filters?.toonZwakkeGeneriek) return chunks;
-  return chunks.filter(
-    (c) =>
-      c.documenten.bibliotheek !== "generiek" ||
-      isStandaardZichtbaarInRag(c.documenten.normgewicht)
-  );
-}
-
 // ── Increment T4: expliciete fonds-discipline op het retrievalpad ───────────
 // Defense-in-depth NÁÁST RLS én de RPC-fondsfilter (p_fonds_id). Dropt elke chunk
 // die de fondsgrens of de published-generiek-regel schendt, en telt de droppings
@@ -86,6 +79,12 @@ function filterZwakkeGeneriek(
 //
 // Vereist dat het pad `documenten.fonds_id` (en voor regel 2 documentstatus/
 // bronstatus) heeft geselecteerd; alle aanroepers hieronder doen dat.
+/** T2-1 — één bron voor de per-document-cap, zodat de orkestratie exact
+ *  dezelfde grens hanteert als de adapter intern deed. */
+export function maxPerDocVoor(maxResults: number): number {
+  return Math.max(3, Math.ceil(maxResults / 2));
+}
+
 export function isPublishedGeneriek(chunk: DocumentChunk): boolean {
   const d = chunk.documenten;
   if (d.bibliotheek !== "generiek") return true; // niet-generiek: regel n.v.t.
@@ -187,124 +186,6 @@ function fondsMeta(
 // is aantoonbaar door de bronsoort-demotie afgevallen (geen overclaim).
 
 /** Terminale reden waarom een opgehaalde kandidaat niet in het antwoord zat. */
-export type SelectieAfvalReden =
-  | "weging"
-  | "zwak_generiek"
-  | "quotum"
-  | "dedup"
-  | "budget";
-
-/** Selectie-diagnostiek voor retrieval_meta (T3). `selectie` is basis-niveau
- *  (telemetrie, geen identiteit); `selectie_kandidaten` draagt bronidentiteit. */
-export interface SelectieDiagnostiek {
-  selectie: NonNullable<RetrievalMeta["selectie"]>;
-  selectie_kandidaten: NonNullable<RetrievalMeta["selectie_kandidaten"]>;
-}
-
-function isGeneriek(c: DocumentChunk): boolean {
-  return c.documenten.bibliotheek === "generiek";
-}
-
-function weegEnSelecteer(
-  gerangschikt: DocumentChunk[],
-  filters: RetrievalFilters | undefined,
-  maxResults: number,
-  maxPerDoc: number,
-  constraintsAan: boolean,
-  regimeAan: boolean
-): { chunks: DocumentChunk[]; diagnostiek: SelectieDiagnostiek } {
-  const profiel = filters?.bronsoortprofiel;
-  const libVan = (c: DocumentChunk) => c.documenten.bibliotheek;
-
-  // filters — §8.3 #6: zwakke generieke chunks vallen vóór de selectie af.
-  const zichtbaar = filterZwakkeGeneriek(gerangschikt, filters);
-  const zichtbaarSet = new Set(zichtbaar);
-
-  // weging (bronsoort) — herordent alleen; behoudt de relevantievolgorde binnen groep.
-  const bronGewogen = profiel
-    ? weegBronsoort(zichtbaar, libVan, profiel)
-    : zichtbaar;
-
-  // T4 regime-demotie — de gereserveerde plek: ná de bronsoort-weging, vóór de
-  // representatie-constraints. Demoveert chunks met een NIET-geldend (tegengesteld)
-  // regime naar onderaan; `beide`/`algemeen`/NULL nooit. Geen harde uitsluiting.
-  // weegRegime is een no-op als het fonds geen specifiek regime heeft, dus met
-  // REGIME_WEGING uit óf een leeg/cross-cutting fondsregime is dit gedrag-neutraal.
-  const regimeDemoveert =
-    regimeAan && (filters?.primairRegime === "pw" || filters?.primairRegime === "wvb");
-  const gewogen = regimeDemoveert
-    ? weegRegime(bronGewogen, (c) => c.documenten.wettelijk_regime, filters?.primairRegime)
-    : bronGewogen;
-
-  // representatie-constraints → dedup → budget-afkap. De effectieve constraints
-  // worden ALTIJD gelogd, ook bij flag-uit (alle minima 0 = huidig gedrag).
-  const constraints: RepresentatieConstraints = constraintsAan
-    ? constraintsVoorProfiel(profiel, { maxTotal: maxResults, maxPerSource: maxPerDoc })
-    : { fondsMin: 0, generiekMin: 0, perSourceMin: 0, maxPerSource: maxPerDoc, maxTotal: maxResults };
-
-  const trace = constraintsAan
-    ? selecteerMetConstraintsMetTrace(gewogen, constraints, libVan)
-    : selecteerChunksMetTrace(gewogen, maxResults, maxPerDoc);
-  const gekozenSet = new Set(trace.gekozen);
-  const redenVanGewogen = new Map(gewogen.map((c, i) => [c, trace.redenen[i]] as const));
-
-  // Contrafeitelijke selectie op de PRE-weging volgorde: zinvol zodra de weging
-  // daadwerkelijk demoveert — bronsoort (fonds/generiek; 'gecombineerd' herordent
-  // niet) óf regime. `zichtbaar` is de volgorde zónder beide weging-stappen, zodat
-  // een chunk die enkel door de weging afvalt op reden "weging" landt (niet budget).
-  let zonderWegingSet: Set<DocumentChunk> | null = null;
-  if (profiel === "fonds" || profiel === "generiek" || regimeDemoveert) {
-    const cf = constraintsAan
-      ? selecteerMetConstraintsMetTrace(zichtbaar, constraints, libVan)
-      : selecteerChunksMetTrace(zichtbaar, maxResults, maxPerDoc);
-    zonderWegingSet = new Set(cf.gekozen);
-  }
-
-  // Kandidatenset vóór selectie = de volledige input van deze stap (incl. de
-  // zwak_generiek-drops), zodat "opgehaald maar afgevallen" zichtbaar is.
-  const telling: Record<SelectieAfvalReden, number> = {
-    weging: 0,
-    zwak_generiek: 0,
-    quotum: 0,
-    dedup: 0,
-    budget: 0,
-  };
-  const perBib = { fonds: 0, generiek: 0 };
-
-  const kandidaten = gerangschikt.map((c) => {
-    const bibliotheek = c.documenten.bibliotheek;
-    const rang = c.rang ?? null;
-    if (gekozenSet.has(c)) {
-      if (isGeneriek(c)) perBib.generiek++;
-      else perBib.fonds++;
-      return { document_id: c.document_id, bibliotheek, rang, status: "geselecteerd" as const };
-    }
-    let reden: SelectieAfvalReden;
-    if (!zichtbaarSet.has(c)) {
-      reden = "zwak_generiek";
-    } else {
-      const r = redenVanGewogen.get(c) ?? "budget";
-      reden = r === "budget" && zonderWegingSet?.has(c) ? "weging" : r;
-    }
-    telling[reden]++;
-    return { document_id: c.document_id, bibliotheek, rang, status: "afgevallen" as const, reden };
-  });
-
-  return {
-    chunks: trace.gekozen,
-    diagnostiek: {
-      selectie: {
-        intent: profiel ?? null,
-        regime: filters?.modus ?? "alles",
-        constraints,
-        geselecteerd_per_bibliotheek: perBib,
-        afgevallen_telling: telling,
-      },
-      selectie_kandidaten: kandidaten,
-    },
-  };
-}
-
 // Bouwt het RPC-parameterblok voor de filters. Alleen gezette velden worden
 // meegegeven; ontbrekende keys laten de SQL-defaults (huidig gedrag) intact.
 function rpcFilterParams(filters?: RetrievalFilters): Record<string, unknown> {
@@ -356,6 +237,17 @@ export interface RetrievalOpties {
   regimeWeging?: boolean; // T4 regime-demotie (weegRegime); env-default REGIME_WEGING (AAN, tenzij "off")
   drempelWaarde?: number; // R1.5 b2-drempel op de rerankscore (0–100)
   rerankClient?: RerankClient; // injectie voor hermetische tests
+  /**
+   * T2-1 — de adaptergrens. Met deze vlag stopt de keten NA het rangschikken
+   * (rerank + drempel, beslissing D1) en slaat zij selectie, ilike-uitsluiting
+   * en parent-retrieval over: dat is werk van de orkestratie (besluit 0213
+   * punt 5). De teruggegeven `chunks` zijn dan KANDIDATEN, en de
+   * selectie-afgeleide meta-velden (`geselecteerd`, `chunks`, `bronversie_audit`)
+   * beschrijven die kandidatenset — de orkestratie bouwt ze opnieuw op de
+   * werkelijke selectie. Alleen voor de Supabase-adapter; laat hem weg en je
+   * krijgt het volledige, ongewijzigde gedrag.
+   */
+  stopNaRangschikking?: boolean;
   // Besluit 0139 (M-R3) — de OORSPRONKELIJKE gebruikersvraag, meegegeven wanneer
   // `vraag` een geherformuleerde zoekvraag is. Is deze gezet en wijkt hij af, dan
   // draait de hybride retrieval een EXTRA poging met de originele vraag en fuseert
@@ -379,7 +271,20 @@ type VolledigeOpties = {
   drempelWaarde: number;
   rerankClient?: RerankClient;
   gateway?: RetrievalOpties["gateway"];
+  stopNaRangschikking: boolean;
 };
+
+/**
+ * T2-1 — ÉÉN resolutie van de retrievalvlaggen, gedeeld door de adapter en de
+ * orkestratie. Zonder deze gedeelde bron zou de orkestratie `regimeWeging`
+ * anders kunnen afleiden dan de adapter: die vlag zit (nog) niet in
+ * `RetrievalVlaggen` per fonds — dat is gaplijst G-11 — en valt terug op de
+ * env-default. Twee afleidingen die uiteenlopen zouden de selectie stil
+ * veranderen.
+ */
+export function resolveerRetrievalVlaggen(o?: RetrievalOpties): VolledigeOpties {
+  return volledigeOpties(o);
+}
 
 function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
   return {
@@ -396,6 +301,7 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     drempelWaarde: o?.drempelWaarde ?? DEFAULT_RELEVANTIE_DREMPEL,
     rerankClient: o?.rerankClient,
     gateway: o?.gateway,
+    stopNaRangschikking: o?.stopNaRangschikking ?? false,
   };
 }
 
@@ -507,40 +413,23 @@ async function naVerwerking(
     kandidaten = behouden;
   }
 
-  // Bronsoort-weging (+ evt. representatie-constraints) + dedup + top-N; werkt op
-  // de nieuwe volgorde. De constraint-laag staat achter opties.representatieConstraints.
-  // T3 — de selectie-diagnostiek (constraints + kandidaten + drop-redenen) reflecteert
-  // deze weeg+select-stap; hij wordt additief in retrieval_meta vastgelegd.
-  const sel = weegEnSelecteer(
-    kandidaten,
-    filters,
-    maxResults,
-    maxPerDoc,
-    opties.representatieConstraints,
-    opties.regimeWeging
-  );
-  let geselecteerd = sel.chunks;
-  extra.selectie = sel.diagnostiek.selectie;
-  extra.selectie_kandidaten = sel.diagnostiek.selectie_kandidaten;
+  // T2-1 — DE ADAPTERGRENS. Tot hier loopt het rangschikken (rerank + drempel);
+  // wat volgt is selectie, en dat is werk van de orkestratie. Met
+  // `stopNaRangschikking` geeft de adapter de kandidaten terug en doet de
+  // orkestratie de rest — zie core/lib/retrieval/orkestratie.ts.
+  if (opties.stopNaRangschikking) return { chunks: kandidaten, extra };
 
-  // B1 — ilike-treffers zijn NOOIT citeerbaar: uit de prompt-set gehaald, alleen
-  // als audit vastgelegd. Leeg resultaat valt op het bestaande geen-treffers-pad.
-  if (opties.relevantieDrempel && methode === "ilike" && geselecteerd.length > 0) {
-    extra.zwakke_bronbasis = true;
-    extra.mogelijk_gerelateerd = geselecteerd.map((c) => ({
-      document_id: c.document_id,
-      titel: c.documenten.titel,
-    }));
-    geselecteerd = [];
-  }
-
-  // D — parent-retrieval (small-to-big): treffers uitbreiden met hun structuur-
-  // unit. Fondsdiscipline draait binnen verrijkMetParents op de siblings.
-  if (opties.parentRetrieval && geselecteerd.length > 0) {
-    const p = await verrijkMetParents(geselecteerd, fondsFilter, peildatum);
-    geselecteerd = p.chunks;
-    extra.parent = p.meta;
-  }
+  // Zonder de vlag blijft het gedrag voor C5/C6/C7 identiek: dezelfde code,
+  // alleen verplaatst naar core/lib/retrieval/selectie.ts (besluit 0213 punt 5).
+  const sel2 = await selecteerEnVerrijk(kandidaten, methode, {
+    filters, maxResults, maxPerDoc, fondsFilter, peildatum,
+    representatieConstraints: opties.representatieConstraints,
+    regimeWeging: opties.regimeWeging,
+    relevantieDrempel: opties.relevantieDrempel,
+    parentRetrieval: opties.parentRetrieval,
+  });
+  Object.assign(extra, sel2.extra);
+  const geselecteerd = sel2.chunks;
 
   return { chunks: geselecteerd, extra };
 }
@@ -1178,35 +1067,6 @@ function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
   };
 }
 
-function bouwMeta(
-  methode: RetrievalMeta["methode"],
-  opgehaald: number,
-  geselecteerd: DocumentChunk[]
-): RetrievalMeta {
-  return {
-    methode,
-    opgehaald,
-    geselecteerd: geselecteerd.length,
-    chunks: geselecteerd.map((c) => ({
-      id: c.id,
-      document_id: c.document_id,
-      rang: c.rang ?? null,
-      // Besluit 0139 — arm-herkomst mee in het auditspoor.
-      fts_rang: c.fts_rang ?? null,
-      vec_rang: c.vec_rang ?? null,
-    })),
-    // T4 — minimale bronversie-audit over de daadwerkelijk geselecteerde chunks.
-    bronversie_audit: geselecteerd.map((c) => ({
-      document_id: c.document_id,
-      bron: c.documenten.bron,
-      bibliotheek: c.documenten.bibliotheek,
-      fonds_id: c.documenten.fonds_id ?? null,
-      documentstatus: c.documenten.documentstatus ?? null,
-      bronstatus: c.documenten.bronstatus ?? null,
-      documentdatum: c.documenten.documentdatum ?? null,
-    })),
-  };
-}
 
 // ── Besluit 0139 (M-R3) — generiek "extra retrievalpoging"-mechanisme ────────
 // Harde bovengrens op het aantal hybride RPC-aanroepen per beurt: 1 basispoging
@@ -1306,7 +1166,7 @@ export async function zoekRelevanteChunksMetMeta(
 
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
-  const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
+  const maxPerDoc = maxPerDocVoor(maxResults);
 
   // Embed de (al door B1 geherformuleerde) vraag. Faalt dat → FTS-fallback.
   //
@@ -1477,7 +1337,7 @@ async function zoekViaFTS(
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
-  const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
+  const maxPerDoc = maxPerDocVoor(maxResults);
   const fMeta = metaFilters(filters);
   const opt = volledigeOpties(opties);
   const peildatum = filters?.peildatum ?? vandaagISO();
