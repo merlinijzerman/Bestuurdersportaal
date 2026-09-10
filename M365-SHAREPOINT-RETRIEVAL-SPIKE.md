@@ -14,12 +14,13 @@ Het go/no-go is daarom nu **NO-GO voor een productieadapter**. Niet omdat de rou
 
 ## Branch- en afhankelijkhedeninventaris
 
-De spike staat op `codex/353-sharepoint-retrieval-spike`, opnieuw gebaseerd op `origin/preview` nadat PR #352 op 10 september 2026 merge-de. De tijdelijke contractspiegel is daarna verwijderd: `SpikeBronresultaat` breidt nu het echte `Bronresultaat` uit en een niet-aangesloten factory implementeert in de compiler en tests het echte `RetrievalAdapter`-contract. De productiegrens-test verbiedt imports vanuit `app`, `core`, `platform` en `fondsen`.
+De spike staat op `codex/353-sharepoint-retrieval-spike`, opnieuw gebaseerd op `origin/preview` nadat PR #352 en cancellation-PR #355 op 10 september 2026 merge-den. De tijdelijke contractspiegel is verwijderd: `SpikeBronresultaat` breidt nu het echte `Bronresultaat` uit en een niet-aangesloten factory implementeert in de compiler en tests het echte `RetrievalAdapter`-contract. De productiegrens-test verbiedt imports vanuit `app`, `core`, `platform` en `fondsen`.
 
 | Afhankelijkheid | Actuele status | Gevolg voor #353 |
 |---|---|---|
 | [PR #352 — typed retrievalcontract](https://github.com/merlinijzerman/Bestuurdersportaal/pull/352) | Gemergd | Contractmapping en rebase uitgevoerd |
-| [Issue #354 — PGB-testbibliotheek en acceptatieset](https://github.com/merlinijzerman/Bestuurdersportaal/issues/354) | Open | Blokkeert uitsluitend de echte tenantdata, negatieve rechtenproeven en drie live meetrondes |
+| [PR #355 — cancellation en deadline](https://github.com/merlinijzerman/Bestuurdersportaal/pull/355) | Gemergd | Spike opnieuw gerebased; uiteindelijke adapter kan de gedeelde grendel gebruiken |
+| [Issue #354 — PGB-testbibliotheek en acceptatieset](https://github.com/merlinijzerman/Bestuurdersportaal/issues/354) | Open | Positieve set kan met expliciet akkoord worden opgebouwd; tweede identiteit blijft nodig voor het negatieve A/B-rechtenbewijs |
 
 ## Onderzochte officiële routes
 
@@ -118,7 +119,7 @@ Deze grenzen zijn werkhypothesen en moeten vóór de live ronde door opdrachtgev
 
 Voor de productieadapter zijn minimaal nodig:
 
-1. PR-B cancellation/timeout en PR-C V1–V5-toelatingspoort uit F4-T2-1;
+1. PR-C met de V1–V5-toelatingspoort uit F4-T2-1;
 2. afronding van #354 met de synthetische bibliotheek, tweede testidentiteit, rechtenmatrix en resetprocedure;
 3. expliciet consentbesluit als de bestaande `Sites.Selected`-scope de voorkeursroute niet draagt;
 4. een afzonderlijk ticket voor productie-adapterwiring; chat/zoeken/vergelijken blijven tot die tijd onaangeraakt;
@@ -143,7 +144,7 @@ De live runner weigert productie/CI, vereist een genegeerde `.local.json` met mo
 | spike-adaptertests | 14/14 groen |
 | statische productiegrens | 3/3 groen |
 | TypeScript | groen |
-| bestaande lokale PR-gates | groen; 513 cross-tenant tests groen |
+| bestaande lokale PR-gates | groen; 538 cross-tenant tests groen |
 | productiebuild | groen met de repository-eigen niet-geheime CI-placeholders |
 | DB-laag van de gates | overgeslagen omdat `TEST_DATABASE_URL` niet was gezet; deze spike wijzigt geen database of migratie |
 
