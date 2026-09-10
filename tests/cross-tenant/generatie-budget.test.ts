@@ -207,10 +207,21 @@ test("#356 — de strikte afronding BREEKT de RPC werkelijk af, niet alleen het 
     }),
   } as unknown as Parameters<typeof rondAfStrikt>[0];
 
-  const t0 = Date.now();
-  assert.equal(await rondAfStrikt(traag, "a1", "mislukt", "generatie:timeout", 60), false);
-  assert.ok(afgebroken, "een Promise.race zou de RPC laten dooretteren tot het platform de functie doodt");
-  assert.ok(Date.now() - t0 < 1_000, "en hij eet de afrondmarge niet op");
+  // De aborttimer van `rondAfStrikt` is UNREF'd — terecht, want in productie
+  // mag hij een lambda niet openhouden. Maar deze nep-RPC lost nooit op en
+  // registreert geen eigen timer, dus zonder dit anker is die unref'd timer het
+  // enige dat de event loop nog bezig houdt en mag Node afsluiten. Dat maakte
+  // in CI drie tests `cancelled` terwijl er lokaal niets aan de hand leek: een
+  // echte RPC heeft een socket, deze niet.
+  const anker = setInterval(() => {}, 1_000);
+  try {
+    const t0 = Date.now();
+    assert.equal(await rondAfStrikt(traag, "a1", "mislukt", "generatie:timeout", 60), false);
+    assert.ok(afgebroken, "een Promise.race zou de RPC laten dooretteren tot het platform de functie doodt");
+    assert.ok(Date.now() - t0 < 1_000, "en hij eet de afrondmarge niet op");
+  } finally {
+    clearInterval(anker);
+  }
 });
 
 // ── Statische gates op de route ─────────────────────────────────────────────
