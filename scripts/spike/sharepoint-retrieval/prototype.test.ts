@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
+import { getEventListeners } from "node:events";
 import test from "node:test";
 import JSZip from "jszip";
-import { maakSharePointSpikeContractAdapter, maakVeiligeMeetrij, voerSharePointRetrievalSpikeUit } from "./prototype";
+import {
+  maakSharePointSpikeContractAdapter,
+  maakVeiligeMeetrij,
+  standaardWacht,
+  voerSharePointPermissionProbeUit,
+  voerSharePointRetrievalSpikeUit,
+} from "./prototype";
 import type { SpikeDependencies } from "./prototype";
 import type { SpikeBronSnapshot, SpikeRoute } from "./types";
 
@@ -21,6 +28,7 @@ function bron(overrides: Partial<SpikeBronSnapshot> = {}): SpikeBronSnapshot {
   return {
     fondsId: IDS.fonds,
     actorId: IDS.actor,
+    microsoftActorObjectId: "private-oid",
     tenantId: IDS.tenant,
     bronId: IDS.bron,
     status: "actief",
@@ -150,10 +158,20 @@ test("drive-search downloadt begrensd en extraheert PowerPoint uitsluitend in-me
   zip.file("ppt/slides/slide1.xml", "<p:sld><a:p><a:r><a:t>Blauwe achtergrondtekst</a:t></a:r></a:p></p:sld>");
   zip.file("ppt/slides/slide2.xml", "<p:sld><a:p><a:r><a:t>De oranje kanariewaarde is 314</a:t></a:r></a:p></p:sld>");
   const pptx = await zip.generateAsync({ type: "uint8array" });
-  const fetchImpl = async (url: string) => {
+  const downloadUrl = "https://synthetisch-bestand.files.1drv.com/tijdelijk-downloadpad";
+  let downloadZonderToken = false;
+  const fetchImpl = async (url: string, init: RequestInit) => {
     if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
     if (url.includes("/search(q=")) return json({ value: [item()] });
-    if (url.endsWith(`/items/${IDS.item}/content`)) return new Response(new Uint8Array(pptx).buffer, { status: 200, headers: { "Content-Type": "application/octet-stream" } });
+    if (url.endsWith(`/items/${IDS.item}/content`)) {
+      assert.equal(init.redirect, "manual");
+      assert.equal(new Headers(init.headers).get("Authorization"), "Bearer geheim-token");
+      return new Response(null, { status: 302, headers: { Location: downloadUrl } });
+    }
+    if (url === downloadUrl) {
+      downloadZonderToken = !new Headers(init.headers).has("Authorization") && init.redirect === "error";
+      return new Response(new Uint8Array(pptx).buffer, { status: 200, headers: { "Content-Type": "application/octet-stream" } });
+    }
     if (url.includes(`/items/${IDS.item}?`)) return json(item());
     if (url.endsWith(`/items/${IDS.item}/preview`)) return json({ getUrl: "https://pgb.sharepoint.com/sites/retrieval/_layouts/15/embed.aspx?id=test" });
     throw new Error("onverwachte call");
@@ -164,6 +182,7 @@ test("drive-search downloadt begrensd en extraheert PowerPoint uitsluitend in-me
   assert.equal(uitkomst.kandidaten[0].locator.paragraaf, "Dia 2");
   assert.match(uitkomst.kandidaten[0].passage, /kanariewaarde is 314/);
   assert.equal(uitkomst.meting.contentBytes, pptx.byteLength);
+  assert.equal(downloadZonderToken, true);
 });
 
 test("intrekking tijdens het verzoek faalt gesloten en laat geen kandidaat door", async () => {
@@ -255,7 +274,7 @@ test("documentwijziging, ontbrekend versiebewijs en een vreemde hit komen nooit 
   assert.equal(vreemdeHit.fout, "geen_resultaten");
 });
 
-test("tenantmismatch stopt vóór Graph en een zoek-403 levert geen resultaten", async () => {
+test("tenant- of actormismatch stopt vóór Graph en een zoek-403 levert geen resultaten", async () => {
   let graphCalls = 0;
   const mismatchDeps = basisDeps(async () => {
     graphCalls += 1;
@@ -266,6 +285,16 @@ test("tenantmismatch stopt vóór Graph en een zoek-403 levert geen resultaten",
   assert.equal(graphCalls, 0);
   assert.equal(mismatch.fout, "buiten_scope");
   assert.equal(mismatch.foutcode, "actor_of_tenant_mismatch");
+
+  const verkeerdeActorDeps = basisDeps(async () => {
+    graphCalls += 1;
+    throw new Error("Graph mag niet worden bereikt");
+  });
+  verkeerdeActorDeps.delegatedToken = async () => ({ accessToken: "geheim-token", tenantId: IDS.tenant, actorObjectId: "andere-private-oid" });
+  const verkeerdeActor = await voerSharePointRetrievalSpikeUit(verkeerdeActorDeps, opdracht("microsoft_search"));
+  assert.equal(graphCalls, 0);
+  assert.equal(verkeerdeActor.fout, "buiten_scope");
+  assert.equal(verkeerdeActor.foutcode, "actor_of_tenant_mismatch");
 
   const geweigerd = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
     if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
@@ -307,6 +336,19 @@ test("onveilig paginavervolg, providerfout en ongeldige preview worden genormali
   assert.equal(onveiligVervolg.fout, "providerfout");
   assert.equal(onveiligVervolg.foutcode, "onveilig_vervolgpad");
 
+  let aanvallerAangeroepen = false;
+  const onveiligeDownload = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.includes("/search(q=")) return json({ value: [item()] });
+    if (url.includes(`/items/${IDS.item}?`)) return json(item());
+    if (url.endsWith(`/items/${IDS.item}/content`)) return new Response(null, { status: 302, headers: { Location: "https://aanvaller.example/bestand" } });
+    aanvallerAangeroepen = true;
+    throw new Error("onbetrouwbare downloadhost mag niet worden gevolgd");
+  }), opdracht("drive_search_extract"));
+  assert.equal(aanvallerAangeroepen, false);
+  assert.equal(onveiligeDownload.fout, "providerfout");
+  assert.equal(onveiligeDownload.foutcode, "ongeldige_download_url");
+
   const providerfout = await voerSharePointRetrievalSpikeUit(basisDeps(async () => json({}, 500)), opdracht("microsoft_search"));
   assert.equal(providerfout.fout, "providerfout");
   assert.equal(providerfout.foutcode, "graph_response");
@@ -321,6 +363,30 @@ test("onveilig paginavervolg, providerfout en ongeldige preview worden genormali
   assert.deepEqual(preview.kandidaten, []);
   assert.equal(preview.fout, "providerfout");
   assert.equal(preview.foutcode, "ongeldige_preview_url");
+});
+
+test("permissionprobe doet uitsluitend één inhoudsvrije drive/root-search", async () => {
+  let aangeroepenPad = "";
+  const toegestaan = await voerSharePointPermissionProbeUit(basisDeps(async (url, init) => {
+    aangeroepenPad = new URL(url).pathname;
+    assert.ok(aangeroepenPad.includes(`/drives/${IDS.drive}/items/${IDS.root}/search`));
+    assert.equal(new Headers(init.headers).get("Authorization"), "Bearer geheim-token");
+    return json({ value: [] });
+  }));
+  assert.deepEqual(toegestaan, { status: "toegestaan", latencyMs: 0, microsoftCalls: 1 });
+
+  const geweigerd = await voerSharePointPermissionProbeUit(basisDeps(async () => json({}, 403)));
+  assert.equal(geweigerd.status, "toestemming_geweigerd");
+  assert.equal(geweigerd.microsoftCalls, 1);
+  assert.equal(Object.keys(geweigerd).sort().join(","), "latencyMs,microsoftCalls,status");
+});
+
+test("standaardWacht ruimt zijn abort-listener ook na normaal aflopen op", async () => {
+  const controller = new AbortController();
+  const wacht = standaardWacht(0, controller.signal);
+  assert.equal(getEventListeners(controller.signal, "abort").length, 1);
+  await wacht;
+  assert.equal(getEventListeners(controller.signal, "abort").length, 0);
 });
 
 test("throttling, timeout en cancellation worden genormaliseerd zonder fallback", async () => {

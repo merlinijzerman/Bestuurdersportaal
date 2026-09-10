@@ -11,6 +11,7 @@ import type {
 import type {
   DelegatedToken,
   GraphMeting,
+  PermissionProbeUitkomst,
   SpikeBronresultaat,
   SpikeBronSnapshot,
   SpikeDocumentMapping,
@@ -50,6 +51,11 @@ export interface SpikeOpdracht {
   signal?: AbortSignal;
   timeoutMs?: number;
   concurrency?: number;
+}
+
+export interface PermissionProbeOpdracht {
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 type GraphDriveItem = {
@@ -97,6 +103,28 @@ function veiligeSharePointUrl(url: string | undefined, hostnaam: string): string
   }
 }
 
+function veiligeMicrosoftDownloadUrl(url: string | null, sharePointHostnaam: string): URL {
+  let parsed: URL;
+  try {
+    if (!url) throw new Error("ontbrekende Location-header");
+    parsed = new URL(url);
+  } catch (cause) {
+    throw new SpikeError("providerfout", "ongeldige_download_url", { cause });
+  }
+  const host = parsed.hostname.toLowerCase();
+  const isEigenSharePointHost = host === sharePointHostnaam.toLowerCase();
+  const isMicrosoftDownloadCdn = /^[a-z0-9-]+\.files\.1drv\.com$/.test(host);
+  if (
+    parsed.protocol !== "https:"
+    || parsed.username
+    || parsed.password
+    || (parsed.port && parsed.port !== "443")
+    || parsed.hash
+    || (!isEigenSharePointHost && !isMicrosoftDownloadCdn)
+  ) throw new SpikeError("providerfout", "ongeldige_download_url");
+  return parsed;
+}
+
 function retryNa(response: Response): number {
   const header = response.headers.get("Retry-After");
   const seconden = Number.parseInt(header ?? "", 10);
@@ -104,17 +132,29 @@ function retryNa(response: Response): number {
   return 250;
 }
 
-function standaardWacht(ms: number, signal: AbortSignal): Promise<void> {
+export function standaardWacht(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(new SpikeError("annulering", "graph_annulering"));
       return;
     }
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => {
+    let afgerond = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const opruimen = () => signal.removeEventListener("abort", bijAfbreken);
+    function bijAfbreken() {
+      if (afgerond) return;
+      afgerond = true;
       clearTimeout(timer);
+      opruimen();
       reject(new SpikeError("annulering", "graph_annulering"));
-    }, { once: true });
+    }
+    timer = setTimeout(() => {
+      if (afgerond) return;
+      afgerond = true;
+      opruimen();
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", bijAfbreken, { once: true });
   });
 }
 
@@ -168,7 +208,7 @@ class GraphClient {
     private readonly wacht: (ms: number, signal: AbortSignal) => Promise<void>,
   ) {}
 
-  private async request(url: string, init: RequestInit, soort: "json" | "content"): Promise<Response> {
+  private async request(url: string, init: RequestInit, soort: "json" | "content_redirect"): Promise<Response> {
     const veilig = veiligeGraphUrl(url).toString();
     for (let poging = 0; ; poging += 1) {
       if (this.signal.aborted) throw new SpikeError("annulering", "graph_annulering");
@@ -185,7 +225,7 @@ class GraphClient {
             ...(init.headers ?? {}),
           },
           cache: "no-store",
-          redirect: soort === "content" ? "follow" : "error",
+          redirect: soort === "content_redirect" ? "manual" : "error",
           signal,
         });
       } catch (cause) {
@@ -200,10 +240,9 @@ class GraphClient {
         await this.wacht(retryNa(response), this.signal);
         continue;
       }
+      if (soort === "content_redirect" && response.status === 302) return response;
       if (!response.ok) throw normaliseerHttpFout(response);
-      if (soort === "content" && new URL(response.url || veilig).protocol !== "https:") {
-        throw new SpikeError("providerfout", "graph_response");
-      }
+      if (soort === "content_redirect") throw new SpikeError("providerfout", "ongeldige_download_url");
       return response;
     }
   }
@@ -219,8 +258,28 @@ class GraphClient {
     }
   }
 
-  async content(url: string): Promise<Buffer> {
-    const response = await this.request(url, {}, "content");
+  async content(url: string, sharePointHostnaam: string): Promise<Buffer> {
+    const redirect = await this.request(url, {}, "content_redirect");
+    const downloadUrl = veiligeMicrosoftDownloadUrl(redirect.headers.get("Location"), sharePointHostnaam);
+    if (this.signal.aborted) throw new SpikeError("annulering", "graph_annulering");
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    const signal = AbortSignal.any([this.signal, timeout]);
+    let response: Response;
+    try {
+      this.meting.calls += 1;
+      response = await this.fetchImpl(downloadUrl.toString(), {
+        headers: { Accept: "application/octet-stream" },
+        cache: "no-store",
+        redirect: "error",
+        signal,
+      });
+    } catch (cause) {
+      if (this.signal.aborted) throw new SpikeError("annulering", "graph_annulering", { cause });
+      const naam = cause instanceof Error ? cause.name : "";
+      if (naam === "AbortError" || naam === "TimeoutError") throw new SpikeError("timeout", "graph_timeout", { cause });
+      throw new SpikeError("providerfout", "graph_response", { cause });
+    }
+    if (!response.ok) throw normaliseerHttpFout(response);
     const bytes = await leesBegrensd(response, MAX_CONTENT_BYTES);
     this.meting.contentBytes += bytes.byteLength;
     return Buffer.from(bytes);
@@ -232,11 +291,11 @@ function bronVingerafdruk(bron: SpikeBronSnapshot): string {
     .map((doc) => [doc.ref, doc.itemId, doc.fixtureCode, doc.titel, doc.bestandstype, doc.geregistreerdMappad ?? "", doc.verwachteMappad ?? ""].join("\u0000"))
     .sort()
     .join("\u0001");
-  return [bron.fondsId, bron.actorId, bron.tenantId, bron.bronId, bron.status, bron.configuratieversie, bron.siteId, bron.siteHostnaam, bron.driveId, bron.driveNaam, bron.rootItemId, docs].join("\u0002");
+  return [bron.fondsId, bron.actorId, bron.microsoftActorObjectId, bron.tenantId, bron.bronId, bron.status, bron.configuratieversie, bron.siteId, bron.siteHostnaam, bron.driveId, bron.driveNaam, bron.rootItemId, docs].join("\u0002");
 }
 
 function valideerBron(bron: SpikeBronSnapshot): void {
-  if (bron.status !== "actief" || bron.configuratieversie < 1 || !bron.fondsId || !bron.actorId || !bron.tenantId || !bron.bronId || !bron.siteId || !bron.driveId || !bron.rootItemId) {
+  if (bron.status !== "actief" || bron.configuratieversie < 1 || !bron.fondsId || !bron.actorId || !bron.microsoftActorObjectId || !bron.tenantId || !bron.bronId || !bron.siteId || !bron.driveId || !bron.rootItemId) {
     throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
   }
   if (!/^[a-z0-9-]+\.sharepoint\.com$/.test(bron.siteHostnaam)) {
@@ -423,7 +482,7 @@ async function maakKandidaat(
     passage = schoneSummary(hit.summary);
     if (!passage) return null;
   } else {
-    const bytes = await client.content(contentUrl(bronEerst, mapping.itemId));
+    const bytes = await client.content(contentUrl(bronEerst, mapping.itemId), bronEerst.siteHostnaam);
     try {
       const extractie = await extractTekst(bytes, bestandstypeVoorExtractie(mapping));
       const gevonden = passageUitSegmenten(extractie.segmenten, opdracht.vraag.vraag);
@@ -513,7 +572,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
     const bron = await deps.leesBron();
     valideerBron(bron);
     const token = await deps.delegatedToken();
-    if (!token.accessToken || !token.actorObjectId || token.tenantId !== bron.tenantId) {
+    if (!token.accessToken || token.tenantId !== bron.tenantId || token.actorObjectId !== bron.microsoftActorObjectId) {
       throw new SpikeError("buiten_scope", "actor_of_tenant_mismatch");
     }
 
@@ -576,6 +635,57 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       fout: veilig.categorie,
       foutcode: veilig.code,
       meting,
+    };
+  }
+}
+
+/**
+ * Eén inhoudsvrije drive/root-search om het bestaande delegated permissionprofiel
+ * live te toetsen. Hits worden genegeerd en private identifiers worden niet
+ * geretourneerd of gelogd.
+ */
+export async function voerSharePointPermissionProbeUit(
+  deps: SpikeDependencies,
+  opdracht: PermissionProbeOpdracht = {},
+): Promise<PermissionProbeUitkomst> {
+  const klok = deps.klok ?? (() => performance.now());
+  const start = klok();
+  let client: GraphClient | undefined;
+  try {
+    const bron = await deps.leesBron();
+    valideerBron(bron);
+    const token = await deps.delegatedToken();
+    if (!token.accessToken || token.tenantId !== bron.tenantId || token.actorObjectId !== bron.microsoftActorObjectId) {
+      throw new SpikeError("buiten_scope", "actor_of_tenant_mismatch");
+    }
+    const timeoutMs = opdracht.timeoutMs ?? 15_000;
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const signal = opdracht.signal ? AbortSignal.any([opdracht.signal, deadline]) : deadline;
+    client = new GraphClient(
+      token.accessToken,
+      deps.fetchImpl ?? ((input, init) => fetch(input, init)),
+      signal,
+      timeoutMs,
+      deps.wacht ?? standaardWacht,
+    );
+    const probeTerm = "m365-permission-probe-7f4c1d9e-no-match";
+    const gecodeerdeVraag = encodeURIComponent(probeTerm).replace(/'/g, "%27");
+    const url = `${GRAPH_BASIS}/drives/${encodeURIComponent(bron.driveId)}/items/${encodeURIComponent(bron.rootItemId)}/search(q='${gecodeerdeVraag}')?$select=id&$top=1`;
+    await client.json<{ value?: Array<{ id?: string }> }>(url);
+    return {
+      status: "toegestaan",
+      latencyMs: Math.max(0, Math.round(klok() - start)),
+      microsoftCalls: client.meting.calls,
+    };
+  } catch (fout) {
+    let veilig = alsSpikeError(fout);
+    if (veilig.categorie === "annulering" && !opdracht.signal?.aborted) {
+      veilig = new SpikeError("timeout", "graph_timeout");
+    }
+    return {
+      status: veilig.categorie,
+      latencyMs: Math.max(0, Math.round(klok() - start)),
+      microsoftCalls: client?.meting.calls ?? 0,
     };
   }
 }

@@ -35,6 +35,7 @@ export type SpikeFoutcode =
   | "graph_timeout"
   | "graph_ratelimit"
   | "graph_toestemming"
+  | "ongeldige_download_url"
   | "ongeldige_graph_url"
   | "ongeldige_preview_url"
   | "onveilig_vervolgpad"
@@ -69,6 +70,8 @@ export interface SpikeDocumentMapping {
 export interface SpikeBronSnapshot {
   fondsId: string;
   actorId: string;
+  /** Private Microsoft Entra-object-id die bij actorId hoort; nooit loggen. */
+  microsoftActorObjectId: string;
   tenantId: string;
   bronId: string;
   status: "actief" | "fout" | "toestemming_nodig" | "ontkoppeld";
@@ -119,6 +122,13 @@ export interface SpikeUitkomst {
   fout?: SpikeFoutcategorie;
   foutcode?: SpikeFoutcode;
   meting: GraphMeting;
+}
+
+/** Uitsluitend inhoudsvrij bewijs voor de delegated permissionprobe. */
+export interface PermissionProbeUitkomst {
+  status: "toegestaan" | SpikeFoutcategorie;
+  latencyMs: number;
+  microsoftCalls: number;
 }
 
 export interface SpikeVraag {

@@ -4,7 +4,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { resolve, relative } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stderr } from "node:process";
-import { voerSharePointRetrievalSpikeUit, maakVeiligeMeetrij, vatMetingenSamen } from "./prototype";
+import { voerSharePointPermissionProbeUit, voerSharePointRetrievalSpikeUit, maakVeiligeMeetrij, vatMetingenSamen } from "./prototype";
 import type { SpikeBronSnapshot, SpikeDocumentMapping, SpikeFase, SpikeRoute, SpikeVraag, VeiligeMeetrij } from "./types";
 
 type ConfigFixture = {
@@ -18,10 +18,10 @@ type Config = {
   doel: "PGB Preview-pilot";
   fondsId: string;
   gebruikerId: string;
-  rondes: number;
-  routes: SpikeRoute[];
-  fixtures: ConfigFixture[];
-  vragen: SpikeVraag[];
+  rondes?: number;
+  routes?: SpikeRoute[];
+  fixtures?: ConfigFixture[];
+  vragen?: SpikeVraag[];
   pauze?: {
     fase: "na_zoeken" | "na_eerste_rechtencheck" | "na_content" | "voor_laatste_rechtencheck" | "voor_toelating";
     fixtureCode?: string;
@@ -40,7 +40,7 @@ function configPadUitArgv(): string {
   return resolve(waarde);
 }
 
-async function leesLokaleConfig(pad: string): Promise<Config> {
+async function leesLokaleConfig(pad: string, alleenPermissionProbe: boolean): Promise<Config> {
   const echt = await realpath(pad);
   const rel = relative(process.cwd(), echt);
   if (rel.startsWith("..") || rel === "" || !echt.endsWith(".local.json")) throw new Error("config moet een .local.json binnen deze worktree zijn");
@@ -49,7 +49,8 @@ async function leesLokaleConfig(pad: string): Promise<Config> {
   const config = JSON.parse(await readFile(echt, "utf8")) as Config;
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (config.doel !== "PGB Preview-pilot" || !uuid.test(config.fondsId) || !uuid.test(config.gebruikerId)) throw new Error("doel, fondsId of gebruikerId is ongeldig");
-  if (!Number.isInteger(config.rondes) || config.rondes < 3 || config.rondes > 10) throw new Error("rondes moet tussen 3 en 10 liggen");
+  if (alleenPermissionProbe) return config;
+  if (typeof config.rondes !== "number" || !Number.isInteger(config.rondes) || config.rondes < 3 || config.rondes > 10) throw new Error("rondes moet tussen 3 en 10 liggen");
   if (!Array.isArray(config.routes) || config.routes.length === 0 || config.routes.some((route) => route !== "microsoft_search" && route !== "drive_search_extract")) throw new Error("routes is ongeldig");
   if (!Array.isArray(config.fixtures) || config.fixtures.length === 0 || config.fixtures.some((fixture) => !fixture.fixtureCode || !uuid.test(fixture.ref))) throw new Error("fixtures ontbreken of bevatten ongeldige lokale refs");
   if (!Array.isArray(config.vragen) || config.vragen.length === 0 || config.vragen.some((vraag) => !vraag.code || !vraag.vraag || !Array.isArray(vraag.verwachteFixtures))) throw new Error("acceptatievragen ontbreken of zijn ongeldig");
@@ -58,16 +59,23 @@ async function leesLokaleConfig(pad: string): Promise<Config> {
 
 async function main() {
   hardeLokaleGrendel();
-  const config = await leesLokaleConfig(configPadUitArgv());
+  const alleenPermissionProbe = process.argv.includes("--permission-probe");
+  const config = await leesLokaleConfig(configPadUitArgv(), alleenPermissionProbe);
   const connector = await import("../../../core/lib/microsoft-connector");
   const vault = await import("../../../core/lib/microsoft-vault");
   const context = { fondsId: config.fondsId, gebruikerId: config.gebruikerId };
 
   const leesBron = async (): Promise<SpikeBronSnapshot> => {
-    const bron = await vault.leesSharePointBron(config.fondsId);
+    const [bron, verbinding] = await Promise.all([
+      vault.leesSharePointBron(config.fondsId),
+      vault.leesVerbinding(config.fondsId, config.gebruikerId),
+    ]);
     if (!bron) throw new Error("geen SharePoint-bron voor het fonds");
     if (bron.gebruiker_id !== config.gebruikerId) throw new Error("SharePoint-bron hoort niet bij de testgebruiker");
-    const documenten = await Promise.all(config.fixtures.map(async (fixture) => {
+    if (!verbinding || verbinding.status !== "gekoppeld" || verbinding.tenant_id !== bron.tenant_id || !verbinding.microsoft_object_id) {
+      throw new Error("Microsoft-identiteit hoort niet bij de actuele SharePoint-bron");
+    }
+    const documenten = await Promise.all((config.fixtures ?? []).map(async (fixture) => {
       const document = await vault.leesSharePointDocument(config.fondsId, fixture.ref);
       if (!document) throw new Error(`fixture ${fixture.fixtureCode} heeft geen actuele lokale ref`);
       if (
@@ -92,6 +100,7 @@ async function main() {
     return {
       fondsId: config.fondsId,
       actorId: config.gebruikerId,
+      microsoftActorObjectId: verbinding.microsoft_object_id,
       tenantId: bron.tenant_id,
       bronId: bron.id,
       status: bron.status,
@@ -105,6 +114,17 @@ async function main() {
     };
   };
 
+  const delegatedToken = async () => {
+    const token = await connector.sharepointAccessToken(context);
+    return { accessToken: token.accessToken, tenantId: token.tenantId, actorObjectId: token.objectId };
+  };
+
+  if (alleenPermissionProbe) {
+    const uitkomst = await voerSharePointPermissionProbeUit({ leesBron, delegatedToken });
+    process.stdout.write(`${JSON.stringify(uitkomst, null, 2)}\n`);
+    return;
+  }
+
   let gepauzeerd = false;
   const onFase = config.pauze ? async (fase: SpikeFase, document?: SpikeDocumentMapping) => {
     if (gepauzeerd || fase !== config.pauze?.fase || (config.pauze.fixtureCode && document?.fixtureCode !== config.pauze.fixtureCode)) return;
@@ -116,15 +136,12 @@ async function main() {
   } : undefined;
 
   const rijen: VeiligeMeetrij[] = [];
-  for (let ronde = 1; ronde <= config.rondes; ronde += 1) {
-    for (const route of config.routes) {
-      for (const vraag of config.vragen) {
+  for (let ronde = 1; ronde <= config.rondes!; ronde += 1) {
+    for (const route of config.routes!) {
+      for (const vraag of config.vragen!) {
         const uitkomst = await voerSharePointRetrievalSpikeUit({
           leesBron,
-          delegatedToken: async () => {
-            const token = await connector.sharepointAccessToken(context);
-            return { accessToken: token.accessToken, tenantId: token.tenantId, actorObjectId: token.objectId };
-          },
+          delegatedToken,
           onFase,
         }, {
           route,
@@ -143,8 +160,8 @@ async function main() {
     doel: config.doel,
     gemetenOp: new Date().toISOString(),
     inhoudPersistentOpgeslagen: false,
-    routes: config.routes,
-    rondes: config.rondes,
+    routes: config.routes!,
+    rondes: config.rondes!,
     samenvatting: vatMetingenSamen(rijen),
     metingen: rijen,
   }, null, 2)}\n`);
