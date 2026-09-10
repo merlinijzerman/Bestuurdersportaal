@@ -20,8 +20,21 @@
 // ============================================================
 
 import { bewaakteProviderCall, type PoortContext } from "./ai-poort";
+import { resolveMistralBaseUrl } from "./ai-provider-endpoint.mjs";
 
-const EMBED_URL = "https://api.mistral.ai/v1/embeddings";
+const EMBED_ORIGIN = "https://api.mistral.ai";
+const EMBED_PAD = "/v1/embeddings";
+
+// #349 (F4-T1b) — dezelfde, dubbel gegrendelde omleiding als de Anthropic-client
+// (#311). Zonder deze seam valt de keten lokaal en in CI altijd terug op FTS en
+// blijft het hybride pad — in productie het primaire pad — ongekarakteriseerd.
+// `resolveMistralBaseUrl` geeft ALLEEN iets terug bij WP4_E2E_EMBED_PROVIDER=local
+// én SEED_DOELOMGEVING=local én een lokale Supabase-URL; in elke andere vorm gooit
+// hij. Preview en Productie kunnen hier dus niet in belanden.
+function embedUrl(): string {
+  const lokaal = resolveMistralBaseUrl(process.env);
+  return `${lokaal ?? EMBED_ORIGIN}${EMBED_PAD}`;
+}
 
 // Centrale config — wisselen van model/dim vergt een volledige re-embed, dus
 // nooit verspreid hardcoderen. `embedding_model` wordt bij elke chunk vastgelegd.
@@ -68,7 +81,7 @@ async function embedBatch(
   // verzoek na een 429/5xx; die pogingen vallen binnen dezelfde toestemming.
   return bewaakteProviderCall(ctx, "mistral", EMBED_MODEL, async () => {
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
-    const res = await fetch(EMBED_URL, {
+    const res = await fetch(embedUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

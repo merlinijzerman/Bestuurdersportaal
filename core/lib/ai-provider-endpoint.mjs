@@ -11,9 +11,29 @@ function geblokkeerd(reden) {
  * een testprovider kan worden omgeleid.
  */
 export function resolveAnthropicBaseUrl(env = process.env) {
-  if (!env.WP4_E2E_AI_PROVIDER) return undefined;
-  if (env.WP4_E2E_AI_PROVIDER !== "local") {
-    geblokkeerd("WP4_E2E_AI_PROVIDER moet exact 'local' zijn.");
+  return resolveLokaleProviderOrigin(env, "WP4_E2E_AI_PROVIDER", "WP4_E2E_AI_PROVIDER_URL");
+}
+
+/**
+ * #349 (F4-T1b) — dezelfde omleiding voor de EMBEDDING-provider.
+ *
+ * Waarom een tweede, LOSSE vlag en niet dezelfde: de embeddingstub en de
+ * Anthropic-stub zijn onafhankelijke testmiddelen. Eén gedeelde vlag zou de
+ * embeddingsomleiding stilzwijgend aanzetten zodra iemand de chatstub gebruikt
+ * (en andersom), en dan is niet meer te zien wélke provider is omgeleid. De
+ * dubbele grendel — expliciet 'local', `SEED_DOELOMGEVING=local` én de lokale
+ * Supabase-URL — is identiek, zodat Preview en Productie hier nooit in kunnen
+ * belanden.
+ */
+export function resolveMistralBaseUrl(env = process.env) {
+  return resolveLokaleProviderOrigin(env, "WP4_E2E_EMBED_PROVIDER", "WP4_E2E_EMBED_PROVIDER_URL");
+}
+
+/** Gedeelde grendel. Ongezet = productiegedrag; alles daarbuiten is fail-closed. */
+function resolveLokaleProviderOrigin(env, vlagNaam, urlNaam) {
+  if (!env[vlagNaam]) return undefined;
+  if (env[vlagNaam] !== "local") {
+    geblokkeerd(`${vlagNaam} moet exact 'local' zijn.`);
   }
   if (env.SEED_DOELOMGEVING !== "local") {
     geblokkeerd("SEED_DOELOMGEVING moet exact 'local' zijn.");
@@ -24,9 +44,9 @@ export function resolveAnthropicBaseUrl(env = process.env) {
 
   let url;
   try {
-    url = new URL(env.WP4_E2E_AI_PROVIDER_URL ?? "");
+    url = new URL(env[urlNaam] ?? "");
   } catch {
-    geblokkeerd("WP4_E2E_AI_PROVIDER_URL ontbreekt of is ongeldig.");
+    geblokkeerd(`${urlNaam} ontbreekt of is ongeldig.`);
   }
   if (
     url.protocol !== "http:" ||

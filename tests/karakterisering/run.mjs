@@ -167,6 +167,10 @@ function bodySnapshot(res, verwacht) {
 function vereisteAanwezig(scenario) {
   if (!scenario.vereist) return true;
   if (scenario.vereist === "ai-stub") return Boolean(ENV.aiStubUrl);
+  if (scenario.vereist === "embed-stub") return Boolean(ENV.embedStubUrl);
+  // #349 — de hybride chatbeurt heeft BEIDE stubs nodig: de embeddingstub voor
+  // de vraag-embedding en de providerstub voor de deterministische SSE-stroom.
+  if (scenario.vereist === "hybride") return Boolean(ENV.embedStubUrl && ENV.aiStubUrl);
   throw new Error(`${scenario.slug}: onbekende vereiste '${scenario.vereist}'`);
 }
 

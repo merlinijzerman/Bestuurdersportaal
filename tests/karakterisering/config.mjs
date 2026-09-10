@@ -17,6 +17,9 @@ export const ENV = {
   // E2E-modus (core/lib/ai-provider-endpoint.mjs grendelt de app-kant); de
   // SSE-scenario's slaan zichzelf over als hij ontbreekt.
   aiStubUrl: process.env.WP4_E2E_AI_PROVIDER === "local" ? process.env.WP4_E2E_AI_PROVIDER_URL || "" : "",
+  // #349 (F4-T1b) — losse vlag voor de embeddingstub; zonder deze URL valt de
+  // keten terug op FTS en worden de hybride scenario's ZICHTBAAR overgeslagen.
+  embedStubUrl: process.env.WP4_E2E_EMBED_PROVIDER === "local" ? process.env.WP4_E2E_EMBED_PROVIDER_URL || "" : "",
 };
 
 export const FONDS_ID = "00000000-0000-4000-8000-000000000001";

@@ -292,6 +292,54 @@ jobs:
           echo "schema-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
+      # #349 (F4-T1b): VIERDE Next-proces op een eigen poort (3003), mét
+      # HYBRID_SEARCH=on én de embeddingstub. Reden voor een aparte instantie:
+      # met hybride aan verandert `methode` op ELK retrievalpad, dus zouden de
+      # 390 bestaande snapshots omvallen. Door alleen de `w322b.*`-scenario's
+      # hier te draaien blijft het FTS-pad hierboven ongemoeid en wordt het
+      # hybride pad — in productie het primaire — alsnog gekarakteriseerd.
+      # Zonder de stub-URL slaat run.mjs deze scenario's ZICHTBAAR over.
+      - name: Hybride retrieval karakteriseren (HYBRID_SEARCH aan)
+        env:
+          HYBRID_SEARCH: "on"
+          MISTRAL_API_KEY: "t1b-stub-sleutel-niet-echt"
+          WP4_E2E_EMBED_PROVIDER: "local"
+          WP4_E2E_EMBED_PROVIDER_URL: "http://127.0.0.1:8791"
+          APP_BASE_URL: "http://127.0.0.1:3003"
+        run: |
+          t0=$(date +%s)
+          node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/t1b-embed-stub.log" 2>&1 &
+          STUB=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8791/_verzoeken >/dev/null && stubok=1 && break
+            sleep 1
+          done
+          if [ "${stubok:-0}" != "1" ]; then
+            echo "FOUT: embeddingstub kwam niet op." >&2
+            kill "$STUB" 2>/dev/null || true; exit 1
+          fi
+          HYBRID_SEARCH=on PORT=3003 npm run start &
+          SERVER=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3003/api/healthz/ping >/dev/null && ok=1 && break
+            sleep 1
+          done
+          if [ "${ok:-0}" != "1" ]; then
+            echo "FOUT: next start (hybride) kwam niet op binnen 60s." >&2
+            kill "$SERVER" "$STUB" 2>/dev/null || true; exit 1
+          fi
+          code=0
+          for ronde in 1 2 3; do
+            echo "::group::karakterisering --verify --only=w322b ronde $ronde/3 (hybride)"
+            if ! node tests/karakterisering/run.mjs --verify --only=w322b; then code=1; fi
+            echo "::endgroup::"
+            [ "$code" = "0" ] || break
+          done
+          kill "$SERVER" "$STUB" 2>/dev/null || true
+          wait "$SERVER" 2>/dev/null || true
+          echo "hybride-pass: $(( $(date +%s) - t0 ))s"
+          exit $code
+
       - name: Supabase-stack stoppen
         if: always()
         run: supabase stop || true

@@ -16,6 +16,8 @@ import {
   NOTULEN_DOCUMENT_BYTES, NOTULEN_DOCUMENT_PAD,
 } from "./config.mjs";
 import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
+import { pseudoEmbedding, vectorLiteral } from "../e2e/fixtures/embed-vector.mjs";
+import { EMBED_STUB_MODEL } from "../e2e/fixtures/config.mjs";
 
 // ── W4-BESLUIT: elke delete wordt gecontroleerd ─────────────────────────────
 //  Het defect dat W4 blootlegde bij `seedRisicos` was niet de append-only
@@ -551,10 +553,16 @@ async function seedAiChat(admin, doelomgeving) {
     if (error) throw new Error(`ai_quota_config: ${error.message}`);
   }
   {
+    const w311Tekst =
+      "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. " +
+      "De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.";
     const { error } = await admin.from("document_chunks").upsert({
       id: FIX.document1Chunk,
       document_id: FIX.document1,
       chunk_index: 0,
+      // #349 — zie de toelichting bij de #322-fixtures hieronder.
+      embedding: vectorLiteral(pseudoEmbedding(w311Tekst)),
+      embedding_model: EMBED_STUB_MODEL,
       tekst:
         "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. " +
         "De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
@@ -585,6 +593,13 @@ async function seedAiChat(admin, doelomgeving) {
         structuur_type: "tekst",
         structuur_label: "W1 retrieval-golden (#322)",
         indexering_versie: "w1-karakterisering-322",
+        // #349 (F4-T1b) — deterministische pseudo-embedding uit dezelfde module
+        // die de embeddingstub gebruikt voor de VRAAG. Alleen als beide kanten
+        // dezelfde vectorizer gebruiken meet de vectorarm gelijkenis in plaats
+        // van ruis. Raakt het FTS-pad niet: `zoek_chunks` leest deze kolom niet,
+        // en geen enkele bestaande snapshot geeft haar terug.
+        embedding: vectorLiteral(pseudoEmbedding(f.tekst)),
+        embedding_model: EMBED_STUB_MODEL,
       })),
       { onConflict: "id" }
     );

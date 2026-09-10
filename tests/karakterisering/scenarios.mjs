@@ -34,6 +34,20 @@ import { ENV, FIX, FONDS_ID } from "./config.mjs";
 import { E2E_AI_PROVIDER_FOUT_MARKER } from "../e2e/fixtures/config.mjs";
 import { zoekVolgorde, metaVolgorde } from "./retrieval-volgorde.mjs";
 
+// #349 -- inhoudsvrije telling uit de embeddingstub (model + aantal, nooit tekst).
+async function embedVerzoeken() {
+  if (!ENV.embedStubUrl) return null;
+  try {
+    const r = await fetch(new URL("/_verzoeken", ENV.embedStubUrl));
+    const { verzoeken } = await r.json();
+    return verzoeken;
+  } catch { return null; }
+}
+async function wisEmbedVerzoeken() {
+  if (!ENV.embedStubUrl) return;
+  try { await fetch(new URL("/_verzoeken", ENV.embedStubUrl), { method: "DELETE" }); } catch { /* stub uit */ }
+}
+
 const LEEG = {};
 const KANDIDATEN_DOELSLEUTEL = "9|approval|W6 kandidaat kiezen";
 const KANDIDATEN_GEBONDEN_SLEUTEL = "9|approval|W6 al gekoppeld";
@@ -1814,6 +1828,98 @@ export const scenarios = [
       return { volgorde: zoekVolgorde(body) };
     },
   })),
+  // -- #349 F4-T1b — het HYBRIDE pad (zoek_chunks_hybride + RRF-fusie) --------
+  //  De w322-goldens hierboven karakteriseren uitsluitend het FTS-terugvalpad:
+  //  zonder embeddingprovider zet rag.ts `embedding_query_success:false` en valt
+  //  deterministisch terug. In productie is hybride juist het PRIMAIRE pad.
+  //
+  //  Deze scenario's draaien daarom tegen een APARTE serverinstantie met
+  //  HYBRID_SEARCH=on en WP4_E2E_EMBED_PROVIDER=local (CI: poort 3003). Zonder
+  //  die stub-URL worden ze ZICHTBAAR overgeslagen (`vereist: "embed-stub"`) --
+  //  nooit stil, en de 390 bestaande snapshots blijven daardoor ongemoeid.
+  //
+  //  Wat ze vastleggen dat het FTS-pad niet kan: `methode: "hybride_rrf"`,
+  //  `embedding_query_success: true`, de per-chunk armherkomst (`fts_rang`
+  //  naast `vec_rang`) en de fusievolgorde. Precies die volgorde is het
+  //  resultaat van de RRF -- en dus wat T2 ongewijzigd moet laten.
+  ...[
+    ["renteafdekking", "q=renteafdekking"],
+    ["premiebeleid-herstelplan", "q=premiebeleid%20herstelplan"],
+    ["uitbesteding", "q=uitbestedingsbeleid%20fiduciair"],
+  ].map(([naam, query]) => ({
+    vereist: "embed-stub",
+    slug: `w322b.zoeken.get.bestuurder.${naam}`,
+    method: "GET",
+    path: `/api/zoeken?${query}`,
+    rol: "bestuurder",
+    verwacht: "json",
+    preseed: async ({ admin }) => {
+      await wisLimiet(admin, LIMIET_ZOEKEN_ENDPOINT);
+      await wisEmbedVerzoeken();
+    },
+    nawerk: async (_ctx, res) => {
+      let body;
+      try { body = JSON.parse(res.buffer.toString("utf8")); } catch { return { volgorde: null, embed: null }; }
+      return {
+        volgorde: zoekVolgorde(body),
+        // Bewijst dat de vraag-embedding daadwerkelijk is opgehaald: zonder deze
+        // regel zou een stille terugval op FTS een groen snapshot opleveren met
+        // een andere methode, en dat is precies wat hier NIET mag gebeuren.
+        embed: await embedVerzoeken(),
+      };
+    },
+  })),
+
+  {
+    //  De zoekroute hierboven toont alleen methode/aantallen. De ARMHERKOMST
+    //  (fts_rang naast vec_rang per chunk), `embedding_query_success` en de
+    //  pogingadministratie leven uitsluitend in `governance_log.retrieval_meta`.
+    //  Deze beurt legt precies die velden vast op het hybride pad — dezelfde
+    //  vraag als w322.chat.…retrieval-meta, maar met HYBRID_SEARCH=on.
+    //  `hybrideZoekenAan()` valt zonder fondsvlag terug op die env, dus de
+    //  chatroute loopt hier hybride zonder dat de seed iets hoeft te zetten —
+    //  en zonder dat het FTS-snapshot op poort 3000 verandert.
+    vereist: "hybride",
+    slug: "w322b.chat.post.bestuurder.hybride-retrieval-meta",
+    method: "POST", path: "/api/chat", rol: "bestuurder",
+    body: {
+      vraag: "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?",
+      neem_niet_vastgestelde_mee: true,
+    },
+    verwacht: "sse", idempotentie: true,
+    preseed: async ({ admin }) => {
+      await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+      await wisStubVerzoeken();
+      await wisEmbedVerzoeken();
+    },
+    nawerk: async ({ admin, users }) => {
+      const { data, error } = await admin
+        .from("governance_log")
+        .select("retrieval_meta, modus")
+        .eq("gebruiker_id", users.bestuurder.userId)
+        .order("aangemaakt", { ascending: false })
+        .limit(1);
+      if (error) throw new Error(`governance_log(349): ${error.message}`);
+      const meta = data?.[0]?.retrieval_meta ?? null;
+      if (!meta) return { retrieval_meta: null, volgorde: null, embed: null };
+      const {
+        methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+        fondsdiscipline_gedropt, embedding_query_success, fallback_reason, retrieval_pogingen,
+        poging_herkomst, bronversie_audit, citaties, selectie, filters, antwoordmodus, gereformuleerd,
+      } = meta;
+      return {
+        modus: data[0].modus,
+        retrieval_meta: {
+          methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+          fondsdiscipline_gedropt, embedding_query_success, fallback_reason, retrieval_pogingen,
+          bronversie_audit, citaties, selectie, filters, antwoordmodus, gereformuleerd,
+          poging_herkomst_geprojecteerd: poging_herkomst == null ? null : Object.keys(poging_herkomst).length,
+        },
+        volgorde: metaVolgorde(meta),
+        embed: await embedVerzoeken(),
+      };
+    },
+  },
   {
     vereist: "ai-stub",
     slug: "w322.chat.post.bestuurder.retrieval-meta",
