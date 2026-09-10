@@ -1201,7 +1201,7 @@ export async function zoekRelevanteChunksMetMeta(
 
   // R1.3–R1.6 — vlaggen resolven (env-default als de aanroeper niets meegeeft).
   const opt = volledigeOpties(opties);
-  const peildatum = filters?.peildatum ?? vandaagISO();
+  const peildatum = effectievePeildatum(filters);
 
   // Per-aanroep instelling (uit het portaal) is leidend; valt terug op de
   // env-default HYBRID_SEARCH als er geen waarde is meegegeven.
@@ -1386,7 +1386,7 @@ async function zoekViaFTS(
   const maxPerDoc = maxPerDocVoor(maxResults);
   const fMeta = metaFilters(filters);
   const opt = volledigeOpties(opties);
-  const peildatum = filters?.peildatum ?? vandaagISO();
+  const peildatum = effectievePeildatum(filters);
 
   // Poging 1: gerangschikte RPC (Dutch FTS + ts_rank_cd).
   // p_document_ids = scope vóór ranking (null = hele bibliotheek).

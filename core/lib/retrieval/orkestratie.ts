@@ -145,6 +145,13 @@ export async function voerRetrievalUit(
   //    `ctx.scope.documentIds` is voor een adapter de ENIGE bron van waarheid;
   //    de orkestratie zet de spoorscope hier één keer en gebruikt diezelfde
   //    afgeleide context ook voor `verrijkSelectie`.
+  // "Vandaag" wordt ÉÉN keer per beurt vastgesteld en door alle sporen gedeeld.
+  // Zou elk spoor het zelf afleiden, dan kan een beurt die middernacht kruist
+  // twee verschillende peildata gebruiken — en dan verschilt de
+  // review-vervalcontrole per spoor binnen dezelfde vraag.
+  const vandaagVoorDezeBeurt = effectievePeildatum(undefined);
+  const peildatumVanSpoor = (q: RetrievalQuery) => q.filters?.peildatum ?? vandaagVoorDezeBeurt;
+
   const spoorContext = sporen.map(({ query }) => ({
     ...ctx,
     scope: { ...ctx.scope, documentIds: query.documentScope },
@@ -201,7 +208,7 @@ export async function voerRetrievalUit(
         // De EFFECTIEVE peildatum van dit spoor: dezelfde waarde waarmee de
         // retrieval draaide. Een lege string zou de review-vervalcontrole op
         // generieke siblings uitschakelen.
-        peildatum: effectievePeildatum(sporen[i].query.filters),
+        peildatum: peildatumVanSpoor(sporen[i].query),
       });
       gekozen = v.resultaten;
       Object.assign(extra, v.meta ?? {});
