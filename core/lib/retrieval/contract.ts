@@ -256,9 +256,14 @@ export interface RetrievalTussenresultaat {
   /** De gezaghebbende contextgrens, overgenomen van de primaire query. */
   maxContextTekens: number;
   /**
-   * De afbreekgrendel van DEZE beurt. Loopt door tot en met `citeer()`, want de
-   * weergaveverrijking en de contextopbouw doen nog database-werk en horen
-   * binnen dezelfde deadline. `citeer()` sluit hem.
+   * De afbreekgrendel van DEZE beurt — een LEVEND handvat, geen waarde. Loopt
+   * door tot en met `citeer()`, want de weergaveverrijking en de contextopbouw
+   * doen nog database-werk en horen binnen dezelfde deadline.
+   *
+   * `citeer()` sluit hem en laat hem VALLEN: `RetrievalUitkomst` draagt hem
+   * bewust niet. Een gesloten grendel in het eindresultaat zou een handvat zijn
+   * dat niets meer bewaakt maar er nog uitziet alsof het dat wel doet — en het
+   * hoort niet thuis in een object dat verder alleen data is en gelogd wordt.
    */
   grendel?: import("./afbreken").Afbreekgrendel;
   /** Ingrediënten om de meta opnieuw te bouwen na afkappen. Intern. */
@@ -272,8 +277,14 @@ export interface RetrievalTussenresultaat {
   };
 }
 
-/** VOLTOOID. Het enige dat de generatielaag mag gebruiken. */
-export interface RetrievalUitkomst extends RetrievalTussenresultaat {
+/**
+ * VOLTOOID. Het enige dat de generatielaag mag gebruiken.
+ *
+ * `Omit<…, "grendel">`: het eindresultaat is pure data. De grendel is een
+ * levend handvat dat bij de afronding is gesloten; hem meedragen nodigt uit tot
+ * gebruik ná zijn levensduur.
+ */
+export interface RetrievalUitkomst extends Omit<RetrievalTussenresultaat, "grendel"> {
   /** Bestaande vorm, ongewijzigd voor C1/C7. */
   bronverwijzingen: BronVerwijzing[];
   contextTekst: string;

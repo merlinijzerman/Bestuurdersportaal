@@ -712,6 +712,18 @@ Een foutvorm is een bibliotheekdetail dat per versie kan veranderen — het sign
 weet of er is afgebroken. De controle staat na élke PostgREST-call en vóór élke
 terugval.
 
+**De grendel is enkelvoudig en zegt dat zelf (reviewronde 2).** Een gesloten
+grendel was van buiten niet te onderscheiden van een lopende — `reden()` bleef
+`null`, `signal.aborted` bleef `false` en `bewaak()` gaf stil `void` terug. Wie
+daarop vertrouwde was dus ONBEWAAKT zonder het te merken. Nu: `gesloten()` is
+zichtbaar, `bewaak()` gooit ná sluiten `GrendelGesloten` (een programmeerfout,
+géén afbreking — `isAfbreking()` herkent hem bewust niet), en een tweede
+`citeer()` op hetzelfde tussenresultaat wordt geweigerd in plaats van zonder
+deadline te draaien. Timer en clientluisteraar worden op één plek opgeruimd, óók
+wanneer de deadline vuurt zonder dat fase 2 ooit is aangeroepen. En
+`RetrievalUitkomst` is `Omit<RetrievalTussenresultaat, "grendel">`: het
+eindresultaat is pure data, een levend handvat hoort er niet in.
+
 **De deadline omvat de hele C1-keten.** Eén grendel dekt fase 1
 (`voerRetrievalUit`) én fase 2 (`citeer`, inclusief `verrijkWeergave`, parent-,
 notulen- en documentmetadata en de contextopbouw). Sloot hij na fase 1, dan viel
@@ -832,7 +844,7 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 | **G-10** | Hybride pad niet gekarakteriseerd | C1 | **hoog** (was: laag) | het is in productie het **primaire** pad; de goldens dekken alleen de FTS-terugval. R3: eigen tranche vóór T2-1 | **T1b** |
 | **G-11** | `regimeWeging` niet per fonds stuurbaar | kern | laag | enige vlag met default aan, buiten `RetrievalVlaggen` | T2-2 |
 | **G-12** | De hybride fusie kent geen verslapte OR-terugval; die bestaat alleen op het FTS-pad (`rag.ts:1519`). Een lange vraag levert daardoor een vector-only fusie | C1 op het hybride pad | **midden** | asymmetrie tussen de twee paden: dezelfde vraag krijgt op FTS wél een tweede, bredere poging en op hybride niet. Gemeten in T1b, gepind in `w322b.chat…hybride-retrieval-meta` (`fts_rang: null` op elke chunk) | T2-1 |
-| **G-13** | De **hoofdgeneratiecall** krijgt geen signaal: `gateway.stream()` accepteert `verzoek.signal` (`contract.ts:146`), maar `chat/route.ts:3534` geeft er geen mee. Verbreekt de bestuurder de verbinding tijdens het genereren, dan loopt de modelcall door en betalen we hem alsnog | C1, ná de retrievalketen | midden | PR-B dekt de RETRIEVALketen (D5: 20 s vanaf binnenkomst in de orkestratie); de generatie valt daarbuiten. Bewust niet stilzwijgend meegenomen: afbreken betekent dat er géén `schrijf_ai_interactie`-regel volgt, en dat is een auditkeuze, geen implementatiedetail | **open — ter besluitvorming** |
+| **G-13** | De **hoofdgeneratiecall** krijgt geen signaal: `gateway.stream()` accepteert `verzoek.signal` (`contract.ts:146`), maar `chat/route.ts:3534` geeft er geen mee. Verbreekt de bestuurder de verbinding tijdens het genereren, dan loopt de modelcall door en betalen we hem alsnog | C1, ná de retrievalketen | midden | PR-B dekt de RETRIEVALketen (D5: 20 s vanaf binnenkomst in de orkestratie); de generatie valt daarbuiten. Bewust niet stilzwijgend meegenomen: afbreken betekent dat er géén `schrijf_ai_interactie`-regel volgt, en dat is een auditkeuze, geen implementatiedetail | **T2-1/PR-B2 — #356, eerstvolgende tranche** |
 
 ### 5.2 Werkpakketten
 

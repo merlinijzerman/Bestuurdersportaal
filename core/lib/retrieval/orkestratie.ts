@@ -21,7 +21,7 @@ import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
-import { maakAfbreekgrendel, isAfbreking, redenVan, TIMEOUT_DEFAULT_MS } from "./afbreken";
+import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type {
   AdapterUitkomst,
   Bronresultaat,
@@ -310,7 +310,13 @@ export async function citeer(
   // De adapter vult providerspecifieke WEERGAVEMETADATA aan (notulenlabel,
   // documenttype, de uitgebreide parent-passage). Hij bouwt geen citaties.
   const grendel = tussen.grendel;
+  // De grendel is een levend handvat en hoort niet in het eindresultaat; hij
+  // wordt hier uit het tussenresultaat gelicht en na afloop gesloten.
+  const { grendel: _grendel, ...tussenData } = tussen;
   const ctxMetGrendel = grendel ? { ...ctx, signal: grendel.signal } : ctx;
+  // Tweemaal citeren op hetzelfde tussenresultaat zou de tweede keer ZONDER
+  // deadline draaien; de grendel is enkelvoudig en zegt dat nu zelf.
+  if (grendel?.gesloten()) throw new GrendelGesloten();
   try {
     // De weergaveverrijking valt BINNEN de deadline: parent-context, notulen- en
     // documentmetadata doen alle drie nog database-werk.
@@ -326,7 +332,7 @@ export async function citeer(
     // De grens komt UITSLUITEND van de query, via het tussenresultaat.
     const c = bouwCitaties(verrijkt, { ...opdracht, maxContextTekens: tussen.maxContextTekens });
     return {
-      ...tussen,
+      ...tussenData,
       geselecteerd: c.opgenomen,
       meta: bouwRetrievalMeta(c.opgenomen, tussen.metaBasis),
       bronverwijzingen: c.bronnen,

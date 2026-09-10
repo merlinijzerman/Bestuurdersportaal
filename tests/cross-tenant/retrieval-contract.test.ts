@@ -254,9 +254,19 @@ test("T2-1 — het type verbiedt een tussenresultaat waar een eindresultaat hoor
   const { readFileSync } = await import("node:fs");
   const bron = readFileSync(new URL("../../core/lib/retrieval/contract.ts", import.meta.url), "utf8");
   // `RetrievalUitkomst` moet strikt méér eisen dan het tussenresultaat; anders
-  // is een half resultaat er stil voor door te geven.
-  assert.match(bron, /interface RetrievalUitkomst extends RetrievalTussenresultaat/);
+  // is een half resultaat er stil voor door te geven. Sinds de levensloop-
+  // correctie erft hij via `Omit<…, "grendel">`: de grendel is een LEVEND
+  // handvat en hoort niet in een eindresultaat dat verder alleen data is.
+  assert.match(
+    bron,
+    /interface RetrievalUitkomst extends Omit<RetrievalTussenresultaat, "grendel">/,
+    "het eindresultaat erft van het tussenresultaat, minus het levende handvat"
+  );
   assert.match(bron, /interface RetrievalTussenresultaat \{[\s\S]*?\n\}/);
+  // …en `grendel` mag ALLEEN daar worden weggelaten: een tweede Omit zou
+  // ongemerkt een verplicht veld uit het eindresultaat kunnen slopen.
+  const omits = [...bron.matchAll(/Omit<RetrievalTussenresultaat,\s*([^>]+)>/g)].map((m) => m[1].trim());
+  assert.deepEqual(omits, ['"grendel"'], "alleen de grendel wordt weggelaten");
 });
 
 // ── (6) Lege querylijst ─────────────────────────────────────────────────────

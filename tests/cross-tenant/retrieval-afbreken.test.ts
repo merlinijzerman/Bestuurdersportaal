@@ -16,6 +16,7 @@ import {
   bewaakNaIO,
   timeoutUitConfig,
   RetrievalAfgebroken,
+  GrendelGesloten,
   TIMEOUT_DEFAULT_MS,
   TIMEOUT_MIN_MS,
   TIMEOUT_MAX_MS,
@@ -393,4 +394,92 @@ test("PR-B — de route vertaalt een afbreking naar een eigen pad, niet naar een
     /rondAf\(supabase, aiActieId, "mislukt", `retrieval:\$\{afbreekreden\}`\)/,
     "de afbrekingsreden hoort op de ai_actie te worden vastgelegd"
   );
+});
+
+// ── Reviewronde 2: de LEVENSLOOP van de grendel ─────────────────────────────
+
+test("PR-B — een gesloten grendel bewaakt niets meer, en zegt dat ook", async () => {
+  // De gevaarlijkste toestand die deze module kan hebben: gesloten, maar van
+  // buiten niet te onderscheiden van lopend. `reden()` blijft null en
+  // `signal.aborted` blijft false, dus wie op de oude `bewaak()` vertrouwde
+  // kreeg stilzwijgend GEEN bewaking. Nu faalt dat luid.
+  const ac = new AbortController();
+  const g = maakAfbreekgrendel(ac.signal, 30);
+  assert.equal(g.gesloten(), false);
+  g.stop();
+  assert.equal(g.gesloten(), true);
+  await slaapMetSignaal(80).catch(() => {});
+  assert.equal(g.reden(), null, "een gesloten grendel breekt niet alsnog af");
+  assert.equal(g.signal.aborted, false);
+  assert.throws(() => g.bewaak(), GrendelGesloten, "werk buiten de levensduur hoort luid te falen");
+  assert.equal(isAfbreking(new GrendelGesloten()), false, "een programmeerfout is geen annulering");
+  g.stop(); // idempotent
+});
+
+test("PR-B — `citeer()` laat de grendel niet achter in het eindresultaat", async () => {
+  const adapter: RetrievalAdapter = {
+    naam: "microsoft-sharepoint",
+    capabilities: () => ({
+      bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
+      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+    }),
+    async zoek(): Promise<AdapterUitkomst> {
+      return {
+        kandidaten: [bron("sp-1", "doc-a", "een passage over uitbesteding")],
+        methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
+      };
+    },
+  };
+  const tussen = await voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY(), grenzen: GRENZEN }] });
+  assert.ok(tussen.grendel, "fase 1 draagt de grendel wél");
+
+  const voltooid = await citeer(CTX, adapter, tussen, {
+    primaireDocumentIds: new Set<string>(), peildatum: "2026-09-10",
+    hoofddocumentLabel: " [hoofddocument]", sentinel: "S",
+  });
+  assert.equal(
+    "grendel" in voltooid, false,
+    "het eindresultaat is pure data — een gesloten handvat hoort er niet in, ook niet gelogd"
+  );
+  assert.equal(tussen.grendel?.gesloten(), true, "en hij is wel degelijk gesloten");
+});
+
+test("PR-B — tweemaal citeren draait de tweede keer niet ZONDER deadline", async () => {
+  // De naad: `stop()` in het `finally` maakte de grendel dood, maar
+  // `tussen.grendel` bleef ernaar wijzen. Een tweede `citeer()` zou daardoor
+  // een onbegrensde ronde doen — stil, want een dode grendel gooide niets.
+  const adapter: RetrievalAdapter = {
+    naam: "microsoft-sharepoint",
+    capabilities: () => ({
+      bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
+      versiebewijs: true, permissionProof: true, preview: false, cancellation: true, timeout: true,
+    }),
+    async zoek(): Promise<AdapterUitkomst> {
+      return {
+        kandidaten: [bron("sp-1", "doc-a", "een passage over uitbesteding")],
+        methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
+      };
+    },
+  };
+  const tussen = await voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY(), grenzen: GRENZEN }] });
+  const opdracht = {
+    primaireDocumentIds: new Set<string>(), peildatum: "2026-09-10",
+    hoofddocumentLabel: " [hoofddocument]", sentinel: "S",
+  };
+  await citeer(CTX, adapter, tussen, opdracht);
+  await assert.rejects(() => citeer(CTX, adapter, tussen, opdracht), GrendelGesloten);
+});
+
+test("PR-B — een grendel die `stop()` nooit haalt, laat geen luisteraar achter", async () => {
+  // Fase 1 kan slagen zonder dat fase 2 volgt (een consument die alleen
+  // kandidaten nodig heeft). Zonder zelfopruiming bleef er dan een
+  // abort-luisteraar op het clientsignaal staan én liep de timer door.
+  const ac = new AbortController();
+  const g = maakAfbreekgrendel(ac.signal, 30); // en nooit `stop()`
+  await slaapMetSignaal(80).catch(() => {});
+  assert.equal(g.reden(), "timeout", "de deadline vuurt");
+  // Ná het vuren is de luisteraar weg: een latere clientafbraak verandert niets
+  // meer, en er is dus niets meer aan het clientsignaal gekoppeld.
+  ac.abort();
+  assert.equal(g.reden(), "timeout");
 });

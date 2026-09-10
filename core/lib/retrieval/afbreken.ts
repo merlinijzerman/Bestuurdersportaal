@@ -45,14 +45,32 @@ export function timeoutUitConfig(waarde: unknown): number {
   return n;
 }
 
+/**
+ * Misbruik van een gesloten grendel. Een EIGEN fout, geen `RetrievalAfgebroken`:
+ * dit is een programmeerfout in de keten, geen afbreking van de beurt, en
+ * `isAfbreking()` mag hem dus niet als annulering aanzien.
+ */
+export class GrendelGesloten extends Error {
+  constructor() {
+    super("retrieval: de afbreekgrendel is al gesloten — deze beurt is afgerond");
+    this.name = "GrendelGesloten";
+  }
+}
+
 export interface Afbreekgrendel {
   /** Het samengestelde signaal: geef dit door aan élke I/O in de keten. */
   signal: AbortSignal;
   /** Waarom er is afgebroken; `null` zolang de keten loopt. */
   reden(): Afbrekingsreden | null;
-  /** Gooit zodra er is afgebroken — te gebruiken tussen twee stappen door. */
+  /**
+   * Gooit zodra er is afgebroken — te gebruiken tussen twee stappen door.
+   * Ná `stop()` gooit hij `GrendelGesloten`: werk buiten de levensduur van de
+   * grendel is per definitie onbewaakt, en dat hoort LUID te falen.
+   */
   bewaak(): void;
-  /** Ruimt de timer op; altijd aanroepen in een `finally`. */
+  /** Is de grendel gesloten? Een gesloten grendel bewaakt niets meer. */
+  gesloten(): boolean;
+  /** Sluit de grendel en ruimt timer en luisteraar op. Idempotent. */
   stop(): void;
 }
 
@@ -64,18 +82,29 @@ export interface Afbreekgrendel {
 export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeoutMs: number): Afbreekgrendel {
   const ctrl = new AbortController();
   let reden: Afbrekingsreden | null = null;
+  let gesloten = false;
+
+  // Timer én luisteraar worden op ÉÉN plek opgeruimd, en die plek wordt langs
+  // alle drie de uitgangen bereikt: afbreken, sluiten, en de deadline die vuurt.
+  // Zonder dat laatste zou een keten die `stop()` nooit haalt — omdat fase 2
+  // niet wordt aangeroepen — een luisteraar op het clientsignaal achterlaten.
+  const ruimOp = () => {
+    clearTimeout(timer);
+    clientSignal?.removeEventListener("abort", opClientAbort);
+  };
 
   const afbreken = (r: Afbrekingsreden) => {
     if (reden !== null) return;
     reden = r;
+    ruimOp();
     ctrl.abort(new RetrievalAfgebroken(r));
   };
 
+  const opClientAbort = () => afbreken("annulering");
   const timer = setTimeout(() => afbreken("timeout"), timeoutMs);
   // `unref` bestaat alleen in Node; in de edge-runtime is het een no-op.
   (timer as unknown as { unref?: () => void }).unref?.();
 
-  const opClientAbort = () => afbreken("annulering");
   if (clientSignal) {
     if (clientSignal.aborted) afbreken("annulering");
     else clientSignal.addEventListener("abort", opClientAbort, { once: true });
@@ -84,12 +113,16 @@ export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeou
   return {
     signal: ctrl.signal,
     reden: () => reden,
+    gesloten: () => gesloten,
     bewaak() {
       if (reden !== null) throw new RetrievalAfgebroken(reden);
+      // Een GESLOTEN grendel die stil `void` teruggeeft is het gevaarlijkst wat
+      // deze module kan doen: de aanroeper denkt bewaakt te zijn en is het niet.
+      if (gesloten) throw new GrendelGesloten();
     },
     stop() {
-      clearTimeout(timer);
-      clientSignal?.removeEventListener("abort", opClientAbort);
+      gesloten = true;
+      ruimOp();
     },
   };
 }
