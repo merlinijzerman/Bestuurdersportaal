@@ -50,6 +50,7 @@ import { leesScannerHealth, scanSignedUrl } from "@/platform/lib/malware-scan-cl
 import { signatureOordeel } from "@/core/lib/malware-scan-beleid";
 import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 import { isProviderAuthenticatieFout } from "@/core/lib/provider-fout";
+import { bepaalDocumentIngestAiScope } from "@/core/lib/document-ingest-ai-scope";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
 const TIJDBUDGET_MS = 240_000; // ruim binnen maxDuration 300s
@@ -394,11 +395,12 @@ async function verwerkJob(
     return await scanEnPromoveer(svc, job, document, oidcToken);
   }
 
+  const aiScope = bepaalDocumentIngestAiScope(document.bibliotheek, job.fonds_id);
   const generiek = document.bibliotheek === "generiek";
-  const actietype = generiek ? "generiek_curatie" : "document_ingest";
+  const actietype = aiScope.ingestActietype;
   const aiPf = await preflightSysteem(svc, {
     actietype,
-    fondsId: generiek ? null : job.fonds_id ?? null,
+    fondsId: aiScope.fondsId,
     provider: null,
     model: null,
     // Eén reservering per logische ingest-job; yield/backoff hergebruikt dezelfde
@@ -700,10 +702,11 @@ async function extracteerEnChunk(
       // OCR-pagina's zijn een EIGEN grootheid met een eigen fondsquotum. Elke
       // poging reserveert opnieuw: Mistral factureert een retry ook opnieuw.
       reserveerOcr: async (paginas, poging) => {
-        const ocrActietype = doc.bibliotheek === "generiek" ? "ocr_generiek" : "ocr";
+        const aiScope = bepaalDocumentIngestAiScope(doc.bibliotheek, job.fonds_id);
+        const ocrActietype = aiScope.ocrActietype;
         const uitkomst = await preflightSysteem(svc, {
           actietype: ocrActietype,
-          fondsId: doc.bibliotheek === "generiek" ? null : job.fonds_id ?? null,
+          fondsId: aiScope.fondsId,
           provider: "mistral",
           model: "mistral-ocr-latest",
           ocrPaginas: paginas,
