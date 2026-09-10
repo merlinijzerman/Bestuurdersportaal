@@ -34,8 +34,30 @@ import { rerankChunks, type RerankMeta, type RerankClient } from "./rerank";
 import { verrijkMetParents, type ParentMeta } from "./parent-context";
 // T2-1 — verplaatst naar de orkestratielaag (besluit 0213 punt 5); tijdelijk
 // teruggeïmporteerd zodat C5/C6/C7 in PR-A ongewijzigd blijven. T2-2 ruimt dit op.
-import { bouwMeta } from "./retrieval/meta";
-import { selecteerEnVerrijk } from "./retrieval/selectie";
+import { bouwMeta as bouwMetaNeutraal, type AuditBron } from "./retrieval/meta";
+
+/** Chunk-vormige bron → de neutrale auditkijk. Eén plek, zodat het terugvalpad
+ *  voor C5/C6/C7 exact hetzelfde auditspoor blijft schrijven. */
+function alsAuditBron(c: DocumentChunk): AuditBron {
+  return {
+    ref: c.id,
+    documentId: c.document_id,
+    bron: c.documenten.bron,
+    bibliotheek: c.documenten.bibliotheek,
+    fondsId: c.documenten.fonds_id ?? null,
+    documentstatus: c.documenten.documentstatus ?? null,
+    bronstatus: c.documenten.bronstatus ?? null,
+    documentdatum: c.documenten.documentdatum ?? null,
+    score: c.rang ?? null,
+    fts: c.fts_rang ?? null,
+    vec: c.vec_rang ?? null,
+  };
+}
+
+function bouwMeta(methode: RetrievalMeta["methode"], opgehaald: number, geselecteerd: DocumentChunk[]): RetrievalMeta {
+  return bouwMetaNeutraal(methode, opgehaald, geselecteerd.map(alsAuditBron));
+}
+import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
 export type { SelectieAfvalReden, SelectieDiagnostiek } from "./retrieval/selectie";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
@@ -421,15 +443,28 @@ async function naVerwerking(
 
   // Zonder de vlag blijft het gedrag voor C5/C6/C7 identiek: dezelfde code,
   // alleen verplaatst naar core/lib/retrieval/selectie.ts (besluit 0213 punt 5).
-  const sel2 = await selecteerEnVerrijk(kandidaten, methode, {
-    filters, maxResults, maxPerDoc, fondsFilter, peildatum,
+  // T2-1 — de selectie draait providerneutraal op SelectieBron; hier heen en
+  // terug via de chunk-id, zodat C5/C6/C7 exact hetzelfde gedrag houden.
+  const perId = new Map(kandidaten.map((c) => [c.id, c]));
+  const sel2 = await selecteerEnVerrijk(kandidaten.map(alsSelectieBron), methode, {
+    filters, maxResults, maxPerDoc,
     representatieConstraints: opties.representatieConstraints,
     regimeWeging: opties.regimeWeging,
     relevantieDrempel: opties.relevantieDrempel,
-    parentRetrieval: opties.parentRetrieval,
   });
   Object.assign(extra, sel2.extra);
-  const geselecteerd = sel2.chunks;
+  let geselecteerd = sel2.chunks
+    .map((b) => perId.get(b.id))
+    .filter((c): c is DocumentChunk => Boolean(c));
+
+  // D — parent-retrieval hoort bij de PROVIDER (siblings uit document_chunks) en
+  // is in de orkestratie een adapterhook. Op dit terugvalpad voor C5/C6/C7 blijft
+  // hij hier staan, op exact dezelfde plek als vóór T2-1.
+  if (opties.parentRetrieval && geselecteerd.length > 0) {
+    const p = await verrijkMetParents(geselecteerd, fondsFilter, peildatum);
+    geselecteerd = p.chunks;
+    extra.parent = p.meta;
+  }
 
   return { chunks: geselecteerd, extra };
 }

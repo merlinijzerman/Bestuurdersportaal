@@ -12,7 +12,7 @@
 //  Wat hier NOOIT in mag: providertokens, endpoints, ruwe Graph-/Search-
 //  responses of database-implementatiedetails.
 // ============================================================================
-import type { DocumentChunk, RetrievalFilters, RetrievalMeta, BronVerwijzing } from "../rag";
+import type { RetrievalFilters, RetrievalMeta, BronVerwijzing } from "../rag";
 import type { Actor, Taaktype } from "../ai-gateway/contract";
 import type { RetrievalModus } from "../vraagtype";
 
@@ -34,6 +34,11 @@ export interface RetrievalContext {
   actor: Actor;
   taaktype: Taaktype;
   bronbeleid: Bronbeleid;
+  /**
+   * DE ENIGE bron van waarheid voor scope. Stond hij ook op de query, dan
+   * konden twee waarden uiteenlopen en zou een gescopete beurt stil breder
+   * kunnen zoeken dan de gebruiker koos.
+   */
   scope?: {
     documentIds?: string[];
     vergaderingId?: string;
@@ -58,10 +63,19 @@ export interface RetrievalQuery {
   zoekvraag: string;
   filters?: RetrievalFilters;
   strategie: Retrievalstrategie;
-  /** Harde bovengrens op het aantal kandidaten dat de adapter mag teruggeven. */
+  /**
+   * Harde bovengrens op het aantal kandidaten dat de adapter TERUGGEEFT. Een
+   * adapter mag intern ruimer ophalen (de Supabase-RPC overfetcht 3×) — dat is
+   * zijn eigen zaak — maar wat het contract verlaat is begrensd, en de
+   * orkestratie kapt alsnog af met `truncatie.reden = "kandidaten"`.
+   */
   maxKandidaten: number;
-  /** Documentscope voor déze query; `undefined` = de hele toegestane bibliotheek. */
-  documentIds?: string[];
+  /**
+   * Harde bovengrens op de omvang van de modelcontext (ontwerp §4.1). De
+   * orkestratie kapt de geselecteerde passages af zodra de som deze grens
+   * overschrijdt en meldt `truncatie.reden = "tekens"`.
+   */
+  maxContextTekens: number;
   /** Per-query hybride-stand; `undefined` = de fonds-/env-default. */
   hybrideAan?: boolean;
 }
@@ -94,7 +108,7 @@ export interface Bronresultaat {
   ref: string;
   bronsoort: Bronsoort;
   titel: string;
-  documentIdentiteit: { documentId: string; bibliotheek?: string | null; bron?: string | null };
+  documentIdentiteit: { documentId: string; bibliotheek?: string | null; bron?: string | null; fondsId?: string | null };
   versie: Versiebewijs;
   /** Verplicht zodra de adapter `permissionProof` claimt (§4.2.1). */
   toegangscontrole?: Toegangsbewijs;
@@ -111,12 +125,12 @@ export interface Bronresultaat {
   /** SharePoint: alleen `true` ná een geslaagde permission-check. */
   previewMogelijk?: boolean;
   /**
-   * T2-1 — de onderliggende chunk. Zolang de Supabase-adapter de enige
-   * productieadapter is, draagt de orkestratie deze mee zodat selectie,
-   * parent-retrieval en citaatvorming byte-identiek blijven aan vóór de
-   * verplaatsing. Een Microsoftresultaat draagt hem niet.
+   * BRONBELEID-gegevens die de selectie stuurt: sectorcuratie (`normgewicht`)
+   * en het wettelijk regime. Bewust hier en niet in een providerspecifieke
+   * bijlage — het zijn beleidsbegrippen, geen opslagvorm, en de weging hoort
+   * centraal (zie de kop van selectie.ts).
    */
-  chunk?: DocumentChunk;
+  curatie?: { normgewicht?: string | null; wettelijkRegime?: string | null };
 }
 
 export type RetrievalFoutcategorie =
@@ -163,12 +177,15 @@ export interface AdapterUitkomst {
   opgehaald: number;
 }
 
-/** Wat de ORKESTRATIE oplevert; het enige dat de generatielaag te zien krijgt. */
-export interface RetrievalUitkomst {
+/**
+ * ONVOLTOOID. Wat `voerRetrievalUit` oplevert: de selectie staat vast, maar er
+ * zijn nog geen citaties. Bewust een EIGEN type en geen `RetrievalUitkomst` met
+ * een lege lijst — een half resultaat mag niet typecompatibel zijn met wat de
+ * generatielaag mag gebruiken.
+ */
+export interface RetrievalTussenresultaat {
   kandidaten: Bronresultaat[];
   geselecteerd: Bronresultaat[];
-  /** Bestaande vorm, ongewijzigd voor C1/C7. */
-  bronverwijzingen: BronVerwijzing[];
   perAdapter: {
     naam: RetrievalAdapter["naam"];
     query: string;
@@ -184,11 +201,57 @@ export interface RetrievalUitkomst {
   meta: RetrievalMeta;
 }
 
+/** VOLTOOID. Het enige dat de generatielaag mag gebruiken. */
+export interface RetrievalUitkomst extends RetrievalTussenresultaat {
+  /** Bestaande vorm, ongewijzigd voor C1/C7. */
+  bronverwijzingen: BronVerwijzing[];
+  contextTekst: string;
+  sentinel: string;
+  geneutraliseerd: number;
+}
+
+/** Wat de citaatvorming van de route meekrijgt — data, geen logica. */
+export interface CitaatOpdracht {
+  primaireDocumentIds: ReadonlySet<string>;
+  peildatum: string;
+  hoofddocumentLabel: string;
+}
+
+export interface CitaatResultaat {
+  resultaten: Bronresultaat[];
+  contextTekst: string;
+  bronverwijzingen: BronVerwijzing[];
+  sentinel: string;
+  geneutraliseerd: number;
+}
+
 export interface RetrievalAdapter {
   readonly naam: "supabase-rag" | "microsoft-sharepoint";
   capabilities(): AdapterCapabilities;
   zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst>;
+  /**
+   * Providerspecifieke uitbreiding van de SELECTIE — voor Supabase de
+   * parent-context (siblings uit `document_chunks`). Draait per spoor, direct
+   * ná de selectie. Een adapter die niets uit te breiden heeft, laat hem weg.
+   */
+  verrijkSelectie?(
+    ctx: RetrievalContext,
+    geselecteerd: Bronresultaat[]
+  ): Promise<{ resultaten: Bronresultaat[]; meta?: Partial<RetrievalMeta> }>;
+  /**
+   * Providercorrecte weergave van de geselecteerde passages. De ORKESTRATIE
+   * bepaalt wát geciteerd wordt en in welke volgorde; de adapter weet hoe zijn
+   * eigen bron eruitziet. Zo blijft `DocumentChunk` buiten het contract.
+   */
+  citeer(
+    ctx: RetrievalContext,
+    geselecteerd: Bronresultaat[],
+    opdracht: CitaatOpdracht
+  ): Promise<CitaatResultaat>;
 }
 
 /** Hulptype voor de orkestratie: de modus die de filters dragen. */
 export type { RetrievalModus };
+
+/** Ten minste één query — een lege lijst is door het type onmogelijk. */
+export type Queries<T> = readonly [T, ...T[]];

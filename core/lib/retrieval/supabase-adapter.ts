@@ -12,8 +12,19 @@
 //  smalle geïnjecteerde dienst binnen (`rerankdienst`), precies zoals D1 eist;
 //  welk model daarachter zit is een zaak van de AI-gateway en de fondsconfig.
 // ============================================================================
-import { zoekRelevanteChunksMetMeta, type DocumentChunk, type RetrievalMeta, type RetrievalOpties } from "../rag";
+import {
+  zoekRelevanteChunksMetMeta,
+  maakContext,
+  verrijkNotulenChunks,
+  verrijkDocumentmetadata,
+  type DocumentChunk,
+  type RetrievalMeta,
+  type RetrievalOpties,
+} from "../rag";
+import { verrijkMetParents } from "../parent-context";
 import type {
+  CitaatOpdracht,
+  CitaatResultaat,
   AdapterCapabilities,
   AdapterUitkomst,
   Bronresultaat,
@@ -44,10 +55,9 @@ function bronsoortVan(chunk: DocumentChunk): Bronsoort {
 }
 
 /**
- * Eén chunk als contractresultaat. `chunk` blijft meereizen zolang de
- * Supabase-adapter de enige productieadapter is: selectie, parent-retrieval en
- * citaatvorming werken daar nog rechtstreeks op, en PR-A moet aantoonbaar nul
- * gedragsverschil opleveren.
+ * Eén chunk als contractresultaat. De chunk zelf blijft PRIVAAT (zie
+ * `chunkPerRef`): alles wat de selectie en de weging nodig hebben staat in
+ * neutrale velden, zodat een bron zónder chunk hier net zo goed doorheen komt.
  */
 function naarBronresultaat(chunk: DocumentChunk, positie: number): Bronresultaat {
   const d = chunk.documenten;
@@ -55,7 +65,7 @@ function naarBronresultaat(chunk: DocumentChunk, positie: number): Bronresultaat
     ref: chunk.id,
     bronsoort: bronsoortVan(chunk),
     titel: d.titel,
-    documentIdentiteit: { documentId: chunk.document_id, bibliotheek: d.bibliotheek ?? null, bron: d.bron ?? null },
+    documentIdentiteit: { documentId: chunk.document_id, bibliotheek: d.bibliotheek ?? null, bron: d.bron ?? null, fondsId: d.fonds_id ?? null },
     // R1: de volledige hash is de versie-identiteit. Die staat pas in T2-3 op de
     // rij; tot dan draagt dit pad expliciet de ZWAKKE legacyfallback, zodat aan
     // het resultaat zelf te zien is dat er nog geen exacte versie is.
@@ -69,12 +79,32 @@ function naarBronresultaat(chunk: DocumentChunk, positie: number): Bronresultaat
       actueel: (d.documentstatus ?? null) === "van_kracht",
     },
     rang: { positie, score: chunk.rang ?? null, fts: chunk.fts_rang ?? null, vec: chunk.vec_rang ?? null },
-    chunk,
+    // Bronbeleid-gegevens die de centrale weging nodig heeft.
+    curatie: { normgewicht: d.normgewicht ?? null, wettelijkRegime: d.wettelijk_regime ?? null },
   };
 }
 
-export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdienst = {}): RetrievalAdapter {
-  return {
+/**
+ * De adapter plus een SMALLE, expliciet benoemde migratiebrug. De chatroute
+ * consumeert stroomafwaarts nog `DocumentChunk` (bronset-hash, besluitvorming-
+ * modus, weergave); `chunksVoor()` haalt die vorm terug uit het providerprivate
+ * register. Bewust hier en NIET in het contract: zo blijft `Bronresultaat`
+ * providerneutraal en is precies zichtbaar wie de brug nog gebruikt.
+ * T2-2/T2-4 laten die consumenten op `Bronresultaat` werken en verwijderen haar.
+ */
+export interface SupabaseRetrieval {
+  adapter: RetrievalAdapter;
+  chunksVoor(bronnen: Bronresultaat[]): DocumentChunk[];
+}
+
+export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdienst = {}): SupabaseRetrieval {
+  // PROVIDERPRIVAAT. De chunk hoort niet in het contract — anders is de vorm van
+  // deze database het contract, en komt een Microsoftresultaat er niet doorheen.
+  // De adapter houdt de koppeling ref → chunk dus zelf bij en gebruikt haar
+  // alleen in zijn eigen hooks.
+  const chunkPerRef = new Map<string, DocumentChunk>();
+
+  const adapter: RetrievalAdapter = {
     naam: "supabase-rag",
 
     capabilities(): AdapterCapabilities {
@@ -112,7 +142,7 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
         ctx.fondsId,
         query.maxKandidaten,
         query.hybrideAan,
-        query.documentIds,
+        ctx.scope?.documentIds,
         query.filters,
         {
           ...vlaggen,
@@ -126,6 +156,8 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
       const diagnostiek: Partial<RetrievalMeta> = { ...meta };
       for (const veld of SELECTIE_AFGELEID) delete (diagnostiek as Record<string, unknown>)[veld];
 
+      for (const c of chunks) chunkPerRef.set(c.id, c);
+
       return {
         kandidaten: chunks.map(naarBronresultaat),
         methode: meta.methode,
@@ -134,6 +166,66 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
         opgehaald: meta.opgehaald,
         diagnostiek,
       };
+    },
+    /**
+     * Parent-context (small-to-big): siblings uit `document_chunks`. Puur
+     * Supabase-werk, dus een adapterhook — de orkestratie roept hem per spoor
+     * aan, direct ná de selectie, op exact dezelfde plek als vóór T2-1.
+     */
+    async verrijkSelectie(ctx: RetrievalContext, geselecteerd: Bronresultaat[]) {
+      if (!vlaggen.parentRetrieval) return { resultaten: geselecteerd };
+      const chunks = geselecteerd
+        .map((b) => chunkPerRef.get(b.ref))
+        .filter((c): c is DocumentChunk => Boolean(c));
+      if (chunks.length === 0) return { resultaten: geselecteerd };
+      const p = await verrijkMetParents(chunks, ctx.fondsId, new Date().toISOString().slice(0, 10));
+      for (const c of p.chunks) chunkPerRef.set(c.id, c);
+      return { resultaten: p.chunks.map(naarBronresultaat), meta: { parent: p.meta } };
+    },
+
+    /**
+     * Providercorrecte weergave. `maakContext` is diep chunk-vormig en blijft
+     * daarom hier, ongewijzigd — dat is precies waarom de citaatrenderer een
+     * adapterhook is en niet in de orkestratie staat. De orkestratie bepaalt
+     * wél wát geciteerd wordt en in welke volgorde.
+     */
+    async citeer(
+      ctx: RetrievalContext,
+      geselecteerd: Bronresultaat[],
+      opdracht: CitaatOpdracht
+    ): Promise<CitaatResultaat> {
+      let chunks = geselecteerd
+        .map((b) => chunkPerRef.get(b.ref))
+        .filter((c): c is DocumentChunk => Boolean(c));
+      // Weergaveverrijking: notulenlabels en documenttype. Beide Supabase-
+      // specifiek, dus adapterwerk; ze veranderen niets aan de selectie.
+      chunks = await verrijkNotulenChunks(chunks);
+      chunks = await verrijkDocumentmetadata(chunks, ctx.fondsId);
+      for (const c of chunks) chunkPerRef.set(c.id, c);
+      const r = maakContext(
+        chunks,
+        0,
+        undefined,
+        opdracht.primaireDocumentIds,
+        opdracht.peildatum,
+        opdracht.hoofddocumentLabel
+      );
+      return {
+        resultaten: chunks.map(naarBronresultaat),
+        contextTekst: r.contextTekst,
+        bronverwijzingen: r.bronnen,
+        sentinel: r.sentinel,
+        geneutraliseerd: r.geneutraliseerd,
+      };
+    },
+  };
+
+  return {
+    adapter,
+    chunksVoor(bronnen: Bronresultaat[]): DocumentChunk[] {
+      return bronnen
+        .map((b) => chunkPerRef.get(b.ref))
+        .filter((c): c is DocumentChunk => Boolean(c));
     },
   };
 }

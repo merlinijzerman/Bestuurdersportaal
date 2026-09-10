@@ -158,7 +158,6 @@
       "modules": {
         "rag": [
           "BronVerwijzing",
-          "DocumentChunk",
           "RetrievalFilters",
           "RetrievalMeta"
         ]
@@ -169,7 +168,6 @@
     "core/lib/retrieval/meta.ts": {
       "modules": {
         "rag": [
-          "DocumentChunk",
           "RetrievalMeta"
         ]
       },
@@ -179,8 +177,6 @@
     "core/lib/retrieval/orkestratie.ts": {
       "modules": {
         "rag": [
-          "BronVerwijzing",
-          "DocumentChunk",
           "RetrievalMeta"
         ]
       },
@@ -190,7 +186,6 @@
     "core/lib/retrieval/selectie.ts": {
       "modules": {
         "rag": [
-          "DocumentChunk",
           "RetrievalFilters",
           "RetrievalMeta"
         ],
@@ -202,9 +197,6 @@
           "RepresentatieConstraints",
           "selecteerChunksMetTrace",
           "selecteerMetConstraintsMetTrace"
-        ],
-        "parent-context": [
-          "verrijkMetParents"
         ]
       },
       "rpcs": [],
@@ -216,7 +208,13 @@
           "DocumentChunk",
           "RetrievalMeta",
           "RetrievalOpties",
+          "maakContext",
+          "verrijkDocumentmetadata",
+          "verrijkNotulenChunks",
           "zoekRelevanteChunksMetMeta"
+        ],
+        "parent-context": [
+          "verrijkMetParents"
         ]
       },
       "rpcs": [],

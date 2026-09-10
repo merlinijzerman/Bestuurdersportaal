@@ -10,34 +10,49 @@
 //  de orkestratie lopen (C5 zoeken, C6 vergelijk, C7 AQLab) ongewijzigd blijven.
 //  T2-2 haalt die terugimport weg.
 // ============================================================================
-import type { DocumentChunk, RetrievalMeta } from "../rag";
+import type { RetrievalMeta } from "../rag";
+
+/** Providerneutrale kijk: precies wat het auditspoor per bron vastlegt. */
+export interface AuditBron {
+  ref: string;
+  documentId: string;
+  bron: string;
+  bibliotheek: string;
+  fondsId?: string | null;
+  documentstatus?: string | null;
+  bronstatus?: string | null;
+  documentdatum?: string | null;
+  score?: number | null;
+  fts?: number | null;
+  vec?: number | null;
+}
 
 export function bouwMeta(
   methode: RetrievalMeta["methode"],
   opgehaald: number,
-  geselecteerd: DocumentChunk[]
+  geselecteerd: AuditBron[]
 ): RetrievalMeta {
   return {
     methode,
     opgehaald,
     geselecteerd: geselecteerd.length,
     chunks: geselecteerd.map((c) => ({
-      id: c.id,
-      document_id: c.document_id,
-      rang: c.rang ?? null,
+      id: c.ref,
+      document_id: c.documentId,
+      rang: c.score ?? null,
       // Besluit 0139 — arm-herkomst mee in het auditspoor.
-      fts_rang: c.fts_rang ?? null,
-      vec_rang: c.vec_rang ?? null,
+      fts_rang: c.fts ?? null,
+      vec_rang: c.vec ?? null,
     })),
     // T4 — minimale bronversie-audit over de daadwerkelijk geselecteerde chunks.
     bronversie_audit: geselecteerd.map((c) => ({
-      document_id: c.document_id,
-      bron: c.documenten.bron,
-      bibliotheek: c.documenten.bibliotheek,
-      fonds_id: c.documenten.fonds_id ?? null,
-      documentstatus: c.documenten.documentstatus ?? null,
-      bronstatus: c.documenten.bronstatus ?? null,
-      documentdatum: c.documenten.documentdatum ?? null,
+      document_id: c.documentId,
+      bron: c.bron,
+      bibliotheek: c.bibliotheek,
+      fonds_id: c.fondsId ?? null,
+      documentstatus: c.documentstatus ?? null,
+      bronstatus: c.bronstatus ?? null,
+      documentdatum: c.documentdatum ?? null,
     })),
   };
 }

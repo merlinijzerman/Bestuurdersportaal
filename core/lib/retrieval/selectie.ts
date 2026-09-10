@@ -16,7 +16,26 @@
 //  `rag.ts` importeert dit tijdelijk terug zodat C5 (zoeken), C6 (vergelijk) en
 //  C7 (AQLab) in PR-A ongewijzigd blijven draaien. T2-2 haalt die terugimport weg.
 // ============================================================================
-import type { DocumentChunk, RetrievalFilters, RetrievalMeta } from "../rag";
+import type { RetrievalFilters, RetrievalMeta } from "../rag";
+
+/**
+ * De PROVIDERNEUTRALE kijk die de selectie nodig heeft. Bewust geen
+ * `SelectieBron`: dan zou een Microsoftresultaat — dat geen chunk heeft — hier
+ * niet doorheen komen en zou de selectie feitelijk Supabase-only zijn.
+ * `bibliotheek`, `normgewicht` en `wettelijkRegime` zijn BRONBELEID-gegevens
+ * (sectorcuratie en wettelijk regime), geen opslagvorm; ze horen daarom in de
+ * neutrale laag thuis.
+ */
+export interface SelectieBron {
+  id: string;
+  document_id: string;
+  tekst: string;
+  rang?: number | null;
+  titel: string;
+  bibliotheek: string;
+  normgewicht: string | null;
+  wettelijkRegime: string | null;
+}
 import { weegBronsoort, constraintsVoorProfiel } from "../weeg-bronsoort";
 import { weegRegime } from "../weeg-regime";
 import {
@@ -24,19 +43,18 @@ import {
   selecteerChunksMetTrace,
   type RepresentatieConstraints,
 } from "../rag-select";
-import { verrijkMetParents } from "../parent-context";
 import { isStandaardZichtbaarInRag } from "../generiek-curatie";
 
 // Verplaatst uit rag.ts: de enige aanroeper was weegEnSelecteer hieronder.
 function filterZwakkeGeneriek(
-  chunks: DocumentChunk[],
+  chunks: SelectieBron[],
   filters?: RetrievalFilters
-): DocumentChunk[] {
+): SelectieBron[] {
   if (filters?.toonZwakkeGeneriek) return chunks;
   return chunks.filter(
     (c) =>
-      c.documenten.bibliotheek !== "generiek" ||
-      isStandaardZichtbaarInRag(c.documenten.normgewicht)
+      c.bibliotheek !== "generiek" ||
+      isStandaardZichtbaarInRag(c.normgewicht)
   );
 }
 
@@ -54,20 +72,20 @@ export interface SelectieDiagnostiek {
   selectie_kandidaten: NonNullable<RetrievalMeta["selectie_kandidaten"]>;
 }
 
-function isGeneriek(c: DocumentChunk): boolean {
-  return c.documenten.bibliotheek === "generiek";
+function isGeneriek(c: SelectieBron): boolean {
+  return c.bibliotheek === "generiek";
 }
 
 function weegEnSelecteer(
-  gerangschikt: DocumentChunk[],
+  gerangschikt: SelectieBron[],
   filters: RetrievalFilters | undefined,
   maxResults: number,
   maxPerDoc: number,
   constraintsAan: boolean,
   regimeAan: boolean
-): { chunks: DocumentChunk[]; diagnostiek: SelectieDiagnostiek } {
+): { chunks: SelectieBron[]; diagnostiek: SelectieDiagnostiek } {
   const profiel = filters?.bronsoortprofiel;
-  const libVan = (c: DocumentChunk) => c.documenten.bibliotheek;
+  const libVan = (c: SelectieBron) => c.bibliotheek;
 
   // filters — §8.3 #6: zwakke generieke chunks vallen vóór de selectie af.
   const zichtbaar = filterZwakkeGeneriek(gerangschikt, filters);
@@ -86,7 +104,7 @@ function weegEnSelecteer(
   const regimeDemoveert =
     regimeAan && (filters?.primairRegime === "pw" || filters?.primairRegime === "wvb");
   const gewogen = regimeDemoveert
-    ? weegRegime(bronGewogen, (c) => c.documenten.wettelijk_regime, filters?.primairRegime)
+    ? weegRegime(bronGewogen, (c) => c.wettelijkRegime, filters?.primairRegime)
     : bronGewogen;
 
   // representatie-constraints → dedup → budget-afkap. De effectieve constraints
@@ -105,7 +123,7 @@ function weegEnSelecteer(
   // daadwerkelijk demoveert — bronsoort (fonds/generiek; 'gecombineerd' herordent
   // niet) óf regime. `zichtbaar` is de volgorde zónder beide weging-stappen, zodat
   // een chunk die enkel door de weging afvalt op reden "weging" landt (niet budget).
-  let zonderWegingSet: Set<DocumentChunk> | null = null;
+  let zonderWegingSet: Set<SelectieBron> | null = null;
   if (profiel === "fonds" || profiel === "generiek" || regimeDemoveert) {
     const cf = constraintsAan
       ? selecteerMetConstraintsMetTrace(zichtbaar, constraints, libVan)
@@ -125,7 +143,7 @@ function weegEnSelecteer(
   const perBib = { fonds: 0, generiek: 0 };
 
   const kandidaten = gerangschikt.map((c) => {
-    const bibliotheek = c.documenten.bibliotheek;
+    const bibliotheek = c.bibliotheek;
     const rang = c.rang ?? null;
     if (gekozenSet.has(c)) {
       if (isGeneriek(c)) perBib.generiek++;
@@ -158,33 +176,49 @@ function weegEnSelecteer(
   };
 }
 
+/** Chunk-vormige bron → neutrale selectieview. Eén plek, zodat rag.ts (C5/C6/C7)
+ *  en de Supabase-adapter gegarandeerd dezelfde velden aanleveren. */
+export function alsSelectieBron(c: {
+  id: string;
+  document_id: string;
+  tekst: string;
+  rang?: number | null;
+  documenten: { titel: string; bibliotheek: string; normgewicht?: string | null; wettelijk_regime?: string | null };
+}): SelectieBron {
+  return {
+    id: c.id,
+    document_id: c.document_id,
+    tekst: c.tekst,
+    rang: c.rang ?? null,
+    titel: c.documenten.titel,
+    bibliotheek: c.documenten.bibliotheek,
+    normgewicht: c.documenten.normgewicht ?? null,
+    wettelijkRegime: c.documenten.wettelijk_regime ?? null,
+  };
+}
+
 /**
  * De selectiehelft van de oude `naVerwerking`: weging+selectie, de
  * ilike-uitsluiting (B1) en parent-retrieval (D). Draait op de door de adapter
  * gerangschikte kandidaten.
  */
 export async function selecteerEnVerrijk(
-  kandidaten: DocumentChunk[],
+  kandidaten: SelectieBron[],
   methode: RetrievalMeta["methode"],
   ctx: {
     filters: RetrievalFilters | undefined;
     maxResults: number;
     maxPerDoc: number;
-    fondsFilter: string | null;
-    peildatum: string;
     representatieConstraints: boolean;
     regimeWeging: boolean;
     relevantieDrempel: boolean;
-    parentRetrieval: boolean;
   }
-): Promise<{ chunks: DocumentChunk[]; extra: Partial<RetrievalMeta> }> {
+): Promise<{ chunks: SelectieBron[]; extra: Partial<RetrievalMeta> }> {
   const extra: Partial<RetrievalMeta> = {};
   const opties = ctx;
   const filters = ctx.filters;
   const maxResults = ctx.maxResults;
   const maxPerDoc = ctx.maxPerDoc;
-  const fondsFilter = ctx.fondsFilter;
-  const peildatum = ctx.peildatum;
 
   // Bronsoort-weging (+ evt. representatie-constraints) + dedup + top-N; werkt op
   // de nieuwe volgorde. De constraint-laag staat achter opties.representatieConstraints.
@@ -208,18 +242,15 @@ export async function selecteerEnVerrijk(
     extra.zwakke_bronbasis = true;
     extra.mogelijk_gerelateerd = geselecteerd.map((c) => ({
       document_id: c.document_id,
-      titel: c.documenten.titel,
+      titel: c.titel,
     }));
     geselecteerd = [];
   }
 
-  // D — parent-retrieval (small-to-big): treffers uitbreiden met hun structuur-
-  // unit. Fondsdiscipline draait binnen verrijkMetParents op de siblings.
-  if (opties.parentRetrieval && geselecteerd.length > 0) {
-    const p = await verrijkMetParents(geselecteerd, fondsFilter, peildatum);
-    geselecteerd = p.chunks;
-    extra.parent = p.meta;
-  }
+  // D — parent-retrieval is PROVIDERSPECIFIEK (het haalt siblings uit
+  // document_chunks) en is daarom een adapterhook: `verrijkSelectie()`. De
+  // orkestratie roept die aan direct ná deze selectie, per spoor, zodat de
+  // volgorde identiek blijft aan vóór T2-1.
 
   return { chunks: geselecteerd, extra };
 }
