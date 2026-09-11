@@ -1,200 +1,123 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
-import Crumb from "../_components/Crumb";
-import CtaBand from "../_components/CtaBand";
+import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
-// /governance-ai — verantwoord AI-gebruik in besluitvorming (copy v0.2 §5).
-// Claimdiscipline (contentplan §4): bewust géén "volledig veilig / compliant /
-// voldoet aan DNB-AFM / data blijft in NL-EU / geen training op klantdata /
-// eigen database per klant / ISO-SOC-NEN-gecertificeerd". Veilige formuleringen
-// per schrijverszelfcheck.
+// /governance-ai v0.8 — kop losgetrokken van de homepagekop om dubbeling
+// te voorkomen.
 export const metadata: Metadata = {
-  title: {
-    absolute:
-      "Governance & AI — verantwoord AI-gebruik in besluitvorming | Bestuurdersportaal",
-  },
+  title: { absolute: "AI & governance: begrensd en navolgbaar — Bestuurdersportaal" },
   description:
-    "AI mag ondersteunen, niet ongemerkt sturen. Brongebonden, met feit en duiding gescheiden, aannames zichtbaar, rollen en rechten vastgelegd en een reconstrueerbare audittrail.",
+    "Hoe wij AI-gebruik begrenzen: werken vanuit uw eigen documentatie, zichtbare bronnen per antwoord, rollen en rechten, en een reconstrueerbaar spoor.",
   alternates: { canonical: "/governance-ai" },
   openGraph: {
-    title: "Governance & AI — verantwoord AI-gebruik in besluitvorming",
+    title: "AI & governance: begrensd en navolgbaar — Bestuurdersportaal",
     description:
-      "AI mag ondersteunen, niet ongemerkt sturen. Brongebonden, met feit en duiding gescheiden, aannames zichtbaar, rollen en rechten vastgelegd en een reconstrueerbare audittrail.",
+      "Hoe wij AI-gebruik begrenzen: werken vanuit uw eigen documentatie, zichtbare bronnen per antwoord, rollen en rechten, en een reconstrueerbaar spoor.",
     type: "website",
     url: "/governance-ai",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 
-const PRINCIPES: { titel: string; tekst: string }[] = [
-  {
-    titel: "Werkt binnen uw context",
-    tekst:
-      "AI werkt binnen de eigen ingerichte context van uw organisatie — uw documenten, besluitdossiers en historie — en redeneert met verwijzing naar de bron, niet op basis van een onzichtbaar achtergrondmodel.",
-  },
-  {
-    titel: "Feit vs. duiding",
-    tekst:
-      "Het onderscheid tussen feitelijke analyse en bestuurlijke duiding blijft expliciet.",
-  },
-  {
-    titel: "Aannames zichtbaar",
-    tekst:
-      "Aannames, risico's en onzekerheden worden benoemd, niet weggepoetst.",
-  },
-  {
-    titel: "Rollen en rechten",
-    tekst:
-      "Wie wat mag zien en doen, is vastgelegd in rollen, rechten en verantwoordelijkheden.",
-  },
-  {
-    titel: "Reconstrueerbaar",
-    tekst:
-      "Een audittrail maakt achteraf navolgbaar hoe een besluit tot stand kwam.",
-  },
-];
-
-export default function GovernanceAiPage() {
+export default function Pagina() {
   return (
     <div className="bp-page">
-      <Header variant="full" actief="/governance-ai" />
+      <Header actief="/governance-ai" />
 
-      {/* HERO */}
       <section className="phero">
-        <div className="grid-bg" />
+        <div className="grid-bg"></div>
         <div className="wrap">
-          <Crumb items={[{ label: "Governance & AI" }]} />
-          <h1>AI mag ondersteunen. Niet ongemerkt sturen.</h1>
-          <p className="sub">
-            In een bestuurlijke omgeving telt niet alleen wat AI kan, maar hoe
-            verantwoord ze wordt ingezet. Bij Bestuurdersportaal is
-            AI-ondersteuning bewust begrensd en zichtbaar gemaakt.
-          </p>
-          <div className="cta">
-            <a href="/contact" className="btn btn-primary">
-              Neem contact op
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* VIJF UITGANGSPUNTEN */}
-      <section>
-        <div className="wrap">
-          <div className="label">Uitgangspunten</div>
-          <h2>Vijf uitgangspunten voor verantwoord AI-gebruik.</h2>
-          <div className="principles">
-            {PRINCIPES.map((p, i) => (
-              <div key={p.titel} className="pr">
-                <span className="n">{String(i + 1).padStart(2, "0")}</span>
-                <div>
-                  <h3>{p.titel}</h3>
-                  <p>{p.tekst}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* VEILIGHEID EN VERTROUWEN */}
-      <section>
-        <div className="wrap">
-          <div className="label">Veiligheid &amp; vertrouwen</div>
-          <h2>Zorgvuldig met informatie, bewust met AI.</h2>
+          <div className="eyebrow-label">AI &amp; governance</div>
+          <h1>Begrensd, zichtbaar en navolgbaar.</h1>
           <p className="lede">
-            Elke organisatie krijgt een eigen omgeving die per organisatie wordt
-            ingericht, met aandacht voor rollen en rechten, logging, beheerste
-            documentcontext en verantwoord AI-gebruik. Definitieve beveiligings- en
-            verwerkingsafspraken worden per omgeving vastgelegd.
+            In een bestuurlijke context telt niet alleen wat AI kan, maar hoe het gebruik is
+            begrensd. Hieronder waar wij ons aan houden — en waar u ons op mag aanspreken.
           </p>
-          <ul className="pledge">
-            <li>Een eigen, per organisatie ingerichte omgeving met eigen documentcontext.</li>
-            <li>Beveiligde toegang op basis van rollen en rechten.</li>
-            <li>Logging van relevante handelingen ten behoeve van controleerbaarheid.</li>
-            <li>
-              Beheerde documentcontext: AI werkt binnen het afgebakende dossier en
-              de eigen context.
-            </li>
-            <li>Aandacht voor privacy, informatiebeveiliging en verantwoord AI-gebruik.</li>
+          <p><a href="/product" className="textlink">Bekijk hoe een besluitdossier werkt →</a></p>
+        </div>
+      </section>
+
+      <section className="sec-cool">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">Uitgangspunten</div>
+            <h2>Vijf uitgangspunten voor verantwoord AI-gebruik.</h2>
+          </div>
+          <div className="kaartjes">
+            <div className="kaartje"><h3>Werkt binnen uw eigen documentatie</h3><p>De assistent zoekt in uw bibliotheek, uw dossiers en uw eerdere besluiten, en in een centraal gecureerd kader met wet- en regelgeving — niet in een onzichtbaar achtergrondmodel.</p></div>
+            <div className="kaartje"><h3>Feit en duiding gescheiden</h3><p>Het verschil tussen wat er staat en wat een interpretatie is, blijft expliciet.</p></div>
+            <div className="kaartje"><h3>Aannames zichtbaar</h3><p>Aannames, risico&apos;s en onzekerheden worden benoemd, niet weggepoetst.</p></div>
+            <div className="kaartje"><h3>Rollen en rechten</h3><p>Wie wat mag zien en doen volgt de governance van uw organisatie, per orgaan en commissie.</p></div>
+            <div className="kaartje"><h3>Reconstrueerbaar</h3><p>Een audittrail maakt achteraf navolgbaar hoe een besluit tot stand kwam.</p></div>
+          </div>
+          <p className="sharp">De assistent ordent en bevraagt. Wegen en besluiten doet het bestuur.</p>
+        </div>
+      </section>
+
+      <section className="sec-app">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">Grenzen</div>
+            <h2>Wat het wel en niet doet.</h2>
+          </div>
+          <div className="duo">
+            <div className="kol">
+              <div className="tag">Wel</div>
+              <ul>
+                <li><span className="ck">—</span><span>Ordenen, toetsen en signaleren, met verwijzing naar de bron.</span></li>
+                <li><span className="ck">—</span><span>Aannames, risico&apos;s en afwegingen zichtbaar maken.</span></li>
+                <li><span className="ck">—</span><span>Navolgbaar vastleggen hoe een besluit tot stand kwam.</span></li>
+              </ul>
+            </div>
+            <div className="kol">
+              <div className="tag">Niet</div>
+              <ul>
+                <li><span className="ck">—</span><span>Besluiten nemen in plaats van het bestuur.</span></li>
+                <li><span className="ck">—</span><span>Uitspraken doen namens toezichthouders.</span></li>
+                <li><span className="ck">—</span><span>Advies geven dat de verantwoordelijkheid van het bestuur overneemt.</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="sec-cool">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">Veiligheid en vertrouwen</div>
+            <h2>Zorgvuldig met informatie.</h2>
+            <p className="lede">
+              Elke organisatie werkt in een eigen ingerichte omgeving. Definitieve beveiligings-
+              en verwerkingsafspraken worden per organisatie vastgelegd.
+            </p>
+          </div>
+          <ul className="lijst" style={{maxWidth: '74ch'}}>
+            <li><span className="ck">—</span><span>Een eigen omgeving per organisatie, met eigen documentcontext.</span></li>
+            <li><span className="ck">—</span><span>Toegang op basis van rollen en rechten.</span></li>
+            <li><span className="ck">—</span><span>Logging van relevante handelingen, ten behoeve van controleerbaarheid.</span></li>
+            <li><span className="ck">—</span><span>Beheerde documentcontext: de assistent werkt binnen het afgebakende dossier.</span></li>
+            <li><span className="ck">—</span><span>Aandacht voor privacy, informatiebeveiliging en verantwoord AI-gebruik.</span></li>
           </ul>
         </div>
       </section>
 
-      {/* WAT DE OMGEVING NIET DOET */}
-      <section>
+      <section className="sec-app">
         <div className="wrap">
-          <div className="label">Grenzen</div>
-          <h2>Wat de omgeving niet doet.</h2>
-          <div className="duo">
-            <div className="col">
-              <div className="tag">De omgeving ondersteunt</div>
-              <ul>
-                <li>
-                  <span className="ck">+</span>
-                  <span>Ordent, toetst en signaleert — met verwijzing naar de bron.</span>
-                </li>
-                <li>
-                  <span className="ck">+</span>
-                  <span>Maakt aannames, risico’s en afwegingen zichtbaar.</span>
-                </li>
-                <li>
-                  <span className="ck">+</span>
-                  <span>Legt navolgbaar vast hoe een besluit tot stand kwam.</span>
-                </li>
-              </ul>
-            </div>
-            <div className="col">
-              <div className="tag">De omgeving doet niet</div>
-              <ul>
-                <li>
-                  <span className="ck">—</span>
-                  <span>Geen besluiten nemen in plaats van het bestuur.</span>
-                </li>
-                <li>
-                  <span className="ck">—</span>
-                  <span>Geen uitspraken namens toezichthouders.</span>
-                </li>
-                <li>
-                  <span className="ck">—</span>
-                  <span>
-                    Geen advies dat de verantwoordelijkheid van het bestuur
-                    overneemt.
-                  </span>
-                </li>
-              </ul>
-            </div>
+          <div className="sec-head">
+            <div className="eyebrow-label">EU AI Act</div>
+            <h2>Dezelfde uitgangspunten, nu ook wettelijk.</h2>
+            <p className="lede">
+              De EU AI Act versterkt wat hierboven staat: brongebonden werken, menselijk toezicht,
+              transparantie en verantwoording. Bestuurdersportaal helpt die randvoorwaarden in de
+              bestuurspraktijk in te richten — met het oordeel bij het bestuur.
+            </p>
           </div>
+          <p><a href="/governance-ai/eu-ai-act" className="textlink">EU AI Act en verantwoord AI-gebruik →</a></p>
         </div>
       </section>
 
-      {/* EU AI ACT — verdieping */}
-      <section>
-        <div className="wrap">
-          <div className="label">EU AI Act</div>
-          <h2>Wat de EU AI Act betekent voor verantwoord AI-gebruik.</h2>
-          <p className="lede">
-            De EU AI Act vergroot de noodzaak om zorgvuldig met AI om te gaan. Ze
-            versterkt dezelfde uitgangspunten: brongebonden werken, menselijk
-            toezicht, transparantie en verantwoording. Bestuurdersportaal helpt die
-            randvoorwaarden in de bestuurspraktijk in te richten — met het oordeel
-            altijd bij het bestuur.
-          </p>
-          <p className="link-row">
-            <a href="/governance-ai/eu-ai-act" className="textlink">
-              EU AI Act &amp; verantwoord AI-gebruik →
-            </a>
-          </p>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <CtaBand
-        kop="Vragen over verantwoord AI-gebruik in uw context?"
-        primair={{ href: "/contact", label: "Neem contact op" }}
-      />
-
-      <Footer variant="full" />
+      <Footer />
     </div>
   );
 }
