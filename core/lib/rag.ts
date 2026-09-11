@@ -36,7 +36,8 @@ import { verrijkMetParents, type ParentMeta } from "./parent-context";
 // T2-1 — verplaatst naar de orkestratielaag (besluit 0213 punt 5); tijdelijk
 // teruggeïmporteerd zodat C5/C6/C7 in PR-A ongewijzigd blijven. T2-2 ruimt dit op.
 import { bouwMeta as bouwMetaNeutraal, type AuditBron } from "./retrieval/meta";
-import { maakDocumentIdentiteit, maakPassageIdentiteit, maakVolledigeVersieHash } from "./retrieval/identiteit";
+import { maakCitationId, maakDocumentIdentiteit, maakPassageIdentiteit, maakVolledigeVersieHash } from "./retrieval/identiteit";
+import type { BevrorenBronbinding } from "./bronset";
 
 /** Chunk-vormige bron → de neutrale auditkijk. Eén plek, zodat het terugvalpad
  *  voor C5/C6/C7 exact hetzelfde auditspoor blijft schrijven. */
@@ -1882,7 +1883,7 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
   const documentId = maakDocumentIdentiteit(namespace, chunk.document_id);
   const passageId = maakPassageIdentiteit(documentId, `chunk-index:${chunk.chunk_index}`);
   const volledigeVersie =
-    chunk.indexering_versie && d.bestand_hash
+    chunk.indexering_versie && d.bestand_hash && /^[a-f0-9]{64}$/.test(d.bestand_hash)
       ? maakVolledigeVersieHash(chunk.document_id, chunk.indexering_versie, d.bestand_hash)
       : null;
   return {
@@ -2115,15 +2116,42 @@ const PASSAGE_IDENTITEIT_EXACT = /^passage_v1_[a-f0-9]{64}$/;
  * of zijn opnieuw berekende providerneutrale passage-id exact was bevroren. */
 export function selecteerBevrorenChunksOpRefs(
   kandidaten: DocumentChunk[],
-  passageRefs: readonly string[]
+  passageRefs: readonly string[],
+  bronbindingen: readonly BevrorenBronbinding[] = []
 ): DocumentChunk[] {
   const refs = new Set(passageRefs);
-  return kandidaten.filter((chunk) =>
-    refs.has(chunk.id) || refs.has(chunkAlsBronresultaat(chunk).passageIdentiteit.id)
-  );
+  const bindingPerPassage = new Map(bronbindingen.map((binding) => [binding.passageIdentiteit, binding]));
+  return kandidaten.filter((chunk) => {
+    if (refs.has(chunk.id)) return true; // uitsluitend historische raw UUID-meta
+    const actueel = chunkAlsBronresultaat(chunk);
+    if (!refs.has(actueel.passageIdentiteit.id)) return false;
+    const bevroren = bindingPerPassage.get(actueel.passageIdentiteit.id);
+    const versieWaarde = actueel.versie.waarde;
+    if (
+      !bevroren ||
+      typeof versieWaarde !== "string" ||
+      bevroren.documentIdentiteit !== actueel.documentIdentiteit.id ||
+      bevroren.versieSoort !== actueel.versie.soort ||
+      bevroren.versieWaarde !== versieWaarde
+    ) return false;
+    return bevroren.citationId === maakCitationId(
+      actueel.documentIdentiteit.id,
+      actueel.passageIdentiteit.id,
+      actueel.versie.soort,
+      versieWaarde
+    );
+  });
 }
 
-const REFLECTIE_KANDIDATEN_PAGINA = 1000;
+export const REFLECTIE_KANDIDATEN_MAX = 2_000;
+const REFLECTIE_KANDIDATEN_PAGINA = 500;
+export function planReflectieKandidatenPagina(van: number): { van: number; tot: number } | null {
+  if (!Number.isInteger(van) || van < 0 || van >= REFLECTIE_KANDIDATEN_MAX) return null;
+  return {
+    van,
+    tot: Math.min(van + REFLECTIE_KANDIDATEN_PAGINA - 1, REFLECTIE_KANDIDATEN_MAX - 1),
+  };
+}
 const REFLECTIE_SELECT = `id, document_id, tekst, pagina, paragraaf, chunk_index, indexering_versie,
   documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status,
     bronstatus, documentdatum, geldig_tot, volgende_review, bestand_hash)`;
@@ -2131,28 +2159,36 @@ const REFLECTIE_SELECT = `id, document_id, tekst, pagina, paragraaf, chunk_index
 export async function haalBevrorenChunks(
   passageRefs: string[],
   lokaleDocumentRefs: string[],
-  fondsId: string | null = null
+  fondsId: string | null = null,
+  bronbindingen: readonly BevrorenBronbinding[] = [],
+  signal?: AbortSignal
 ): Promise<DocumentChunk[]> {
   if (passageRefs.length === 0) return [];
+  bewaakNaIO(signal);
   const supabase = await createServerSupabase();
   const legacyIds = [...new Set(passageRefs.filter((ref) => LOKALE_UUID_EXACT.test(ref)))];
   const opaqueRefs = passageRefs.filter((ref) => PASSAGE_IDENTITEIT_EXACT.test(ref));
   const documentRefs = [...new Set(lokaleDocumentRefs.filter((ref) => LOKALE_UUID_EXACT.test(ref)))];
-  const kandidaten: DocumentChunk[] = [];
+  const gevonden: DocumentChunk[] = [];
+  const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
 
   if (legacyIds.length > 0) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("document_chunks")
       .select(REFLECTIE_SELECT)
       .in("id", legacyIds)
       .eq("documenten.actief", true)
       .order("document_id", { ascending: true })
       .order("chunk_index", { ascending: true });
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query;
+    bewaakNaIO(signal, error);
     if (error || !data) {
       console.error("haalBevrorenChunks legacy-fout:", error);
       return [];
     }
-    kandidaten.push(...(data as unknown as DocumentChunk[]));
+    const toegestaan = handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks;
+    gevonden.push(...selecteerBevrorenChunksOpRefs(toegestaan, legacyIds));
   }
 
   // Geen lokale documentroute bij een opaque bronset: fail-closed. Zonder die
@@ -2162,28 +2198,37 @@ export async function haalBevrorenChunks(
   if (opaqueRefs.length > 0) {
     let van = 0;
     while (true) {
-      const { data, error } = await supabase
+      bewaakNaIO(signal);
+      const bereik = planReflectieKandidatenPagina(van);
+      if (!bereik) break;
+      const paginaGrootte = bereik.tot - bereik.van + 1;
+      let query = supabase
         .from("document_chunks")
         .select(REFLECTIE_SELECT)
         .in("document_id", documentRefs)
         .eq("documenten.actief", true)
         .order("document_id", { ascending: true })
         .order("chunk_index", { ascending: true })
-        .range(van, van + REFLECTIE_KANDIDATEN_PAGINA - 1);
+        .range(bereik.van, bereik.tot);
+      if (signal) query = query.abortSignal(signal);
+      const { data, error } = await query;
+      bewaakNaIO(signal, error);
       if (error || !data) {
         console.error("haalBevrorenChunks opaque-resolutiefout:", error);
         return [];
       }
-      kandidaten.push(...(data as unknown as DocumentChunk[]));
-      if (data.length < REFLECTIE_KANDIDATEN_PAGINA) break;
-      van += REFLECTIE_KANDIDATEN_PAGINA;
+      const toegestaan = handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks;
+      gevonden.push(...selecteerBevrorenChunksOpRefs(toegestaan, opaqueRefs, bronbindingen));
+      const gevondenPassages = new Set(
+        gevonden.map((chunk) => chunkAlsBronresultaat(chunk).passageIdentiteit.id)
+      );
+      if (opaqueRefs.every((ref) => gevondenPassages.has(ref)) || data.length < paginaGrootte) break;
+      van = bereik.tot + 1;
     }
   }
 
-  const uniek = [...new Map(kandidaten.map((chunk) => [chunk.id, chunk])).values()];
-  const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
-  const toegestaan = handhaafFondsdiscipline(uniek, fondsFilter).chunks;
-  return selecteerBevrorenChunksOpRefs(toegestaan, passageRefs);
+  bewaakNaIO(signal);
+  return [...new Map(gevonden.map((chunk) => [chunk.id, chunk])).values()];
 }
 
 // Increment D — verrijk opgehaalde chunks met de vergadering/agendapunt van hun

@@ -23,10 +23,12 @@ import { createHash } from "node:crypto";
 import {
   bepaalBronset,
   canoniekeBronset,
+  leesBevrorenBronbindingen,
   leesBronsetChunks,
   leesLokaleDocumentRefs,
   leesScopeDocumentIds,
 } from "./bronset";
+import { maakCitationId } from "./retrieval/identiteit";
 
 let n = 0;
 function test(naam: string, fn: () => void) {
@@ -104,6 +106,36 @@ test("alleen lokale document-route-ids begrenzen de server-side reflectieresolut
     { document_id: "graph-drive-item-id" },
     null,
   ]), [lokaal]);
+});
+
+test("opaque reflectiebinding vereist exact document, passage, versie en citation", () => {
+  const documentIdentiteit = `doc_v1_${"a".repeat(64)}`;
+  const passageIdentiteit = `passage_v1_${"b".repeat(64)}`;
+  const versieWaarde = `version_v1_${"c".repeat(64)}`;
+  const citationId = maakCitationId(documentIdentiteit, passageIdentiteit, "hash", versieWaarde);
+  const meta = {
+    chunks: [{ id: passageIdentiteit, document_id: documentIdentiteit, rang: 1 }],
+    bronversie_audit: [{
+      document_identiteit: documentIdentiteit,
+      passage_identiteit: passageIdentiteit,
+      citation_id: citationId,
+      versie: { soort: "hash", waarde: versieWaarde },
+    }],
+  };
+  assert.deepEqual(leesBevrorenBronbindingen(meta), [{
+    documentIdentiteit,
+    passageIdentiteit,
+    versieSoort: "hash",
+    versieWaarde,
+    citationId,
+  }]);
+  assert.deepEqual(leesBevrorenBronbindingen({
+    ...meta,
+    bronversie_audit: [{
+      ...meta.bronversie_audit[0],
+      citation_id: `citation_v1_${"d".repeat(64)}`,
+    }],
+  }), [], "een verwisselde maar vormgeldige citation-id wordt geweigerd");
 });
 
 test("een andere, extra of ontbrekende bron kantelt de hash wél", () => {

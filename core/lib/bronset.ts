@@ -38,11 +38,21 @@
 // ============================================================================
 
 import { createHash } from "node:crypto";
+import { maakCitationId } from "./retrieval/identiteit";
 
 /** Eén bevroren passage: de chunk zoals hij in `retrieval_meta.chunks` staat. */
 export interface BronsetChunk {
   id: string;
   document_id: string;
+}
+
+/** Volledig opaque slot op precies de bronversie die het antwoord heeft gezien. */
+export interface BevrorenBronbinding {
+  documentIdentiteit: string;
+  passageIdentiteit: string;
+  versieSoort: "etag" | "ctag" | "hash" | "status-datum";
+  versieWaarde: string;
+  citationId: string;
 }
 
 export interface Bronset {
@@ -55,6 +65,17 @@ export interface Bronset {
 }
 
 const UUID_EXACT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DOC_IDENTITEIT_EXACT = /^doc_v1_[a-f0-9]{64}$/;
+const PASSAGE_IDENTITEIT_EXACT = /^passage_v1_[a-f0-9]{64}$/;
+const VERSIE_IDENTITEIT_EXACT = /^version_v1_[a-f0-9]{64}$/;
+const CITATION_IDENTITEIT_EXACT = /^citation_v1_[a-f0-9]{64}$/;
+const DATUM_EXACT = /^\d{4}-\d{2}-\d{2}$/;
+
+function geldigeKalenderdatum(waarde: string): boolean {
+  if (!DATUM_EXACT.test(waarde)) return false;
+  const datum = new Date(`${waarde}T00:00:00.000Z`);
+  return Number.isFinite(datum.getTime()) && datum.toISOString().slice(0, 10) === waarde;
+}
 
 function schoonIds(ruw: unknown): string[] {
   if (!Array.isArray(ruw)) return [];
@@ -100,6 +121,62 @@ export function leesBronsetChunks(retrievalMeta: unknown): BronsetChunk[] {
     uit.push({ id: r.id, document_id: r.document_id });
   }
   return uit;
+}
+
+/**
+ * Leest alleen cryptografisch zelf-consistente bindings uit het append-only
+ * bronniveau. `chunks` bewijst dat de passage daadwerkelijk was geselecteerd;
+ * `bronversie_audit` bindt die passage aan document, versie en citation-id.
+ * Halfgevulde, dubbel-conflicterende en raw-providerwaarden worden genegeerd,
+ * zodat de reflectieresolver ze vervolgens fail-closed laat vallen.
+ */
+export function leesBevrorenBronbindingen(retrievalMeta: unknown): BevrorenBronbinding[] {
+  if (typeof retrievalMeta !== "object" || retrievalMeta === null) return [];
+  const meta = retrievalMeta as Record<string, unknown>;
+  const geselecteerdeParen = new Set(
+    leesBronsetChunks(meta).map((chunk) => `${chunk.document_id}\u0000${chunk.id}`)
+  );
+  if (!Array.isArray(meta.bronversie_audit)) return [];
+
+  const perPassage = new Map<string, BevrorenBronbinding | null>();
+  for (const invoer of meta.bronversie_audit) {
+    if (typeof invoer !== "object" || invoer === null) continue;
+    const rij = invoer as Record<string, unknown>;
+    const versie = typeof rij.versie === "object" && rij.versie !== null
+      ? rij.versie as Record<string, unknown>
+      : null;
+    const documentIdentiteit = rij.document_identiteit;
+    const passageIdentiteit = rij.passage_identiteit;
+    const citationId = rij.citation_id;
+    const versieSoort = versie?.soort;
+    const versieWaarde = versie?.waarde;
+    const sterkeVersie = /^(etag|ctag|hash)$/.test(String(versieSoort))
+      && typeof versieWaarde === "string"
+      && VERSIE_IDENTITEIT_EXACT.test(versieWaarde);
+    const gedegradeerdeVersie = versieSoort === "status-datum"
+      && typeof versieWaarde === "string"
+      && geldigeKalenderdatum(versieWaarde);
+    if (
+      typeof documentIdentiteit !== "string" || !DOC_IDENTITEIT_EXACT.test(documentIdentiteit) ||
+      typeof passageIdentiteit !== "string" || !PASSAGE_IDENTITEIT_EXACT.test(passageIdentiteit) ||
+      typeof citationId !== "string" || !CITATION_IDENTITEIT_EXACT.test(citationId) ||
+      (!sterkeVersie && !gedegradeerdeVersie) ||
+      !geselecteerdeParen.has(`${documentIdentiteit}\u0000${passageIdentiteit}`) ||
+      citationId !== maakCitationId(documentIdentiteit, passageIdentiteit, String(versieSoort), versieWaarde as string)
+    ) continue;
+
+    const binding: BevrorenBronbinding = {
+      documentIdentiteit,
+      passageIdentiteit,
+      versieSoort: versieSoort as BevrorenBronbinding["versieSoort"],
+      versieWaarde: versieWaarde as string,
+      citationId,
+    };
+    const bestaand = perPassage.get(passageIdentiteit);
+    if (bestaand === undefined) perPassage.set(passageIdentiteit, binding);
+    else if (JSON.stringify(bestaand) !== JSON.stringify(binding)) perPassage.set(passageIdentiteit, null);
+  }
+  return [...perPassage.values()].filter((binding): binding is BevrorenBronbinding => binding !== null);
 }
 
 /** Leest `retrieval_meta.scope.document_ids`. Afwezige scope ⇒ lege lijst. */

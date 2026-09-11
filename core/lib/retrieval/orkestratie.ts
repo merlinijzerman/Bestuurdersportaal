@@ -102,6 +102,12 @@ function bouwRetrievalMeta(
   const primair = opgenomen.filter((b) => basis.primaireRefs.has(b.ref));
   const aanvullend = opgenomen.filter((b) => !basis.primaireRefs.has(b.ref));
   const basisMeta = bouwMeta(basis.methode, basis.opgehaald, primair.map(alsAuditBron), basis.correlationId);
+  const volledigeBronmeta = bouwMeta(
+    basis.methode,
+    basis.opgehaald,
+    opgenomen.map(alsAuditBron),
+    basis.correlationId
+  );
   return {
     ...basisMeta,
     ...basis.diagnostiek,
@@ -114,6 +120,9 @@ function bouwRetrievalMeta(
         rang: b.rang.score ?? null,
       })),
     ],
+    // Een bevroren reflectiebronset moet ook bij meerdere sporen iedere
+    // geselecteerde passage volledig aan versie en citation kunnen binden.
+    bronversie_audit: volledigeBronmeta.bronversie_audit,
     opgehaald: basis.opgehaald,
     geselecteerd: opgenomen.length,
     ...(basis.meerdereSporen

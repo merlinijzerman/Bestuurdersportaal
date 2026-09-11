@@ -8,12 +8,16 @@ import {
 } from "../../core/lib/retrieval/identiteit";
 import { bouwCitaties } from "../../core/lib/retrieval/citatie";
 import { splitsRetrievalMeta } from "../../core/lib/audit-meta";
-import { bepaalBronset, leesLokaleDocumentRefs } from "../../core/lib/bronset";
+import { bepaalBronset, leesBevrorenBronbindingen, leesLokaleDocumentRefs } from "../../core/lib/bronset";
 import { bewijsUitVersierij } from "../../core/lib/retrieval/supabase-versie";
 import { voerRetrievalUit, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
 import { maakSupabaseAdapter, type Adaptervlaggen } from "../../core/lib/retrieval/supabase-adapter";
 import {
+  chunkAlsBronresultaat,
+  haalBevrorenChunks,
   maakContext,
+  planReflectieKandidatenPagina,
+  REFLECTIE_KANDIDATEN_MAX,
   selecteerBevrorenChunksOpRefs,
   type DocumentChunk,
   type RetrievalMeta,
@@ -280,21 +284,44 @@ test("#367 — echte Supabase-adapter herleest via private chunk-id en levert ee
     // passage kunnen worden gebonden. Dit is bewust één keten vanaf de echte
     // adapteruitkomst; een losse helpertest had de productiebreuk gemist.
     const bevroren = bepaalBronset(uit.meta);
+    const bronbindingen = leesBevrorenBronbindingen(uit.meta);
     const lokaleDocumentRef =
       retrieval.lokaleDocumentRefVoor(uit.geselecteerd[0].documentIdentiteit.id);
     const opgeslagenBronnen = [{ document_id: lokaleDocumentRef }];
     const lokaleRefs = leesLokaleDocumentRefs(opgeslagenBronnen);
-    const reflectieChunks = selecteerBevrorenChunksOpRefs([chunk], bevroren.chunkIds);
+    const reflectieChunks = selecteerBevrorenChunksOpRefs([chunk], bevroren.chunkIds, bronbindingen);
     const reflectieContext = maakContext(reflectieChunks, 0, "reflectie-sentinel");
     assert.deepEqual(lokaleRefs, [chunk.document_id]);
     assert.equal(reflectieChunks.length, 1, "opaque passage-id moet de private chunk opnieuw vinden");
     assert.equal(reflectieContext.bronnen.length, 1, "reflectie op een #367-antwoord mag niet bronloos worden");
     assert.match(reflectieContext.contextTekst, /governance/);
     assert.deepEqual(
-      selecteerBevrorenChunksOpRefs([chunk], [`passage_v1_${"f".repeat(64)}`]),
+      selecteerBevrorenChunksOpRefs([chunk], [`passage_v1_${"f".repeat(64)}`], bronbindingen),
       [],
       "een verwisselde opaque passage-id mag niet op de private kandidaat binden"
     );
+    const gewijzigdeBron: DocumentChunk = {
+      ...chunk,
+      tekst: "De broninhoud is na het oorspronkelijke antwoord gewijzigd.",
+      indexering_versie: "r2",
+      documenten: { ...chunk.documenten, bestand_hash: "b".repeat(64) },
+    };
+    assert.equal(
+      chunkAlsBronresultaat(gewijzigdeBron).passageIdentiteit.id,
+      uit.geselecteerd[0].passageIdentiteit.id,
+      "de logische passage blijft dezelfde bij gelijk document en chunk-index"
+    );
+    const gewijzigdeReflectie = selecteerBevrorenChunksOpRefs(
+      [gewijzigdeBron],
+      bevroren.chunkIds,
+      bronbindingen
+    );
+    assert.deepEqual(
+      gewijzigdeReflectie,
+      [],
+      "een gewijzigde versie/citation mag tussen antwoord en reflectie geen broncontext leveren"
+    );
+    assert.equal(maakContext(gewijzigdeReflectie).bronnen.length, 0);
   } finally {
     uit.grendel?.stop();
   }
@@ -334,12 +361,43 @@ test("#367 — ontbrekende private map-entry faalt gesloten en zero-source is zi
 test("#367 — lokale download-id blijft server-only en voedt het bestaande UI-pad", async () => {
   const { readFileSync } = await import("node:fs");
   const route = readFileSync(new URL("../../app/api/chat/route.ts", import.meta.url), "utf8");
+  const rag = readFileSync(new URL("../../core/lib/rag.ts", import.meta.url), "utf8");
+  const orkestratie = readFileSync(new URL("../../core/lib/retrieval/orkestratie.ts", import.meta.url), "utf8");
   const ui = readFileSync(new URL("../../app/(dashboard)/ai/_components/AntwoordWeergave.tsx", import.meta.url), "utf8");
   assert.match(route, /lokaleDocumentRefVoor\(bron\.document_id\)/);
   assert.doesNotMatch(route, /document_id:\s*lokaleDocumentRefVoor[^\n]*retrievalMeta/);
   assert.match(route, /leesLokaleDocumentRefs/);
+  assert.match(route, /leesBevrorenBronbindingen/);
   assert.match(route, /haalBevrorenChunks\([\s\S]*reflectieBronsetDocumentRefs/);
   assert.match(route, /id:\s*identiteit\.passageIdentiteit\.id/);
   assert.match(route, /document_id:\s*identiteit\.documentIdentiteit\.id/);
+  assert.match(route, /bronversie_audit:\s*chunks\.map/);
+  assert.match(orkestratie, /bronversie_audit:\s*volledigeBronmeta\.bronversie_audit/);
+  assert.match(route, /maakAfbreekgrendel\(req\.signal,[^)]*timeoutUitConfig\(undefined\)/);
+  assert.match(route, /haalBevrorenChunks\([\s\S]*reflectieGrendel\.signal/);
+  assert.match(rag, /query = query\.abortSignal\(signal\)/);
   assert.match(ui, /`\/api\/documents\/\$\{bron\.document_id\}\/bestand`/);
+});
+
+test("#367 — reflectieresolutie heeft een harde kandidaatcap", () => {
+  assert.equal(REFLECTIE_KANDIDATEN_MAX, 2_000);
+  assert.deepEqual(planReflectieKandidatenPagina(0), { van: 0, tot: 499 });
+  assert.deepEqual(planReflectieKandidatenPagina(1_500), { van: 1_500, tot: 1_999 });
+  assert.equal(planReflectieKandidatenPagina(2_000), null);
+  assert.equal(planReflectieKandidatenPagina(-1), null);
+});
+
+test("#367 — reflectieresolutie start geen I/O na clientannulering", async () => {
+  const ctrl = new AbortController();
+  ctrl.abort(new Error("client-weg"));
+  await assert.rejects(
+    haalBevrorenChunks(
+      [`passage_v1_${"a".repeat(64)}`],
+      [DOC_REF],
+      FONDS_A,
+      [],
+      ctrl.signal
+    ),
+    /client-weg/
+  );
 });

@@ -30,7 +30,9 @@
           "verrijkNotulenChunks"
         ],
         "bronset": [
+          "BevrorenBronbinding",
           "bepaalBronset",
+          "leesBevrorenBronbindingen",
           "leesLokaleDocumentRefs"
         ],
         "query-reformulatie": [

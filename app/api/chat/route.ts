@@ -19,13 +19,14 @@ import { timeoutUitConfig, maakAfbreekgrendel, RetrievalAfgebroken as BeurtAfgeb
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import { maakCitationId } from "@/core/lib/retrieval/identiteit";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, chunkAlsBronresultaat, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
 // `actief` in deze route al een half dozijn andere betekenissen heeft.
 import { effectieveStatus, isActief as isReflectieActief, isReflectieIngang, type ReflectieStatus, type ReflectieActie, type ReflectieIngang } from "@/core/lib/reflectie-flow";
 import { valideerVerdiepingsvraag, standaardVraag, tegenperspectiefVraag } from "@/core/lib/reflectie-richtingen";
-import { bepaalBronset, leesLokaleDocumentRefs } from "@/core/lib/bronset";
+import { bepaalBronset, leesBevrorenBronbindingen, leesLokaleDocumentRefs, type BevrorenBronbinding } from "@/core/lib/bronset";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
 // Plateau 1 — vroege contextresolutie: leidt één zelfstandige `effectieveVraag`
 // af die de normale-informatie-downstream stuurt (bronintentie, router,
@@ -1529,6 +1530,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     let reflectieBeurt = 0;
     let reflectieBronsetChunkIds: string[] = [];
     let reflectieBronsetDocumentRefs: string[] = [];
+    let reflectieBronbindingen: BevrorenBronbinding[] = [];
     // B-opt tranche 3 — de gekozen ingang (voor de deterministische terugval bij
     // een afgekeurde verdiepingsvraag) en de FEITELIJKE samenstelling van het
     // oorspronkelijke antwoord (§3d): alleen wanneer de server die meegeeft, mag
@@ -1634,6 +1636,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ]);
           const meta = (logRij as { retrieval_meta?: unknown } | null)?.retrieval_meta;
           reflectieBronsetChunkIds = bepaalBronset(meta).chunkIds;
+          reflectieBronbindingen = leesBevrorenBronbindingen(meta);
           reflectieBronsetDocumentRefs = leesLokaleDocumentRefs(
             (inhoudRij as { bronnen?: unknown } | null)?.bronnen
           );
@@ -2350,34 +2353,47 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // deze aanpak élk pad borgt — ze draaien geen van alle (FR-54, AC-19, AC-20).
     //
     // In plaats daarvan worden precies de chunks van het oorspronkelijke antwoord
-    // opgehaald, op ID. Is er geen bronset (een antwoord uit algemene kennis),
+    // opgehaald via een begrensde private documentset en een volledige opaque
+    // passage-/versie-/citationbinding. Is er geen bronset (een antwoord uit algemene kennis),
     // dan blijft de context leeg en reflecteert de assistent uitsluitend op het
     // antwoord en de woorden van de gebruiker — hij verzint geen dossiercontext
     // en haalt geen bronnen op (FR-55, AC-21).
     if (reflectieActief) {
       if (reflectieBronsetChunkIds.length > 0) {
-        chunks = await haalBevrorenChunks(
-          reflectieBronsetChunkIds,
-          reflectieBronsetDocumentRefs,
-          fondsId
-        );
-        chunks = await verrijkNotulenChunks(chunks);
-        chunks = await verrijkDocumentmetadata(chunks, fondsId);
-        const ctx = maakContext(chunks);
-        contextTekst = ctx.contextTekst;
-        const lokaleDocumenten = new Map(chunks.map((chunk) => {
-          const identiteit = chunkAlsBronresultaat(chunk).documentIdentiteit.id;
-          return [identiteit, chunk.document_id] as const;
-        }));
-        // Zelfde scheiding als op het normale adapterpad: de lokale UUID is
-        // uitsluitend een route-locator voor UI/download; het retrievalcontract
-        // en de meta hieronder houden de opaque identiteit.
-        bronnen = ctx.bronnen.map((bron) => ({
-          ...bron,
-          document_id: lokaleDocumenten.get(bron.document_id) ?? bron.document_id,
-        }));
-        bronSentinel = ctx.sentinel;
-        contextGeneutraliseerd = ctx.geneutraliseerd;
+        // Ook de private reflectieresolutie deelt de clientannulering en een
+        // harde deadline. Zonder deze eigen grendel zou zij vóór de normale
+        // retrievalgrendel onbegrensd doorlopen na een disconnect.
+        const reflectieGrendel = maakAfbreekgrendel(req.signal, timeoutUitConfig(undefined));
+        try {
+          chunks = await haalBevrorenChunks(
+            reflectieBronsetChunkIds,
+            reflectieBronsetDocumentRefs,
+            fondsId,
+            reflectieBronbindingen,
+            reflectieGrendel.signal
+          );
+          reflectieGrendel.bewaak();
+          chunks = await verrijkNotulenChunks(chunks, reflectieGrendel.signal);
+          chunks = await verrijkDocumentmetadata(chunks, fondsId, reflectieGrendel.signal);
+          reflectieGrendel.bewaak();
+          const ctx = maakContext(chunks);
+          contextTekst = ctx.contextTekst;
+          const lokaleDocumenten = new Map(chunks.map((chunk) => {
+            const identiteit = chunkAlsBronresultaat(chunk).documentIdentiteit.id;
+            return [identiteit, chunk.document_id] as const;
+          }));
+          // Zelfde scheiding als op het normale adapterpad: de lokale UUID is
+          // uitsluitend een route-locator voor UI/download; het retrievalcontract
+          // en de meta hieronder houden de opaque identiteit.
+          bronnen = ctx.bronnen.map((bron) => ({
+            ...bron,
+            document_id: lokaleDocumenten.get(bron.document_id) ?? bron.document_id,
+          }));
+          bronSentinel = ctx.sentinel;
+          contextGeneutraliseerd = ctx.geneutraliseerd;
+        } finally {
+          reflectieGrendel.stop();
+        }
       }
       // `retrieval_meta` krijgt bewust GEEN reflectiesleutel (besluit 0112,
       // AC-17). Wat er staat is precies wat er gebeurde: er is niet gezocht.
@@ -2393,6 +2409,39 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             id: identiteit.passageIdentiteit.id,
             document_id: identiteit.documentIdentiteit.id,
             rang: null,
+          };
+        }),
+        // Een volgende reflectiebeurt kan dezelfde bron alleen opnieuw binden
+        // wanneer passage, versie én citation nog exact gelijk zijn. Deze
+        // velden zijn providerneutrale opaque identiteiten; raw locators blijven
+        // uitsluitend server-side in de verwijderbare inhoud.
+        bronversie_audit: chunks.map((c) => {
+          const bron = chunkAlsBronresultaat(c);
+          const versieWaarde = bron.versie.waarde;
+          return {
+            document_id: bron.documentIdentiteit.id,
+            bron: bron.documentIdentiteit.bron ?? "",
+            bibliotheek: bron.documentIdentiteit.bibliotheek ?? "fonds",
+            fonds_id: bron.documentIdentiteit.fondsId ?? null,
+            documentstatus: bron.status.documentstatus ?? null,
+            bronstatus: bron.status.bronstatus ?? null,
+            documentdatum: bron.weergave?.documentdatum ?? null,
+            document_identiteit: bron.documentIdentiteit.id,
+            passage_identiteit: bron.passageIdentiteit.id,
+            ...(versieWaarde ? {
+              citation_id: maakCitationId(
+                bron.documentIdentiteit.id,
+                bron.passageIdentiteit.id,
+                bron.versie.soort,
+                versieWaarde
+              ),
+              versie: {
+                soort: bron.versie.soort,
+                waarde: versieWaarde,
+                gecontroleerd_op: bron.versie.gecontroleerdOp,
+                toestand: bron.versie.soort === "status-datum" ? "gedegradeerd" as const : "sterk" as const,
+              },
+            } : {}),
           };
         }),
         toegepaste_fonds_filter: fondsId ?? null,
