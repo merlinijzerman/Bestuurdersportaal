@@ -1,0 +1,53 @@
+{
+  "doel": "PGB Preview-pilot",
+  "fondsId": "VUL-LOKAAL-IN-NA-ISSUE-354",
+  "gebruikerId": "VUL-LOKAAL-IN-NA-ISSUE-354",
+  "rondes": 3,
+  "routes": [
+    "microsoft_search",
+    "drive_search_extract"
+  ],
+  "fixtures": [
+    {
+      "fixtureCode": "PGB-DOCX-01",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "docx",
+      "verwachteMappad": "01 Vergaderstukken/2026-09 Bestuursvergadering"
+    },
+    {
+      "fixtureCode": "PGB-PDF-01",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "pdf",
+      "verwachteMappad": "02 Beleid en reglementen"
+    },
+    {
+      "fixtureCode": "PGB-PPTX-01",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "pptx",
+      "verwachteMappad": "01 Vergaderstukken/2026-10 Bestuursvergadering"
+    }
+  ],
+  "vragen": [
+    {
+      "code": "Q-GERICHT-01",
+      "soort": "gericht",
+      "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
+      "verwachteFixtures": ["PGB-DOCX-01"],
+      "maxKandidaten": 20
+    },
+    {
+      "code": "Q-FONDSBREED-01",
+      "soort": "fondsbreed",
+      "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
+      "verwachteFixtures": ["PGB-DOCX-01", "PGB-PDF-01"],
+      "maxKandidaten": 20
+    },
+    {
+      "code": "Q-PPTX-01",
+      "soort": "powerpoint",
+      "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
+      "verwachteFixtures": ["PGB-PPTX-01"],
+      "maxKandidaten": 20
+    }
+  ]
+}
