@@ -54,6 +54,8 @@ export interface Bronset {
   versie: string | null;
 }
 
+const UUID_EXACT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function schoonIds(ruw: unknown): string[] {
   if (!Array.isArray(ruw)) return [];
   const uniek = new Set<string>();
@@ -63,6 +65,21 @@ function schoonIds(ruw: unknown): string[] {
   // Codepoint-sortering: identiek aan `order by` op text in Postgres met de
   // C-collatie, die de SQL-kant expliciet forceert (collate "C").
   return [...uniek].sort();
+}
+
+/**
+ * Leest uitsluitend lokale document-route-ids uit de verwijderbare broninhoud
+ * van het oorspronkelijke antwoord. De providerprivate chunk-id staat daar
+ * nadrukkelijk niet in. Deze route-ids begrenzen server-side de kandidaten
+ * waartegen een opaque passage-identiteit opnieuw wordt berekend.
+ */
+export function leesLokaleDocumentRefs(bronnen: unknown): string[] {
+  if (!Array.isArray(bronnen)) return [];
+  return schoonIds(bronnen.map((bron) => {
+    if (typeof bron !== "object" || bron === null) return null;
+    const documentId = (bron as Record<string, unknown>).document_id;
+    return typeof documentId === "string" && UUID_EXACT.test(documentId) ? documentId : null;
+  }));
 }
 
 /**

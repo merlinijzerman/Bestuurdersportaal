@@ -359,6 +359,34 @@ test("#367 — historische status-datum mag alleen expliciet gedegradeerd", asyn
   assert.equal((await poort(CTX, dicht, [historisch])).geweigerd[0].grond, "versiesoort_niet_toegestaan");
 });
 
+test("#367 — een adapter kan de semantische versieklasse niet verkeerd declareren", async () => {
+  const statusAlsSterk = bron("status-als-sterk", null, {
+    versie: { soort: "status-datum", waarde: "2026-09-11", gecontroleerdOp: null },
+  });
+  const verkeerdSterk = adapter({
+    caps: {
+      permissionProof: false,
+      versiebeleid: { sterk: ["status-datum"], gedegradeerd: [] },
+    },
+  });
+  const sterkUit = await poort(CTX, verkeerdSterk, [statusAlsSterk]);
+  assert.equal(sterkUit.toegelatenPerSpoor[0].length, 0);
+  assert.equal(sterkUit.geweigerd[0].grond, "versiesoort_niet_toegestaan");
+
+  const hashAlsGedegradeerd = bron("hash-als-gedegradeerd", null, {
+    versie: { soort: "hash", waarde: VERSIE_V1, gecontroleerdOp: null },
+  });
+  const verkeerdGedegradeerd = adapter({
+    caps: {
+      permissionProof: false,
+      versiebeleid: { sterk: [], gedegradeerd: ["hash"] },
+    },
+  });
+  const gedegradeerdUit = await poort(CTX, verkeerdGedegradeerd, [hashAlsGedegradeerd]);
+  assert.equal(gedegradeerdUit.toegelatenPerSpoor[0].length, 0);
+  assert.equal(gedegradeerdUit.geweigerd[0].grond, "versiesoort_niet_toegestaan");
+});
+
 test("#367 — ontbrekend versiebeleid is ook bij capability=false geen bypass", async () => {
   const a = adapter({ caps: { permissionProof: false, versiebewijs: false } });
   const runtimeCaps = a.capabilities();
@@ -634,7 +662,7 @@ test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in `meta_proje
   assert.deepEqual(verschil(bron, new Set(META_BRON as readonly string[])), [], "DB-bron kent een sleutel die TS niet kent");
 });
 
-test("#367 — uitgebrachte migratie/check blijven bytegelijk; forward en rollback zijn replay-consistent", async () => {
+test("#367 — uitgebrachte migratie/check blijven bytegelijk; forward en rollback spiegelen structureel", async () => {
   const { createHash } = await import("node:crypto");
   const { readdirSync, readFileSync } = await import("node:fs");
   const migraties = new URL("../../supabase/migrations/", import.meta.url);
@@ -656,12 +684,33 @@ test("#367 — uitgebrachte migratie/check blijven bytegelijk; forward en rollba
   assert.ok(namen.indexOf(forwardNaam) > bestaand, "fresh replay moet #367 pas na de uitgebrachte wrapper toepassen");
   const forward = readFileSync(new URL(forwardNaam, migraties), "utf8");
   const rollback = readFileSync(new URL("2026_09_11_z367_retrieval_identiteit_auditprojectie_ROLLBACK.sql", rollbacks), "utf8");
+  const oorspronkelijkeWrappers = readFileSync(
+    new URL("2026_08_04_a2_audit_least_privilege.sql", migraties),
+    "utf8"
+  );
+  const definitie = (sql: string, naam: string) => {
+    const match = sql.match(new RegExp(
+      `create or replace function public\\.${naam}\\(p_meta jsonb\\) returns jsonb[\\s\\S]*?\\$\\$;`
+    ));
+    assert.ok(match, `${naam} ontbreekt`);
+    return match![0].replace(/\s+/g, " ").trim();
+  };
   for (const naam of ["meta_basisniveau", "meta_bronniveau"]) {
     assert.match(forward, new RegExp(`create or replace function public\\.${naam}`));
     assert.match(rollback, new RegExp(`create or replace function public\\.${naam}`));
+    assert.equal(
+      definitie(rollback, naam),
+      definitie(oorspronkelijkeWrappers, naam),
+      `rollback moet de voorafgaande wrapper ${naam} exact herstellen`
+    );
   }
   assert.match(forward, /jsonb_build_object\('correlation_id'/);
   assert.doesNotMatch(rollback, /jsonb_build_object\('correlation_id'/, "rollback moet de correlation-uitbreiding volledig verwijderen");
+  assert.doesNotMatch(forward, /\b(drop|alter|truncate|delete|update)\s+(table|function|from)\b/i, "forward is uitsluitend additieve wrappervervanging");
+  assert.doesNotMatch(rollback, /\b(drop|alter|truncate|delete|update)\s+(table|function|from)\b/i, "rollback raakt geen data of schema-objecten");
+  // Dit is bewust een hermetische STRUCTUURcontrole, geen claim dat PostgreSQL
+  // rollback→forward werkelijk is uitgevoerd. Die runtimecheck vereist
+  // TEST_DATABASE_URL en wordt door gates.sh alleen in zo'n omgeving gedraaid.
 });
 
 // ── Providerneutraliteit, statisch afgedwongen ──────────────────────────────

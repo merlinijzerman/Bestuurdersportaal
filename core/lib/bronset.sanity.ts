@@ -24,6 +24,7 @@ import {
   bepaalBronset,
   canoniekeBronset,
   leesBronsetChunks,
+  leesLokaleDocumentRefs,
   leesScopeDocumentIds,
 } from "./bronset";
 
@@ -92,6 +93,17 @@ test("dubbele chunks tellen één keer", () => {
   });
   assert.equal(metDubbel.versie, basis.versie);
   assert.deepEqual(metDubbel.chunkIds, basis.chunkIds);
+});
+
+test("alleen lokale document-route-ids begrenzen de server-side reflectieresolutie", () => {
+  const lokaal = "11111111-1111-4111-8111-111111111111";
+  assert.deepEqual(leesLokaleDocumentRefs([
+    { document_id: lokaal },
+    { document_id: `doc_v1_${"a".repeat(64)}` },
+    { document_id: lokaal },
+    { document_id: "graph-drive-item-id" },
+    null,
+  ]), [lokaal]);
 });
 
 test("een andere, extra of ontbrekende bron kantelt de hash wél", () => {

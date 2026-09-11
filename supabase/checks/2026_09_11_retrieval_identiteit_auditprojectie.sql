@@ -1,5 +1,6 @@
--- #367 — additieve correlation-projectie, inclusief fresh-replay/rollbackvorm.
--- Read-only gedragstoets; draait als de werkelijke auditreader.
+-- #367 — additieve correlation-projectie na alle forward-migraties.
+-- Read-only gedragstoets; draait als de werkelijke auditreader. Dit is bewust
+-- GEEN rollback→forward-replay: daarvoor is een aparte wegwerp-DB-run nodig.
 -- ROL: authenticated — dit is de rol die execute op beide auditprojecties
 -- krijgt; zo toetst de check naast de JSON-vorm ook het werkelijke leesbereik.
 \set ON_ERROR_STOP on
@@ -37,6 +38,11 @@ begin
   if v_basis ? 'zoekvraag' or v_bron ? 'zoekvraag'
      or v_basis ? 'sources' or v_bron ? 'sources' then
     raise exception '#367: inhoud lekt naar operationeel auditniveau';
+  end if;
+  if public.meta_basisniveau('{}'::jsonb) ? 'correlation_id'
+     or public.meta_basisniveau('{"correlation_id":""}'::jsonb) ? 'correlation_id'
+     or public.meta_basisniveau('{"correlation_id":42}'::jsonb) ? 'correlation_id' then
+    raise exception '#367: ontbrekende, lege of niet-string correlation_id wordt geprojecteerd';
   end if;
 end;
 $$;

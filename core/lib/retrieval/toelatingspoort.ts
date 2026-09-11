@@ -195,12 +195,20 @@ function beoordeel(bron: Bronresultaat, o: Oordeelcontext): Weigergrond | null {
   }
   const beleid = o.caps.versiebeleid;
   if (!beleid) return "versiebeleid_ontbreekt";
-  if (!beleid.sterk.includes(bron.versie.soort) && !beleid.gedegradeerd.includes(bron.versie.soort)) {
+  // De twee beleidslijsten zijn geen vrije labels. Een adapter mag een zwakke
+  // status-datum niet onder `sterk` schuiven (of een sterke hash als
+  // `gedegradeerd` declareren) om de bedoelde semantiek te omzeilen.
+  const sterkeSoort = /^(etag|ctag|hash)$/.test(bron.versie.soort);
+  const gedegradeerdeSoort = bron.versie.soort === "status-datum";
+  const semantischToegestaan =
+    (sterkeSoort && beleid.sterk.includes(bron.versie.soort)) ||
+    (gedegradeerdeSoort && beleid.gedegradeerd.includes(bron.versie.soort));
+  if (!semantischToegestaan) {
     return "versiesoort_niet_toegestaan";
   }
-  const sterkeVorm = /^(etag|ctag|hash)$/.test(bron.versie.soort)
+  const sterkeVorm = sterkeSoort
     && /^version_v1_[a-f0-9]{64}$/.test(w);
-  const gedegradeerdeVorm = bron.versie.soort === "status-datum"
+  const gedegradeerdeVorm = gedegradeerdeSoort
     && geldigeKalenderdatum(w);
   if (!sterkeVorm && !gedegradeerdeVorm) return "versiebewijs_ontbreekt";
   if (o.versieHookFout) return "versie_hook_fout";

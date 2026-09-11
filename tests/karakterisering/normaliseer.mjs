@@ -7,6 +7,8 @@
 //
 //    UUID's      → stabiele mapping per snapshot: <uuid:1>, <uuid:2>, … in
 //                  volgorde van eerste voorkomen in de canonieke traversal.
+//    Opaque ID's → stabiele, relationele mapping per soort en unieke waarde:
+//                  <passage-identiteit:1>, <passage-identiteit:2>, …
 //    Timestamps  → <ts> (ISO-8601).
 //    Array-orde  → arrays worden gesorteerd op hun genormaliseerde inhoud
 //                  (UUID's gemaskeerd), zodat een DB-volgorde zonder ORDER BY
@@ -59,12 +61,7 @@ function isObject(v) {
 // 1. Vervang timestamps in alle strings.
 function vervangTimestamps(node) {
   if (typeof node === "string") {
-    return node
-      .replace(TS_RE, "<ts>")
-      // BESLUIT (#367): de digest zelf is geen contractwaarde. Het prefix en
-      // de volledige 64-hexvorm zijn dat wel. Zo legt de golden de nieuwe
-      // providerneutrale identiteit expliciet vast zonder seed-private input.
-      .replace(OPAQUE_IDENTITEIT_RE, (_waarde, soort) => `<${soort}-identiteit>`);
+    return node.replace(TS_RE, "<ts>");
   }
   if (Array.isArray(node)) return node.map(vervangTimestamps);
   if (isObject(node)) {
@@ -86,6 +83,38 @@ function maskeerUuids(node) {
   if (isObject(node)) {
     const out = {};
     for (const k of Object.keys(node).sort()) out[k] = maskeerUuids(node[k]);
+    return out;
+  }
+  return node;
+}
+
+// BESLUIT (#367): opaque identiteiten zijn weliswaar seed-afhankelijk, maar hun
+// RELATIES zijn contract. Eén generieke placeholder maskeerde zowel duplicatie
+// als een verwisselde passage-/versiebinding. Verzamel daarom eerst alle unieke
+// waarden na de bestaande canonieke arraysortering in eerste-voorkomensvolgorde
+// een eigen pseudoniem. Daarmee geldt: dezelfde input → hetzelfde pseudoniem
+// en verschillende input → verschillende pseudoniemen, zonder dat de private
+// digest snapshotdata wordt. Ook objectSLEUTELS tellen mee; anders kon een
+// sleutelgeadresseerde herkomstkaart de opaque waarde alsnog lekken.
+function mapOpaqueIdentiteiten(node, perSoort) {
+  const vervang = (waarde) => waarde.replace(
+    OPAQUE_IDENTITEIT_RE,
+    (match, soort) => {
+      if (!perSoort.has(soort)) perSoort.set(soort, new Map());
+      const mapping = perSoort.get(soort);
+      if (!mapping.has(match)) {
+        mapping.set(match, `<${soort}-identiteit:${mapping.size + 1}>`);
+      }
+      return mapping.get(match);
+    }
+  );
+  if (typeof node === "string") return vervang(node);
+  if (Array.isArray(node)) return node.map((el) => mapOpaqueIdentiteiten(el, perSoort));
+  if (isObject(node)) {
+    const out = {};
+    for (const sleutel of Object.keys(node).sort()) {
+      out[vervang(sleutel)] = mapOpaqueIdentiteiten(node[sleutel], perSoort);
+    }
     return out;
   }
   return node;
@@ -174,8 +203,9 @@ function vervangCorrelationId(node) {
 export function normaliseerJson(body) {
   const stap1 = vervangTimestamps(vervangCorrelationId(vervangPeildatum(body)));
   const stap2 = sorteerArrays(stap1);
-  const stap3 = mapUuids(stap2, new Map());
-  return stap3;
+  const stap3 = mapOpaqueIdentiteiten(stap2, new Map());
+  const stap4 = mapUuids(stap3, new Map());
+  return stap4;
 }
 
 /** Filter + normaliseer headers tot de vergeleken deelverzameling.

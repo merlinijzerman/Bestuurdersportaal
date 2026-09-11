@@ -39,7 +39,7 @@
             "bron": "Intern",
             "bronorganisatie": null,
             "bronstatus": null,
-            "citation_id": "<citation-identiteit>",
+            "citation_id": "<citation-identiteit:1>",
             "document_id": "<uuid:1>",
             "documentdatum": null,
             "documentstatus": "concept",
@@ -152,26 +152,26 @@
           "bibliotheek": "fonds",
           "bron": "Intern",
           "bronstatus": null,
-          "citation_id": "<citation-identiteit>",
-          "document_id": "<doc-identiteit>",
-          "document_identiteit": "<doc-identiteit>",
+          "citation_id": "<citation-identiteit:1>",
+          "document_id": "<doc-identiteit:1>",
+          "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
           "fonds_id": "<uuid:2>",
-          "passage_identiteit": "<passage-identiteit>",
+          "passage_identiteit": "<passage-identiteit:1>",
           "versie": {
             "gecontroleerd_op": "<ts>",
             "soort": "hash",
             "toestand": "sterk",
-            "waarde": "<version-identiteit>"
+            "waarde": "<version-identiteit:1>"
           }
         }
       ],
       "chunks": [
         {
-          "document_id": "<doc-identiteit>",
+          "document_id": "<doc-identiteit:1>",
           "fts_rang": null,
-          "id": "<passage-identiteit>",
+          "id": "<passage-identiteit:1>",
           "rang": 0.3,
           "vec_rang": null
         }
@@ -222,10 +222,10 @@
     },
     "volgorde": {
       "bronversie_audit": [
-        "00 doc=<doc-identiteit> docid=<doc-identiteit> passage=<passage-identiteit> citation=<citation-identiteit> versie=hash:<version-identiteit> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
+        "00 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:1> citation=<citation-identiteit:1> versie=hash:<version-identiteit:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
       ],
       "chunks": [
-        "00 chunk=<passage-identiteit> doc=<doc-identiteit> rang=0.3 fts=geen vec=geen"
+        "00 chunk=<passage-identiteit:1> doc=<doc-identiteit:1> rang=0.3 fts=geen vec=geen"
       ],
       "poging_herkomst": null,
       "retrieval_pogingen": []

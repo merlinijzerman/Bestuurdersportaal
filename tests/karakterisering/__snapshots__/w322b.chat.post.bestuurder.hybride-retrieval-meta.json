@@ -39,7 +39,7 @@
             "bron": "Intern",
             "bronorganisatie": null,
             "bronstatus": null,
-            "citation_id": "<citation-identiteit>",
+            "citation_id": "<citation-identiteit:1>",
             "document_id": "<uuid:1>",
             "documentdatum": null,
             "documentstatus": "concept",
@@ -59,7 +59,7 @@
             "bron": "Intern",
             "bronorganisatie": null,
             "bronstatus": null,
-            "citation_id": "<citation-identiteit>",
+            "citation_id": "<citation-identiteit:2>",
             "document_id": "<uuid:1>",
             "documentdatum": null,
             "documentstatus": "concept",
@@ -79,7 +79,7 @@
             "bron": "Intern",
             "bronorganisatie": null,
             "bronstatus": null,
-            "citation_id": "<citation-identiteit>",
+            "citation_id": "<citation-identiteit:3>",
             "document_id": "<uuid:1>",
             "documentdatum": null,
             "documentstatus": "concept",
@@ -99,7 +99,7 @@
             "bron": "Intern",
             "bronorganisatie": null,
             "bronstatus": null,
-            "citation_id": "<citation-identiteit>",
+            "citation_id": "<citation-identiteit:4>",
             "document_id": "<uuid:1>",
             "documentdatum": null,
             "documentstatus": "concept",
@@ -119,7 +119,7 @@
             "bron": "Intern",
             "bronorganisatie": null,
             "bronstatus": null,
-            "citation_id": "<citation-identiteit>",
+            "citation_id": "<citation-identiteit:5>",
             "document_id": "<uuid:1>",
             "documentdatum": null,
             "documentstatus": "concept",
@@ -309,126 +309,126 @@
           "bibliotheek": "fonds",
           "bron": "Intern",
           "bronstatus": null,
-          "citation_id": "<citation-identiteit>",
-          "document_id": "<doc-identiteit>",
-          "document_identiteit": "<doc-identiteit>",
+          "citation_id": "<citation-identiteit:1>",
+          "document_id": "<doc-identiteit:1>",
+          "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
           "fonds_id": "<uuid:2>",
-          "passage_identiteit": "<passage-identiteit>",
+          "passage_identiteit": "<passage-identiteit:1>",
           "versie": {
             "gecontroleerd_op": "<ts>",
             "soort": "hash",
             "toestand": "sterk",
-            "waarde": "<version-identiteit>"
+            "waarde": "<version-identiteit:1>"
           }
         },
         {
           "bibliotheek": "fonds",
           "bron": "Intern",
           "bronstatus": null,
-          "citation_id": "<citation-identiteit>",
-          "document_id": "<doc-identiteit>",
-          "document_identiteit": "<doc-identiteit>",
+          "citation_id": "<citation-identiteit:2>",
+          "document_id": "<doc-identiteit:1>",
+          "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
           "fonds_id": "<uuid:2>",
-          "passage_identiteit": "<passage-identiteit>",
+          "passage_identiteit": "<passage-identiteit:2>",
           "versie": {
             "gecontroleerd_op": "<ts>",
             "soort": "hash",
             "toestand": "sterk",
-            "waarde": "<version-identiteit>"
+            "waarde": "<version-identiteit:2>"
           }
         },
         {
           "bibliotheek": "fonds",
           "bron": "Intern",
           "bronstatus": null,
-          "citation_id": "<citation-identiteit>",
-          "document_id": "<doc-identiteit>",
-          "document_identiteit": "<doc-identiteit>",
+          "citation_id": "<citation-identiteit:3>",
+          "document_id": "<doc-identiteit:1>",
+          "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
           "fonds_id": "<uuid:2>",
-          "passage_identiteit": "<passage-identiteit>",
+          "passage_identiteit": "<passage-identiteit:3>",
           "versie": {
             "gecontroleerd_op": "<ts>",
             "soort": "hash",
             "toestand": "sterk",
-            "waarde": "<version-identiteit>"
+            "waarde": "<version-identiteit:2>"
           }
         },
         {
           "bibliotheek": "fonds",
           "bron": "Intern",
           "bronstatus": null,
-          "citation_id": "<citation-identiteit>",
-          "document_id": "<doc-identiteit>",
-          "document_identiteit": "<doc-identiteit>",
+          "citation_id": "<citation-identiteit:4>",
+          "document_id": "<doc-identiteit:1>",
+          "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
           "fonds_id": "<uuid:2>",
-          "passage_identiteit": "<passage-identiteit>",
+          "passage_identiteit": "<passage-identiteit:4>",
           "versie": {
             "gecontroleerd_op": "<ts>",
             "soort": "hash",
             "toestand": "sterk",
-            "waarde": "<version-identiteit>"
+            "waarde": "<version-identiteit:2>"
           }
         },
         {
           "bibliotheek": "fonds",
           "bron": "Intern",
           "bronstatus": null,
-          "citation_id": "<citation-identiteit>",
-          "document_id": "<doc-identiteit>",
-          "document_identiteit": "<doc-identiteit>",
+          "citation_id": "<citation-identiteit:5>",
+          "document_id": "<doc-identiteit:1>",
+          "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
           "fonds_id": "<uuid:2>",
-          "passage_identiteit": "<passage-identiteit>",
+          "passage_identiteit": "<passage-identiteit:5>",
           "versie": {
             "gecontroleerd_op": "<ts>",
             "soort": "hash",
             "toestand": "sterk",
-            "waarde": "<version-identiteit>"
+            "waarde": "<version-identiteit:2>"
           }
         }
       ],
       "chunks": [
         {
-          "document_id": "<doc-identiteit>",
+          "document_id": "<doc-identiteit:1>",
           "fts_rang": 1,
-          "id": "<passage-identiteit>",
+          "id": "<passage-identiteit:1>",
           "rang": 0.0327869,
           "vec_rang": 1
         },
         {
-          "document_id": "<doc-identiteit>",
+          "document_id": "<doc-identiteit:1>",
           "fts_rang": null,
-          "id": "<passage-identiteit>",
+          "id": "<passage-identiteit:5>",
           "rang": 0.0153846,
           "vec_rang": 5
         },
         {
-          "document_id": "<doc-identiteit>",
+          "document_id": "<doc-identiteit:1>",
           "fts_rang": null,
-          "id": "<passage-identiteit>",
+          "id": "<passage-identiteit:4>",
           "rang": 0.015625,
           "vec_rang": 4
         },
         {
-          "document_id": "<doc-identiteit>",
+          "document_id": "<doc-identiteit:1>",
           "fts_rang": null,
-          "id": "<passage-identiteit>",
+          "id": "<passage-identiteit:3>",
           "rang": 0.015873,
           "vec_rang": 3
         },
         {
-          "document_id": "<doc-identiteit>",
+          "document_id": "<doc-identiteit:1>",
           "fts_rang": null,
-          "id": "<passage-identiteit>",
+          "id": "<passage-identiteit:2>",
           "rang": 0.016129,
           "vec_rang": 2
         }
@@ -480,18 +480,18 @@
     },
     "volgorde": {
       "bronversie_audit": [
-        "00 doc=<doc-identiteit> docid=<doc-identiteit> passage=<passage-identiteit> citation=<citation-identiteit> versie=hash:<version-identiteit> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "01 doc=<doc-identiteit> docid=<doc-identiteit> passage=<passage-identiteit> citation=<citation-identiteit> versie=hash:<version-identiteit> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "02 doc=<doc-identiteit> docid=<doc-identiteit> passage=<passage-identiteit> citation=<citation-identiteit> versie=hash:<version-identiteit> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "03 doc=<doc-identiteit> docid=<doc-identiteit> passage=<passage-identiteit> citation=<citation-identiteit> versie=hash:<version-identiteit> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "04 doc=<doc-identiteit> docid=<doc-identiteit> passage=<passage-identiteit> citation=<citation-identiteit> versie=hash:<version-identiteit> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
+        "00 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:1> citation=<citation-identiteit:1> versie=hash:<version-identiteit:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "01 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:2> citation=<citation-identiteit:2> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "02 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:3> citation=<citation-identiteit:3> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "03 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:4> citation=<citation-identiteit:4> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "04 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:5> citation=<citation-identiteit:5> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
       ],
       "chunks": [
-        "00 chunk=<passage-identiteit> doc=<doc-identiteit> rang=0.0327869 fts=1 vec=1",
-        "01 chunk=<passage-identiteit> doc=<doc-identiteit> rang=0.016129 fts=geen vec=2",
-        "02 chunk=<passage-identiteit> doc=<doc-identiteit> rang=0.015873 fts=geen vec=3",
-        "03 chunk=<passage-identiteit> doc=<doc-identiteit> rang=0.015625 fts=geen vec=4",
-        "04 chunk=<passage-identiteit> doc=<doc-identiteit> rang=0.0153846 fts=geen vec=5"
+        "00 chunk=<passage-identiteit:1> doc=<doc-identiteit:1> rang=0.0327869 fts=1 vec=1",
+        "01 chunk=<passage-identiteit:2> doc=<doc-identiteit:1> rang=0.016129 fts=geen vec=2",
+        "02 chunk=<passage-identiteit:3> doc=<doc-identiteit:1> rang=0.015873 fts=geen vec=3",
+        "03 chunk=<passage-identiteit:4> doc=<doc-identiteit:1> rang=0.015625 fts=geen vec=4",
+        "04 chunk=<passage-identiteit:5> doc=<doc-identiteit:1> rang=0.0153846 fts=geen vec=5"
       ],
       "poging_herkomst": null,
       "retrieval_pogingen": []

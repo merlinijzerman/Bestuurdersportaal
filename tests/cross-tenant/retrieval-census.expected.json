@@ -17,6 +17,7 @@
           "RetrievalFilters",
           "RetrievalMeta",
           "VOLLEDIGE_DOCUMENT_CHUNK_CAP",
+          "chunkAlsBronresultaat",
           "haalBevrorenChunks",
           "haalDocumentChunksMetDekking",
           "maakBronSentinel",
@@ -29,7 +30,8 @@
           "verrijkNotulenChunks"
         ],
         "bronset": [
-          "bepaalBronset"
+          "bepaalBronset",
+          "leesLokaleDocumentRefs"
         ],
         "query-reformulatie": [
           "heeftReformulatieNodig",

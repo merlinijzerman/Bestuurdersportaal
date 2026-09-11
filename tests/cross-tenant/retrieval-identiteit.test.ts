@@ -8,10 +8,16 @@ import {
 } from "../../core/lib/retrieval/identiteit";
 import { bouwCitaties } from "../../core/lib/retrieval/citatie";
 import { splitsRetrievalMeta } from "../../core/lib/audit-meta";
+import { bepaalBronset, leesLokaleDocumentRefs } from "../../core/lib/bronset";
 import { bewijsUitVersierij } from "../../core/lib/retrieval/supabase-versie";
 import { voerRetrievalUit, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
 import { maakSupabaseAdapter, type Adaptervlaggen } from "../../core/lib/retrieval/supabase-adapter";
-import type { DocumentChunk, RetrievalMeta } from "../../core/lib/rag";
+import {
+  maakContext,
+  selecteerBevrorenChunksOpRefs,
+  type DocumentChunk,
+  type RetrievalMeta,
+} from "../../core/lib/rag";
 import type { Bronresultaat, RetrievalAdapter, RetrievalContext } from "../../core/lib/retrieval/contract";
 
 const DOC_REF = "11111111-1111-4111-8111-111111111111";
@@ -268,6 +274,27 @@ test("#367 — echte Supabase-adapter herleest via private chunk-id en levert ee
     assert.equal(uit.meta.chunks[0].document_id, uit.geselecteerd[0].documentIdentiteit.id);
     assert.doesNotMatch(JSON.stringify(uit.meta), new RegExp(`${chunk.id}|${chunk.document_id}`));
     assert.equal(retrieval.lokaleDocumentRefVoor(uit.geselecteerd[0].documentIdentiteit.id), chunk.document_id);
+
+    // Rereview: dezelfde nieuw gevormde #367-meta moet in een latere
+    // reflectiebeurt via de lokale documentroute terug naar exact de bevroren
+    // passage kunnen worden gebonden. Dit is bewust één keten vanaf de echte
+    // adapteruitkomst; een losse helpertest had de productiebreuk gemist.
+    const bevroren = bepaalBronset(uit.meta);
+    const lokaleDocumentRef =
+      retrieval.lokaleDocumentRefVoor(uit.geselecteerd[0].documentIdentiteit.id);
+    const opgeslagenBronnen = [{ document_id: lokaleDocumentRef }];
+    const lokaleRefs = leesLokaleDocumentRefs(opgeslagenBronnen);
+    const reflectieChunks = selecteerBevrorenChunksOpRefs([chunk], bevroren.chunkIds);
+    const reflectieContext = maakContext(reflectieChunks, 0, "reflectie-sentinel");
+    assert.deepEqual(lokaleRefs, [chunk.document_id]);
+    assert.equal(reflectieChunks.length, 1, "opaque passage-id moet de private chunk opnieuw vinden");
+    assert.equal(reflectieContext.bronnen.length, 1, "reflectie op een #367-antwoord mag niet bronloos worden");
+    assert.match(reflectieContext.contextTekst, /governance/);
+    assert.deepEqual(
+      selecteerBevrorenChunksOpRefs([chunk], [`passage_v1_${"f".repeat(64)}`]),
+      [],
+      "een verwisselde opaque passage-id mag niet op de private kandidaat binden"
+    );
   } finally {
     uit.grendel?.stop();
   }
@@ -310,5 +337,9 @@ test("#367 — lokale download-id blijft server-only en voedt het bestaande UI-p
   const ui = readFileSync(new URL("../../app/(dashboard)/ai/_components/AntwoordWeergave.tsx", import.meta.url), "utf8");
   assert.match(route, /lokaleDocumentRefVoor\(bron\.document_id\)/);
   assert.doesNotMatch(route, /document_id:\s*lokaleDocumentRefVoor[^\n]*retrievalMeta/);
+  assert.match(route, /leesLokaleDocumentRefs/);
+  assert.match(route, /haalBevrorenChunks\([\s\S]*reflectieBronsetDocumentRefs/);
+  assert.match(route, /id:\s*identiteit\.passageIdentiteit\.id/);
+  assert.match(route, /document_id:\s*identiteit\.documentIdentiteit\.id/);
   assert.match(ui, /`\/api\/documents\/\$\{bron\.document_id\}\/bestand`/);
 });

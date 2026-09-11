@@ -2093,8 +2093,12 @@ export async function haalDocumentChunks(
 // vervolgens als bron worden getóónd — schijnzekerheid bovenop een twijfel.
 //
 // In plaats daarvan worden precies de chunks opgehaald die bij het oorspronkelijke
-// antwoord zijn gebruikt, op ID. Deterministisch: geen ranking, geen selectie,
-// geen drempel. Dat is strenger dan het filter dat het technisch ontwerp §6.3
+// antwoord zijn gebruikt. Nieuwe antwoorden dragen uitsluitend een opaque
+// passage-identiteit; de server leest daarom kandidaten via de lokale document-
+// route-ids uit de verwijderbare antwoordinhoud en bindt ze daarna exact aan de
+// opnieuw berekende passage-identiteit. Legacy-antwoorden met een rauwe chunk-id
+// blijven leesbaar. Deterministisch: geen ranking, geen selectie, geen drempel.
+// Dat is strenger dan het filter dat het technisch ontwerp §6.3
 // voorstelt (`p_document_ids` op de retrieval-RPC's): een filter kan worden
 // omzeild door een pad dat de RPC niet gebruikt, deze aanpak niet — want er
 // draait geen enkel retrievalpad.
@@ -2104,31 +2108,82 @@ export async function haalDocumentChunks(
 // document intussen ingetrokken, van fonds gewisseld of over zijn verplichte
 // review heen, dan valt het hier alsnog af — de bevriezing bevriest de SELECTIE,
 // niet de toegang.
+const LOKALE_UUID_EXACT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PASSAGE_IDENTITEIT_EXACT = /^passage_v1_[a-f0-9]{64}$/;
+
+/** Pure laatste binding: een kandidaat telt alleen wanneer zijn raw legacy-id
+ * of zijn opnieuw berekende providerneutrale passage-id exact was bevroren. */
+export function selecteerBevrorenChunksOpRefs(
+  kandidaten: DocumentChunk[],
+  passageRefs: readonly string[]
+): DocumentChunk[] {
+  const refs = new Set(passageRefs);
+  return kandidaten.filter((chunk) =>
+    refs.has(chunk.id) || refs.has(chunkAlsBronresultaat(chunk).passageIdentiteit.id)
+  );
+}
+
+const REFLECTIE_KANDIDATEN_PAGINA = 1000;
+const REFLECTIE_SELECT = `id, document_id, tekst, pagina, paragraaf, chunk_index, indexering_versie,
+  documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status,
+    bronstatus, documentdatum, geldig_tot, volgende_review, bestand_hash)`;
+
 export async function haalBevrorenChunks(
-  chunkIds: string[],
+  passageRefs: string[],
+  lokaleDocumentRefs: string[],
   fondsId: string | null = null
 ): Promise<DocumentChunk[]> {
-  if (chunkIds.length === 0) return [];
+  if (passageRefs.length === 0) return [];
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("document_chunks")
-    .select(
-      `id, document_id, tekst, pagina, paragraaf, chunk_index,
-       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review)`
-    )
-    .in("id", chunkIds)
-    .eq("documenten.actief", true)
-    .order("document_id", { ascending: true })
-    .order("chunk_index", { ascending: true })
-    .limit(200); // een bronset is de top-N van één antwoord, nooit een heel dossier
+  const legacyIds = [...new Set(passageRefs.filter((ref) => LOKALE_UUID_EXACT.test(ref)))];
+  const opaqueRefs = passageRefs.filter((ref) => PASSAGE_IDENTITEIT_EXACT.test(ref));
+  const documentRefs = [...new Set(lokaleDocumentRefs.filter((ref) => LOKALE_UUID_EXACT.test(ref)))];
+  const kandidaten: DocumentChunk[] = [];
 
-  if (error || !data) {
-    console.error("haalBevrorenChunks fout:", error);
-    return [];
+  if (legacyIds.length > 0) {
+    const { data, error } = await supabase
+      .from("document_chunks")
+      .select(REFLECTIE_SELECT)
+      .in("id", legacyIds)
+      .eq("documenten.actief", true)
+      .order("document_id", { ascending: true })
+      .order("chunk_index", { ascending: true });
+    if (error || !data) {
+      console.error("haalBevrorenChunks legacy-fout:", error);
+      return [];
+    }
+    kandidaten.push(...(data as unknown as DocumentChunk[]));
   }
-  const chunks = data as unknown as DocumentChunk[];
+
+  // Geen lokale documentroute bij een opaque bronset: fail-closed. Zonder die
+  // server-side begrenzing zouden we de hele corpus-tabel moeten scannen.
+  if (opaqueRefs.length > 0 && documentRefs.length === 0) return [];
+
+  if (opaqueRefs.length > 0) {
+    let van = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("document_chunks")
+        .select(REFLECTIE_SELECT)
+        .in("document_id", documentRefs)
+        .eq("documenten.actief", true)
+        .order("document_id", { ascending: true })
+        .order("chunk_index", { ascending: true })
+        .range(van, van + REFLECTIE_KANDIDATEN_PAGINA - 1);
+      if (error || !data) {
+        console.error("haalBevrorenChunks opaque-resolutiefout:", error);
+        return [];
+      }
+      kandidaten.push(...(data as unknown as DocumentChunk[]));
+      if (data.length < REFLECTIE_KANDIDATEN_PAGINA) break;
+      van += REFLECTIE_KANDIDATEN_PAGINA;
+    }
+  }
+
+  const uniek = [...new Map(kandidaten.map((chunk) => [chunk.id, chunk])).values()];
   const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
-  return handhaafFondsdiscipline(chunks, fondsFilter).chunks;
+  const toegestaan = handhaafFondsdiscipline(uniek, fondsFilter).chunks;
+  return selecteerBevrorenChunksOpRefs(toegestaan, passageRefs);
 }
 
 // Increment D — verrijk opgehaalde chunks met de vergadering/agendapunt van hun
