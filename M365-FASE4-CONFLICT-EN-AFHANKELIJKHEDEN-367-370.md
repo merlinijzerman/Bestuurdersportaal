@@ -1,9 +1,9 @@
 # Conflict- en afhankelijkhedenkaart — M365 fase 4 #367–#370
 
 **Peildatum:** 11 september 2026
-**Startregel:** ieder ticket werkt in een eigen worktree en branch, na de documentatie-PR opnieuw
-gebaseerd op de dan actuele `origin/preview`. Elk ticket begint met planreview; productiecode wordt
-pas daarna gewijzigd.
+**Startregel:** ieder ticket werkt in een eigen worktree en branch. Direct na het openen van de
+documentatie-PR zijn de vier schone branches fast-forward op de toen actuele `origin/preview`
+`4a61b7851747` gezet. Elk ticket begint met planreview; productiecode wordt pas daarna gewijzigd.
 
 ## Afhankelijkheden
 
@@ -26,8 +26,8 @@ pas daarna gewijzigd.
 
 ## Uitvoering en mergevolgorde
 
-1. Na merge van de documentatie-PR: `git fetch origin --prune` en per schone ticketworktree de
-   branch op de nieuwe `origin/preview` baseren.
+1. Na het openen van de documentatie-PR zijn `origin` en de vier schone ticketworktrees ververst;
+   startbasis voor alle vier is `origin/preview` op `4a61b7851747`.
 2. Parallelle planreviews en inventarisaties voor alle vier; #368 stopt na karakterisering zolang
    #367/#369 niet stabiel zijn.
 3. Voorkeursvolgorde voor integratie: **#367 → #369 → #370 → #368**.
@@ -38,12 +38,13 @@ pas daarna gewijzigd.
 
 ## Bestaande geïsoleerde werkplekken
 
-| Ticket | Worktree | Branch | Huidige toestand vóór docs-PR |
+| Ticket | Worktree | Branch | Starttoestand na openen docs-PR |
 |---|---|---|---|
-| #367 | `mvp-367-versie-identiteit` | `feat/367-versie-identiteit` | schoon, maar nog op oudere Preview-basis `1b70bf2` |
-| #368 | `mvp-368-evidencelezingen` | `feat/368-evidencelezingen` | schoon, maar nog op oudere Preview-basis `1b70bf2` |
-| #369 | `mvp-369-zoeken-vergelijken` | `feat/369-t2-2-zoeken-vergelijken` | schoon, maar nog op oudere Preview-basis `1b70bf2` |
-| #370 | `mvp-370-microsoft-stub` | `feat/370-microsoft-adapterstub` | schoon, maar nog op oudere Preview-basis `1b70bf2` |
+| #367 | `mvp-367-versie-identiteit` | `feat/367-versie-identiteit` | schoon op `4a61b7851747` |
+| #368 | `mvp-368-evidencelezingen` | `feat/368-evidencelezingen` | schoon op `4a61b7851747`; eerst inventarisatie/karakterisering |
+| #369 | `mvp-369-zoeken-vergelijken` | `feat/369-t2-2-zoeken-vergelijken` | schoon op `4a61b7851747` |
+| #370 | `mvp-370-microsoft-stub` | `feat/370-microsoft-adapterstub` | schoon op `4a61b7851747`; hermetisch, geen live wiring |
 
-Deze branches worden niet vooruitgezet en er start geen implementatie voordat de
-documentatie-PR is gemerged en `origin/preview` opnieuw is vastgesteld.
+De documentatie-PR blijft ongemergd tot opdrachtgeverakkoord. Ticketwerk gebruikt daarom de
+vastgelegde Preview-basis en neemt het docs-sluitstuk niet mee; vóór iedere ticketmerge worden
+`origin/preview`, afhankelijkheden en overlap opnieuw gecontroleerd.
