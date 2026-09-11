@@ -271,6 +271,15 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/vergelijk-types.ts": {
+      "modules": {
+        "rag": [
+          "BronVerwijzing"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
     "platform/lib/aqlab/generate-adapter.ts": {
       "modules": {
         "rag": [

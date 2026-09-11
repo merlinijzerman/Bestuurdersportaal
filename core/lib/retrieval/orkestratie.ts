@@ -101,9 +101,17 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
  * daarvan zijn. Een foutieve of kwaadwillige adapteruitkomst wordt hier nog
  * eenmaal providerneutraal tegen fonds, document en proces getoetst.
  */
-function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): boolean {
+export function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): boolean {
   const identiteit = bron.documentIdentiteit;
-  if (identiteit.fondsId != null && identiteit.fondsId !== ctx.fondsId) return false;
+  // Fondsgebonden bronnen zonder fonds-id zijn géén neutrale bron: zonder deze
+  // expliciete tak werd `null` als "niet te controleren" behandeld en dus
+  // doorgelaten. Alleen een bron die zowel contractueel als in de
+  // documentidentiteit echt generiek is, mag fondsloos zijn.
+  if (identiteit.fondsId == null) {
+    if (bron.bronsoort !== "generiek" || identiteit.bibliotheek !== "generiek") return false;
+  } else if (identiteit.fondsId !== ctx.fondsId) {
+    return false;
+  }
   if (ctx.scope?.documentIds?.length && !ctx.scope.documentIds.includes(identiteit.id)) return false;
   if (ctx.scope?.procesId && identiteit.procesId !== ctx.scope.procesId) return false;
   return true;

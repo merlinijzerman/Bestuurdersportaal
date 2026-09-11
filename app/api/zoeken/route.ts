@@ -33,6 +33,7 @@ import {
   bevatClientScopeSturing,
   geldigeUuid,
   groepeerZoekresultaten,
+  maakZoekRespons,
   maakZoekSpoor,
 } from "@/core/lib/retrieval/productiepaden-core";
 
@@ -102,7 +103,7 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
     // voorheen, maar stopt nu vóór de adapter (dus vóór embedding/rerank/RPC).
     if (procesinstantie) {
       if (!geldigeUuid(procesinstantie)) {
-        return NextResponse.json({ resultaten: [], procesinstanties: [], bronnen: [], meta: null });
+        return NextResponse.json({ resultaten: [], procesinstanties: [], meta: null });
       }
       const { data: proces } = await supabase
         .from("procedures")
@@ -111,7 +112,7 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
         .eq("fonds_id", fondsId)
         .maybeSingle();
       if (!proces) {
-        return NextResponse.json({ resultaten: [], procesinstanties: [], bronnen: [], meta: null });
+        return NextResponse.json({ resultaten: [], procesinstanties: [], meta: null });
       }
     }
 
@@ -164,21 +165,15 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
       procesinstanties = (procs ?? []).map((p) => ({ id: p.id as string, titel: p.titel as string }));
     }
 
-    return NextResponse.json({
+    return NextResponse.json(maakZoekRespons({
       resultaten,
       procesinstanties,
-      // Providerneutrale bronvorm met centrale citatievolgorde. De bestaande
-      // `resultaten` blijven voor de huidige UI beschikbaar.
-      bronnen: voltooid.bronverwijzingen,
-      meta: {
-        methode: voltooid.meta.methode,
-        opgehaald: voltooid.meta.opgehaald,
-        geselecteerd: voltooid.meta.geselecteerd,
-        modus,
-        // Alleen tellingen/categorieën, nooit refs of passages.
-        ...(voltooid.meta.toelating ? { toelating: voltooid.meta.toelating } : {}),
-      },
-    });
+      methode: voltooid.meta.methode,
+      opgehaald: voltooid.meta.opgehaald,
+      geselecteerd: voltooid.meta.geselecteerd,
+      modus,
+      toelating: voltooid.meta.toelating,
+    }));
   } catch (e) {
     const afbreking = foutcategorieVoor(e);
     if (afbreking === "annulering") {

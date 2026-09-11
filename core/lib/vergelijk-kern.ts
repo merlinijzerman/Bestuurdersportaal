@@ -19,6 +19,8 @@ import type {
   Dimensie,
   Finding,
   FindingZijde,
+  VergelijkBron,
+  VergelijkRetrievalMeta,
   VerschilTypeRuw,
   VergelijkResultaat,
 } from "./vergelijk-types";
@@ -47,6 +49,8 @@ export interface SemanticUnitLite {
 export interface PassageLite {
   tekst: string;
   page: number | null;
+  /** Blijft providerneutraal; productie bindt hiermee evidence aan `bronnen`. */
+  passage_ref?: string | null;
 }
 
 // Wat het LLM-pad teruggeeft per dimensie. `gelijk` is het SEMANTISCHE oordeel;
@@ -56,9 +60,11 @@ export interface LLMVergelijkUitkomst {
   bron_value: string | null;
   bron_evidence: string | null;
   bron_page: number | null;
+  bron_passage_ref?: string | null;
   doel_value: string | null;
   doel_evidence: string | null;
   doel_page: number | null;
+  doel_passage_ref?: string | null;
   gelijk: boolean;
 }
 
@@ -68,6 +74,8 @@ export interface PersisteerInvoer {
   promptVersion: string;
   comparatorVersion: string;
   findings: Finding[];
+  bronnen?: VergelijkBron[];
+  retrievalMeta?: VergelijkRetrievalMeta;
 }
 
 export interface VergelijkDeps {
@@ -89,6 +97,8 @@ export interface VergelijkDeps {
   // Schrijft comparison_run + comparison_results en geeft de run-id terug (of null
   // wanneer er bewust niet gepersisteerd wordt).
   persisteer(input: PersisteerInvoer): Promise<string | null>;
+  /** Productie levert na alle retrievals één deterministische auditprojectie. */
+  retrievalAudit?(): { bronnen: VergelijkBron[]; meta: VergelijkRetrievalMeta };
   // De contingentie-poort: alleen als dit true is mag het deterministische pad vuren.
   deterministischVertrouwd: boolean;
 }
@@ -284,12 +294,14 @@ export async function voerVergelijkingUit(
         evidence: uit.bron_evidence,
         page: uit.bron_page,
         document_id: bronDocumentId,
+        passage_ref: uit.bron_passage_ref ?? null,
       },
       doel: {
         value: uit.doel_value,
         evidence: uit.doel_evidence,
         page: uit.doel_page,
         document_id: doelDocumentId,
+        passage_ref: uit.doel_passage_ref ?? null,
       },
       verschil_type_ruw: bepaalVerschilTypeRuw(bronAanwezig, doelAanwezig, uit.gelijk),
       method: "llm",
@@ -297,12 +309,15 @@ export async function voerVergelijkingUit(
   }
 
   // 4. Persisteren (append-only run + results via de DEFINER-RPC in productie).
+  const retrievalAudit = deps.retrievalAudit?.();
   const comparison_run_id = await deps.persisteer({
     mode,
     model: params.versies.model,
     promptVersion: params.versies.promptVersion,
     comparatorVersion: params.versies.comparatorVersion,
     findings,
+    bronnen: retrievalAudit?.bronnen,
+    retrievalMeta: retrievalAudit?.meta,
   });
 
   return {
@@ -312,5 +327,8 @@ export async function voerVergelijkingUit(
     doel_document_id: doelDocumentId,
     dimensies,
     findings,
+    ...(retrievalAudit
+      ? { bronnen: retrievalAudit.bronnen, retrieval_meta: retrievalAudit.meta }
+      : {}),
   };
 }

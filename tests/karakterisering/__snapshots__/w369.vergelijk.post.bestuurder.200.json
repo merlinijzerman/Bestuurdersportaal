@@ -1,0 +1,247 @@
+{
+  "body": {
+    "bron_document_id": "<uuid:1>",
+    "bronnen": [
+      {
+        "bronsoort": "fonds",
+        "citation_id": 1,
+        "passage_ref": "<uuid:2>",
+        "status": {
+          "actueel": false,
+          "bronstatus": null,
+          "documentstatus": "vastgesteld",
+          "geldigTot": null
+        },
+        "versie": {
+          "gecontroleerdOp": null,
+          "soort": "onbekend",
+          "waarde": null
+        },
+        "verwijzing": {
+          "bestandstype": "pdf",
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronorganisatie": null,
+          "bronstatus": null,
+          "document_id": "<uuid:1>",
+          "documentdatum": null,
+          "documentstatus": "vastgesteld",
+          "documenttype": null,
+          "extern_url": null,
+          "fragment": "De bovengrens van de solidariteitsreserve bedraagt 7,5 procent.",
+          "geldig_tot": null,
+          "heeft_origineel": true,
+          "normgewicht": null,
+          "pagina": 7,
+          "paragraaf": null,
+          "titel": "W1 Document"
+        }
+      },
+      {
+        "bronsoort": "fonds",
+        "citation_id": 2,
+        "passage_ref": "<uuid:3>",
+        "status": {
+          "actueel": false,
+          "bronstatus": null,
+          "documentstatus": "vastgesteld",
+          "geldigTot": null
+        },
+        "versie": {
+          "gecontroleerdOp": null,
+          "soort": "onbekend",
+          "waarde": null
+        },
+        "verwijzing": {
+          "bestandstype": "pdf",
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronorganisatie": null,
+          "bronstatus": null,
+          "document_id": "<uuid:4>",
+          "documentdatum": null,
+          "documentstatus": "vastgesteld",
+          "documenttype": null,
+          "extern_url": null,
+          "fragment": "De bovengrens van de solidariteitsreserve bedraagt 6,0 procent.",
+          "geldig_tot": null,
+          "heeft_origineel": true,
+          "normgewicht": null,
+          "pagina": 8,
+          "paragraaf": null,
+          "titel": "W1 Ingetrokken document"
+        }
+      }
+    ],
+    "comparison_run_id": "<uuid:5>",
+    "dimensies": [
+      {
+        "concept_id": "<uuid:6>",
+        "concept_key": "solidariteitsreserve.bovengrens",
+        "herkomst": "catalogus",
+        "key": "solidariteitsreserve.bovengrens",
+        "label": "Bovengrens solidariteitsreserve",
+        "type": "percentage"
+      }
+    ],
+    "doel_document_id": "<uuid:4>",
+    "findings": [
+      {
+        "bron": {
+          "document_id": "<uuid:1>",
+          "evidence": "De bovengrens van de solidariteitsreserve bedraagt 7,5 procent.",
+          "page": 7,
+          "passage_ref": "<uuid:2>",
+          "value": "7,5%"
+        },
+        "concept_id": "<uuid:6>",
+        "dimensie": "solidariteitsreserve.bovengrens",
+        "doel": {
+          "document_id": "<uuid:4>",
+          "evidence": "De bovengrens van de solidariteitsreserve bedraagt 6,0 procent.",
+          "page": 8,
+          "passage_ref": "<uuid:3>",
+          "value": "6,0%"
+        },
+        "finding_key": "fk_bb398d7577d31cc5ede87ff7e21dfc12711c5a19cac05d66be763f0d71fb62da",
+        "method": "llm",
+        "verschil_type_ruw": "verschilt"
+      }
+    ],
+    "mode": "symmetrisch",
+    "retrieval_meta": {
+      "correlation_id": "<uuid:7>",
+      "pogingen": [
+        {
+          "dimensie": "generiek",
+          "document_id": "<uuid:1>",
+          "geselecteerd": 0,
+          "methode": "geen",
+          "opgehaald": 0
+        },
+        {
+          "dimensie": "generiek",
+          "document_id": "<uuid:4>",
+          "geselecteerd": 0,
+          "methode": "geen",
+          "opgehaald": 0
+        },
+        {
+          "dimensie": "solidariteitsreserve.bovengrens",
+          "document_id": "<uuid:1>",
+          "geselecteerd": 1,
+          "methode": "fts_dutch_terugval",
+          "opgehaald": 1
+        },
+        {
+          "dimensie": "solidariteitsreserve.bovengrens",
+          "document_id": "<uuid:4>",
+          "geselecteerd": 1,
+          "methode": "fts_dutch_terugval",
+          "opgehaald": 1
+        }
+      ]
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "nawerk": {
+    "findings": 1,
+    "provider_verzoeken": [
+      {
+        "max_tokens": 512,
+        "messages_aantal": 1,
+        "messages_sha256": "6cd8123e6c9a98567f410377bc56a8d8531649aa73daf310e5422acbb6868bad",
+        "model": "claude-haiku-4-5-20251001",
+        "stream": false,
+        "system_sha256": "8fa604970037611cf300afba2637fa97b6dd66d17f3fb021277adfe0fad8bdbf",
+        "system_tekens": 222,
+        "temperature": 0,
+        "tool_choice": "{\"type\":\"tool\",\"name\":\"stel_dimensies_voor\"}",
+        "tools": [
+          "onbekend"
+        ],
+        "top_p": null
+      },
+      {
+        "max_tokens": 700,
+        "messages_aantal": 1,
+        "messages_sha256": "a896d346e2fd00c47833a2938f1d5a295494a0da633aef72ff0e7e35e2c6992c",
+        "model": "claude-opus-4-8",
+        "stream": false,
+        "system_sha256": "7bff8f3d29e4caf5b61f925ba455b34da80a2a54142b82b77c0c4a38b3a93881",
+        "system_tekens": 258,
+        "temperature": 0,
+        "tool_choice": "{\"type\":\"tool\",\"name\":\"vergelijk_dimensie\"}",
+        "tools": [
+          "onbekend"
+        ],
+        "top_p": null
+      }
+    ],
+    "run": {
+      "bronnen": [
+        {
+          "bibliotheek": "fonds",
+          "bronsoort": "fonds",
+          "citation_id": 1,
+          "document_id": "<uuid:1>",
+          "documentstatus": "vastgesteld",
+          "pagina": 7,
+          "passage_ref": "<uuid:2>",
+          "versie": {
+            "soort": "onbekend"
+          }
+        },
+        {
+          "bibliotheek": "fonds",
+          "bronsoort": "fonds",
+          "citation_id": 2,
+          "document_id": "<uuid:3>",
+          "documentstatus": "vastgesteld",
+          "pagina": 8,
+          "passage_ref": "<uuid:4>",
+          "versie": {
+            "soort": "onbekend"
+          }
+        }
+      ],
+      "correlation_id": "<uuid:5>",
+      "retrieval_meta": {
+        "correlation_id": "<uuid:5>",
+        "pogingen": [
+          {
+            "dimensie": "generiek",
+            "document_id": "<uuid:1>",
+            "geselecteerd": 0,
+            "methode": "geen",
+            "opgehaald": 0
+          },
+          {
+            "dimensie": "generiek",
+            "document_id": "<uuid:3>",
+            "geselecteerd": 0,
+            "methode": "geen",
+            "opgehaald": 0
+          },
+          {
+            "dimensie": "solidariteitsreserve.bovengrens",
+            "document_id": "<uuid:1>",
+            "geselecteerd": 1,
+            "methode": "fts_dutch_terugval",
+            "opgehaald": 1
+          },
+          {
+            "dimensie": "solidariteitsreserve.bovengrens",
+            "document_id": "<uuid:3>",
+            "geselecteerd": 1,
+            "methode": "fts_dutch_terugval",
+            "opgehaald": 1
+          }
+        ]
+      }
+    }
+  },
+  "status": 200
+}

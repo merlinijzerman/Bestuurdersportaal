@@ -210,7 +210,7 @@
       "domein": [
         {
           "token": "fn_schrijf_vergelijking",
-          "via": "voerVergelijkingUit",
+          "via": "voerVergelijkingBinnenDeadline",
           "soort": "transitief"
         }
       ],
@@ -2011,7 +2011,7 @@
       "domein": [
         {
           "token": "fn_schrijf_vergelijking",
-          "via": "voerVergelijkingUit",
+          "via": "voerVergelijkingBinnenDeadline",
           "soort": "transitief"
         }
       ],

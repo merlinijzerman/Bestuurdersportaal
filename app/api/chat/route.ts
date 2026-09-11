@@ -85,8 +85,8 @@ import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
 // testbaar); deze route is enkel de confidence-gated ingang + governance-logging.
 import { bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "@/core/lib/vergelijk-intent";
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
-import { voerVergelijkingUit } from "@/core/lib/vergelijk-kern";
-import { productieDeps, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/vergelijk-productie";
+import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
+import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/vergelijk-productie";
 // AQL-2 / spike 1 — de answer-generation-kern (toon-systeemprompt, per-modus
 // instructiesets, system-prompt-builders, model-/budgetconstanten) is verplaatst
 // naar lib/generatie-kern.ts zodat zowel deze streaming-route als het AI Quality
@@ -1841,44 +1841,54 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const koppeling = koppelDocumenten(vergelijkIntent.bronHint, vergelijkIntent.doelHint, documenten);
 
       if (koppeling.eenduidig && koppeling.bron && koppeling.doel) {
+        const vergelijkBron = koppeling.bron;
+        const vergelijkDoel = koppeling.doel;
         const [vergelijkHybrideAan, vergelijkVlaggen] = await Promise.all([
           hybrideZoekenAan(fondsId),
           retrievalVlaggenVoorFonds(fondsId),
         ]);
-        const vergelijkRetrieval = maakSupabaseAdapter(vergelijkVlaggen, {
-          gateway: { gateway, ctx: gatewayCtx },
-        });
+        const vergelijkTimeoutMs = timeoutUitConfig(vergelijkVlaggen.retrievalTimeoutMs);
         let resultaat;
         try {
-          resultaat = await voerVergelijkingUit(
+          resultaat = await voerVergelijkingBinnenDeadline(
             {
               mode: "symmetrisch",
-              bronDocumentId: koppeling.bron.id,
-              doelDocumentId: koppeling.doel.id,
+              bronDocumentId: vergelijkBron.id,
+              doelDocumentId: vergelijkDoel.id,
               versies: VERGELIJK_VERSIES,
             },
-            productieDeps({
-              supabase,
-              fondsId,
-              gateway,
-              gatewayCtx,
-              retrieval: {
-                adapter: vergelijkRetrieval.adapter,
-                context: {
+            {
+              clientSignal: req.signal,
+              timeoutMs: vergelijkTimeoutMs,
+              depsVoorSignal(signal) {
+                const vergelijkRetrieval = maakSupabaseAdapter(vergelijkVlaggen, {
+                  gateway: { gateway, ctx: gatewayCtx },
+                });
+                return productieDeps({
+                  supabase,
                   fondsId,
-                  actor: { soort: "gebruiker", id: ctx.gebruikerId },
-                  taaktype: "vergelijk_waarde",
-                  bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
-                  scope: { documentIds: [koppeling.bron.id, koppeling.doel.id] },
-                  correlationId: ctx.requestId,
-                  verzoekStartOp: ctx.verzoekStartOp,
-                  signal: req.signal,
-                },
-                timeoutMs: timeoutUitConfig(vergelijkVlaggen.retrievalTimeoutMs),
-                hybrideAan: vergelijkHybrideAan,
-                vlaggen: vergelijkVlaggen,
+                  gateway,
+                  gatewayCtx,
+                  retrieval: {
+                    adapter: vergelijkRetrieval.adapter,
+                    context: {
+                      fondsId,
+                      actor: { soort: "gebruiker", id: ctx.gebruikerId },
+                      taaktype: "vergelijk_waarde",
+                      bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+                      scope: { documentIds: [vergelijkBron.id, vergelijkDoel.id] },
+                      correlationId: ctx.requestId,
+                      verzoekStartOp: ctx.verzoekStartOp,
+                      signal,
+                    },
+                    timeoutMs: vergelijkTimeoutMs,
+                    hybrideAan: vergelijkHybrideAan,
+                    vlaggen: vergelijkVlaggen,
+                    audit: new VergelijkAuditVerzamelaar(ctx.requestId),
+                  },
+                });
               },
-            })
+            }
           );
         } catch (e) {
           const afbreking = foutcategorieVoor(e);
@@ -1911,7 +1921,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             {
               p_vraag: vraag,
               p_antwoord: samenvatting,
-              p_bronnen: [],
+              // Dezelfde centraal gevormde verwijzingen die de vergelijkrespons
+              // draagt. De RPC bewaart ze in governance_log_inhoud (verwijderbaar),
+              // niet in het brede append-only metadataveld.
+              p_bronnen: (resultaat.bronnen ?? []).map((b) => b.verwijzing),
               p_modus: "documenten",
               p_model: VERGELIJK_MODEL,
               p_retrieval_meta: {
@@ -1921,6 +1934,27 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 doel_document_id: koppeling.doel.id,
                 aantal_findings: resultaat.findings.length,
                 dimensies: resultaat.dimensies.map((d) => d.key),
+                correlation_id: resultaat.retrieval_meta?.correlation_id ?? ctx.requestId,
+                methode: resultaat.retrieval_meta?.pogingen[0]?.methode ?? "geen",
+                opgehaald: (resultaat.retrieval_meta?.pogingen ?? []).reduce((som, p) => som + p.opgehaald, 0),
+                geselecteerd: resultaat.bronnen?.length ?? 0,
+                chunks: (resultaat.bronnen ?? []).map((b) => ({
+                  id: b.passage_ref,
+                  document_id: b.verwijzing.document_id,
+                  rang: null,
+                })),
+                bronversie_audit: (resultaat.bronnen ?? []).map((b) => ({
+                  document_id: b.verwijzing.document_id,
+                  bron: b.verwijzing.bron,
+                  bibliotheek: b.verwijzing.bibliotheek ?? "fonds",
+                  fonds_id: fondsId,
+                  documentstatus: b.status.documentstatus ?? null,
+                  bronstatus: b.status.bronstatus ?? null,
+                  documentdatum: b.versie.waarde,
+                })),
+                ...(resultaat.retrieval_meta?.toelating
+                  ? { toelating: resultaat.retrieval_meta.toelating }
+                  : {}),
                 // Plateau 1 — een contextresolver-call kan vóór deze vroege return
                 // hebben gedraaid; leg de telemetrie vast zodat hij niet stil buiten
                 // het auditspoor valt.

@@ -62,7 +62,7 @@ function bron(ref: string, doc: string, passage: string): Bronresultaat {
   const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, ref);
   const resultaat: Bronresultaat = {
     ref: passageIdentiteit, bronsoort: "sharepoint", titel: "T",
-    documentIdentiteit: { id: documentIdentiteit, bibliotheek: "fonds", bron: "SharePoint" },
+    documentIdentiteit: { id: documentIdentiteit, fondsId: CTX.fondsId, bibliotheek: "fonds", bron: "SharePoint" },
     passageIdentiteit: { id: passageIdentiteit },
     versie: { soort: "etag", waarde: maakVolledigeVersieHash(doc, "etag-1", "a".repeat(64)), gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
     locator: {}, passage, status: { actueel: true }, rang: { positie: 1, score: 1 },

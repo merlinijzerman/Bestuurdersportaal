@@ -24,8 +24,8 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
-import { voerVergelijkingUit } from "@/core/lib/vergelijk-kern";
-import { productieDeps, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
+import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
+import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
@@ -154,10 +154,8 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
         hybrideZoekenAan(fondsId),
         retrievalVlaggenVoorFonds(fondsId),
       ]);
-      const retrieval = maakSupabaseAdapter(retrievalVlaggen, {
-        gateway: { gateway, ctx: gatewayCtx },
-      });
-      resultaat = await voerVergelijkingUit(
+      const timeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
+      resultaat = await voerVergelijkingBinnenDeadline(
         {
           mode: "symmetrisch",
           bronDocumentId: bronId,
@@ -165,29 +163,44 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
           extraDimensies,
           versies: VERGELIJK_VERSIES,
         },
-        productieDeps({
-          supabase,
-          fondsId,
-          gateway,
-          // #311 — fonds/gebruiker uit de sessiecontext, reservering als bewijs.
-          gatewayCtx,
-          retrieval: {
-            adapter: retrieval.adapter,
-            context: {
+        {
+          clientSignal: req.signal,
+          timeoutMs,
+          depsVoorSignal(signal) {
+            const retrieval = maakSupabaseAdapter(retrievalVlaggen, {
+              gateway: { gateway, ctx: gatewayCtx },
+            });
+            const audit = new VergelijkAuditVerzamelaar(ctx.requestId);
+            return productieDeps({
+              supabase,
               fondsId,
-              actor: gatewayCtx.actor,
-              taaktype: "vergelijk_waarde",
-              bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
-              scope: { documentIds: [bronId, doelId] },
-              correlationId: ctx.requestId,
-              verzoekStartOp: ctx.verzoekStartOp,
-              signal: req.signal,
-            },
-            timeoutMs: timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs),
-            hybrideAan,
-            vlaggen: retrievalVlaggen,
+              gateway,
+              // #311 — fonds/gebruiker uit de sessiecontext, reservering als bewijs.
+              gatewayCtx,
+              retrieval: {
+                adapter: retrieval.adapter,
+                context: {
+                  fondsId,
+                  actor: gatewayCtx.actor,
+                  taaktype: "vergelijk_waarde",
+                  bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+                  scope: { documentIds: [bronId, doelId] },
+                  correlationId: ctx.requestId,
+                  verzoekStartOp: ctx.verzoekStartOp,
+                  // De requestbrede grendel, niet het kale clientsignaal. Deze
+                  // reist naar concept-/semantic-reads, retrieval én modelcalls.
+                  signal,
+                },
+                // Binnenste retrievalgrendels mogen nooit langer leven dan de
+                // buitenste; diens signaal blijft de gezaghebbende bovengrens.
+                timeoutMs,
+                hybrideAan,
+                vlaggen: retrievalVlaggen,
+                audit,
+              },
+            });
           },
-        })
+        }
       );
     } catch (e) {
       // Reservering blijft staan: het verbruik is gemaakt. Alleen de

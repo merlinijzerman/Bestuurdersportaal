@@ -19,8 +19,8 @@ import { AI_MODEL } from "./generatie-kern";
 import { deterministischVertrouwd } from "./vergelijk-config";
 import type { RetrievalOpties } from "./rag";
 import { voerVolledigeRetrievalUit } from "./retrieval/orkestratie";
-import { isAfbreking } from "./retrieval/afbreken";
-import type { RetrievalAdapter, RetrievalContext } from "./retrieval/contract";
+import { bewaakNaIO, isAfbreking } from "./retrieval/afbreken";
+import type { Bronresultaat, RetrievalAdapter, RetrievalContext, RetrievalUitkomst } from "./retrieval/contract";
 import { citaatOpdracht, maakVergelijkSpoor } from "./retrieval/productiepaden-core";
 import type {
   ConceptLite,
@@ -30,7 +30,7 @@ import type {
   SemanticUnitLite,
   VergelijkDeps,
 } from "./vergelijk-kern";
-import type { Dimensie } from "./vergelijk-types";
+import type { Dimensie, VergelijkBron, VergelijkRetrievalMeta, VergelijkRetrievalPoging } from "./vergelijk-types";
 
 /** #311: beide modelcalls lopen door de AI-gateway (fondsconfiguratie + poort + audit). */
 type GatewayDeps = { gateway: AiGateway; ctx: GatewayContext };
@@ -62,6 +62,96 @@ interface VergelijkRetrieval {
   timeoutMs: number;
   hybrideAan: boolean;
   vlaggen: RetrievalOpties;
+  audit: VergelijkAuditVerzamelaar;
+}
+
+interface GeregistreerdePoging {
+  sleutel: string;
+  poging: VergelijkRetrievalPoging;
+  bronnen: { bron: Bronresultaat; verwijzing: RetrievalUitkomst["bronverwijzingen"][number] }[];
+}
+
+/**
+ * Request-lokale verzamelaar. Parallelle bron-/doelretrievals mogen in een
+ * willekeurige tijdsvolgorde eindigen; `snapshot()` sorteert daarom op een
+ * expliciete dimensie/document-sleutel voordat citation-id's worden toegekend.
+ */
+export class VergelijkAuditVerzamelaar {
+  private readonly pogingen = new Map<string, GeregistreerdePoging>();
+
+  constructor(private readonly correlationId: string) {}
+
+  registreer(documentId: string, dimensie: Dimensie, uitkomst: RetrievalUitkomst): void {
+    const sleutel = `${dimensie.key}\u0000${documentId}`;
+    this.pogingen.set(sleutel, {
+      sleutel,
+      poging: {
+        document_id: documentId,
+        dimensie: dimensie.key,
+        methode: uitkomst.meta.methode,
+        opgehaald: uitkomst.meta.opgehaald,
+        geselecteerd: uitkomst.meta.geselecteerd,
+        ...(uitkomst.fout ? { fout: uitkomst.fout } : {}),
+        ...(uitkomst.meta.toelating ? { toelating: uitkomst.meta.toelating } : {}),
+      },
+      bronnen: uitkomst.geselecteerd.map((bron, index) => ({
+        bron,
+        verwijzing: uitkomst.bronverwijzingen[index],
+      })).filter((paar) => Boolean(paar.verwijzing)),
+    });
+  }
+
+  registreerProviderfout(documentId: string, dimensie: Dimensie): void {
+    const sleutel = `${dimensie.key}\u0000${documentId}`;
+    this.pogingen.set(sleutel, {
+      sleutel,
+      poging: {
+        document_id: documentId,
+        dimensie: dimensie.key,
+        methode: "geen",
+        opgehaald: 0,
+        geselecteerd: 0,
+        fout: "providerfout",
+      },
+      bronnen: [],
+    });
+  }
+
+  snapshot(): { bronnen: VergelijkBron[]; meta: VergelijkRetrievalMeta } {
+    const geordend = [...this.pogingen.values()].sort((a, b) => a.sleutel.localeCompare(b.sleutel));
+    const uniek = new Map<string, Omit<VergelijkBron, "citation_id">>();
+    const categorieen: Record<string, number> = {};
+    const gronden: Record<string, number> = {};
+    let geweigerd = 0;
+
+    for (const item of geordend) {
+      const toelating = item.poging.toelating;
+      if (toelating) {
+        geweigerd += toelating.geweigerd;
+        for (const [k, v] of Object.entries(toelating.categorieen)) categorieen[k] = (categorieen[k] ?? 0) + (v ?? 0);
+        for (const [k, v] of Object.entries(toelating.gronden)) gronden[k] = (gronden[k] ?? 0) + (v ?? 0);
+      }
+      for (const { bron, verwijzing } of item.bronnen) {
+        if (uniek.has(bron.ref)) continue;
+        uniek.set(bron.ref, {
+          passage_ref: bron.ref,
+          bronsoort: bron.bronsoort,
+          verwijzing,
+          versie: bron.versie,
+          status: bron.status,
+        });
+      }
+    }
+
+    return {
+      bronnen: [...uniek.values()].map((bron, index) => ({ citation_id: index + 1, ...bron })),
+      meta: {
+        correlation_id: this.correlationId,
+        pogingen: geordend.map((p) => p.poging),
+        ...(geweigerd > 0 ? { toelating: { geweigerd, categorieen, gronden } } : {}),
+      },
+    };
+  }
 }
 
 // AI-BEGRENZING (besluit 0180). Geen eigen client: beide modelcalls lopen door
@@ -99,14 +189,17 @@ async function haalPassages(
       },
       citaatOpdracht([documentId])
     );
+    retrieval.audit.registreer(documentId, dimensie, uitkomst);
     return uitkomst.geselecteerd.map((b) => ({
       tekst: b.weergave?.aangeleverdePassage ?? b.passage,
       page: b.locator.pagina ?? null,
+      passage_ref: b.ref,
     }));
   } catch (e) {
     // Een providerfout blijft best-effort zoals vóór #369; annulering en onze
     // deadline zijn terminal en mogen nooit als een lege evidence-set doorgaan.
     if (isAfbreking(e)) throw e;
+    retrieval.audit.registreerProviderfout(documentId, dimensie);
     console.error(`[vergelijk] retrieval mislukt (doc ${documentId}, dim ${dimensie.key}):`, (e as Error).message);
     return [];
   }
@@ -114,14 +207,14 @@ async function haalPassages(
 
 // Zoek de pagina van de passage waaruit een evidence-zin (deels) komt, zodat de
 // evidence-link een paginanummer draagt zonder het model dat te laten raden.
-function paginaVoorEvidence(passages: PassageLite[], evidence: string | null): number | null {
+function passageVoorEvidence(passages: PassageLite[], evidence: string | null): PassageLite | null {
   if (!evidence) return null;
   const naald = evidence.trim().slice(0, 40).toLowerCase();
   if (naald.length === 0) return null;
   for (const p of passages) {
-    if (p.tekst.toLowerCase().includes(naald)) return p.page;
+    if (p.tekst.toLowerCase().includes(naald)) return p;
   }
-  return passages[0]?.page ?? null;
+  return passages[0] ?? null;
 }
 
 // ── Haiku: extra (niet-catalogus) dimensies afleiden ─────────────────────────
@@ -271,13 +364,17 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
     const r = blok.input as Partial<LLMVergelijkUitkomst>;
     const bron_evidence = (r.bron_evidence as string | null) ?? null;
     const doel_evidence = (r.doel_evidence as string | null) ?? null;
+    const bronPassage = passageVoorEvidence(passagesBron, bron_evidence);
+    const doelPassage = passageVoorEvidence(passagesDoel, doel_evidence);
     return {
       bron_value: (r.bron_value as string | null) ?? null,
       bron_evidence,
-      bron_page: paginaVoorEvidence(passagesBron, bron_evidence),
+      bron_page: bronPassage?.page ?? null,
+      bron_passage_ref: bronPassage?.passage_ref ?? null,
       doel_value: (r.doel_value as string | null) ?? null,
       doel_evidence,
-      doel_page: paginaVoorEvidence(passagesDoel, doel_evidence),
+      doel_page: doelPassage?.page ?? null,
+      doel_passage_ref: doelPassage?.passage_ref ?? null,
       gelijk: r.gelijk === true,
     };
   } catch (e) {
@@ -310,7 +407,8 @@ async function leesSemanticUnits(supabase: SupabaseClient, documentId: string, s
 }
 
 // ── Persisteren via de DEFINER-RPC ───────────────────────────────────────────
-async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer): Promise<string | null> {
+async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer, signal?: AbortSignal): Promise<string | null> {
+  bewaakNaIO(signal);
   const p_findings = inv.findings.map((f) => ({
     finding_key: f.finding_key,
     dimensie: f.dimensie,
@@ -325,14 +423,34 @@ async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer): Prom
     doel_page: f.doel.page,
     verschil_type_ruw: f.verschil_type_ruw,
     method: f.method,
+    bron_passage_ref: f.bron.passage_ref ?? null,
+    doel_passage_ref: f.doel.passage_ref ?? null,
   }));
-  const { data, error } = await supabase.rpc("fn_schrijf_vergelijking", {
+  const p_bronnen = (inv.bronnen ?? []).map((b) => ({
+    citation_id: b.citation_id,
+    passage_ref: b.passage_ref,
+    document_id: b.verwijzing.document_id,
+    pagina: b.verwijzing.pagina,
+    bibliotheek: b.verwijzing.bibliotheek ?? null,
+    bronsoort: b.bronsoort,
+    documentstatus: b.status.documentstatus ?? null,
+    bronstatus: b.status.bronstatus ?? null,
+    geldig_tot: b.status.geldigTot ?? null,
+    versie: b.versie,
+  }));
+  let query = supabase.rpc("fn_schrijf_vergelijking", {
     p_mode: inv.mode,
     p_model: inv.model,
     p_prompt_version: inv.promptVersion,
     p_comparator_version: inv.comparatorVersion,
     p_findings,
+    p_correlation_id: inv.retrievalMeta?.correlation_id ?? null,
+    p_retrieval_meta: inv.retrievalMeta ?? {},
+    p_bronnen,
   });
+  if (signal) query = query.abortSignal(signal);
+  const { data, error } = await query;
+  bewaakNaIO(signal, error);
   if (error) {
     console.error(`[vergelijk] persisteren mislukt:`, error.message);
     throw new Error(`vergelijking_persisteren: ${error.message}`);
@@ -350,6 +468,7 @@ export function productieDeps(ctx: {
 }): VergelijkDeps {
   const { supabase } = ctx;
   const gw: GatewayDeps = { gateway: ctx.gateway, ctx: ctx.gatewayCtx };
+  const audit = ctx.retrieval.audit;
   return {
     leesConcepten: () => leesConcepten(supabase, ctx.retrieval.context.signal),
     // Gemotiveerde uitzondering: semantic_units zijn reeds geëxtraheerde,
@@ -361,7 +480,8 @@ export function productieDeps(ctx: {
       haalExtraDimensies(gw, ctx.retrieval, bronDocumentId, doelDocumentId, catalogus),
     retrieveerPassages: (documentId, dimensie) => haalPassages(ctx.retrieval, documentId, dimensie),
     vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(gw, { ...input, signal: ctx.retrieval.context.signal }),
-    persisteer: (inv) => persisteer(supabase, inv),
+    persisteer: (inv) => persisteer(supabase, inv, ctx.retrieval.context.signal),
+    retrievalAudit: () => audit.snapshot(),
     deterministischVertrouwd: deterministischVertrouwd(),
   };
 }

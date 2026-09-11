@@ -168,6 +168,7 @@ function vereisteAanwezig(scenario) {
   if (!scenario.vereist) return true;
   if (scenario.vereist === "ai-stub") return Boolean(ENV.aiStubUrl);
   if (scenario.vereist === "embed-stub") return Boolean(ENV.embedStubUrl);
+  if (scenario.vereist === "vergelijk") return Boolean(ENV.vergelijkAan && ENV.aiStubUrl);
   // #349 — de hybride chatbeurt heeft BEIDE stubs nodig: de embeddingstub voor
   // de vraag-embedding en de providerstub voor de deterministische SSE-stroom.
   if (scenario.vereist === "hybride") return Boolean(ENV.embedStubUrl && ENV.aiStubUrl);

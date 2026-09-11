@@ -8,10 +8,14 @@ import {
   geldigeUuid,
   bevatClientScopeSturing,
   groepeerZoekresultaten,
+  maakZoekRespons,
   maakVergelijkSpoor,
   maakZoekSpoor,
 } from "../../core/lib/retrieval/productiepaden-core";
-import { voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
+import { binnenServerScope, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
+import { voerVergelijkingBinnenDeadline } from "../../core/lib/vergelijk-deadline";
+import type { VergelijkDeps } from "../../core/lib/vergelijk-kern";
+import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
 import type {
   Bronresultaat,
   RetrievalAdapter,
@@ -123,7 +127,7 @@ test("T2-2 — zoeken en vergelijken bouwen centrale, begrensde opdrachten; R2 h
   assert.equal(vergelijk.grenzen.representatieConstraints, true);
 });
 
-test("T2-2 — zoekrespons wordt uitsluitend uit providerneutrale bronnen opgebouwd met citation-id", () => {
+test("T2-2 — /zoeken-succesgrens blijft byte-/structuurcompatibel met de W322-golden", () => {
   const lang = bron({ passage: "x".repeat(230) });
   const resultaat = groepeerZoekresultaten([
     lang,
@@ -132,9 +136,110 @@ test("T2-2 — zoekrespons wordt uitsluitend uit providerneutrale bronnen opgebo
   assert.equal(resultaat.length, 1);
   assert.equal(resultaat[0].procesinstantie_id, UUID_B);
   assert.equal(resultaat[0].treffers.length, 2);
-  assert.equal(resultaat[0].treffers[0].citation_id, 1);
-  assert.equal(resultaat[0].treffers[1].citation_id, 2);
   assert.equal(resultaat[0].treffers[0].fragment.length, 221);
+  const respons = maakZoekRespons({
+    resultaten: resultaat,
+    procesinstanties: [{ id: UUID_B, titel: "Dossier" }],
+    methode: "fts_dutch_ranked",
+    opgehaald: 2,
+    geselecteerd: 2,
+    modus: "alles",
+  });
+  assert.deepEqual(Object.keys(respons).sort(), ["meta", "procesinstanties", "resultaten"]);
+  assert.deepEqual(Object.keys(respons.meta).sort(), ["geselecteerd", "methode", "modus", "opgehaald"]);
+  assert.deepEqual(Object.keys(respons.resultaten[0].treffers[0]).sort(), ["fragment", "pagina", "paragraaf"]);
+  assert.doesNotMatch(JSON.stringify(respons), /citation_id|"bronnen"/);
+});
+
+test("T2-2 review — alleen een echte generieke bron mag zonder fonds-id door de serverscope", () => {
+  assert.equal(binnenServerScope(context, bron({ documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "fonds" } })), false);
+  assert.equal(binnenServerScope(context, bron({ bronsoort: "notulen", documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "fonds" } })), false);
+  assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "fonds" } })), false);
+  assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "generiek" } })), true);
+});
+
+test("T2-2 review — requestbrede deadline voorkomt persistentie als een concept-read abort negeert", async () => {
+  let persisteerCalls = 0;
+  let gedeeldSignaal: AbortSignal | undefined;
+  const start = Date.now();
+  await assert.rejects(
+    voerVergelijkingBinnenDeadline(
+      {
+        mode: "symmetrisch",
+        bronDocumentId: UUID_A,
+        doelDocumentId: UUID_B,
+        versies: { model: "test", promptVersion: "p", comparatorVersion: "c" },
+      },
+      {
+        timeoutMs: 20,
+        depsVoorSignal(signal) {
+          gedeeldSignaal = signal;
+          const deps: VergelijkDeps = {
+            // Simuleert een SDK die AbortSignal negeert. De wrapper moet NA de
+            // await alsnog stoppen en mag persisteer nooit bereiken.
+            leesConcepten: async () => {
+              await new Promise((resolve) => setTimeout(resolve, 35));
+              return [];
+            },
+            leesSemanticUnits: async () => [],
+            bepaalExtraDimensies: async () => [],
+            retrieveerPassages: async () => [],
+            vergelijkWaardeLLM: async () => ({
+              bron_value: null, bron_evidence: null, bron_page: null,
+              doel_value: null, doel_evidence: null, doel_page: null, gelijk: false,
+            }),
+            persisteer: async () => { persisteerCalls++; return "mag-niet"; },
+            deterministischVertrouwd: false,
+          };
+          return deps;
+        },
+      }
+    ),
+    (e: unknown) => e instanceof RetrievalAfgebroken && e.reden === "timeout"
+  );
+  assert.equal(gedeeldSignaal?.aborted, true);
+  assert.equal(persisteerCalls, 0);
+  assert.ok(Date.now() - start < 250, "gedragstest mag niet op een providerdeadline wachten");
+});
+
+test("T2-2 review — verlopen deadline na een modelcall kan niet alsnog persisteren", async () => {
+  let persisteerCalls = 0;
+  await assert.rejects(
+    voerVergelijkingBinnenDeadline(
+      {
+        mode: "symmetrisch",
+        bronDocumentId: UUID_A,
+        doelDocumentId: UUID_B,
+        versies: { model: "test", promptVersion: "p", comparatorVersion: "c" },
+      },
+      {
+        timeoutMs: 20,
+        depsVoorSignal() {
+          return {
+            leesConcepten: async () => [{
+              id: "concept-1", key: "premie", label: "Premie", type: "percentage", status: "actief",
+            }],
+            leesSemanticUnits: async () => [],
+            bepaalExtraDimensies: async () => [],
+            retrieveerPassages: async (_documentId) => [{ tekst: "Premie 24 procent.", page: 1 }],
+            // Ook als de modeladapter het signaal negeert en succesvol terugkomt,
+            // controleert de requestwrapper de verstreken deadline na de await.
+            vergelijkWaardeLLM: async () => {
+              await new Promise((resolve) => setTimeout(resolve, 35));
+              return {
+                bron_value: "24", bron_evidence: "Premie 24 procent.", bron_page: 1,
+                doel_value: "25", doel_evidence: "Premie 25 procent.", doel_page: 1, gelijk: false,
+              };
+            },
+            persisteer: async () => { persisteerCalls++; return "mag-niet"; },
+            deterministischVertrouwd: false,
+          };
+        },
+      }
+    ),
+    (e: unknown) => e instanceof RetrievalAfgebroken && e.reden === "timeout"
+  );
+  assert.equal(persisteerCalls, 0);
 });
 
 test("T2-2 — gemanipuleerd bronbeleid stopt vóór de adapter/netwerkcall", async () => {
@@ -211,7 +316,8 @@ test("T2-2 — productieroutes hebben geen directe retrievalcall of service-role
   assert.ok(
     vergelijkRoute.indexOf("bevatClientScopeSturing(Object.keys") < vergelijkRoute.indexOf("maakSupabaseAdapter(retrievalVlaggen")
   );
-  assert.match(vergelijkRoute, /signal: req\.signal/);
+  assert.match(vergelijkRoute, /clientSignal: req\.signal/);
+  assert.match(vergelijkRoute, /voerVergelijkingBinnenDeadline/);
 });
 
 test("T2-2 — directe semantic_units-lezing is één gemotiveerde RLS-uitzondering met cancellation", () => {
@@ -235,7 +341,7 @@ test("T2-2 — providerfout degradeert alleen in vergelijk; afbraak en auditafro
   assert.ok(afronding >= 0 && timeoutRespons > afronding, "sluit ai_actie vóór de timeoutrespons");
 
   const chat = lees("app/api/chat/route.ts");
-  const vergelijkStart = chat.indexOf("resultaat = await voerVergelijkingUit(");
+  const vergelijkStart = chat.indexOf("resultaat = await voerVergelijkingBinnenDeadline(");
   const governance = chat.indexOf('"schrijf_ai_interactie"', vergelijkStart);
   const voltooid = chat.indexOf('"voltooid"', governance);
   assert.ok(

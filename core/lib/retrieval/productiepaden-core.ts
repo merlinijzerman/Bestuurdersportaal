@@ -116,8 +116,6 @@ export interface ZoekTreffer {
   pagina: number | null;
   paragraaf: string | null;
   fragment: string;
-  /** Verwijst 1-based naar `bronnen` in de route-respons. */
-  citation_id: number;
 }
 
 export interface ZoekResultaatNeutraal {
@@ -144,7 +142,7 @@ export interface ZoekResultaatNeutraal {
  */
 export function groepeerZoekresultaten(bronnen: Bronresultaat[]): ZoekResultaatNeutraal[] {
   const perDoc = new Map<string, ZoekResultaatNeutraal>();
-  for (const [index, b] of bronnen.entries()) {
+  for (const b of bronnen) {
     const d = b.documentIdentiteit;
     const w = b.weergave ?? {};
     let resultaat = perDoc.get(d.id);
@@ -172,11 +170,40 @@ export function groepeerZoekresultaten(bronnen: Bronresultaat[]): ZoekResultaatN
         pagina: b.locator.pagina ?? null,
         paragraaf: b.locator.paragraaf ?? null,
         fragment: b.passage.length > 220 ? `${b.passage.slice(0, 220)}…` : b.passage,
-        citation_id: index + 1,
       });
     }
   }
   return [...perDoc.values()];
+}
+
+/**
+ * Publieke /zoeken-respons. De centrale orkestratie bouwt intern wél citaties,
+ * maar de bestaande zoek-API publiceerde die niet. Deze expliciete grens houdt
+ * de W322-goldens byte-/structuuridentiek en voorkomt een ongereviewde
+ * contractuitbreiding voor bestaande clients.
+ */
+export function maakZoekRespons(input: {
+  resultaten: ZoekResultaatNeutraal[];
+  procesinstanties: { id: string; titel: string }[];
+  methode: import("../rag").RetrievalMeta["methode"];
+  opgehaald: number;
+  geselecteerd: number;
+  modus: string;
+  toelating?: import("./toelatingspoort").Toelatingssamenvatting;
+}) {
+  return {
+    resultaten: input.resultaten,
+    procesinstanties: input.procesinstanties,
+    meta: {
+      methode: input.methode,
+      opgehaald: input.opgehaald,
+      geselecteerd: input.geselecteerd,
+      modus: input.modus,
+      // Nieuw maar conditioneel: alleen zichtbaar als de centrale poort echt
+      // iets weigerde. Succesresponses houden exact het historische contract.
+      ...(input.toelating ? { toelating: input.toelating } : {}),
+    },
+  };
 }
 
 /** Alleen voor tests en adapters die een query los willen typeren. */
