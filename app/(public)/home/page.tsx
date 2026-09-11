@@ -85,7 +85,6 @@ export default function Pagina() {
             </div>
           </div>
 
-          <p className="sharp">De afweging hoort niet in de wandelgangen.</p>
         </div>
       </section>
 
