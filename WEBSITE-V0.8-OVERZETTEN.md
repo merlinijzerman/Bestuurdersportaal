@@ -1,8 +1,9 @@
-# Website v0.8 — wat er op deze branch staat
+# Website v0.8 — productie-overdracht
 
-Branch: `feat/website-v0.8` (worktree `mvp-website-v08`, afgetakt van `origin/main`).
-Ontwerp en copy komen uit `website-mockup-v0.8/` in de projectmap; die mockup is
-akkoord bevonden. Deze branch zet dat om naar de echte site.
+**Status 11 september 2026:** live op `main`. De hoofdrelease is gemerged via
+PR #365; de vereenvoudigde privacyverklaring en generieke contactintro via
+PR #374 (`b171ee5`). Ontwerp en copy komen uit `website-mockup-v0.8/` in de
+projectmap; die mockup is akkoord bevonden.
 
 ## Wijzigingen
 
@@ -33,8 +34,8 @@ akkoord bevonden. Deze branch zet dat om naar de echte site.
 | `/sectoren`, `/sectoren/pensioenfondsen` | Permanente redirect naar `/voor-wie` |
 | `/governance-ai` | Herzien; kop losgetrokken van de homepagekop |
 | `/over-ons` | Opent met de visie, daarna oprichters met bio's en LinkedIn, werkprincipes, volg-ons-strook |
-| `/contact` | Nieuwe copy rond de demo; bestaand formulier ongewijzigd. `noindex` |
-| `/privacy` | Alleen `noindex` toegevoegd; juridische tekst ongewijzigd |
+| `/contact` | Generieke introductie zonder vaste duur of voorgeschreven demo-opzet; bestaand formulier ongewijzigd. `noindex` |
+| `/privacy` | Beknopte verklaring in vijf onderdelen; `Bestuurdersportaal.com` als verantwoordelijke zonder postadres; Vercel Analytics en Cloudflare Turnstile benoemd. Versie `2026-09-11`. `noindex` |
 
 **Beelden (`public/website/`)**
 Zes productfragmenten (1200 × 675) plus `og-image.png` (1200 × 630).
@@ -43,22 +44,36 @@ Zes productfragmenten (1200 × 675) plus `og-image.png` (1200 × 630).
 `/sectoren`, `/sectoren/pensioenfondsen`, `/contact` en `/privacy` zijn eruit —
 de eerste twee zijn redirects, de laatste twee dragen `noindex`.
 
-## Nog te doen vóór of na livegang
+## Productiecontrole 11 september 2026
 
-1. **Portretfoto's** op `/over-ons`: nu staan er initialen in een cirkel.
+- Beide Vercel-productiedeployments waren groen.
+- `/privacy` en `/contact` zijn visueel gecontroleerd op desktop en 390 × 844;
+  geen horizontale overflow of afgebroken formulieronderdelen.
+- Een echte herkenbare testinzending gaf de succesmelding en verscheen in de
+  beveiligde contact-inbox. De test is daarna als afgehandeld gemarkeerd.
+- De interne notificatiemail is **niet** verzonden: de Mailgun-configuratie in
+  Vercel is onvolledig. Opslag is soft-fail-onafhankelijk en werkt wel. Zie
+  `SETUP.md` stap 8.
+
+## Nog te doen na livegang
+
+1. **Mailgun-notificaties activeren:** zet `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`,
+   `CONTACT_NOTIFY_FROM` en `CONTACT_NOTIFY_TO` in het publieke Vercel-project
+   voor Production en preview-stable, redeploy en herhaal de mail-smoke.
+2. **Portretfoto's** op `/over-ons`: nu staan er initialen in een cirkel.
    Vierkant, minimaal 400 × 400, in `public/website/`.
-2. **DemoVideo en ThemeToggle** worden nergens meer gebruikt. De componenten en
+3. **DemoVideo en ThemeToggle** worden nergens meer gebruikt. De componenten en
    `public/video/*` kunnen weg in een opschoonstap.
-3. **`_components/CtaBand.tsx`, `Flow.tsx`, `Steps.tsx`, `DossierKaart.tsx`,
+4. **`_components/CtaBand.tsx`, `Flow.tsx`, `Steps.tsx`, `DossierKaart.tsx`,
    `Crumb.tsx`** worden alleen nog door `/governance-ai/eu-ai-act` gebruikt.
    Die pagina is in deze ronde niet herzien.
-4. **Deelkaarten in cache.** Na livegang halen LinkedIn en WhatsApp de oude kaart
+5. **Deelkaarten in cache.** Na livegang halen LinkedIn en WhatsApp de oude kaart
    uit hun cache. Eén keer verversen via de debugger van het betreffende platform.
-5. **Controleren na deploy:** `/sectoren` → `/voor-wie` (308), `robots.txt` en
+6. **Resterende nazorgcontrole:** `/sectoren` → `/voor-wie` (308), `robots.txt` en
    `sitemap.xml` op de marketing-host, en of `og:image` absoluut wordt uitgeserveerd.
 
 ## Wat bewust niet is aangepast
 
-- De juridische tekst op `/privacy`.
 - De EU AI Act-subpagina (alleen de CTA-tekst is meegetrokken).
-- Alles buiten `app/(public)/`, `app/sitemap.ts` en `public/website/`.
+- Het contactformulier zelf; alleen de omliggende tekst en gekoppelde
+  privacyversie zijn in PR #374 gewijzigd.

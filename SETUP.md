@@ -115,7 +115,7 @@ Open je browser en ga naar: **http://localhost:3000**
 
 ---
 
-## Stap 8 — Contactformulier: e-mailnotificatie instellen (Mailgun) — TODO
+## Stap 8 — Contactformulier: e-mailnotificatie instellen (Mailgun) — OPEN IN PRODUCTIE
 
 > Het contactformulier (`/contact`, W2) **slaat altijd op** in Supabase, ook zonder
 > mail. De mail is een **soft-fail-notificatie**: lukt-ie niet, dan blijft de
@@ -132,7 +132,7 @@ Open je browser en ga naar: **http://localhost:3000**
 - [ ] Kopieer de **private API-key** (Mailgun → *Send → API keys*; begint meestal met `key-...`).
 - [ ] Noteer de **sandbox-domeinnaam** (`sandboxXXXX.mailgun.org`).
 
-**B. Environment variables (lokaal in `.env.local`, en in Vercel voor productie)**
+**B. Environment variables (lokaal in `.env.local`, en in het publieke Vercel-project)**
 
 Vul deze server-side variabelen in — **nooit als `NEXT_PUBLIC_*`**:
 
@@ -143,23 +143,38 @@ MAILGUN_BASE_URL=https://api.eu.mailgun.net  # optioneel; dit is al de default (
 CONTACT_NOTIFY_TO=merlin.ijzerman@the-paradox.com,robert.timmer@the-paradox.com
 CONTACT_NOTIFY_FROM=postmaster@sandboxXXXX.mailgun.org   # sandbox: postmaster@<domein>
 CONTACT_IP_HASH_SALT=<een-lange-willekeurige-string>     # voor de rate-limit (geen ruw IP)
-SUPABASE_SERVICE_ROLE_KEY=<service_role-key uit Supabase> # Project Settings → API
 ```
 
 - [ ] In `.env.local` ingevuld (in `mvp/.env.local` staan al uitgecommentarieerde regels — haal het `#` weg en vul de waarden in).
-- [ ] In **Vercel** dezelfde variabelen gezet onder *Project → Settings → Environment Variables*.
+- [ ] In Vercel-project **`bestuurdersportaal`** dezelfde variabelen gezet onder
+  *Settings → Environment Variables*, voor minimaal **Production** en
+  **preview-stable**.
+- [ ] Na een wijziging van de variabelen beide omgevingen opnieuw gedeployed.
 
-> ⚠️ `SUPABASE_SERVICE_ROLE_KEY` is óók nodig voor de platform-back-office. Zonder deze
-> sleutel geeft het contactformulier een nette foutmelding en wordt er niets opgeslagen.
-> Genereer `CONTACT_IP_HASH_SALT` bijv. met `openssl rand -hex 32` in de Terminal.
+> Het publieke contactformulier gebruikt sinds D1 de begrensde
+> `contact_aanvraag_insert`- en `contact_notificatie_status`-RPC's met de anon-key.
+> Zet daarom **geen** `SUPABASE_SERVICE_ROLE_KEY` in het publieke Vercel-project.
+> Die sleutel hoort uitsluitend bij het afzonderlijke beheerproject voor de
+> beveiligde back-office. Genereer `CONTACT_IP_HASH_SALT` bijv. met
+> `openssl rand -hex 32` in de Terminal.
 
 **C. Deploy + verifiëren**
 
 - [ ] Code is via een PR naar `preview` gegaan (client vrij: `gh` of GitHub Desktop) → Vercel deployt de Preview-omgeving; promotie naar `main` volgt met expliciet akkoord. Zie `CLAUDE.md` r. 53 en `decisions/0207`.
 - [ ] Lokaal smoke-testen: `npm run dev`, ga naar `http://localhost:3000/contact`, vul het formulier in en verstuur.
-- [ ] Controleer dat er een rij verschijnt in Supabase → tabel `contact_aanvragen` (kolom `notificatie_verzonden` = `true` als de mail lukte).
+- [x] Productiesmoke 11-09-2026: formulier accepteert de inzending, toont de
+  succesmelding en de rij verschijnt in `/platform/contact`.
+- [ ] Controleer na het instellen van Mailgun dat `notificatie_verzonden = true`
+  en `mail_error = null` op de nieuwe rij.
 - [ ] Controleer dat Merlin **én** Robert de notificatiemail ontvangen (kijk ook in spam).
 - [ ] Test dat **antwoorden** op de notificatie naar de aanvrager gaat (`reply-to` = het ingevulde e-mailadres).
+
+> **Productiestatus 11-09-2026:** opslag werkt. De testaanvraag is aantoonbaar in
+> de platform-contact-inbox aangekomen. De notificatiemail faalde soft met
+> `Mailgun-config onvolledig`; de vier verplichte variabelen `MAILGUN_API_KEY`,
+> `MAILGUN_DOMAIN`, `CONTACT_NOTIFY_FROM` en `CONTACT_NOTIFY_TO` ontbreken in het
+> publieke Vercel-project. Tot dit is opgelost moet de contact-inbox handmatig
+> worden gecontroleerd.
 
 **D. Later (niet blokkerend)**
 
