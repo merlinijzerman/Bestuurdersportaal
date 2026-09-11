@@ -1,5 +1,5 @@
 // Afsluitende CTA-band (server component), gedeeld door homepage + subpagina's.
-// Primaire CTA is overal "Neem contact op" (of een expliciete variant zoals
+// v0.8: primaire CTA is overal "Plan een live demo" (of een expliciete variant zoals
 // "Bespreek een pilot" op de pensioenpagina). Secundaire CTA's zijn optioneel.
 type Cta = { href: string; label: string; extern?: boolean };
 
