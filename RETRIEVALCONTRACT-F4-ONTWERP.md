@@ -826,6 +826,33 @@ faalt. De twee fasefuncties zijn intern; een contractgate verbiedt dat een
 bestand in `app/`, `core/` of `platform/` ze importeert. `voerRetrievalUit()`
 sluit een GELEENDE grendel niet: die is van de uitlener.
 
+**G-12 — de hybride fusie krijgt een verslapte FTS-poging (PR-D).** In de hybride
+chatgolden had elke chunk `fts_rang: null`: de FTS-arm kreeg de strikte AND-keten
+van `websearch_to_tsquery`, en bij een natuurlijke vraag bevat zelden één chunk álle
+inhoudswoorden. De fusie was daarmee feitelijk alleen vector. Nu, beoordeeld over
+ALLE strikte pogingen samen (primair, en bij reformulatie de originele vraag):
+
+| Situatie | Gevolg |
+|---|---|
+| primaire RPC-fout | bestaande FTS-terugval, geen verslapping — de RPC zelf is stuk |
+| strikte pogingen samen: nul kandidaten | bestaande FTS-terugval |
+| wel kandidaten, nergens `fts_rang` | één verslapte hybride poging |
+| ergens een `fts_rang` | geen verslapping — precisie heeft gewerkt |
+
+Samen en niet per poging, omdat anders een lege primaire poging naast een originele
+met alleen vectorresultaten tussen wal en schip valt. De verslapte poging gebruikt
+de OR-keten van het FTS-pad (`bouwTerugvalFtsQuery`), hergebruikt de PRIMAIRE
+vector (geen extra embedding) en deelt via `maakHybrideRpc` exact het
+parameterblok van de strikte pogingen: alleen `p_query` verschilt, dus scope,
+filters en fondsgrens kunnen per constructie niet verruimen. Geen SQL-wijziging:
+beide RPC's parsen `p_query` met `websearch_to_tsquery`. Bij één zoekterm draait
+hij niet — en komt er dan ook geen regel in `retrieval_pogingen` bij.
+
+`retrieval_pogingen` draagt vraag-afgeleide querytekst en hoort daarom in het
+INHOUDELIJKE auditniveau (`governance_log_inhoud.retrieval_meta_inhoud`), niet in
+het spoor. Het veld staat in geen van beide allowlists en valt fail-closed in de
+inhoud — geen migratie op `meta_projectie` nodig.
+
 **De grendel is enkelvoudig en zegt dat zelf (reviewronde 2).** Een gesloten
 grendel was van buiten niet te onderscheiden van een lopende — `reden()` bleef
 `null`, `signal.aborted` bleef `false` en `bewaak()` gaf stil `void` terug. Wie
@@ -957,7 +984,7 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 | **G-9** | Drie onverenigbare bronvormen | C1/C7, C5, C6 | midden | alleen `BronVerwijzing` draagt citation-id en sentinel | T2-2 |
 | **G-10** | Hybride pad niet gekarakteriseerd | C1 | **hoog** (was: laag) | het is in productie het **primaire** pad; de goldens dekken alleen de FTS-terugval. R3: eigen tranche vóór T2-1 | **T1b** |
 | **G-11** | `regimeWeging` niet per fonds stuurbaar | kern | laag | enige vlag met default aan, buiten `RetrievalVlaggen` | T2-2 |
-| **G-12** | De hybride fusie kent geen verslapte OR-terugval; die bestaat alleen op het FTS-pad (`rag.ts:1519`). Een lange vraag levert daardoor een vector-only fusie | C1 op het hybride pad | **midden** | asymmetrie tussen de twee paden: dezelfde vraag krijgt op FTS wél een tweede, bredere poging en op hybride niet. Gemeten in T1b, gepind in `w322b.chat…hybride-retrieval-meta` (`fts_rang: null` op elke chunk) | T2-1 |
+| **G-12** | De hybride fusie kent geen verslapte OR-terugval; die bestaat alleen op het FTS-pad (`rag.ts:1519`). Een lange vraag levert daardoor een vector-only fusie | C1 op het hybride pad | **midden** | asymmetrie tussen de twee paden: dezelfde vraag krijgt op FTS wél een tweede, bredere poging en op hybride niet. Gemeten in T1b, gepind in `w322b.chat…hybride-retrieval-meta` (`fts_rang: null` op elke chunk) | **T2-1/PR-D — OPGELOST** |
 | **G-13** | De **hoofdgeneratiecall** krijgt geen signaal: `gateway.stream()` accepteert `verzoek.signal` (`contract.ts:146`), maar `chat/route.ts:3534` geeft er geen mee. Verbreekt de bestuurder de verbinding tijdens het genereren, dan loopt de modelcall door en betalen we hem alsnog | C1, ná de retrievalketen | midden | PR-B dekt de RETRIEVALketen (D5: 20 s vanaf binnenkomst in de orkestratie); de generatie valt daarbuiten. Bewust niet stilzwijgend meegenomen: afbreken betekent dat er géén `schrijf_ai_interactie`-regel volgt, en dat is een auditkeuze, geen implementatiedetail | **T2-1/PR-B2 — #356, GEBOUWD** |
 
 ### 5.2 Werkpakketten
