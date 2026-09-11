@@ -1,9 +1,7 @@
 import Link from "next/link";
 
-// Marketing-footer (server component). variant "full" = volledige footer met
-// route-links (incl. The Paradox, dat sinds besluit 0103 niet meer in de
-// hoofdnav staat maar hier wél zichtbaar blijft als herkomst);
-// "simple" = compacte linkbalk voor tekstpagina's (privacy, contact).
+// Marketing-footer v0.8. Over ons, Contact en Privacy staan hier; de
+// hoofdnavigatie is teruggebracht tot vier items.
 export default function Footer({
   variant = "full",
 }: {
@@ -15,13 +13,11 @@ export default function Footer({
         <div className="wrap wide foot-links">
           <Link href="/">Home</Link>
           <a href="/product">Product</a>
-          <a href="/over-ons">Over</a>
+          <a href="/voor-wie">Voor wie</a>
+          <a href="/over-ons">Over ons</a>
           <a href="/contact">Contact</a>
           <a href="/login">Inloggen</a>
           <a href="/privacy">Privacy</a>
-          <a href="https://the-paradox.com" target="_blank" rel="noreferrer">
-            The Paradox
-          </a>
         </div>
       </footer>
     );
@@ -31,24 +27,21 @@ export default function Footer({
     <footer>
       <div className="wrap">
         <div className="foot-top">
-          Bestuurdersportaal — bestuurlijke besluitvorming, door ontwerp.
+          Bestuurdersportaal — waar het besluit zijn onderbouwing houdt.
         </div>
         <div className="foot-links">
+          <a href="/#werkwijze">Werkwijze</a>
           <a href="/product">Product</a>
           <a href="/voor-wie">Voor wie</a>
-          <a href="/sectoren">Sectoren</a>
-          <a href="/governance-ai">Governance &amp; AI</a>
-          <a href="/over-ons">Over</a>
-          <a href="https://the-paradox.com" target="_blank" rel="noreferrer">
-            The Paradox
-          </a>
+          <a href="/governance-ai">AI &amp; governance</a>
+          <a href="/over-ons">Over ons</a>
           <a href="/contact">Contact</a>
           <a href="/login">Inloggen</a>
           <a href="/privacy">Privacy</a>
         </div>
         <div className="foot-bottom">
           <span>© 2026 Bestuurdersportaal</span>
-          <span>Gebouwd op het besluitvormingsdenken van The Paradox.</span>
+          <span>Eerste specialisatie: pensioenfondsen</span>
         </div>
       </div>
     </footer>

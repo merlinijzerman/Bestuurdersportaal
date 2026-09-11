@@ -6,9 +6,10 @@ import { bepaalSurface } from "@/core/lib/platform-host";
 // pagina's (de (public)-allowlist, TO §9.1). Op de app- en platform-host is er
 // niets te indexeren → lege sitemap.
 //
-// /sectoren/pensioenfondsen was gated tot de pensioen-SME-validatie (besluit
-// 0037 #4); die is akkoord (6 juli 2026), dus het pad staat nu in de sitemap én
-// in MARKETING_PUBLIEKE_PADEN (lib/platform-host.ts).
+// v0.8: /sectoren en /sectoren/pensioenfondsen zijn samengevoegd met /voor-wie
+// en redirecten daarheen — ze horen dus niet meer in de sitemap. /contact en
+// /privacy dragen `robots: noindex` en staan er om dezelfde reden niet in:
+// een sitemap die een noindex-pagina aanmeldt, geeft een tegenstrijdig signaal.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const host = (await headers()).get("host");
   const surface = bepaalSurface({
@@ -40,18 +41,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
-      url: `${origin}/sectoren`,
-      lastModified: nu,
-      changeFrequency: "monthly",
-      priority: 0.8,
-    },
-    {
-      url: `${origin}/sectoren/pensioenfondsen`,
-      lastModified: nu,
-      changeFrequency: "monthly",
-      priority: 0.7,
-    },
-    {
       url: `${origin}/governance-ai`,
       lastModified: nu,
       changeFrequency: "monthly",
@@ -64,25 +53,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     },
     {
-      // Sinds besluit 0103 een hoofdnavigatie-item ("Over") met eigen inhoud
-      // (oprichters, werkprincipes, visie) — daarom hoger dan de 0.5/yearly
-      // die paste bij een colofon-achtige pagina.
       url: `${origin}/over-ons`,
       lastModified: nu,
       changeFrequency: "monthly",
       priority: 0.7,
-    },
-    {
-      url: `${origin}/contact`,
-      lastModified: nu,
-      changeFrequency: "yearly",
-      priority: 0.6,
-    },
-    {
-      url: `${origin}/privacy`,
-      lastModified: nu,
-      changeFrequency: "yearly",
-      priority: 0.3,
     },
   ];
 }

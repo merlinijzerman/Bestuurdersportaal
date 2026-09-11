@@ -2,18 +2,14 @@
 
 import type { NavKey } from "./Header";
 
-// Uitklapnavigatie voor mobiel (FO REQ-PV-004/062). Toetsenbordbedienbaar: het
-// is een lijst gewone links naar echte routes; sluiten gebeurt bij klik
-// (onNavigate) en het menu is verborgen voor screenreaders zolang het dicht is
-// (aria-hidden). Primaire CTA = "Neem contact op".
-// Zelfde items en volgorde als de desktopnav in Header.tsx, met Contact erachter.
-// Geen externe links meer sinds besluit 0103 (The Paradox uit de hoofdnavigatie).
+// Uitklapnavigatie voor mobiel. Zelfde items en volgorde als de desktopnav,
+// met Over ons en Contact erachter. Primaire CTA = "Plan een live demo".
 const ITEMS: { href: string; label: string }[] = [
+  { href: "/#werkwijze", label: "Werkwijze" },
   { href: "/product", label: "Product" },
   { href: "/voor-wie", label: "Voor wie" },
-  { href: "/sectoren", label: "Sectoren" },
-  { href: "/governance-ai", label: "Governance & AI" },
-  { href: "/over-ons", label: "Over" },
+  { href: "/governance-ai", label: "AI & governance" },
+  { href: "/over-ons", label: "Over ons" },
   { href: "/contact", label: "Contact" },
 ];
 
@@ -45,7 +41,7 @@ export default function MobileMenu({
       ))}
       <div className="m-cta">
         <a href="/contact" className="btn btn-primary" onClick={onNavigate}>
-          Neem contact op
+          Plan een live demo
         </a>
         <a href="/login" className="btn btn-outline" onClick={onNavigate}>
           Inloggen

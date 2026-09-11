@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description:
     "Privacyverklaring van het Bestuurdersportaal: hoe wij omgaan met persoonsgegevens via de publieke website.",
   alternates: { canonical: "/privacy" },
+  // Buiten de zoekresultaten: juridische pagina, hoort bij een bezoek aan de site.
+  robots: { index: false, follow: true },
 };
 
 export default function PrivacyPage() {
