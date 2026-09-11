@@ -158,10 +158,10 @@ export default function Pagina() {
             </article>
 
             <article className="pcard">
-              <div className="pshot"><Image src="/website/06-microsoft-365-sharepoint.png" width={1200} height={675} loading="lazy" alt="Illustratie van de koppeling tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
-              <h3>Microsoft 365 en SharePoint</h3>
-              <p>Documenten worden als bron verbonden, terwijl gebruikers met hun vertrouwde werkaccount inloggen.</p>
-              <span className="where">Koppelingen · illustratieve weergave</span>
+              <div className="pshot"><Image src="/website/06-microsoft-365-sharepoint.png" width={1200} height={675} loading="lazy" alt="Illustratie van een optionele integratie tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
+              <h3>Integratie met Microsoft 365</h3>
+              <p>Bestuurdersportaal kan worden gekoppeld aan Microsoft 365 en SharePoint, met documenten als bron en inloggen via het vertrouwde werkaccount.</p>
+              <span className="where">Integratiemogelijkheid · illustratieve weergave</span>
             </article>
 
           </div>

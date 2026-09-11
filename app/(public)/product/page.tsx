@@ -178,18 +178,19 @@ export default function Pagina() {
       <section className="sec-app">
         <div className="wrap">
           <div className="sec-head">
-            <div className="eyebrow-label">Koppelingen</div>
-            <h2>Uw stukken blijven staan waar ze staan.</h2>
+            <div className="eyebrow-label">Integratiemogelijkheden</div>
+            <h2>Een optionele koppeling met Microsoft 365.</h2>
           </div>
           <div className="duoshot omgekeerd">
             <div className="tekst">
-              <p>Documenten uit SharePoint worden als bron aan het dossier verbonden, terwijl
-                 gebruikers met hun vertrouwde werkaccount inloggen.</p>
+              <p>Bestuurdersportaal kan worden gekoppeld aan Microsoft 365. Documenten uit
+                 SharePoint blijven in hun bestaande omgeving en worden als bron aan het dossier
+                 verbonden. Gebruikers kunnen via hun vertrouwde werkaccount inloggen.</p>
               <p className="bijschrift">Illustratieve weergave — geen applicatiescherm.</p>
             </div>
             <div>
-              <div className="pshot"><Image src="/website/06-microsoft-365-sharepoint.png" width={1200} height={675} alt="Illustratie van de koppeling tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
-              <p className="bijschrift">Microsoft 365 en SharePoint · illustratieve weergave</p>
+              <div className="pshot"><Image src="/website/06-microsoft-365-sharepoint.png" width={1200} height={675} alt="Illustratie van een optionele integratie tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
+              <p className="bijschrift">Optionele Microsoft 365-integratie · illustratieve weergave</p>
             </div>
           </div>
         </div>
