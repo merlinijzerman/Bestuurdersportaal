@@ -28,7 +28,7 @@ const LABEL = "contact.POST";
 
 // Gekoppelde privacyverklaring-versie (zie app/(public)/privacy). Wordt
 // server-side bij elke inzending meegeslagen (FO §10 / REQ-PV-040).
-const PRIVACY_VERSION = "2026-06-29";
+const PRIVACY_VERSION = "2026-09-11";
 
 // Rate-limit-venster voor de Retry-After bij een 429. De AUTORITATIEVE limiet
 // (max 3 / 10 min) is sinds D1 in de RPC contact_aanvraag_insert belegd; dit
