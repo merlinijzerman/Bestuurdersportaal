@@ -3,16 +3,15 @@ import Header from "../_components/Header";
 import Footer from "../_components/Footer";
 import ContactForm from "./_components/ContactForm";
 
-// Contactpagina v0.8. De primaire CTA op de site is "Plan een live demo", dus
-// deze pagina vertelt wat daarna gebeurt: dertig minuten, online, één dossier.
-// Claimdiscipline ongewijzigd: geen reactietermijn toegezegd, geen e-mailadres
-// in de front-end. `/contact?type=pilot` preselecteert de pilot-optie.
+// Contactpagina v0.8. De primaire CTA op de site is "Plan een live demo".
+// De introductie blijft bewust algemeen: geen vaste duur, agenda of voorbereiding
+// beloven. `/contact?type=pilot` preselecteert de pilot-optie.
 // Bewust buiten de zoekresultaten (noindex): deze pagina hoort bij een bezoek
 // aan de site, niet als los zoekresultaat.
 export const metadata: Metadata = {
   title: { absolute: "Plan een live demo — Bestuurdersportaal" },
   description:
-    "Dertig minuten, online: we lopen door één besluitdossier — voorbereiding, afweging, besluit en opvolging. Geen voorbereiding nodig.",
+    "Maak kennis met Bestuurdersportaal en bespreek wat het platform voor uw organisatie kan betekenen.",
   alternates: { canonical: "/contact" },
   robots: { index: false, follow: true },
 };
@@ -35,33 +34,12 @@ export default async function ContactPage({
             <div className="label">Contact</div>
             <h1>Plan een live demo.</h1>
             <p>
-              Dertig minuten, online. We lopen door één besluitdossier —
-              voorbereiding, afweging, besluit en opvolging. Neem gerust een
-              lopend vraagstuk in gedachten.
+              Maak kennis met Bestuurdersportaal. We laten zien hoe het platform
+              werkt en bespreken wat het voor uw organisatie kan betekenen.
             </p>
-            <div className="what">
-              <div>
-                <span className="d">—</span>
-                <span>
-                  <b>Een vraag</b> — kort schakelen over de mogelijkheden.
-                </span>
-              </div>
-              <div>
-                <span className="d">—</span>
-                <span>
-                  <b>Een verkenning</b> — bespreken of dit bij uw organisatie past.
-                </span>
-              </div>
-              <div>
-                <span className="d">—</span>
-                <span>
-                  <b>Een pilot</b> — samen één besluitdossier inrichten met uw
-                  eigen stukken.
-                </span>
-              </div>
-            </div>
             <p className="privacy-note">
-              Geen voorbereiding nodig. We vragen niet vooraf om documenten.
+              Laat uw gegevens achter. We nemen contact op om een passend moment
+              af te spreken.
             </p>
           </div>
 
