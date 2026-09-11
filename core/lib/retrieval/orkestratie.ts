@@ -21,6 +21,7 @@ import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
+import { verifieerToelating, nietOndersteundeFilters, vatToelatingSamen } from "./toelatingspoort";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type { Afbreekgrendel } from "./afbreken";import type {
   AdapterUitkomst,
@@ -179,38 +180,81 @@ export async function voerRetrievalUit(
     scope: { ...ctx.scope, documentIds: query.documentScope },
   }));
   try {
+    // 1a. TOELATINGSPOORT, VÓÓR `zoek()` — de filterbelofte. Een filter dat de
+    //     adapter niet ondersteunt is een FOUT, nooit een stille no-op: anders
+    //     zoekt hij breder dan gevraagd en ziet niemand het. Dat spoor wordt
+    //     dan niet bevraagd; `zoek()` wordt aantoonbaar niet aangeroepen.
+    const caps = opdracht.adapter.capabilities();
+    const nietOndersteund = sporen.map(({ query }) => nietOndersteundeFilters(caps, query));
+    const filterweigeringen = nietOndersteund.filter((f) => f.length > 0).length;
+
     const uitkomsten: AdapterUitkomst[] = await Promise.all(
-      sporen.map(({ query }, i) => opdracht.adapter.zoek(spoorContext[i], query))
+      sporen.map(({ query }, i) =>
+        nietOndersteund[i].length > 0
+          ? Promise.resolve<AdapterUitkomst>({
+              kandidaten: [],
+              methode: "geen",
+              // Niet bevraagd — dus ook geen provider die iets heeft gedaan.
+              provider: "geen",
+              latencyMs: 0,
+              opgehaald: 0,
+              fout: "configuratiefout",
+            })
+          : opdracht.adapter.zoek(spoorContext[i], query)
+      )
     );
     // Tussen twee stappen door: is er afgebroken, dan stopt de keten hier — ook
     // als de I/O zelf toevallig al klaar was.
     grendel.bewaak();
 
-    // 2. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
+    // 2. TOELATINGSPOORT, NÁ `zoek()` en VÓÓR de kandidatenbegrenzing. Niet pas
+    //    vóór de selectie: kapt de pool eerst af op `maxKandidaten`, dan kan een
+    //    geweigerde bron een toelaatbare kandidaat uit de pool hebben verdrongen.
+    //
+    //    ÉÉN BATCH over alle sporen: één `poortNu` en één V5-herlezing per unieke
+    //    bron. Per spoor apart zou dezelfde bron twee keer worden gelezen en bij
+    //    een intrekking tussen die lezingen verschillend worden beoordeeld.
+    const poort = await verifieerToelating(
+      ctxMetGrendel,
+      opdracht.adapter,
+      uitkomsten.map((u) => u.kandidaten)
+    );
+    grendel.bewaak();
+    const toegelatenPerSpoor = poort.toegelatenPerSpoor;
+    const geweigerdPerSpoor = sporen.map((_, i) => poort.geweigerd.filter((w) => w.spoor === i).length);
+    // Inhoudsvrij, alleen tellingen; `null` als er niets is geweigerd.
+    const toelating = vatToelatingSamen(poort.geweigerd, filterweigeringen);
+
+    // 3. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
     //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
     //    responstijd de volgorde en was de samenvoeging niet meer deterministisch.
+    //    `kandidaten` telt wat de poort HEEFT TOEGELATEN: een geweigerde bron mag
+    //    ook in het auditspoor niet meetellen.
     const perAdapter: RetrievalTussenresultaat["perAdapter"] = uitkomsten.map((u, i) => ({
       naam: opdracht.adapter.naam,
       query: sporen[i].query.naam,
       methode: u.methode,
       latencyMs: u.latencyMs,
-      kandidaten: u.kandidaten.length,
+      kandidaten: toegelatenPerSpoor[i].length,
       fout: u.fout,
+      // Alleen aanwezig als er werkelijk iets is geweigerd: een veld dat altijd
+      // op 0 staat zou elke bestaande snapshot veranderen zonder iets te melden.
+      ...(geweigerdPerSpoor[i] > 0 ? { geweigerd: geweigerdPerSpoor[i] } : {}),
     }));
 
-    // 3. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
+    // 4. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
     //    bewust ruimer (`max(3 × maxResultaten, 20)`), want de centrale weging mag
     //    een kandidaat van plek 15 alsnog in de top halen. Terugkappen naar
     //    `maxResultaten` zou die promotie stil wegnemen.
     let truncatie: RetrievalTussenresultaat["truncatie"];
-    const begrensd = uitkomsten.map((u, i) => {
+    const begrensd = toegelatenPerSpoor.map((toegelaten, i) => {
       const max = sporen[i].query.maxKandidaten;
-      if (u.kandidaten.length <= max) return u.kandidaten;
+      if (toegelaten.length <= max) return toegelaten;
       truncatie = { reden: "kandidaten" };
-      return u.kandidaten.slice(0, max);
+      return toegelaten.slice(0, max);
     });
 
-    // 4. Selectie PER SPOOR — zie de kopnoot — gevolgd door de providerhook.
+    // 5. Selectie PER SPOOR — zie de kopnoot — gevolgd door de providerhook.
     const geselecteerdPerSpoor: Bronresultaat[][] = [];
     const extraPerSpoor: Partial<RetrievalMeta>[] = [];
     for (let i = 0; i < uitkomsten.length; i++) {
@@ -265,7 +309,10 @@ export async function voerRetrievalUit(
       methode: uitkomsten[0].methode as RetrievalMeta["methode"],
       opgehaald: uitkomsten.reduce((s, u) => s + u.opgehaald, 0),
       diagnostiek: uitkomsten[0].diagnostiek ?? {},
-      extra: extraPerSpoor[0] ?? {},
+      // De inhoudsvrije poortsamenvatting reist mee in de META, want die gaat
+      // via de route naar het duurzame auditspoor. Alleen aanwezig als er iets
+      // is geweigerd: een altijd-aanwezig veld zou elke snapshot veranderen.
+      extra: { ...(extraPerSpoor[0] ?? {}), ...(toelating ? { toelating } : {}) },
       primaireRefs: new Set(primair.map((b) => b.ref)),
       meerdereSporen: uitkomsten.length > 1,
     };

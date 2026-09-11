@@ -99,6 +99,14 @@ export type FondsContext = {
    * resterende budget niet laten springen.
    */
   readonly startMonotoonMs: number;
+  /**
+   * PR-C — SERVER-SIDE wandkloktijd van binnenkomst (ISO), naast
+   * `startMonotoonMs` en op hetzelfde moment vastgelegd. De toelatingspoort
+   * toetst hiermee dat een rechtenbewijs uit DIT verzoek komt (V4). Server-side,
+   * nooit uit de body: een client die zijn eigen verzoekstart mag aanleveren,
+   * kan het geldigheidsvenster naar believen oprekken.
+   */
+  readonly verzoekStartOp: string;
 };
 
 export type RouteSpecV1 = {
@@ -330,6 +338,7 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
       // wrapper hierna doet (auth, guards, profiel) hoort in het verbruikte deel
       // van de functieduur te vallen.
       const startMonotoonMs = performance.now();
+      const verzoekStartOp = new Date().toISOString();
       const requestId = crypto.randomUUID();
 
       // 1. Authenticatie.
@@ -517,6 +526,7 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
         supabase,
         requestId,
         startMonotoonMs,
+        verzoekStartOp,
       };
 
       // Laatste vangnet: alleen wat de route zélf niet vangt. Dezelfde vorm als

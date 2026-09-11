@@ -69,6 +69,10 @@ export const META_BASIS = [
   "drempel",
   "zwakke_bronbasis",
   "parent",
+  // PR-C — toelatingspoort: uitsluitend TELLINGEN per categorie en grond, geen
+  // referenties. Daarom spoor, niet inhoud: er staat niets in dat de gebruiker
+  // niet mocht zien, alleen dát er iets is geweigerd en waarom.
+  "toelating",
   // fondsdiscipline (defense-in-depth, increment T4)
   "toegepaste_fonds_filter",
   "namespace_conventie",

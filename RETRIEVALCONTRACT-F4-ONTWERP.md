@@ -622,6 +622,66 @@ documentpad, reranker, trage provider) waarin tussen check en modelcontext meer 
 zit dan verwacht. `basis: "rls"` kent geen eigen venster — daar is de tenant-client zelf
 het bewijs — maar V2 en V3 gelden onverkort.
 
+**Twee bindingen maken het bewijs NIET-OVERDRAAGBAAR (PR-C).** `Toegangsbewijs`
+was tot PR-C alleen aan actor, verzoek en configuratieversie gebonden — en die
+drie zijn binnen één verzoek per definitie gelijk voor álle kandidaten. Een
+geldig bewijs voor bron A paste daarmee naadloos op kandidaat B. Het bewijs
+draagt daarom nu:
+
+| Veld | Moet exact gelijk zijn aan |
+|---|---|
+| `resultaatRef` | `Bronresultaat.ref` van de kandidaat die het bewijs draagt |
+| `bronregistratieRef` | `Bronresultaat.bronregistratieRef` — een ONAFHANKELIJK veld dat de adapter op het resultaat zet, los van het bewijs. Stond hij alleen in het bewijs, dan was hij een bewering over zichzelf. V5 herleest onder de referentie van het RESULTAAT |
+
+**Eén beoordeling per verzoek, niet per spoor.** Alle kandidaten van alle
+sporen gaan in één batch: één `poortNu` en één V5-herlezing per unieke
+bronregistratie, daarna terug geprojecteerd. Per spoor apart zou dezelfde bron
+twee keer worden gelezen, en bij een intrekking tussen die lezingen in het ene
+spoor worden toegelaten en in het andere geweigerd.
+
+**De poort heeft twee momenten.** Vóór `zoek()`: een filter dat niet in
+`ondersteundeFilters` staat is een fout — het spoor wordt dan niet bevraagd
+(`configuratiefout`), want anders zoekt een adapter breder dan gevraagd en ziet
+niemand het. Alleen filters mét een waarde tellen. Ná `zoek()`: per kandidaat
+versiebewijs (als de adapter `versiebewijs` belooft) en rechtenbewijs.
+
+**Genormaliseerd naar twee categorieën.** Elke weigergrond valt onder
+`toestemming_geweigerd` (de gebruiker mocht het niet zien, of het was niet aan te
+tonen) of `configuratiefout` (de adapter houdt zich niet aan zijn eigen contract:
+`bewijs_niet_beloofd`, `versiebewijs_ontbreekt`, `v5_hook_ontbreekt`, een
+niet-ondersteund filter). Het eerste is normaal bedrijf, het tweede een defect.
+Een hook die GOOIT valt onder het eerste: de rechten waren niet te bevestigen.
+
+**Het duurzame auditspoor** krijgt `retrieval_meta.toelating`: tellingen per
+categorie en per grond, **geen referenties** — dat zijn identifiers van stukken
+die de gebruiker juist níét mocht zien. Als spoor geclassificeerd in
+`audit-meta.ts`; anders viel hij fail-closed in de inhoud.
+
+**Waar de poort draait: vóór de kandidatenbegrenzing.** Niet pas vóór de
+selectie. Kapt de pool eerst af op `maxKandidaten`, dan kan een geweigerde bron
+een toelaatbare kandidaat uit de pool hebben verdrongen — die telt dan alsnog
+mee, en wel onzichtbaar, want hij staat nergens meer in.
+
+**De poort is providerneutraal, en dat wordt statisch afgedwongen.** Wat een
+resultaat moet meebrengen volgt uitsluitend uit `capabilities().permissionProof`;
+een gate leest `toelatingspoort.ts` en verbiedt in de CODE elke vergelijking op
+`microsoft`, `sharepoint`, `supabase`, `bronsoort` of `provider`. Een adapter die
+`permissionProof: false` declareert mag bovendien **geen** bewijs meesturen —
+anders claimt hij stilzwijgend iets dat nergens wordt getoetst.
+
+**Fail-closed, met onderscheidbare gronden.** Ontbrekend bewijs, een verwisselde
+binding, een onleesbaar tijdstip, een ontbrekende V5-hook, een ontbrekende
+map-entry én een hook die GOOIT weigeren alle zes. Die laatste twee zijn bewust
+gescheiden (`v5_hook_ontbreekt` versus `v5_hook_fout`): een Graph-storing hoort
+in het auditspoor niet op een ontwerpfout te lijken. `poortNu` wordt één keer
+bepaald voor alle kandidaten — anders hangt de uitkomst bij een venstergrens af
+van de volgorde waarin toevallig is geïtereerd.
+
+**Het auditspoor telt geen geweigerde bron mee.** `perAdapter.kandidaten` telt wat
+de poort doorliet; `geweigerd` verschijnt **alleen** als er werkelijk iets is
+geweigerd. Een veld dat altijd op 0 staat zou elke bestaande snapshot veranderen
+zonder iets te melden.
+
 **V5 toetst tegen de ACTUELE stand, niet tegen een momentopname.** Dit is een correctie
 op de eerste formulering, die de meegeleverde `bronconfiguratieVersie` vergeleek met de
 versie die de orkestratie *bij verzoekstart* had vastgelegd. Die vergelijking is

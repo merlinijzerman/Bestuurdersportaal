@@ -29,6 +29,7 @@ const CTX: RetrievalContext = {
   taaktype: "chat_generatie",
   bronbeleid: { bronsoorten: ["fonds", "sharepoint"] },
   correlationId: "corr-1",
+  verzoekStartOp: new Date().toISOString(),
 };
 
 /** Een SharePoint-resultaat: geen chunk, geen chunk-id, wel volledig bewijs. */
@@ -39,11 +40,17 @@ function sharepointBron(n: number, doc: string, passage: string): Bronresultaat 
     titel: `SharePointstuk ${n}`,
     documentIdentiteit: { documentId: doc, bibliotheek: "fonds", bron: "SharePoint", fondsId: CTX.fondsId },
     versie: { soort: "etag", waarde: `etag-${n}`, gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
+    // ONAFHANKELIJK van het bewijs, door de adapter op het resultaat gezet.
+    bronregistratieRef: "bron-1",
     toegangscontrole: {
       toegestaan: true,
+      resultaatRef: `sp-${n}`,
+      bronregistratieRef: "bron-1",
       gebruikerId: CTX.actor.soort === "gebruiker" ? CTX.actor.id : "",
       correlationId: CTX.correlationId,
-      gecontroleerdOp: "2026-09-10T10:00:00.000Z",
+      gecontroleerdOp: new Date().toISOString(),
+      // VERS: V4 eist `verzoekStartOp ≤ gecontroleerdOp ≤ nu`, met een venster
+      // van 60 s. Een vaste tijdstempel uit het verleden wordt terecht geweigerd.
       basis: "delegated_user",
       bronconfiguratieVersie: 3,
     },
@@ -85,13 +92,22 @@ function nepAdapter(opties: {
     capabilities: () => ({
       bronsoorten: ["sharepoint"],
       strategieen: ["gericht"],
-      ondersteundeFilters: [],
+      // De filters die deze suite werkelijk gebruikt. Stond hier `[]`, dan
+      // werden `modus`, `bronsoortprofiel` en `peildatum` tot PR-C stil
+      // genegeerd — precies de no-op die de toelatingspoort nu weigert.
+      ondersteundeFilters: ["modus", "bronsoortprofiel", "peildatum"],
       versiebewijs: true,
       permissionProof: true,
       preview: true,
       cancellation: true,
       timeout: true,
     }),
+    // V5 — de nepadapter belooft bewijs, dus hij moet de herlezing ook kunnen.
+    // Standaard: bron verbonden op versie 3, gelijk aan het bewijs in
+    // `sharepointBron`. Losse tests overschrijven dit om intrekking te simuleren.
+    async verifieerBronregistratie(_ctx, refs) {
+      return new Map(refs.map((r) => [r, { verbonden: true, versie: 3 }]));
+    },
     async zoek(ctxVanSpoor, query): Promise<AdapterUitkomst> {
       const ms = opties.vertragingMs?.[query.naam] ?? 0;
       if (ms > 0) await new Promise((r) => setTimeout(r, ms));

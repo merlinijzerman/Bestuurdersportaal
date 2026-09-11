@@ -47,6 +47,17 @@ export interface RetrievalContext {
     bevrorenChunkIds?: string[];
   };
   correlationId: string;
+  /**
+   * PR-C — SERVER-SIDE wandkloktijd van binnenkomst (ISO), vastgelegd in
+   * `withFondsRoute` naast `startMonotoonMs`. V4 toetst
+   * `verzoekStartOp ≤ gecontroleerdOp ≤ poortNu`; zonder deze waarde vervalt die
+   * eis stil tot alleen "≤ nu" — de zwakkere helft, want dan glipt een proof van
+   * vóór dit verzoek er alsnog door.
+   *
+   * Wandklok, niet monotoon: hij wordt vergeleken met een ISO-tijdstempel uit
+   * een ander proces. `startMonotoonMs` meet duur en is daarvoor onbruikbaar.
+   */
+  verzoekStartOp: string;
   /** T2-1/PR-B: de samengestelde afbraak- én deadlinegrendel over de hele keten. */
   signal?: AbortSignal;
 }
@@ -120,6 +131,20 @@ export interface Versiebewijs {
  */
 export interface Toegangsbewijs {
   toegestaan: true;
+  /**
+   * PR-C — BINDING AAN DE KANDIDAAT. Exact gelijk aan `Bronresultaat.ref`.
+   * Zonder deze binding is een bewijs overdraagbaar: een geldig bewijs voor bron
+   * A kan aan kandidaat B worden gehangen zodra actor, correlatie-id en
+   * configuratieversie toevallig gelijk zijn — en dat zijn ze binnen één
+   * verzoek per definitie.
+   */
+  resultaatRef: string;
+  /**
+   * PR-C — BINDING AAN DE BRONREGISTRATIE. De opaque bronreferentie waaronder
+   * V5 de actuele stand herleest. Providerneutraal: de orkestratie kent er geen
+   * betekenis aan toe, ze groepeert er alleen op.
+   */
+  bronregistratieRef: string;
   gebruikerId: string;
   correlationId: string;
   gecontroleerdOp: string;
@@ -134,6 +159,14 @@ export interface Bronresultaat {
   titel: string;
   documentIdentiteit: { documentId: string; bibliotheek?: string | null; bron?: string | null; fondsId?: string | null };
   versie: Versiebewijs;
+  /**
+   * PR-C — de opaque BRONREGISTRATIEreferentie van dit resultaat, gezet door de
+   * adapter OP HET RESULTAAT, los van het bewijs. Dat is het punt: stond hij
+   * alleen in `toegangscontrole`, dan was hij een bewering ín hetzelfde bewijs
+   * dat hij moet staven. De poort eist dat beide gelijk zijn, en herleest V5
+   * onder DEZE waarde — niet onder wat het bewijs over zichzelf zegt.
+   */
+  bronregistratieRef?: string;
   /** Verplicht zodra de adapter `permissionProof` claimt (§4.2.1). */
   toegangscontrole?: Toegangsbewijs;
   locator: { pagina?: number | null; paragraaf?: string | null; mappad?: string; chunkIndex?: number };
@@ -239,8 +272,13 @@ export interface RetrievalTussenresultaat {
     naam: RetrievalAdapter["naam"];
     query: string;
     methode: AdapterUitkomst["methode"];
-    latencyMs: number;
+    /** Wat de TOELATINGSPOORT heeft doorgelaten, niet wat de adapter ophaalde. */
     kandidaten: number;
+    latencyMs: number;
+    /** Alleen aanwezig als de poort werkelijk iets weigerde (PR-C). Een veld dat
+     *  altijd op 0 staat zou elke bestaande snapshot veranderen zonder iets te
+     *  melden. */
+    geweigerd?: number;
     fout?: RetrievalFoutcategorie;
   }[];
   latencyMs: number;
@@ -304,10 +342,36 @@ export interface CitaatOpdracht {
   startIndex?: number;
 }
 
+/** Wat V5 over één bronregistratie moet weten. Providerneutraal. */
+export interface Bronregistratiestand {
+  /** Is de bron op DIT moment nog verbonden? */
+  verbonden: boolean;
+  /** De actuele configuratieversie; moet gelijk zijn aan die in het bewijs. */
+  versie: number;
+}
+
 export interface RetrievalAdapter {
   readonly naam: "supabase-rag" | "microsoft-sharepoint";
   capabilities(): AdapterCapabilities;
   zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst>;
+  /**
+   * V5 — de ACTUELE stand van de bronregistratie, één aanroep per verzoek met
+   * alle unieke `bronregistratieRef`s. Verplicht zodra de adapter
+   * `permissionProof` claimt; ontbreekt hij dan, dan weigert de poort gesloten.
+   *
+   * WAAROM HERLEZEN EN NIET VERGELIJKEN MET EEN MOMENTOPNAME: beide waarden
+   * zouden dan uit hetzelfde moment komen en precies het geval dat V5 moet
+   * vangen — een intrekking of herconfiguratie TIJDENS het verzoek — blijft
+   * onzichtbaar. Een brede beurt duurt tientallen seconden.
+   *
+   * Request-lokaal, nooit gecached tussen verzoeken: een cache zou de
+   * herlezing terugbrengen tot precies de momentopname die zij vervangt.
+   * `ctx.signal` geldt onverkort — dit is I/O binnen de beurtdeadline.
+   */
+  verifieerBronregistratie?(
+    ctx: RetrievalContext,
+    refs: readonly string[]
+  ): Promise<Map<string, Bronregistratiestand>>;
   /**
    * Providerspecifieke uitbreiding van de SELECTIE — voor Supabase de
    * parent-context (siblings uit `document_chunks`). Draait per spoor, direct
