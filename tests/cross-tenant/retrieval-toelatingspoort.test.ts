@@ -267,7 +267,10 @@ test("PR-C — V5: een hook die GOOIT weigert, en is te onderscheiden van een on
   };
   const uit = await poort(CTX, adapter({ hook: stuk }), [bron("sp-1")]);
   assert.equal(uit.geweigerd[0].grond, "v5_hook_fout", "een storing hoort niet op een ontwerpfout te lijken");
-  assert.equal(categorieVan("v5_hook_fout"), "toestemming_geweigerd");
+  // Een Graph-503 zegt niets over wat deze gebruiker mag. Als autorisatie-
+  // weigering geboekt zou het incident onzichtbaar maken én de gebruiker ten
+  // onrechte als "niet bevoegd" registreren. Fail-closed blijft staan.
+  assert.equal(categorieVan("v5_hook_fout"), "providerfout");
 });
 
 test("PR-C — V5 herleest onder de referentie VAN HET RESULTAAT, niet uit het bewijs", async () => {
@@ -357,6 +360,9 @@ test("PR-C — een niet-ondersteund filter: `zoek()` wordt aantoonbaar NIET aang
   assert.equal(uit.perAdapter[0].fout, "configuratiefout");
   assert.deepEqual(uit.geselecteerd, []);
   assert.equal(uit.meta.toelating?.categorieen.configuratiefout, 1, "en het auditspoor meldt het");
+  // …ook PER GROND — anders klopt "per categorie én per grond" niet en tellen
+  // de gronden niet op tot het totaal.
+  assert.equal(uit.meta.toelating?.gronden.filter_niet_ondersteund, 1);
 });
 
 // ── De race: intrekking TIJDENS het verzoek ─────────────────────────────────
@@ -437,6 +443,50 @@ test("PR-C — de samenvatting bereikt de chatroute én het auditspoor", async (
   assert.ok((META_BASIS as readonly string[]).includes("toelating"), "`toelating` hoort bij het spoor");
 });
 
+test("PR-C — de gronden tellen op tot het totaal, en elke categorie ook", () => {
+  const t = vatToelatingSamen(
+    [{ grond: "geen_bewijs" }, { grond: "v5_hook_fout" }, { grond: "versiebewijs_ontbreekt" }],
+    2
+  );
+  assert.ok(t);
+  const som = (o: Record<string, number | undefined>) => Object.values(o).reduce((a: number, b) => a + (b ?? 0), 0);
+  assert.equal(som(t.gronden), t.geweigerd, "per grond telt op tot het totaal");
+  assert.equal(som(t.categorieen), t.geweigerd, "per categorie telt op tot het totaal");
+  assert.deepEqual(t.categorieen, { toestemming_geweigerd: 1, providerfout: 1, configuratiefout: 3 });
+});
+
+// ── Pariteit: wat de app schrijft, moet de database ook teruggeven ──────────
+
+test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in `meta_projectie()`", async () => {
+  // DE FOUT UIT DE REVIEW: `toelating` stond alleen in de TS-allowlist. De
+  // database hanteert een EIGEN allowlist, dus de samenvatting werd opgeslagen
+  // en verdween bij het lezen. Dezelfde controle vond ook `gateway` (#311 T3),
+  // sinds 766bbe6 in dezelfde toestand. Deze gate leest de NIEUWSTE definitie
+  // van `meta_projectie` uit de migraties en eist dat beide lijsten gelijk zijn.
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { join } = await import("node:path");
+  const dir = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
+  const laatste = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .filter((f) => /create or replace function public\.meta_projectie\(/.test(readFileSync(join(dir, f), "utf8")))
+    .pop();
+  assert.ok(laatste, "er hoort een definitie van meta_projectie te zijn");
+  const sql = readFileSync(join(dir, laatste!), "utf8");
+  const lijst = (naam: string) => {
+    const m = sql.match(new RegExp(`${naam} constant text\\[\\] := array\\[([\\s\\S]*?)\\];`));
+    assert.ok(m, `${naam} niet gevonden in ${laatste}`);
+    return new Set([...m![1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
+  };
+  const { META_BASIS, META_BRON } = await import("../../core/lib/audit-meta");
+  const verschil = (a: Iterable<string>, b: Set<string>) => [...a].filter((x) => !b.has(x)).sort();
+  assert.deepEqual(verschil(META_BASIS as readonly string[], lijst("c_basis")), [], `basis ontbreekt in ${laatste}`);
+  assert.deepEqual(verschil(META_BRON as readonly string[], lijst("c_bron")), [], `bron ontbreekt in ${laatste}`);
+  assert.deepEqual(verschil(lijst("c_basis"), new Set(META_BASIS as readonly string[])), [], "DB-basis kent een sleutel die TS niet kent");
+  assert.deepEqual(verschil(lijst("c_bron"), new Set(META_BRON as readonly string[])), [], "DB-bron kent een sleutel die TS niet kent");
+});
+
 // ── Providerneutraliteit, statisch afgedwongen ──────────────────────────────
 
 test("PR-C — de poort kent geen providernamen en geen bronsoorten", async () => {
@@ -448,8 +498,13 @@ test("PR-C — de poort kent geen providernamen en geen bronsoorten", async () =
     .split("\n")
     .filter((r) => !/^\s*(\/\/|\*|\/\*)/.test(r))
     .join("\n");
-  for (const verboden of ["microsoft", "sharepoint", "supabase", "bronsoort", "provider"]) {
-    assert.doesNotMatch(code, new RegExp(verboden, "i"), `de poort mag niet op \`${verboden}\` beslissen`);
+  // Providernamen en bronsoorten: nergens, ook niet als deel van een woord.
+  for (const verboden of ["microsoft", "sharepoint", "supabase", "bronsoort"]) {
+    assert.doesNotMatch(code, new RegExp(`\\b${verboden}`, "i"), `de poort mag niet op \`${verboden}\` beslissen`);
   }
+  // `provider` als AFZONDERLIJK woord — een eigenschap of vergelijking waarop
+  // wordt beslist. De foutcategorie `providerfout` (§4.4) is geen providerkeuze
+  // maar een genormaliseerde uitkomst, en valt daar bewust buiten.
+  assert.doesNotMatch(code, /\bprovider\b/i, "de poort mag niet op `provider` beslissen");
   assert.match(code, /caps\.permissionProof/, "de belofte van de adapter is het criterium");
 });

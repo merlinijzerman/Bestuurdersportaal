@@ -38,6 +38,7 @@ import type {
 
 /** Waarom een kandidaat is geweigerd. Inhoudsvrij; gaat naar het auditspoor. */
 export type Weigergrond =
+  | "filter_niet_ondersteund"
   | "geen_bewijs"
   | "bewijs_niet_beloofd"
   | "versiebewijs_ontbreekt"
@@ -53,15 +54,18 @@ export type Weigergrond =
   | "v5_geen_stand";
 
 /**
- * De genormaliseerde foutcategorie (§4.4). Twee soorten falen die in het
+ * De genormaliseerde foutcategorie (§4.4). Drie soorten falen die in het
  * auditspoor NIET op elkaar mogen lijken:
  *   • `toestemming_geweigerd` — de gebruiker mocht dit niet zien, of het was
  *     niet aan te tonen dat hij het mocht;
- *   • `configuratiefout` — de ADAPTER hield zich niet aan zijn eigen contract.
- * Het eerste is normaal bedrijf; het tweede is een defect dat iemand moet
- * oplossen.
+ *   • `configuratiefout` — de ADAPTER hield zich niet aan zijn eigen contract;
+ *   • `providerfout` — de PROVIDER faalde (een Graph-503). Dat zegt niets over
+ *     de rechten van de gebruiker.
+ * Alle drie weigeren gesloten. Maar een storing bij Microsoft rapporteren als
+ * een gewone autorisatieweigering zou het incident onzichtbaar maken én de
+ * gebruiker ten onrechte als "niet bevoegd" boeken.
  */
-export type Weigercategorie = "toestemming_geweigerd" | "configuratiefout";
+export type Weigercategorie = "toestemming_geweigerd" | "configuratiefout" | "providerfout";
 
 const CATEGORIE: Record<Weigergrond, Weigercategorie> = {
   geen_bewijs: "toestemming_geweigerd",
@@ -73,10 +77,11 @@ const CATEGORIE: Record<Weigergrond, Weigercategorie> = {
   v4_venster: "toestemming_geweigerd",
   v5_bron_gewijzigd: "toestemming_geweigerd",
   v5_geen_stand: "toestemming_geweigerd",
-  // Een hook die GOOIT: de rechten konden niet worden bevestigd. Dat is voor de
-  // gebruiker een weigering, geen defect van het contract.
-  v5_hook_fout: "toestemming_geweigerd",
+  // Een hook die GOOIT: de provider faalde. Fail-closed blijft staan, maar het
+  // is een storing — geen uitspraak over wat deze gebruiker mag.
+  v5_hook_fout: "providerfout",
   // De adapter belooft iets wat hij niet waarmaakt.
+  filter_niet_ondersteund: "configuratiefout",
   bewijs_niet_beloofd: "configuratiefout",
   versiebewijs_ontbreekt: "configuratiefout",
   v5_hook_ontbreekt: "configuratiefout",
@@ -298,6 +303,9 @@ export function vatToelatingSamen(
     categorieen[c] = (categorieen[c] ?? 0) + 1;
   }
   if (filterweigeringen > 0) {
+    // Ook per GROND geteld: anders klopt de claim "per categorie én per grond"
+    // niet, en tellen de gronden niet op tot het totaal.
+    gronden.filter_niet_ondersteund = (gronden.filter_niet_ondersteund ?? 0) + filterweigeringen;
     categorieen.configuratiefout = (categorieen.configuratiefout ?? 0) + filterweigeringen;
   }
   return { geweigerd: totaal, categorieen, gronden };

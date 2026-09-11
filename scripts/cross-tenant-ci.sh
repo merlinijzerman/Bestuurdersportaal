@@ -191,6 +191,9 @@ SQL_M365F1="supabase/checks/2026_09_04_microsoft_fase1_connectorfundament.sql"
 # #311 T2 — AI-gateway: privaat schema, minimale rol ai_gateway (exact 3 executes,
 # nul tabelrechten), profiel-eigenaarschap, backfill ×4, fail-closed fondstrigger.
 SQL_AIGW="supabase/checks/2026_09_04_ai_gateway.sql"
+# #322 PR-C — de toelatingssamenvatting (en `gateway`) overleven beide
+# leesniveaus van het auditspoor, met de tellingen intact.
+SQL_TOELATING="supabase/checks/2026_09_11_toelating_auditprojectie.sql"
 # Microsoft 365 fase 2A — delta/cursor/run-integriteit en private Outlook-ACL.
 SQL_M365F2A="supabase/checks/2026_09_04_microsoft_outlook_fase2a.sql"
 # Microsoft 365 fase 3A (#321) — fondsgebonden SharePoint-bron, private ACL,
@@ -433,6 +436,10 @@ TEST_DATABASE_URL="$DB_URL" node scripts/breakglass-directe-refresh.mjs
 echo
 echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
+echo
+
+echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van het auditspoor --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_TOELATING"
 echo
 
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
