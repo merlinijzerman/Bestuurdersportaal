@@ -166,6 +166,7 @@ export const LEZINGKLASSE = {
   "core/lib/rag.ts::document_chunks": { klassen: ["evidence"], doel: "de retrievalkern zelf" },
   "core/lib/rag.ts::documenten": { klassen: ["evidence"], doel: "documentmetadata bij de chunks (status, geldigheid, normgewicht)" },
   "core/lib/parent-context.ts::document_chunks": { klassen: ["evidence"], doel: "parent-context rond een geselecteerde chunk — buiten rag.ts om (gap G-8)" },
+  "core/lib/retrieval/supabase-versie.ts::document_chunks": { klassen: ["evidence"], doel: "#367 herleest de actuele document- en indexeringsversie vóór ranking" },
   "core/lib/besluitvorming-bron.ts::decision_objects": { klassen: ["evidence"], doel: "besluitregistratie als formele bron (gap G-1a)" },
   "core/lib/vergelijk-productie.ts::semantic_units": { klassen: ["evidence"], doel: "documentgebonden waarden met pagina en evidence (gap G-1a)" },
 

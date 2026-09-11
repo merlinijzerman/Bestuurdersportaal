@@ -34,7 +34,7 @@ set search_path = public, pg_temp
 as $$
 declare
   c_basis constant text[] := array[
-    'methode','opgehaald','geselecteerd','embedding_query_success','fallback_reason',
+    'correlation_id','methode','opgehaald','geselecteerd','embedding_query_success','fallback_reason',
     'rerank','drempel','zwakke_bronbasis','parent',
     'toegepaste_fonds_filter','namespace_conventie','fondsdiscipline_gedropt',
     'body_fonds_id_genegeerd',

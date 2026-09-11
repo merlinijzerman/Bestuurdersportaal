@@ -2603,9 +2603,31 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
         }
       );
+      // #367 — dezelfde request-id moet de hele keten ongewijzigd verlaten.
+      // Dit is een harde invariant: bij een afwijking volgt geen modelcall en
+      // dus ook geen governance-regel met een misleidende correlatie.
+      if (voltooid.meta.correlation_id !== gatewayCtx.correlatieId) {
+        throw new Error("retrieval_correlation_mismatch");
+      }
       chunks = retrieval.chunksVoor(voltooid.geselecteerd);
       contextTekst = voltooid.contextTekst;
-      bronnen = voltooid.bronverwijzingen;
+      // De retrievalcontractlaag kent uitsluitend opaque identiteiten. Dit
+      // bestaande Supabase-antwoordvlak gebruikt `document_id` nog als lokale
+      // downloadlocator; projecteer die pas hier, ná de adaptergrens, terug.
+      // `citation_id` en de nieuwe auditidentiteiten blijven providerneutraal.
+      const chunkPerPassage = new Map(
+        voltooid.geselecteerd.map((bron, index) => [bron.ref, chunks[index]])
+      );
+      const lokaalDocumentPerOpaque = new Map(
+        voltooid.geselecteerd.map((bron, index) => [
+          bron.documentIdentiteit.id,
+          chunks[index]?.document_id,
+        ])
+      );
+      bronnen = voltooid.bronverwijzingen.map((bron) => ({
+        ...bron,
+        document_id: lokaalDocumentPerOpaque.get(bron.document_id) ?? bron.document_id,
+      }));
       // H-10: bron-afbakening en het aantal geneutraliseerde bronlabel-patronen
       // door naar respectievelijk de systeemprompt en het auditspoor.
       bronSentinel = voltooid.sentinel;
@@ -2614,6 +2636,15 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // De HERBOUWDE meta: hij beschrijft exact de bronnen die in de context
         // staan, ook wanneer de grens blokken heeft afgekapt.
         ...voltooid.meta,
+        chunks: voltooid.meta.chunks.map((bron) => ({
+          ...bron,
+          id: chunkPerPassage.get(bron.id)?.id ?? bron.id,
+          document_id: lokaalDocumentPerOpaque.get(bron.document_id) ?? bron.document_id,
+        })),
+        bronversie_audit: voltooid.meta.bronversie_audit?.map((bron) => ({
+          ...bron,
+          document_id: lokaalDocumentPerOpaque.get(bron.document_id) ?? bron.document_id,
+        })),
         zoekvraag: zoekVraag,
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,

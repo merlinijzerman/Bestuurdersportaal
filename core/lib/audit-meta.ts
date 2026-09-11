@@ -60,6 +60,7 @@ export type MetaNiveau = "basis" | "bron" | "inhoud";
  */
 export const META_BASIS = [
   // retrieval-uitvoering
+  "correlation_id",
   "methode",
   "opgehaald",
   "geselecteerd",

@@ -9,6 +9,7 @@
 //  normalisatielaag mapt ze. Domein-UUID's zijn vast.
 // ============================================================================
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import {
   ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX,
@@ -504,6 +505,8 @@ async function seedDocumenten(admin) {
       bestandsnaam: "w1-document.pdf",
       bestandstype: "pdf",
       opslag_pad: DOCUMENT1_PAD,
+      // #367 — sterke, deterministische R1-versie-identiteit voor de golden.
+      bestand_hash: createHash("sha256").update(DOCUMENT1_BYTES).digest("hex"),
       actief: true,
     }, { onConflict: "id" });
     if (error) throw new Error(`documenten(actief): ${error.message}`);

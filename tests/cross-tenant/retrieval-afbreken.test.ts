@@ -54,7 +54,8 @@ const QUERY = (over: Partial<RetrievalQuery> = {}): RetrievalQuery => ({
 function bron(ref: string, doc: string, passage: string): Bronresultaat {
   return {
     ref, bronsoort: "sharepoint", titel: "T",
-    documentIdentiteit: { documentId: doc, bibliotheek: "fonds", bron: "SharePoint" },
+    documentIdentiteit: { id: `doc_v1_${doc}`, bibliotheek: "fonds", bron: "SharePoint" },
+    passageIdentiteit: { id: `passage_v1_${ref}` },
     versie: { soort: "etag", waarde: "e", gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
     locator: {}, passage, status: { actueel: true }, rang: { positie: 1, score: 1 },
   };
@@ -75,7 +76,7 @@ function traagAdapter(msPerCall: number, gezien: { signal?: AbortSignal }): Retr
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: false, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(ctx): Promise<AdapterUitkomst> {
       gezien.signal = ctx.signal;
@@ -187,7 +188,7 @@ test("PR-B — na een afbreking draait er geen enkele vervolgstap meer", async (
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: false, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -273,7 +274,7 @@ test("PR-B — een timeout tijdens verrijkSelectie stopt de keten", async () => 
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: false, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -312,7 +313,7 @@ test("PR-B — de deadline loopt DOOR tot en met citeer(); verrijkWeergave valt 
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: false, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -436,7 +437,7 @@ test("PR-B — `citeer()` laat de grendel niet achter in het eindresultaat", asy
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: false, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       return {
@@ -469,7 +470,7 @@ test("PR-B — tweemaal citeren draait de tweede keer niet ZONDER deadline", asy
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: false, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       return {

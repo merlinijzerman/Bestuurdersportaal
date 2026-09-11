@@ -36,6 +36,7 @@ import { verrijkMetParents, type ParentMeta } from "./parent-context";
 // T2-1 — verplaatst naar de orkestratielaag (besluit 0213 punt 5); tijdelijk
 // teruggeïmporteerd zodat C5/C6/C7 in PR-A ongewijzigd blijven. T2-2 ruimt dit op.
 import { bouwMeta as bouwMetaNeutraal, type AuditBron } from "./retrieval/meta";
+import { maakDocumentIdentiteit, maakPassageIdentiteit, maakVolledigeVersieHash } from "./retrieval/identiteit";
 
 /** Chunk-vormige bron → de neutrale auditkijk. Eén plek, zodat het terugvalpad
  *  voor C5/C6/C7 exact hetzelfde auditspoor blijft schrijven. */
@@ -510,6 +511,8 @@ export interface DocumentChunk {
   pagina: number | null;
   paragraaf: string | null;
   chunk_index: number;
+  /** Adapterprivate ingrediënten voor R1-versiebewijs; niet publiek gemaakt. */
+  indexering_versie?: string | null;
   // Relevantie-score uit ts_rank_cd; null bij fallback-zoekpaden zonder ranking.
   rang?: number | null;
   // Besluit 0139 — RRF-arm-rangen (1-based) waaruit deze chunk kwam: fts_rang =
@@ -554,6 +557,8 @@ export interface DocumentChunk {
     // verrijkDocumentmetadata() ná retrieval; zie daar waarom niet via de select.
     documenttype?: string | null;
     bestandstype?: string | null;
+    /** Adapterprivate ingrediënt voor R1-versiebewijs; niet publiek gemaakt. */
+    bestand_hash?: string | null;
   };
   // Increment D — aanwezig zodra de chunk uit een bevestigd notulensegment komt.
   // Gevuld door verrijkNotulenChunks() ná retrieval (de RPC's leveren dit niet);
@@ -574,6 +579,8 @@ export interface DocumentChunk {
 // geselecteerd voor de prompt. Wordt insert-only weggeschreven in
 // governance_log.retrieval_meta — geen wijziging aan append-only-garanties.
 export interface RetrievalMeta {
+  /** Eén id voor adapter → poort → selectie → citatie → gateway → governance. */
+  correlation_id?: string;
   /**
    * PR-C — inhoudsvrije samenvatting van de TOELATINGSPOORT: aantallen per
    * genormaliseerde categorie (`toestemming_geweigerd` / `configuratiefout`) en
@@ -625,6 +632,15 @@ export interface RetrievalMeta {
     documentstatus: string | null;
     bronstatus: string | null;
     documentdatum: string | null;
+    document_identiteit?: string;
+    passage_identiteit?: string;
+    citation_id?: string;
+    versie?: {
+      soort: "etag" | "ctag" | "hash" | "status-datum" | "onbekend";
+      waarde: string | null;
+      gecontroleerd_op: string | null;
+      toestand: "sterk" | "gedegradeerd" | "onbekend";
+    };
   }[];
   // Hybride retrieval (Fase C). Of de query-embedding lukte en, bij terugval op
   // FTS, waarom — zodat een stille terugval zichtbaar is in het auditspoor.
@@ -1080,6 +1096,8 @@ interface ZoekChunkRij {
 }
 
 export interface BronVerwijzing {
+  /** Stabiele, providerneutrale bron+passage+versie-identiteit. */
+  citation_id?: string;
   document_id: string;
   titel: string;
   bron: string;
@@ -1860,20 +1878,30 @@ export { neutraliseerBrontekst, maakBronSentinel };
  *  centrale citaatopbouw nodig heeft. Eén plek voor rag.ts en de adapter. */
 export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronresultaat {
   const d = chunk.documenten;
+  const namespace = d.bibliotheek === "generiek" ? "generiek" : `fonds:${d.fonds_id ?? "onbekend"}`;
+  const documentId = maakDocumentIdentiteit(namespace, chunk.document_id);
+  const passageId = maakPassageIdentiteit(documentId, `chunk-index:${chunk.chunk_index}`);
+  const volledigeVersie =
+    chunk.indexering_versie && d.bestand_hash
+      ? maakVolledigeVersieHash(chunk.document_id, chunk.indexering_versie, d.bestand_hash)
+      : null;
   return {
-    ref: chunk.id,
+    ref: passageId,
     bronsoort: d.bibliotheek === "generiek" ? "generiek" : chunk.notulen ? "notulen" : "fonds",
     titel: d.titel,
     documentIdentiteit: {
-      documentId: chunk.document_id,
+      id: documentId,
       bibliotheek: d.bibliotheek ?? null,
       bron: d.bron ?? null,
       fondsId: d.fonds_id ?? null,
     },
+    passageIdentiteit: { id: passageId },
     // R1 (T2-3) brengt de volledige hash. Tot dan is de documentdatum de ZWAKKE
     // legacyfallback, en is er geen controlemoment: `gecontroleerdOp: null` zegt
     // dat expliciet. Zonder documentdatum is er helemaal geen versiebewijs.
-    versie: d.documentdatum
+    versie: volledigeVersie
+      ? { soort: "hash" as const, waarde: volledigeVersie, gecontroleerdOp: new Date().toISOString() }
+      : d.documentdatum
       ? { soort: "status-datum" as const, waarde: d.documentdatum, gecontroleerdOp: null }
       : { soort: "onbekend" as const, waarde: null, gecontroleerdOp: null },
     locator: { pagina: chunk.pagina, paragraaf: chunk.paragraaf, chunkIndex: chunk.chunk_index },

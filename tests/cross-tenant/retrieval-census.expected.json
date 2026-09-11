@@ -237,6 +237,17 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/retrieval/supabase-versie.ts": {
+      "modules": {
+        "rag": [
+          "DocumentChunk"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
     "core/lib/vergelijk-productie.ts": {
       "modules": {
         "rag": [

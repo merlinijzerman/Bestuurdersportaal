@@ -56,7 +56,8 @@ function bron(ref: string, tc?: Toegangsbewijs | null, over: Partial<Bronresulta
     ref,
     bronsoort: "sharepoint",
     titel: "T",
-    documentIdentiteit: { documentId: `doc-${ref}` },
+    documentIdentiteit: { id: `doc_v1_${ref}` },
+    passageIdentiteit: { id: `passage_v1_${ref}` },
     versie: { soort: "etag", waarde: "e", gecontroleerdOp: null },
     bronregistratieRef: "bron-A",
     ...(tc === null ? {} : { toegangscontrole: tc ?? bewijs({ resultaatRef: ref }) }),
@@ -69,7 +70,7 @@ function bron(ref: string, tc?: Toegangsbewijs | null, over: Partial<Bronresulta
 }
 
 function caps(over: Partial<AdapterCapabilities> = {}): AdapterCapabilities {
-  return {
+  const uit: AdapterCapabilities = {
     bronsoorten: ["sharepoint"],
     strategieen: ["gericht"],
     ondersteundeFilters: [],
@@ -80,11 +81,16 @@ function caps(over: Partial<AdapterCapabilities> = {}): AdapterCapabilities {
     timeout: true,
     ...over,
   };
+  if (uit.versiebewijs && !uit.versiebeleid) {
+    uit.versiebeleid = { sterk: ["etag", "ctag", "hash"], gedegradeerd: [] };
+  }
+  return uit;
 }
 
 function adapter(opties: {
   caps?: Partial<AdapterCapabilities>;
   hook?: RetrievalAdapter["verifieerBronregistratie"];
+  versieHook?: RetrievalAdapter["verifieerVersies"];
   zoek?: RetrievalAdapter["zoek"];
 }): RetrievalAdapter {
   const c = caps(opties.caps);
@@ -101,6 +107,12 @@ function adapter(opties: {
         opgehaald: 0,
       })),
     ...(opties.hook ? { verifieerBronregistratie: opties.hook } : {}),
+    ...(c.versiebewijs
+      ? { verifieerVersies: opties.versieHook ?? (async (_ctx, refs) => new Map(refs.map((ref) => [ref, {
+          beschikbaar: true,
+          versie: { soort: "etag" as const, waarde: "e" },
+        }]))) }
+      : {}),
   };
 }
 
@@ -239,6 +251,64 @@ test("PR-C — belooft de adapter versiebewijs maar ontbreekt het → configurat
   const zonder = adapter({ caps: { versiebewijs: false }, hook: STAND() });
   const door = await poort(CTX, zonder, [bron("sp-1", undefined, { versie: { soort: "onbekend", waarde: "", gecontroleerdOp: null } })]);
   assert.equal(door.toegelatenPerSpoor[0].length, 1);
+});
+
+test("#367 — ontbrekende of niet-opaque identiteit wordt vóór ranking geweigerd", async () => {
+  const a = adapter({ caps: { permissionProof: false, versiebewijs: false } });
+  const ontbrekendDocument = bron("zonder-doc", null, {
+    documentIdentiteit: { id: "database-uuid" },
+  });
+  const ontbrekendePassage = bron("zonder-passage", null, {
+    passageIdentiteit: { id: "chunk-uuid" },
+  });
+  const uit = await verifieerToelating(CTX, a, [[ontbrekendDocument, ontbrekendePassage]]);
+  assert.equal(uit.toegelatenPerSpoor[0].length, 0);
+  assert.deepEqual(uit.geweigerd.map((w) => w.grond), ["identiteit_ontbreekt", "identiteit_ontbreekt"]);
+});
+
+test("#367 — sterke actuele versie komt door; gewijzigde, ontbrekende en corrupte stand weigeren", async () => {
+  const kandidaat = bron("sp-1", undefined, { versie: { soort: "hash", waarde: "version-v1", gecontroleerdOp: new Date().toISOString() } });
+  const capsSterk = { versiebewijs: true, versiebeleid: { sterk: ["hash" as const], gedegradeerd: [] } };
+  const actuele = async (_ctx: RetrievalContext, refs: readonly string[]) =>
+    new Map(refs.map((ref) => [ref, { beschikbaar: true, versie: { soort: "hash" as const, waarde: "version-v1" } }]));
+  assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: actuele }), [kandidaat])).toegelatenPerSpoor[0].length, 1);
+
+  const gewijzigd = async (_ctx: RetrievalContext, refs: readonly string[]) =>
+    new Map(refs.map((ref) => [ref, { beschikbaar: true, versie: { soort: "hash" as const, waarde: "version-v2" } }]));
+  assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: gewijzigd }), [kandidaat])).geweigerd[0].grond, "versie_gewijzigd");
+  const ontbreekt = async () => new Map();
+  assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: ontbreekt }), [kandidaat])).geweigerd[0].grond, "versiestand_ontbreekt");
+  const corrupt = async (_ctx: RetrievalContext, refs: readonly string[]) =>
+    new Map(refs.map((ref) => [ref, { beschikbaar: false, versie: { soort: "onbekend" as const, waarde: null } }]));
+  assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: corrupt }), [kandidaat])).geweigerd[0].grond, "versiestand_ontbreekt");
+});
+
+test("#367 — historische status-datum mag alleen expliciet gedegradeerd", async () => {
+  const historisch = bron("sp-1", undefined, { versie: { soort: "status-datum", waarde: "2020-01-01", gecontroleerdOp: new Date().toISOString() } });
+  const hook = async (_ctx: RetrievalContext, refs: readonly string[]) =>
+    new Map(refs.map((ref) => [ref, { beschikbaar: true, versie: { soort: "status-datum" as const, waarde: "2020-01-01" } }]));
+  const toegestaan = adapter({
+    caps: { versiebewijs: true, versiebeleid: { sterk: ["hash"], gedegradeerd: ["status-datum"] } },
+    hook: STAND(), versieHook: hook,
+  });
+  assert.equal((await poort(CTX, toegestaan, [historisch])).toegelatenPerSpoor[0].length, 1);
+
+  const dicht = adapter({
+    caps: { versiebewijs: true, versiebeleid: { sterk: ["hash"], gedegradeerd: [] } },
+    hook: STAND(), versieHook: hook,
+  });
+  assert.equal((await poort(CTX, dicht, [historisch])).geweigerd[0].grond, "versiesoort_niet_toegestaan");
+});
+
+test("#367 — ontbrekende of falende versieherlezing is zichtbaar en fail-closed", async () => {
+  const kandidaat = bron("sp-1", undefined, { versie: { soort: "hash", waarde: "v", gecontroleerdOp: new Date().toISOString() } });
+  const capsSterk = { versiebewijs: true, versiebeleid: { sterk: ["hash" as const], gedegradeerd: [] } };
+  const zonder = adapter({ caps: capsSterk, hook: STAND() });
+  delete zonder.verifieerVersies;
+  assert.equal((await poort(CTX, zonder, [kandidaat])).geweigerd[0].grond, "versie_hook_ontbreekt");
+  const stuk = async (): Promise<Map<string, never>> => { throw new Error("provider stuk"); };
+  assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: stuk }), [kandidaat])).geweigerd[0].grond, "versie_hook_fout");
+  assert.equal(categorieVan("versie_hook_fout"), "providerfout");
 });
 
 // ── V5: de actuele stand van de bronregistratie ─────────────────────────────

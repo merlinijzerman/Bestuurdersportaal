@@ -38,7 +38,8 @@ function sharepointBron(n: number, doc: string, passage: string): Bronresultaat 
     ref: `sp-${n}`,
     bronsoort: "sharepoint",
     titel: `SharePointstuk ${n}`,
-    documentIdentiteit: { documentId: doc, bibliotheek: "fonds", bron: "SharePoint", fondsId: CTX.fondsId },
+    documentIdentiteit: { id: `doc_v1_${doc}`, bibliotheek: "fonds", bron: "SharePoint", fondsId: CTX.fondsId },
+    passageIdentiteit: { id: `passage_v1_sp-${n}` },
     versie: { soort: "etag", waarde: `etag-${n}`, gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
     // ONAFHANKELIJK van het bewijs, door de adapter op het resultaat gezet.
     bronregistratieRef: "bron-1",
@@ -97,6 +98,7 @@ function nepAdapter(opties: {
       // genegeerd — precies de no-op die de toelatingspoort nu weigert.
       ondersteundeFilters: ["modus", "bronsoortprofiel", "peildatum"],
       versiebewijs: true,
+      versiebeleid: { sterk: ["etag", "ctag"], gedegradeerd: [] },
       permissionProof: true,
       preview: true,
       cancellation: true,
@@ -107,6 +109,13 @@ function nepAdapter(opties: {
     // `sharepointBron`. Losse tests overschrijven dit om intrekking te simuleren.
     async verifieerBronregistratie(_ctx, refs) {
       return new Map(refs.map((r) => [r, { verbonden: true, versie: 3 }]));
+    },
+    async verifieerVersies(_ctx, refs) {
+      const perRef = new Map(Object.values(opties.perQuery).flat().map((b) => [b.ref, b.versie]));
+      return new Map(refs.map((ref) => {
+        const versie = perRef.get(ref);
+        return [ref, { beschikbaar: !!versie?.waarde, versie: { soort: versie?.soort ?? "onbekend", waarde: versie?.waarde ?? null } }];
+      }));
     },
     async zoek(ctxVanSpoor, query): Promise<AdapterUitkomst> {
       const ms = opties.vertragingMs?.[query.naam] ?? 0;
@@ -331,8 +340,8 @@ test("T2-1 — het aanvullende spoor erft de documentscope van het primaire spoo
   // En de regressie zoals de review hem formuleerde: beide documenten komen in
   // het eindresultaat.
   assert.deepEqual(
-    tussen.geselecteerd.map((b) => b.documentIdentiteit.documentId),
-    ["doc-primair", "doc-bibliotheek"]
+    tussen.geselecteerd.map((b) => b.documentIdentiteit.id),
+    ["doc_v1_doc-primair", "doc_v1_doc-bibliotheek"]
   );
 });
 
@@ -492,7 +501,7 @@ test("T2-1 — na afkappen noemt het auditspoor exact de opgenomen bronnen", asy
   assert.equal(voltooid.geselecteerd.length, 1, "de tweede bron past niet meer");
   assert.equal(voltooid.meta.geselecteerd, 1);
   assert.deepEqual(voltooid.meta.chunks.map((c) => c.id), ["sp-1"]);
-  assert.deepEqual(voltooid.meta.bronversie_audit?.map((b) => b.document_id), ["doc-primair"]);
+  assert.deepEqual(voltooid.meta.bronversie_audit?.map((b) => b.document_id), ["doc_v1_doc-primair"]);
   // `aanvullend` telde één bron; die is afgekapt, dus moet nu op nul staan.
   assert.deepEqual(voltooid.meta.aanvullend, { chunks: 0, documenten: 0 });
 });

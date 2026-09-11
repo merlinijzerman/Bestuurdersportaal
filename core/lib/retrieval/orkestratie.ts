@@ -60,7 +60,7 @@ export interface Orkestratieopdracht {
 function alsAuditBron(b: Bronresultaat): AuditBron {
   return {
     ref: b.ref,
-    documentId: b.documentIdentiteit.documentId,
+    documentId: b.documentIdentiteit.id,
     bron: b.documentIdentiteit.bron ?? "",
     bibliotheek: b.documentIdentiteit.bibliotheek ?? "fonds",
     fondsId: b.documentIdentiteit.fondsId ?? null,
@@ -70,13 +70,16 @@ function alsAuditBron(b: Bronresultaat): AuditBron {
     score: b.rang.score ?? null,
     fts: b.rang.fts ?? null,
     vec: b.rang.vec ?? null,
+    documentIdentiteit: b.documentIdentiteit.id,
+    passageIdentiteit: b.passageIdentiteit.id,
+    versie: b.versie,
   };
 }
 
 function alsSelectieBron(b: Bronresultaat): SelectieBron {
   return {
     id: b.ref,
-    document_id: b.documentIdentiteit.documentId,
+    document_id: b.documentIdentiteit.id,
     tekst: b.passage,
     rang: b.rang.score ?? null,
     titel: b.titel,
@@ -98,7 +101,7 @@ function bouwRetrievalMeta(
 ): RetrievalMeta {
   const primair = opgenomen.filter((b) => basis.primaireRefs.has(b.ref));
   const aanvullend = opgenomen.filter((b) => !basis.primaireRefs.has(b.ref));
-  const basisMeta = bouwMeta(basis.methode, basis.opgehaald, primair.map(alsAuditBron));
+  const basisMeta = bouwMeta(basis.methode, basis.opgehaald, primair.map(alsAuditBron), basis.correlationId);
   return {
     ...basisMeta,
     ...basis.diagnostiek,
@@ -107,7 +110,7 @@ function bouwRetrievalMeta(
       ...basisMeta.chunks,
       ...aanvullend.map((b) => ({
         id: b.ref,
-        document_id: b.documentIdentiteit.documentId,
+        document_id: b.documentIdentiteit.id,
         rang: b.rang.score ?? null,
       })),
     ],
@@ -117,7 +120,7 @@ function bouwRetrievalMeta(
       ? {
           aanvullend: {
             chunks: aanvullend.length,
-            documenten: new Set(aanvullend.map((b) => b.documentIdentiteit.documentId)).size,
+            documenten: new Set(aanvullend.map((b) => b.documentIdentiteit.id)).size,
           },
         }
       : {}),
@@ -291,11 +294,11 @@ export async function voerRetrievalUit(
     // 5. Samenvoegen. Het primaire spoor vooraan; een document dat daar al in zit
     //    komt niet nóg eens uit een volgend spoor (één passage, één bronnummer).
     const primair = geselecteerdPerSpoor[0] ?? [];
-    const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.documentId));
+    const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.id));
     const aanvullend = geselecteerdPerSpoor
       .slice(1)
       .flat()
-      .filter((b) => !primaireDocIds.has(b.documentIdentiteit.documentId));
+      .filter((b) => !primaireDocIds.has(b.documentIdentiteit.id));
     const geselecteerd = [...primair, ...aanvullend];
 
     // 6. De contextgrens wordt NIET hier afgedwongen. Meten op de kale passage zou
@@ -315,6 +318,7 @@ export async function voerRetrievalUit(
       extra: { ...(extraPerSpoor[0] ?? {}), ...(toelating ? { toelating } : {}) },
       primaireRefs: new Set(primair.map((b) => b.ref)),
       meerdereSporen: uitkomsten.length > 1,
+      correlationId: ctx.correlationId,
     };
     const meta = bouwRetrievalMeta(geselecteerd, metaBasis);
 
@@ -428,7 +432,21 @@ export async function citeer(
     // Eerst de DEFINITIEVE context bouwen — inclusief de harde grens — en pas
     // daarna alle metadata afleiden van exact de bronnen die erin staan.
     // De grens komt UITSLUITEND van de query, via het tussenresultaat.
-    const c = bouwCitaties(verrijkt, { ...opdracht, maxContextTekens: tussen.maxContextTekens });
+    // De aanroeper kent mogelijk alleen providerprivate scope-id's. Leid de
+    // primaire set daarom hier opnieuw af uit de opaque refs die fase 1 zelf
+    // vastlegde; zo hoeft geen database-id het providercontract in.
+    const primaireDocumentIds = opdracht.primaireDocumentIds?.size
+      ? new Set(
+          verrijkt
+            .filter((bron) => tussen.metaBasis.primaireRefs.has(bron.ref))
+            .map((bron) => bron.documentIdentiteit.id)
+        )
+      : opdracht.primaireDocumentIds;
+    const c = bouwCitaties(verrijkt, {
+      ...opdracht,
+      primaireDocumentIds,
+      maxContextTekens: tussen.maxContextTekens,
+    });
     return {
       ...tussenData,
       geselecteerd: c.opgenomen,

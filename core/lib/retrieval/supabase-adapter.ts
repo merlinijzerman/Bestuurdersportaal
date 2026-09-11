@@ -22,6 +22,7 @@ import {
   type RetrievalOpties,
 } from "../rag";
 import { verrijkMetParents } from "../parent-context";
+import { alsActueleVersiestand, leesSupabaseVersies } from "./supabase-versie";
 import type {
   AdapterCapabilities,
   AdapterUitkomst,
@@ -67,6 +68,12 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
   // De adapter houdt de koppeling ref → chunk dus zelf bij en gebruikt haar
   // alleen in zijn eigen hooks.
   const chunkPerRef = new Map<string, DocumentChunk>();
+  const identiteitPerRef = new Map<string, Pick<Bronresultaat, "documentIdentiteit" | "passageIdentiteit" | "versie">>();
+
+  const behoudIdentiteit = (bron: Bronresultaat): Bronresultaat => {
+    const eerder = identiteitPerRef.get(bron.ref);
+    return eerder ? { ...bron, ...eerder } : bron;
+  };
 
   const adapter: RetrievalAdapter = {
     naam: "supabase-rag",
@@ -86,9 +93,10 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
           "primairRegime",
           "toonZwakkeGeneriek",
         ],
-        // T2-3 brengt de volledige hash (R1); tot dan draagt elk resultaat de
-        // zwakke `status-datum`-fallback en is dit bewust `false`.
-        versiebewijs: false,
+        versiebewijs: true,
+        // Bestaande documenten zonder complete hash-ingrediënten mogen alleen
+        // expliciet gedegradeerd door op hun status-datum. Zonder beide: dicht.
+        versiebeleid: { sterk: ["hash"], gedegradeerd: ["status-datum"] },
         // RLS is hier het bewijs; de adapter kan er geen per-resultaat
         // `toegangscontrole` voor leveren, dus claimt hij het ook niet.
         permissionProof: false,
@@ -126,16 +134,33 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
       const diagnostiek: Partial<RetrievalMeta> = { ...meta };
       for (const veld of SELECTIE_AFGELEID) delete (diagnostiek as Record<string, unknown>)[veld];
 
-      for (const c of chunks) chunkPerRef.set(c.id, c);
+      const versies = await leesSupabaseVersies(chunks, ctx.fondsId, ctx.signal);
+      const kandidaten = chunks.map((c, i) => ({
+        ...chunkAlsBronresultaat(c, i),
+        versie: versies.get(c.id) ?? { soort: "onbekend" as const, waarde: null, gecontroleerdOp: null },
+      }));
+      for (const [index, kandidaat] of kandidaten.entries()) {
+        chunkPerRef.set(kandidaat.ref, chunks[index]);
+        identiteitPerRef.set(kandidaat.ref, {
+          documentIdentiteit: kandidaat.documentIdentiteit,
+          passageIdentiteit: kandidaat.passageIdentiteit,
+          versie: kandidaat.versie,
+        });
+      }
 
       return {
-        kandidaten: chunks.map((c, i) => chunkAlsBronresultaat(c, i)),
+        kandidaten,
         methode: meta.methode,
         provider: "supabase",
         latencyMs: Date.now() - t0,
         opgehaald: meta.opgehaald,
         diagnostiek,
       };
+    },
+    async verifieerVersies(ctx: RetrievalContext, refs: readonly string[]) {
+      const chunks = refs.map((ref) => chunkPerRef.get(ref)).filter((c): c is DocumentChunk => Boolean(c));
+      const versies = await leesSupabaseVersies(chunks, ctx.fondsId, ctx.signal);
+      return new Map(refs.map((ref) => [ref, alsActueleVersiestand(versies.get(ref))]));
     },
     /**
      * Parent-context (small-to-big): siblings uit `document_chunks`. Puur
@@ -151,8 +176,9 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
       // De peildatum van HET SPOOR, nooit "vandaag": anders zou een historische
       // retrieval ongemerkt met de datum van nu worden verrijkt.
       const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum, { signal: ctx.signal });
-      for (const c of p.chunks) chunkPerRef.set(c.id, c);
-      return { resultaten: p.chunks.map((c, i) => chunkAlsBronresultaat(c, i)), meta: { parent: p.meta } };
+      const resultaten = p.chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)));
+      for (const [index, bron] of resultaten.entries()) chunkPerRef.set(bron.ref, p.chunks[index]);
+      return { resultaten, meta: { parent: p.meta } };
     },
 
     /**
@@ -168,8 +194,9 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
       if (chunks.length === 0) return geselecteerd;
       chunks = await verrijkNotulenChunks(chunks, ctx.signal);
       chunks = await verrijkDocumentmetadata(chunks, ctx.fondsId, ctx.signal);
-      for (const c of chunks) chunkPerRef.set(c.id, c);
-      return chunks.map((c, i) => chunkAlsBronresultaat(c, i));
+      const resultaten = chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)));
+      for (const [index, bron] of resultaten.entries()) chunkPerRef.set(bron.ref, chunks[index]);
+      return resultaten;
     },
   };
 
