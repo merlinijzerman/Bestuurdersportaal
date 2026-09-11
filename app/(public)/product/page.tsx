@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
 import { OPEN_GRAPH_IMAGE } from "../open-graph";
@@ -31,7 +32,7 @@ export default function Pagina() {
           <h1>Modules die samen het besluitproces bedienen.</h1>
           <p className="lede">
             Een brongebonden AI-assistent die put uit uw eigen bibliotheek en context. Vergaderingen
-            met voorbereiding per agendapunt. En complete besluitdossiers met risico's, aannames,
+            met voorbereiding per agendapunt. En complete besluitdossiers met risico&apos;s, aannames,
             voorwaarden en opvolging — inclusief afschrift en auditdossier.
           </p>
           <p><a href="/governance-ai" className="textlink">Zo begrenzen we het AI-gebruik →</a></p>
@@ -57,7 +58,7 @@ export default function Pagina() {
               </ul>
             </div>
             <div>
-              <div className="pshot"><img src="/website/01-voorbereiding-agendapunt.png" alt="Productweergave: een agendapunt met voorstel, samenvatting en verdiepingsvragen." /></div>
+              <div className="pshot"><Image src="/website/01-voorbereiding-agendapunt.png" width={1200} height={675} alt="Productweergave: een agendapunt met voorstel, samenvatting en verdiepingsvragen." /></div>
               <p className="bijschrift">Voorbereiding bij het agendapunt · demonstratiedata</p>
             </div>
           </div>
@@ -72,18 +73,18 @@ export default function Pagina() {
           </div>
           <div className="duoshot omgekeerd">
             <div className="tekst">
-              <h3>Aannames, risico's en voorwaarden</h3>
+              <h3>Aannames, risico&apos;s en voorwaarden</h3>
               <p>Elk besluitdossier kent dezelfde vaste onderdelen. Wat open staat blijft zichtbaar,
                  ook als het bestuur besluit door te gaan.</p>
               <ul className="lijst">
                 <li><span className="ck">—</span><span><b>Aannames</b> met een onzekerheid en een evaluatiecriterium.</span></li>
-                <li><span className="ck">—</span><span><b>Risico's</b> met impact, kans, categorie en beheersmaatregel.</span></li>
+                <li><span className="ck">—</span><span><b>Risico&apos;s</b> met impact, kans, categorie en beheersmaatregel.</span></li>
                 <li><span className="ck">—</span><span><b>Voorwaarden</b> met KPI, drempelwaarde en monitorfrequentie.</span></li>
                 <li><span className="ck">—</span><span><b>Afwijkende standpunten</b> apart genoteerd in plaats van weggemasseerd.</span></li>
               </ul>
             </div>
             <div>
-              <div className="pshot"><img src="/website/03-risicos-en-aannames.png" alt="Productweergave: het onderbouwingspaneel met aannames, risico's en voorwaarden." /></div>
+              <div className="pshot"><Image src="/website/03-risicos-en-aannames.png" width={1200} height={675} alt="Productweergave: het onderbouwingspaneel met aannames, risico's en voorwaarden." /></div>
               <p className="bijschrift">De afweging wordt expliciet · demonstratiedata</p>
             </div>
           </div>
@@ -114,7 +115,7 @@ export default function Pagina() {
                 Doorgaan mag — met een reden die wordt vastgelegd.</p>
             </div>
             <div>
-              <div className="pshot"><img src="/website/04-besluit-heeft-een-route.png" alt="Productweergave: de fasen van een besluitproces met de actieve stap en de openstaande vereisten." /></div>
+              <div className="pshot"><Image src="/website/04-besluit-heeft-een-route.png" width={1200} height={675} alt="Productweergave: de fasen van een besluitproces met de actieve stap en de openstaande vereisten." /></div>
               <p className="bijschrift">Het besluit heeft een route · demonstratiedata</p>
             </div>
           </div>
@@ -140,7 +141,7 @@ export default function Pagina() {
               </ul>
             </div>
             <div>
-              <div className="pshot"><img src="/website/05-besluit-en-voorwaarden.png" alt="Productweergave: een vastgelegd besluit met motivering, alternatieven en voorwaarden." /></div>
+              <div className="pshot"><Image src="/website/05-besluit-en-voorwaarden.png" width={1200} height={675} alt="Productweergave: een vastgelegd besluit met motivering, alternatieven en voorwaarden." /></div>
               <p className="bijschrift">Besluit en voorwaarden vastgelegd · demonstratiedata</p>
             </div>
           </div>
@@ -167,7 +168,7 @@ export default function Pagina() {
               <p style={{marginTop: '18px'}}><a href="/governance-ai" className="textlink">Zo begrenzen we het AI-gebruik →</a></p>
             </div>
             <div>
-              <div className="pshot"><img src="/website/02-antwoorden-zichtbare-bronnen.png" alt="Productweergave: een antwoord met het paneel Onderbouwing en bronnen." /></div>
+              <div className="pshot"><Image src="/website/02-antwoorden-zichtbare-bronnen.png" width={1200} height={675} alt="Productweergave: een antwoord met het paneel Onderbouwing en bronnen." /></div>
               <p className="bijschrift">Antwoorden met zichtbare bronnen · demonstratiedata</p>
             </div>
           </div>
@@ -187,7 +188,7 @@ export default function Pagina() {
               <p className="bijschrift">Illustratieve weergave — geen applicatiescherm.</p>
             </div>
             <div>
-              <div className="pshot"><img src="/website/06-microsoft-365-sharepoint.png" alt="Illustratie van de koppeling tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
+              <div className="pshot"><Image src="/website/06-microsoft-365-sharepoint.png" width={1200} height={675} alt="Illustratie van de koppeling tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
               <p className="bijschrift">Microsoft 365 en SharePoint · illustratieve weergave</p>
             </div>
           </div>

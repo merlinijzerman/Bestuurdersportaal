@@ -47,7 +47,7 @@ export default function Pagina() {
           <div className="rolgrid">
             <div className="rol">
               <h3>Besturen en directies</h3>
-              <p>Veel informatie, beperkte tijd, grote verantwoordingsdruk. Voor besluiten waarbij informatie, risico's, alternatieven en verantwoordelijkheden tegen elkaar moeten worden gewogen.</p>
+              <p>Veel informatie, beperkte tijd, grote verantwoordingsdruk. Voor besluiten waarbij informatie, risico&apos;s, alternatieven en verantwoordelijkheden tegen elkaar moeten worden gewogen.</p>
               <span className="out">Levert op: besluitdossier, afwegingsoverzicht.</span>
             </div>
             <div className="rol">
@@ -67,8 +67,8 @@ export default function Pagina() {
             </div>
             <div className="rol">
               <h3>Governance, risk en compliance</h3>
-              <p>Risico's, beheersmaatregelen en beleidskaders staan vaak los van het bestuurlijke besluit. Hier hangen ze eraan vast.</p>
-              <span className="out">Levert op: besluit met gekoppelde risico's.</span>
+              <p>Risico&apos;s, beheersmaatregelen en beleidskaders staan vaak los van het bestuurlijke besluit. Hier hangen ze eraan vast.</p>
+              <span className="out">Levert op: besluit met gekoppelde risico&apos;s.</span>
             </div>
           </div>
           <p className="sharp">Ongeacht de rol draait het om hetzelfde: navolgbaar maken waarop een besluit rust.</p>
@@ -135,7 +135,7 @@ export default function Pagina() {
           <div className="kaartjes">
             <div className="kaartje"><h3>Uitbesteding en sturing</h3><p>Besluiten over uitbesteding en het sturen op uitbestede partijen onderbouwen en vastleggen.</p></div>
             <div className="kaartje"><h3>Beleggingsbeleid en risicohouding</h3><p>De afweging en de vastlegging rond beleggingsbeleid en risicohouding ondersteunen.</p></div>
-            <div className="kaartje"><h3>Risicobeheersing en compliance</h3><p>Risico's, beheersmaatregelen en beleidskaders aan het bestuurlijke besluit verbinden.</p></div>
+            <div className="kaartje"><h3>Risicobeheersing en compliance</h3><p>Risico&apos;s, beheersmaatregelen en beleidskaders aan het bestuurlijke besluit verbinden.</p></div>
             <div className="kaartje"><h3>Bestuurs- en commissiebesluiten</h3><p>Voorbereiding, advisering en besluitvorming met bronnen, aannames en opvolgpunten in één dossier.</p></div>
             <div className="kaartje"><h3>Verantwoording</h3><p>Afwegingen, besluiten en opvolging herleidbaar maken voor intern toezicht en externe stakeholders.</p></div>
             <div className="kaartje"><h3>Evaluatie</h3><p>Toetsen of voorwaarden zijn nagekomen en of de aannames klopten.</p></div>

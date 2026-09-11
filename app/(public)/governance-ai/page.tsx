@@ -47,7 +47,7 @@ export default function Pagina() {
           <div className="kaartjes">
             <div className="kaartje"><h3>Werkt binnen uw eigen documentatie</h3><p>De assistent zoekt in uw bibliotheek, uw dossiers en uw eerdere besluiten, en in een centraal gecureerd kader met wet- en regelgeving — niet in een onzichtbaar achtergrondmodel.</p></div>
             <div className="kaartje"><h3>Feit en duiding gescheiden</h3><p>Het verschil tussen wat er staat en wat een interpretatie is, blijft expliciet.</p></div>
-            <div className="kaartje"><h3>Aannames zichtbaar</h3><p>Aannames, risico's en onzekerheden worden benoemd, niet weggepoetst.</p></div>
+            <div className="kaartje"><h3>Aannames zichtbaar</h3><p>Aannames, risico&apos;s en onzekerheden worden benoemd, niet weggepoetst.</p></div>
             <div className="kaartje"><h3>Rollen en rechten</h3><p>Wie wat mag zien en doen volgt de governance van uw organisatie, per orgaan en commissie.</p></div>
             <div className="kaartje"><h3>Reconstrueerbaar</h3><p>Een audittrail maakt achteraf navolgbaar hoe een besluit tot stand kwam.</p></div>
           </div>
@@ -66,7 +66,7 @@ export default function Pagina() {
               <div className="tag">Wel</div>
               <ul>
                 <li><span className="ck">—</span><span>Ordenen, toetsen en signaleren, met verwijzing naar de bron.</span></li>
-                <li><span className="ck">—</span><span>Aannames, risico's en afwegingen zichtbaar maken.</span></li>
+                <li><span className="ck">—</span><span>Aannames, risico&apos;s en afwegingen zichtbaar maken.</span></li>
                 <li><span className="ck">—</span><span>Navolgbaar vastleggen hoe een besluit tot stand kwam.</span></li>
               </ul>
             </div>

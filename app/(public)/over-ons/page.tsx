@@ -87,7 +87,7 @@ export default function Pagina() {
                  wordt ingezet.</p>
               <div className="meta">
                 <span className="expertise">Strategie · Governance · Onderzoek</span>
-                <a href="https://www.linkedin.com/in/roberttimmer/nl" target="_blank" rel="noopener" className="textlink">LinkedIn →</a>
+                <a href="https://www.linkedin.com/in/roberttimmer/nl" target="_blank" rel="noopener noreferrer" className="textlink">LinkedIn →</a>
               </div>
             </article>
 
@@ -109,7 +109,7 @@ export default function Pagina() {
                  kunnen dragen.</p>
               <div className="meta">
                 <span className="expertise">Pensioenen · Architectuur · Recht</span>
-                <a href="https://www.linkedin.com/in/merlin-ijzerman-19183a2a" target="_blank" rel="noopener" className="textlink">LinkedIn →</a>
+                <a href="https://www.linkedin.com/in/merlin-ijzerman-19183a2a" target="_blank" rel="noopener noreferrer" className="textlink">LinkedIn →</a>
               </div>
             </article>
           </div>
@@ -135,7 +135,7 @@ export default function Pagina() {
               <p>We bouwen in de open lucht: wat we leren over besluitvorming, governance en
                  verantwoord AI-gebruik delen we onderweg.</p>
             </div>
-            <a href="https://www.linkedin.com/company/bestuurdersportaal/" target="_blank" rel="noopener" className="btn btn-primary">Volg ons op LinkedIn</a>
+            <a href="https://www.linkedin.com/company/bestuurdersportaal/" target="_blank" rel="noopener noreferrer" className="btn btn-primary">Volg ons op LinkedIn</a>
           </div>
         </div>
       </section>

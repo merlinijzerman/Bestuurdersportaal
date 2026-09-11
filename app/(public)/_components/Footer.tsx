@@ -12,12 +12,12 @@ export default function Footer({
       <footer>
         <div className="wrap wide foot-links">
           <Link href="/">Home</Link>
-          <a href="/product">Product</a>
-          <a href="/voor-wie">Voor wie</a>
-          <a href="/over-ons">Over ons</a>
-          <a href="/contact">Contact</a>
-          <a href="/login">Inloggen</a>
-          <a href="/privacy">Privacy</a>
+          <Link href="/product">Product</Link>
+          <Link href="/voor-wie">Voor wie</Link>
+          <Link href="/over-ons">Over ons</Link>
+          <Link href="/contact">Contact</Link>
+          <Link href="/login">Inloggen</Link>
+          <Link href="/privacy">Privacy</Link>
         </div>
       </footer>
     );
@@ -30,14 +30,14 @@ export default function Footer({
           Bestuurdersportaal — waar het besluit zijn onderbouwing houdt.
         </div>
         <div className="foot-links">
-          <a href="/#werkwijze">Werkwijze</a>
-          <a href="/product">Product</a>
-          <a href="/voor-wie">Voor wie</a>
-          <a href="/governance-ai">AI &amp; governance</a>
-          <a href="/over-ons">Over ons</a>
-          <a href="/contact">Contact</a>
-          <a href="/login">Inloggen</a>
-          <a href="/privacy">Privacy</a>
+          <Link href="/#werkwijze">Werkwijze</Link>
+          <Link href="/product">Product</Link>
+          <Link href="/voor-wie">Voor wie</Link>
+          <Link href="/governance-ai">AI &amp; governance</Link>
+          <Link href="/over-ons">Over ons</Link>
+          <Link href="/contact">Contact</Link>
+          <Link href="/login">Inloggen</Link>
+          <Link href="/privacy">Privacy</Link>
         </div>
         <div className="foot-bottom">
           <span>© 2026 Bestuurdersportaal</span>

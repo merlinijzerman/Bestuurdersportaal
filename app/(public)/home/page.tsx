@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
 import { OPEN_GRAPH_IMAGE } from "../open-graph";
@@ -55,7 +56,7 @@ export default function Pagina() {
             <div className="eyebrow-label">De afweging in beeld</div>
             <h2>Een besluit wordt sterker als ook de twijfel zichtbaar is.</h2>
             <p className="lede">
-              Bronnen, risico's, aannames en alternatieven krijgen een vaste plek voordat het
+              Bronnen, risico&apos;s, aannames en alternatieven krijgen een vaste plek voordat het
               bestuur beslist.
             </p>
           </div>
@@ -71,7 +72,7 @@ export default function Pagina() {
             <div className="m">
               <div className="st">Afwegen</div>
               <h3>Twijfel krijgt een plek</h3>
-              <p>Risico's krijgen een impact en een kans, aannames een onzekerheid en een
+              <p>Risico&apos;s krijgen een impact en een kans, aannames een onzekerheid en een
                  evaluatiecriterium. Een afwijkend standpunt wordt apart genoteerd.</p>
               <div className="res">De afweging staat op papier vóór de vergadering, niet erna.</div>
             </div>
@@ -102,7 +103,7 @@ export default function Pagina() {
 
           <div className="geheugen">
             <div className="g"><h3>Bronnen</h3><p>Welke informatie aan het besluit ten grondslag lag.</p></div>
-            <div className="g"><h3>Afweging</h3><p>Welke risico's, aannames en alternatieven zijn besproken.</p></div>
+            <div className="g"><h3>Afweging</h3><p>Welke risico&apos;s, aannames en alternatieven zijn besproken.</p></div>
             <div className="g"><h3>Besluit</h3><p>Wat is besloten en onder welke voorwaarden.</p></div>
             <div className="g"><h3>Opvolging</h3><p>Welke acties en evaluatiemomenten eraan zijn verbonden.</p></div>
           </div>
@@ -123,42 +124,42 @@ export default function Pagina() {
           <div className="pcards">
 
             <article className="pcard">
-              <div className="pshot"><img src="/website/01-voorbereiding-agendapunt.png" width="1200" height="675" loading="lazy" alt="Productweergave: een agendapunt met het voorstel, de samenvatting en de verdiepingsvragen bij elkaar." /></div>
+              <div className="pshot"><Image src="/website/01-voorbereiding-agendapunt.png" width={1200} height={675} loading="lazy" alt="Productweergave: een agendapunt met het voorstel, de samenvatting en de verdiepingsvragen bij elkaar." /></div>
               <h3>Voorbereiding bij het agendapunt</h3>
               <p>Voorstel, samenvatting en gerichte verdieping staan bij het onderwerp waarover wordt besloten.</p>
               <span className="where">Vergaderingen · assistent</span>
             </article>
 
             <article className="pcard">
-              <div className="pshot"><img src="/website/02-antwoorden-zichtbare-bronnen.png" width="1200" height="675" loading="lazy" alt="Productweergave: een antwoord met daarnaast het paneel Onderbouwing en bronnen met drie gebruikte bronnen." /></div>
+              <div className="pshot"><Image src="/website/02-antwoorden-zichtbare-bronnen.png" width={1200} height={675} loading="lazy" alt="Productweergave: een antwoord met daarnaast het paneel Onderbouwing en bronnen met drie gebruikte bronnen." /></div>
               <h3>Antwoorden met zichtbare bronnen</h3>
               <p>Onder ieder antwoord blijft zichtbaar welke documenten en kaders zijn gebruikt.</p>
               <span className="where">AI-assistent</span>
             </article>
 
             <article className="pcard">
-              <div className="pshot"><img src="/website/03-risicos-en-aannames.png" width="1200" height="675" loading="lazy" alt="Productweergave: het onderbouwingspaneel met aannames, risico's en voorwaarden bij een besluit." /></div>
+              <div className="pshot"><Image src="/website/03-risicos-en-aannames.png" width={1200} height={675} loading="lazy" alt="Productweergave: het onderbouwingspaneel met aannames, risico's en voorwaarden bij een besluit." /></div>
               <h3>De afweging wordt expliciet</h3>
-              <p>Aannames, risico's, voorwaarden en afwijkende standpunten krijgen een vaste plek.</p>
+              <p>Aannames, risico&apos;s, voorwaarden en afwijkende standpunten krijgen een vaste plek.</p>
               <span className="where">Besluitdossier</span>
             </article>
 
             <article className="pcard">
-              <div className="pshot"><img src="/website/04-besluit-heeft-een-route.png" width="1200" height="675" loading="lazy" alt="Productweergave: de fasen van een besluitproces met de actieve stap en de openstaande vereisten." /></div>
+              <div className="pshot"><Image src="/website/04-besluit-heeft-een-route.png" width={1200} height={675} loading="lazy" alt="Productweergave: de fasen van een besluitproces met de actieve stap en de openstaande vereisten." /></div>
               <h3>Het besluit heeft een route</h3>
               <p>Per fase is zichtbaar wat gereed is, wat ontbreekt en wie aan zet is.</p>
               <span className="where">Procedures</span>
             </article>
 
             <article className="pcard">
-              <div className="pshot"><img src="/website/05-besluit-en-voorwaarden.png" width="1200" height="675" loading="lazy" alt="Productweergave: een vastgelegd besluit met motivering, afgewogen alternatieven en voorwaarden." /></div>
+              <div className="pshot"><Image src="/website/05-besluit-en-voorwaarden.png" width={1200} height={675} loading="lazy" alt="Productweergave: een vastgelegd besluit met motivering, afgewogen alternatieven en voorwaarden." /></div>
               <h3>Besluit en voorwaarden vastgelegd</h3>
               <p>Formulering, motivering, verworpen alternatieven en voorwaarden blijven bijeen.</p>
               <span className="where">Besluitdossier</span>
             </article>
 
             <article className="pcard">
-              <div className="pshot"><img src="/website/06-microsoft-365-sharepoint.png" width="1200" height="675" loading="lazy" alt="Illustratie van de koppeling tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
+              <div className="pshot"><Image src="/website/06-microsoft-365-sharepoint.png" width={1200} height={675} loading="lazy" alt="Illustratie van de koppeling tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
               <h3>Microsoft 365 en SharePoint</h3>
               <p>Documenten worden als bron verbonden, terwijl gebruikers met hun vertrouwde werkaccount inloggen.</p>
               <span className="where">Koppelingen · illustratieve weergave</span>
