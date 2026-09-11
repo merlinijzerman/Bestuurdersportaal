@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
+import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
 // /voor-wie v0.8 — samenvoeging van de oude /voor-wie, /sectoren en
 // /sectoren/pensioenfondsen. Die twee routes redirecten hierheen.
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
       "Voor de organen die samen tot een besluit komen: bestuur, commissies, toezicht, bestuursbureau en GRC. Pensioenfondsen zijn de eerste specialisatie.",
     type: "website",
     url: "/voor-wie",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 

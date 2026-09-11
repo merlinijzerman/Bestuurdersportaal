@@ -53,6 +53,19 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Een rewrite wordt door Next.js opnieuw door deze middleware geleid. Alleen
+  // de interne tweede doorgang naar /home mag daarom passeren; een rechtstreeks
+  // verzoek naar /home blijft via bepaalRoute hieronder een 404. De markering
+  // geldt uitsluitend op de marketing-surface, zodat zij nooit de app-/platform-
+  // scheiding kan omzeilen.
+  if (
+    surface === "marketing" &&
+    request.nextUrl.pathname === "/home" &&
+    request.headers.get("x-bp-marketing-home-rewrite") === "1"
+  ) {
+    return NextResponse.next();
+  }
+
   const beslissing = bepaalRoute({
     surface,
     pathname: request.nextUrl.pathname,
@@ -79,7 +92,11 @@ export function middleware(request: NextRequest) {
     case "rewrite": {
       const url = request.nextUrl.clone();
       url.pathname = beslissing.naar;
-      return NextResponse.rewrite(url);
+      const headers = new Headers(request.headers);
+      if (surface === "marketing" && request.nextUrl.pathname === "/") {
+        headers.set("x-bp-marketing-home-rewrite", "1");
+      }
+      return NextResponse.rewrite(url, { request: { headers } });
     }
 
     case "door":

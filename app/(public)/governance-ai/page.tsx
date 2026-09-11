@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
+import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
 // /governance-ai v0.8 — kop losgetrokken van de homepagekop om dubbeling
 // te voorkomen.
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
       "Hoe wij AI-gebruik begrenzen: werken vanuit uw eigen documentatie, zichtbare bronnen per antwoord, rollen en rechten, en een reconstrueerbaar spoor.",
     type: "website",
     url: "/governance-ai",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 
@@ -111,7 +113,7 @@ export default function Pagina() {
               bestuurspraktijk in te richten — met het oordeel bij het bestuur.
             </p>
           </div>
-          <p><a href="#" className="textlink">EU AI Act en verantwoord AI-gebruik →</a></p>
+          <p><a href="/governance-ai/eu-ai-act" className="textlink">EU AI Act en verantwoord AI-gebruik →</a></p>
         </div>
       </section>
 
