@@ -1206,6 +1206,157 @@ export function fuseerHybridePogingen(pogingen: HybridePogingResultaat[]): {
 // veilig terug op FTS als de embedding of de RPC faalt. De terugval wordt in de
 // meta vastgelegd (embedding_query_success / fallback_reason) zodat een stille
 // terugval zichtbaar is in het auditspoor. Tenant-isolatie loopt overal via RLS.
+/**
+ * Eén hybride RPC-poging, gebonden aan het GEDEELDE parameterblok. Levert de
+ * gerangschikte chunks, of `null` bij een RPC-fout (≠ leeg resultaat, dat is een
+ * lege array). SECURITY INVOKER → RLS blijft gelden; `p_document_ids` scoopt
+ * vóór de fusie.
+ *
+ * Elke poging die deze functie maakt deelt EXACT hetzelfde parameterblok; alleen
+ * `p_query` en `p_embedding` verschillen per aanroep. Zo kan geen extra poging —
+ * ook de verslapte van G-12 niet — scope, filters of fondsgrens verruimen.
+ */
+export function maakHybrideRpc(
+  supabase: { rpc: (fn: string, args: Record<string, unknown>) => any },
+  gedeeldeParams: Record<string, unknown>,
+  signal?: AbortSignal
+): (ftsQuery: string, embedding: number[]) => Promise<DocumentChunk[] | null> {
+  return async (ftsQuery, embedding) => {
+    const { data, error } = await metSignaal(
+      supabase.rpc("zoek_chunks_hybride", {
+        p_query: ftsQuery,
+        p_embedding: naarVectorLiteral(embedding),
+        ...gedeeldeParams,
+      }),
+      signal
+    );
+    // PostgREST GOOIT een abort niet door — hij levert een gewoon
+    // foutresultaat. Het SIGNAAL is dus gezaghebbend, niet de vorm van de fout.
+    bewaakNaIO(signal, error);
+    if (error) {
+      console.error("Hybride RPC-fout:", error);
+      return null;
+    }
+    return Array.isArray(data) ? (data as ZoekChunkRij[]).map(rijNaarChunk) : [];
+  };
+}
+
+export interface HybrideDeps {
+  /** Eén hybride RPC-poging; `null` bij een RPC-fout. */
+  draai(ftsQuery: string, embedding: number[]): Promise<DocumentChunk[] | null>;
+  /** Embedding van de originele vraag (M-R3). */
+  embed(tekst: string): Promise<number[]>;
+  /** De STRIKTE FTS-query voor een tekst (eventueel jargon-verbreed). */
+  ftsQueryVoor(tekst: string): string;
+  signal?: AbortSignal;
+}
+
+export type HybrideUitkomst =
+  | { soort: "rpc_fout" }
+  | {
+      soort: "pogingen";
+      pogingen: HybridePogingResultaat[];
+      pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]>;
+    };
+
+/**
+ * G-12 — mag er een verslapte hybride poging bij? Alleen als de strikte
+ * pogingen SAMEN wél kandidaten opleverden, maar in geen enkele daarvan de
+ * FTS-arm iets bijdroeg (`fts_rang` overal leeg). Dan is de fusie in feite
+ * alleen vector — de strikte AND-keten van `websearch_to_tsquery` vond niets.
+ *
+ *   • geen kandidaten      → nee: de bestaande FTS-terugval neemt het over;
+ *   • ergens een fts-rang  → nee: precisie heeft gewerkt, niet verslappen;
+ *   • kandidaten, geen fts → ja: één verslapte poging.
+ *
+ * Gemeten over ALLE strikte pogingen samen, niet per poging. Anders valt een lege
+ * primaire poging naast een originele met alleen vectorresultaten tussen wal en
+ * schip: de primaire geeft niets om te beoordelen, de originele wordt nooit
+ * bekeken. Gemeten ná de fonds-, scope- en statusfilters (die past de RPC al in
+ * SQL toe) en vóór rerank en selectie — beslissing D2.
+ */
+export function moetHybrideVerslappen(strikt: readonly (readonly DocumentChunk[])[]): boolean {
+  const alle = strikt.flat();
+  if (alle.length === 0) return false;
+  return !alle.some((c) => c.fts_rang !== null && c.fts_rang !== undefined);
+}
+
+/**
+ * De strikte hybride pogingen en — G-12 — hooguit één verslapte.
+ *
+ * `rpc_fout` alleen als de PRIMAIRE poging faalt: dan valt de aanroeper terug op
+ * FTS. Een lege uitkomst is geen fout; die komt als `pogingen` terug en de
+ * aanroeper beslist na de fusie over de terugval.
+ */
+export async function voerHybridePogingenUit(
+  vraag: string,
+  primaireQuery: string,
+  vector: number[],
+  origineleVraag: string | undefined,
+  deps: HybrideDeps
+): Promise<HybrideUitkomst> {
+  const pogingen: HybridePogingResultaat[] = [];
+  const pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]> = [];
+
+  // Poging 1 (primair): de (mogelijk geherformuleerde) vraag.
+  const primair = await deps.draai(primaireQuery, vector);
+  if (primair === null) return { soort: "rpc_fout" };
+  pogingen.push({ naam: "primair", chunks: primair });
+  pogingMeta.push({ naam: "primair", query: primaireQuery, rijen: primair.length });
+
+  // Poging 2 (M-R3): bij een geherformuleerde vraag draaien we OOK de originele
+  // vraag en fuseren, zodat de reformulatie alleen recall kan toevoegen. Faalt de
+  // embedding van de originele vraag, dan blijft de primaire poging staan
+  // (non-destructief).
+  const origineel = origineleVraag?.trim();
+  if (origineel && origineel !== vraag.trim()) {
+    if (pogingen.length < MAX_HYBRIDE_POGINGEN) {
+      const origFts = deps.ftsQueryVoor(origineel);
+      try {
+        const origVec = await deps.embed(origineel);
+        const origChunks = await deps.draai(origFts, origVec);
+        if (origChunks === null) {
+          pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });
+        } else {
+          pogingen.push({ naam: "origineel", chunks: origChunks });
+          pogingMeta.push({ naam: "origineel", query: origFts, rijen: origChunks.length });
+        }
+      } catch (e) {
+        if (isAfbreking(e)) throw e;
+        console.error("Hybride: embedding originele vraag mislukt (M-R3), primair blijft:", e);
+        pogingMeta.push({ naam: "origineel", query: origFts, rijen: null, overgeslagen: true });
+      }
+    } else {
+      pogingMeta.push({ naam: "origineel", query: origineel, rijen: null, overgeslagen: true });
+    }
+  }
+
+  // Poging 3 (G-12): de verslapte OR-keten, op de PRIMAIRE vector — geen extra
+  // embedding. Dezelfde query die het FTS-pad als poging 1b gebruikt
+  // (`bouwTerugvalFtsQuery`), en via `deps.draai` hetzelfde parameterblok als de
+  // strikte pogingen: alleen `p_query` verschilt. Bij één zoekterm is de
+  // verslapte query gelijk aan de strikte; dan levert hij niets toe en draait hij
+  // niet — en komt er ook géén meta-regel bij.
+  if (moetHybrideVerslappen(pogingen.map((p) => p.chunks)) && pogingen.length < MAX_HYBRIDE_POGINGEN) {
+    const terugval = bouwTerugvalFtsQuery(vraag);
+    if (terugval) {
+      // Een extra RPC valt binnen de beurtdeadline; start hem niet als die al
+      // verstreken is.
+      bewaakNaIO(deps.signal);
+      const verslapt = await deps.draai(terugval.query, vector);
+      if (verslapt === null) {
+        // Non-destructief: de strikte uitkomst blijft staan.
+        pogingMeta.push({ naam: "verslapt", query: terugval.query, rijen: null });
+      } else {
+        pogingen.push({ naam: "verslapt", chunks: verslapt });
+        pogingMeta.push({ naam: "verslapt", query: terugval.query, rijen: verslapt.length });
+      }
+    }
+  }
+
+  return { soort: "pogingen", pogingen, pogingMeta };
+}
+
 export async function zoekRelevanteChunksMetMeta(
   vraag: string,
   fondsId: string,
@@ -1288,76 +1439,27 @@ export async function zoekRelevanteChunksMetMeta(
   // versoepelen. Alleen p_query/p_embedding verschillen (zie draaiHybridePoging).
   const gedeeldeRpcParams = gedeeldeHybrideParams(overFetch, scope, filters, fondsFilter);
 
-  // Eén hybride RPC-poging. Geeft de gerangschikte chunks terug, of null bij een
-  // RPC-fout (≠ leeg resultaat, dat is een lege array). SECURITY INVOKER → RLS
-  // blijft gelden; p_document_ids scoopt vóór de fusion.
-  async function draaiHybridePoging(
-    ftsQ: string,
-    emb: number[]
-  ): Promise<DocumentChunk[] | null> {
-    const { data, error } = await metSignaal(
-      supabase.rpc("zoek_chunks_hybride", {
-        p_query: ftsQ,
-        p_embedding: naarVectorLiteral(emb),
-        ...gedeeldeRpcParams,
-      }),
-      opt.signal
-    );
-    // PostgREST GOOIT een abort niet door — hij levert een gewoon
-    // foutresultaat. Het SIGNAAL is dus gezaghebbend, niet de vorm van de fout.
-    bewaakNaIO(opt.signal, error);
-    if (error) {
-      console.error("Hybride RPC-fout:", error);
-      return null;
-    }
-    return Array.isArray(data) ? (data as ZoekChunkRij[]).map(rijNaarChunk) : [];
-  }
-
-  const pogingen: HybridePogingResultaat[] = [];
-  const pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]> = [];
-
-  // Poging 1 (primair): de (mogelijk geherformuleerde) vraag.
-  const primair = await draaiHybridePoging(ftsQuery, vector);
-  if (primair === null) {
+  // De strikte pogingen (primair, en bij reformulatie de originele vraag) en —
+  // G-12 — hooguit één verslapte. Uitgebreid in `voerHybridePogingenUit`, zodat
+  // de beslisregels hermetisch te toetsen zijn; hier alleen de bedrading.
+  const uitkomst = await voerHybridePogingenUit(vraag, ftsQuery, vector, opties?.origineleVraag, {
+    draai: maakHybrideRpc(supabase, gedeeldeRpcParams, opt.signal),
+    embed: (tekst) => embedTekst({ supabase, label: "rag.hybride.origineel" }, tekst, opt.signal),
+    ftsQueryVoor: (tekst) => ftsQueryVoor(tekst, opt).ftsQuery,
+    signal: opt.signal,
+  });
+  if (uitkomst.soort === "rpc_fout") {
     // Vóór de terugval: is er intussen afgebroken, dan start hij niet.
     bewaakNaIO(opt.signal);
-    // RPC faalde → terugval op FTS (embedding lukte wél).
+    // RPC faalde → terugval op FTS (embedding lukte wél). GEEN verslapte hybride
+    // poging: de RPC zelf is stuk, een tweede aanroep ervan helpt niet.
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
       chunks: r.chunks,
       meta: { ...r.meta, embedding_query_success: true, fallback_reason: "rpc_error" },
     };
   }
-  pogingen.push({ naam: "primair", chunks: primair });
-  pogingMeta.push({ naam: "primair", query: ftsQuery, rijen: primair.length });
-
-  // Poging 2 (M-R3): bij een geherformuleerde vraag draaien we OOK de originele
-  // vraag en fuseren, zodat de reformulatie alleen recall kan toevoegen. Faalt de
-  // embedding van de originele vraag, dan blijft de primaire poging staan
-  // (non-destructief). De M1-FTS-terugval uit de recall-opdracht komt later als
-  // derde poging op exact deze plek erbij (zelfde bovengrens, zelfde fusie).
-  const origineel = opties?.origineleVraag?.trim();
-  if (origineel && origineel !== vraag.trim()) {
-    if (pogingen.length < MAX_HYBRIDE_POGINGEN) {
-      const { ftsQuery: origFts } = ftsQueryVoor(origineel, opt);
-      try {
-        const origVec = await embedTekst({ supabase, label: "rag.hybride.origineel" }, origineel, opt.signal);
-        const origChunks = await draaiHybridePoging(origFts, origVec);
-        if (origChunks === null) {
-          pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });
-        } else {
-          pogingen.push({ naam: "origineel", chunks: origChunks });
-          pogingMeta.push({ naam: "origineel", query: origFts, rijen: origChunks.length });
-        }
-      } catch (e) {
-        if (isAfbreking(e)) throw e;
-        console.error("Hybride: embedding originele vraag mislukt (M-R3), primair blijft:", e);
-        pogingMeta.push({ naam: "origineel", query: origFts, rijen: null, overgeslagen: true });
-      }
-    } else {
-      pogingMeta.push({ naam: "origineel", query: origineel, rijen: null, overgeslagen: true });
-    }
-  }
+  const { pogingen, pogingMeta } = uitkomst;
 
   // Fusie van alle pogingen (union op id, beste RRF-rang wint, deterministisch).
   const { chunks: gefuseerd, herkomstPerId } = fuseerHybridePogingen(pogingen);
