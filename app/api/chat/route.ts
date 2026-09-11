@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type Anthropic from "@anthropic-ai/sdk";
-import { bewaakteAnthropic, bewaakteAnthropicStream } from "@/core/lib/ai-poort";
+// #311 — de centrale AI-gateway: provider/model komen server-side uit fonds +
+// taaktype (ai_gateway_private), de poort (kill switch/allowlist) draait vlak
+// vóór iedere call en elke call krijgt een inhoudsvrije auditregel.
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import { isVoorNetwerkGestopt } from "@/core/lib/ai-gateway/fout";
+import type { GatewayContext, TekstBlok } from "@/core/lib/ai-gateway/contract";
 import {
   preflight,
   preflightRespons,
@@ -8,8 +12,15 @@ import {
   sleutelUitRequest,
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
+import { rondAfStrikt } from "@/core/lib/ai-actie-afronding";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { timeoutUitConfig, maakAfbreekgrendel, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
+import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
+import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
+import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import type { Bronsoort } from "@/core/lib/retrieval/contract";
+import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
 // `actief` in deze route al een half dozijn andere betekenissen heeft.
 import { effectieveStatus, isActief as isReflectieActief, isReflectieIngang, type ReflectieStatus, type ReflectieActie, type ReflectieIngang } from "@/core/lib/reflectie-flow";
@@ -61,7 +72,7 @@ import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@
 import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource, type AssistantSourceWeb } from "@/core/lib/assistant-source";
 import { allowedDomeinenUit } from "@/core/lib/web-whitelist";
 import { haalActieveWhitelist } from "@/core/lib/web-whitelist-data";
-import { beoordeelWebGate, buildWebSearchTool, extractWebResultaten, bouwWebbronnen, bevraagdeDomeinen } from "@/core/lib/web-retrieval";
+import { beoordeelWebGate, extractWebResultaten, bouwWebbronnen, bevraagdeDomeinen } from "@/core/lib/web-retrieval";
 import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel, bouwRegimeKaderBlok } from "@/core/lib/organisatieprofiel";
@@ -82,7 +93,6 @@ import { productieDeps, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/ve
 // (streamt) en importeert die kern hier terug — de assemblage is byte-identiek
 // (bewaakt door lib/generatie-kern.sanity.ts).
 import {
-  AI_MODEL,
   MAX_TOKENS,
   MAX_TOKENS_BESTUURLIJK,
   BESTUURLIJKE_STIJL,
@@ -154,17 +164,28 @@ import {
 // leven in lib/generatie-kern.ts en worden hierboven geïmporteerd — één gedeelde
 // kern voor route én Lab.
 const CHUNK_BUDGET = 10;
+// T2-1 — harde bovengrens op de omvang van de modelcontext (ontwerp §4.1).
+// Bewust een VANGNET en geen sturing: de huidige budgetten (10 + 5 passages,
+// plus parent-context) blijven er ruim onder, zodat deze grens vandaag niets
+// afkapt. T2-1 introduceert de grens; het bijstellen ervan is een aparte,
+// gemotiveerde keuze — en de orkestratie meldt afkappen als truncatie."tekens".
+const MAX_CONTEXT_TEKENS = 120_000;
+/** Kandidatenpool: ruimer dan de eindselectie, zodat de centrale weging een
+ *  kandidaat van plek 15 alsnog in de top kan halen. Spiegelt de overfetch die
+ *  de RPC al deed, zodat de pool niet twee keer wordt opgerekt. */
+const kandidatenpool = (maxResultaten: number) => Math.max(maxResultaten * 3, 20);
 // 12-08-2026 — budget voor het AANVULLENDE spoor bij een primair document.
 // Bewust een eigen budget bovenop CHUNK_BUDGET in plaats van een verdeling
 // binnen dat budget: zo houdt het gekozen hoofddocument exact de ruimte die het
 // vóór deze wijziging had en kan de verbreding de dekking van dat stuk per
 // constructie niet verslechteren. De prompt groeit met hooguit 5 passages.
 const AANVULLEND_BUDGET = 5;
-// History-aware query-reformulatie (Fase B1). Bewust op het sterke model: de
-// rewrite bepaalt wat de retrieval ophaalt, dus fouten hier (bv. dubbelzinnige
-// afkortingen verkeerd expanderen) vergiftigen álle downstream-resultaten. De
-// meerkosten zijn klein (één korte call), de hefboom op antwoordkwaliteit groot.
-const REWRITE_MODEL = "claude-sonnet-4-6";
+// History-aware query-reformulatie (Fase B1) en de contextresolver draaien op
+// het STERKE hulpmodel: de rewrite bepaalt wat de retrieval ophaalt, dus fouten
+// hier (bv. dubbelzinnige afkortingen verkeerd expanderen) vergiftigen álle
+// downstream-resultaten. #311: welk model dat is, bepaalt de fondsconfiguratie
+// (taakgroep hulp_sterk, taaktypes chat_contextresolutie/chat_reformulatie) —
+// niet langer een constante in deze route.
 
 // Plateau 1 — harde timeout op de vroege contextresolver. De resolver blokkeert
 // de retrieval, dus een trage call mag de hele chat niet ophouden: bij overschrijding
@@ -214,7 +235,7 @@ function telDekkingslocaties(chunks: DocumentChunk[]): {
 }
 // Goedkoop/snel model voor de extractieve map-stap; het sterke AI_MODEL doet de
 // reduce-stap (kwaliteit van het eindantwoord).
-const MAP_MODEL = HAIKU_MODEL;
+// #311: het mapstap-model komt uit de fondsconfiguratie (taakgroep hulp_snel, taaktype chat_mapstap).
 
 // ── Scenario A live web-retrieval (besluit 0072) ────────────────────────────
 // Hoofdschakelaar: web-retrieval draait ALLEEN als WEB_RETRIEVAL_ACTIEF='true'
@@ -348,6 +369,14 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
 // Response met de ReadableStream is teruggegeven (het "stream-openpunt", besluit
 // 0087) is status 200 verzonden en doet de wrapper niets meer — bewezen met een
 // geïnjecteerde throw ná het eerste enqueue in core/lib/route-wrapper.sanity.ts.
+/**
+ * #356 — de platformgrens expliciet in code. Vercel Pro met Fluid Compute geeft
+ * 300 s als standaard maximale functieduur en er is geen projectoverride; die
+ * grens hier vastleggen maakt hem zichtbaar in de repo in plaats van alleen in
+ * een dashboard. Het generatiebudget wordt hierop geklemd (generatie-budget.ts).
+ */
+export const maxDuration = 300;
+
 export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route-eigen", audit: { handeling: "chat.gebruiken" }, capability: "chat.use", schema: z.object({ "actieve_antwoordmodus": z.unknown().optional(), "agendapunt_context": z.unknown().optional(), "algemeen_perspectief": z.unknown().optional(), "alleen_fondsdocumenten": z.unknown().optional(), "bron_intent_bron": z.unknown().optional(), "bron_intent_herkomst": z.unknown().optional(), "bron_intent_override": z.unknown().optional(), "bronkeuze_vorige_log_id": z.unknown().optional(), "const": z.unknown().optional(), "document_scope": z.unknown().optional(), "doorgrond": z.unknown().optional(), "fonds_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "messages": z.unknown().optional(), "module_scope": z.unknown().optional(), "neem_niet_vastgestelde_mee": z.unknown().optional(), "reflectie_antwoord": z.unknown().optional(), "reflectie_herformuleren": z.unknown().optional(), "reflectie_start": z.unknown().optional(), "reflectie_tegenperspectief": z.unknown().optional(), "reflectie_verdiepen": z.unknown().optional(), "startvraag_bron": z.unknown().optional(), "stukvoorbereiding": z.unknown().optional(), "transformatie": z.unknown().optional(), "volledige_analyse": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json()) as {
@@ -645,7 +674,6 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // voortkomen (Opus-stream + tot twaalf Haiku-mapstappen + reformulatie +
     // embeddings + reranker). Reserveren gebeurt hier, vóór de eerste
     // providercall; de poort hieronder draait daarna per afzonderlijke call.
-    const aiPoort = { supabase, label: "chat.POST" };
     const idempotentie = sleutelUitRequest(req, "chat");
     if (!idempotentie) {
       return badRequest(
@@ -655,8 +683,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     }
     const pf = await preflight(supabase, {
       actietype: "chat",
-      provider: "anthropic",
-      model: AI_MODEL,
+      provider: null,
+      model: null,
       idempotentie,
       // De vingerafdruk bindt de sleutel aan de INHOUD: dezelfde sleutel met een
       // andere vraag wordt geweigerd, zodat een hergebruikte sleutel geen
@@ -671,6 +699,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const aiBlokkade = preflightRespons("chat.POST", pf);
     if (aiBlokkade) return aiBlokkade;
     const aiActieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
+
+    // #311 — één gateway-context per beurt: fonds en gebruiker uit de
+    // sessiecontext, de reservering als bewijs, de request-id als correlatie.
+    // Alle providercalls in deze route (contextresolver, reformulatie,
+    // vraagrouter, reranker, mapstap, eindgeneratie, vergelijking) lopen hierdoor.
+    const gateway = productieGateway();
+    const gatewayCtx: GatewayContext = {
+      supabase,
+      fondsId,
+      actor: { soort: "gebruiker", id: ctx.gebruikerId },
+      actieId: aiActieId,
+      correlatieId: ctx.requestId,
+      label: "chat.POST",
+    };
 
     // Increment T4 — manipulatie-signaal: de client MAG body.fonds_id nog meesturen
     // (backwards-compat), maar hij wordt genegeerd. Wijkt hij af van de server-side
@@ -898,47 +940,44 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           const timer = setTimeout(() => ctrl.abort(), CONTEXTRESOLVER_TIMEOUT_MS);
           const start = Date.now();
           // Expliciete runtimewaarde: pas true zodra de PROVIDERCALL echt start.
-          // Een poortweigering (bewaakteAnthropic) draait de callback niet en telt
+          // Een poortweigering draait de providercall niet en telt
           // dus NIET als modelcall; een timeout ná start telt wél.
           let providercallGestart = false;
           try {
-            const resp = await bewaakteAnthropic(aiPoort, REWRITE_MODEL, (client) => {
-              providercallGestart = true;
-              return client.messages.create(
-                {
-                  model: REWRITE_MODEL,
-                  max_tokens: 220,
-                  temperature: 0,
-                  system: systeem,
-                  messages: [{ role: "user", content: gebruiker }],
-                },
-                { timeout: CONTEXTRESOLVER_SDK_TIMEOUT_MS, signal: ctrl.signal }
-              );
+            providercallGestart = true;
+            const resp = await gateway.genereer(gatewayCtx, {
+              taaktype: "chat_contextresolutie",
+              systeem,
+              berichten: [{ role: "user", content: gebruiker }],
+              maxTokens: 220,
+              temperature: 0,
+              timeoutMs: CONTEXTRESOLVER_SDK_TIMEOUT_MS,
+              signal: ctrl.signal,
             });
-            const tekst =
-              resp.content[0]?.type === "text" ? resp.content[0].text : "";
             return {
-              tekst,
+              tekst: resp.tekst,
               meting: {
-                model: REWRITE_MODEL,
+                model: resp.model,
                 duurMs: Date.now() - start,
-                tokensIn: resp.usage?.input_tokens ?? 0,
-                tokensOut: resp.usage?.output_tokens ?? 0,
+                tokensIn: resp.usage.in,
+                tokensOut: resp.usage.out,
                 timeout: false,
                 modelAangeroepen: true,
               },
             };
-          } catch {
+          } catch (e) {
             // Nooit throwen: de resolver beslist de fallback op basis van de meting.
             // Drie onderscheidbare gevallen, expliciet (niet uit lege tekst afgeleid):
             //   aborted            → timeout ná callstart;
             //   call gestart, fout → providerfout;
-            //   niet gestart       → poortweigering (geen modelcall).
+            //   niet gestart       → configuratie-/poortweigering vóór het netwerk
+            //                        (geen modelcall; de gateway stopt daar).
+            if (isVoorNetwerkGestopt(e)) providercallGestart = false;
             const aborted = ctrl.signal.aborted;
             return {
               tekst: "",
               meting: {
-                model: REWRITE_MODEL,
+                model: "niet_bepaald",
                 duurMs: Date.now() - start,
                 tokensIn: 0,
                 tokensOut: 0,
@@ -1652,7 +1691,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           basis: basisRoute,
           documentAantal: scopeActief ? scopeDocumentIds?.length ?? 0 : 0,
           actief: vraagrouterVlaggen.modelrouter,
-          poort: aiPoort,
+          gateway,
+          ctx: gatewayCtx,
         });
         vraagRoute = verfijnd.route;
         vraagrouterUitvoering = {
@@ -1789,7 +1829,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             doelDocumentId: koppeling.doel.id,
             versies: VERGELIJK_VERSIES,
           },
-          productieDeps({ supabase, fondsId })
+          productieDeps({ supabase, fondsId, gateway, gatewayCtx })
         );
 
         // Governance-logging: een vergelijking is een AI-interactie (verplicht spoor,
@@ -1865,7 +1905,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_antwoord: vvSamenvatting,
             p_bronnen: [],
             p_modus: "documenten",
-            p_model: vergelijkVerduidelijkingResolverModel ? REWRITE_MODEL : null,
+            p_model: vergelijkVerduidelijkingResolverModel ? (vraagContext?.meting?.model ?? null) : null,
             p_retrieval_meta: {
               vergelijkmodus: true,
               verduidelijking: true,
@@ -1923,7 +1963,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         const zegel = bouwInhoudZegel(vraag, VERDUIDELIJKINGSVRAAG);
         // Plateau 1 — modelcall-semantiek. Deze tak doet geen ANTWOORD-generatie,
         // maar de contextresolver kan wél een providercall hebben gestart. Dan is
-        // `geen_modelcall` false en registreren we REWRITE_MODEL als gebruikt model;
+        // `geen_modelcall` false en registreren we het effectieve resolvermodel;
         // `geen_generatiecall` legt afzonderlijk vast dat er geen generatie was.
         const resolverModelGebruikt = vraagContext?.modelAangeroepen ?? false;
         const { data: verduidelijkingLogId, error: logFout } = await supabase.rpc(
@@ -1938,7 +1978,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_modus: bepaalAutoBronModus(alleenFondsdocumenten),
             // Registreer het door de resolver gebruikte model waar het auditcontract
             // een modelveld verwacht; null als er geen enkele providercall was.
-            p_model: resolverModelGebruikt ? REWRITE_MODEL : null,
+            p_model: resolverModelGebruikt ? (vraagContext?.meting?.model ?? null) : null,
             p_retrieval_meta: {
               // Markeert de regel als een TERUGVRAAG, geen antwoord. Zo is in het log
               // te onderscheiden en te meten hoe vaak de assistent doorvraagt.
@@ -2026,8 +2066,29 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const send = (obj: unknown) =>
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        // #356 — ná een clientdisconnect gooit `enqueue` een TypeError
+        // ("Invalid state"). Ongeguard zou die de OORSPRONKELIJKE fout
+        // overschrijven, precies op het pad dat we duurzaam willen vastleggen.
+        // Er is dan ook niemand meer die het event zou lezen.
+        const send = (obj: unknown) => {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          } catch {
+            /* verbinding weg — er is niemand om iets aan te melden */
+          }
+        };
+        // De eigenaar van het generatiebudget. Gezet zodra de generatie begint;
+        // gesloten in de `finally` hieronder, langs élke uitgang.
+        let generatieGrendel: Afbreekgrendel | null = null;
+        // #356 — de FASE expliciet, niet afgeleid uit het bestaan van de
+        // grendel. Bij "te weinig tijd over" gooien we vóórdat de grendel
+        // bestaat; afleiden zou die afbreking dan als `retrieval` bestempelen —
+        // verkeerde melding aan de bestuurder én een verkeerde reden in het
+        // auditspoor.
+        let fase: "retrieval" | "generatie" = "retrieval";
+        // Het GECONFIGUREERDE budget, gezet zodra de fondsvlaggen bekend zijn.
+        // Blijft het ongezet (een pad zonder retrieval), dan geldt de default.
+        let generatieBudgetMs = generatieTimeoutUitConfig(undefined);
 
         try {
     // Retrieval-modus (verborgen) volgt Design A "combineren-vloer": tenzij de
@@ -2353,8 +2414,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // Voortgang (besluit 0087): de reformulatie draait op het STERKE model en
         // is meestal het grootste stille-tijd-blok. Melden vóór en na de call.
         send({ type: "progress", fase: "reformulatie", status: "bezig", label: VOORTGANG_LABEL.reformulatie });
-        const herschreven = await bewaakteAnthropic(aiPoort, REWRITE_MODEL, (client) =>
-          reformuleerVraag(client, priorBeurten, vraag, REWRITE_MODEL)
+        const herschreven = await reformuleerVraag(
+          async (invoer) =>
+            (
+              await gateway.genereer(gatewayCtx, {
+                taaktype: "chat_reformulatie",
+                systeem: invoer.systeem,
+                berichten: [{ role: "user", content: invoer.gebruiker }],
+                maxTokens: invoer.maxTokens,
+                temperature: invoer.temperature,
+              })
+            ).tekst,
+          priorBeurten,
+          vraag
         );
         if (herschreven.trim() && herschreven.trim() !== vraag.trim()) {
           zoekVraag = herschreven.trim();
@@ -2371,9 +2443,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // ORIGINELE vraag mee, zodat de hybride retrieval een extra poging met de
       // originele vraag draait en fuseert (reformulatie voegt alleen recall toe,
       // nooit minder). Niet-geherformuleerd → ongewijzigd gedrag.
+      // #311: de (optionele) reranker binnen de retrieval loopt door dezelfde
+      // gateway-context als de rest van de beurt.
       const retrievalOpties = gereformuleerd
-        ? { ...retrievalVlaggen, origineleVraag: vraag }
-        : retrievalVlaggen;
+        ? { ...retrievalVlaggen, origineleVraag: vraag, gateway: { gateway, ctx: gatewayCtx } }
+        : { ...retrievalVlaggen, gateway: { gateway, ctx: gatewayCtx } };
 
       // ── 12-08-2026 — tweesporen-retrieval bij een primair document ────────
       // Een documentselectie was tot nu toe een HARDE afbakening: de RPC's
@@ -2409,73 +2483,137 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const primaireIds = new Set<string>(
         primairPadActief ? scopeDocumentIds ?? [] : []
       );
-      const [res, resAanvullend] = await Promise.all([
-        zoekRelevanteChunksMetMeta(
-          zoekVraag,
-          fondsId,
-          CHUNK_BUDGET,
-          hybrideAan,
-          scopeDocumentIds,
-          // Spoor A draagt géén filters in de primaire modi. In agendapunt-modus
-          // was `retrievalFilters` daar al `undefined`; dit is dus geen
-          // gedragswijziging, alleen expliciet gemaakt.
-          primairPadActief ? undefined : retrievalFilters,
-          retrievalOpties
-        ),
-        primairPadActief
-          ? zoekRelevanteChunksMetMeta(
-              zoekVraag,
-              fondsId,
-              AANVULLEND_BUDGET,
-              hybrideAan,
-              undefined,
-              // Altijd de bibliotheekfilters, óók in agendapunt-modus waar het
-              // primaire spoor ongefilterd draait. Zonder dit zou de hele
-              // bibliotheek inclusief historische stukken ongefilterd meekomen.
-              bibliotheekFilters,
-              retrievalOpties
-            )
-          : Promise.resolve(null),
-      ]);
-
-      // Het hoofddocument zit al in spoor A; overlap eruit zodat een passage
-      // nooit twee bronnummers krijgt.
-      const aanvullendeChunks = (resAanvullend?.chunks ?? []).filter(
-        (c) => !primaireIds.has(c.document_id)
-      );
-      // Volgorde is betekenisdragend: het hoofddocument krijgt de laagste
-      // bronnummers, de aanvullende bronnen komen erachter.
-      chunks = [...res.chunks, ...aanvullendeChunks];
-      retrievalMeta = {
-        ...res.meta,
-        // De promptset is de SOM van beide sporen. `chunks` voedt de bronset-hash
-        // en daarmee de bevroren reflectiebronset (core/lib/bronset.ts,
-        // bepaalBronset). Stond hier alleen spoor A in, dan zou een reflectie op
-        // dit antwoord de aanvullende bronnen niet terugzien terwijl ze wél in
-        // het antwoord zijn gebruikt — en zou de TS-hash afwijken van de
-        // SQL-spiegel in reflectie_transitie().
-        chunks: [
-          ...res.meta.chunks,
-          ...aanvullendeChunks.map((c) => ({
-            id: c.id,
-            document_id: c.document_id,
-            rang: c.rang ?? null,
-          })),
-        ],
-        opgehaald: res.meta.opgehaald + (resAanvullend?.meta.opgehaald ?? 0),
-        geselecteerd: res.meta.geselecteerd + aanvullendeChunks.length,
-        // Wat de verbreding daadwerkelijk toevoegde. Alleen aanwezig als er een
-        // aanvullend spoor draaide; geldt voor /ai én de agendapuntchat.
-        ...(resAanvullend
-          ? {
-              aanvullend: {
-                chunks: aanvullendeChunks.length,
-                documenten: new Set(
-                  aanvullendeChunks.map((c) => c.document_id)
-                ).size,
+      // ── T2-1 — C1 loopt door het retrievalcontract ───────────────────────
+      //  De adapter levert kandidaten; de orkestratie selecteert per spoor,
+      //  voegt samen en bouwt het auditspoor (besluit 0213 punt 5). De twee
+      //  sporen, hun budgetten en hun filters zijn ONGEWIJZIGD — dit is een
+      //  verplaatsing, geen gedragswijziging.
+      // Dezelfde resolutie die de adapter intern gebruikt — zie
+      // resolveerRetrievalVlaggen(): `regimeWeging` valt terug op de env-default
+      // omdat de fondsvlag nog niet bestaat (gaplijst G-11).
+      const geresolveerdeVlaggen = resolveerRetrievalVlaggen(retrievalOpties);
+      // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
+      // providerprivaat bij, en de citaatvorming heeft die later nodig.
+      const retrievalTimeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
+      // #356 — eigen budget voor de generatie, hier vastgesteld omdat de
+      // fondsvlaggen op dit punt bekend zijn; gebruikt bij de generatiecall.
+      generatieBudgetMs = generatieTimeoutUitConfig(retrievalVlaggen.generatieTimeoutMs);
+      const retrieval = maakSupabaseAdapter(retrievalVlaggen, { gateway: { gateway, ctx: gatewayCtx } });
+      const retrievalAdapter = retrieval.adapter;
+      // De route consumeert (nog) chunks. De adapter houdt de koppeling
+      // ref → chunk providerprivaat; deze helper haalt op ná de citatie de
+      // chunkvorm terug voor de bestaande, ongewijzigde downstreamlogica.
+      // T2-2/T2-4 laten die consumenten op Bronresultaat werken.
+      const retrievalContext = {
+        fondsId,
+        actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
+        taaktype: "chat_generatie" as const,
+        bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+        // De BEURTscope (audit, vergadering/agendapunt); de DOCUMENTscope is
+        // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
+        scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
+        correlationId: ctx.requestId,
+        // V4 — server-side vastgelegd bij binnenkomst in de wrapper.
+        verzoekStartOp: ctx.verzoekStartOp,
+        // PR-B — de clientverbinding. Verbreekt de bestuurder de verbinding,
+        // dan stopt de retrievalketen; zonder dit liep zij door en betaalden we
+        // de model- en embeddingcalls van een beurt die niemand meer leest.
+        signal: req.signal,
+      };
+      // ÉÉN aanroep, en die bezit de afbreekgrendel: hij sluit timer en
+      // clientluisteraar langs elke uitgang, ook als de weergaveverrijking
+      // halverwege faalt. De twee losse fasen zijn intern — een route die ze
+      // zelf sequencet erft een resource waarvan zij de levensduur moet kennen.
+      const voltooid = await voerVolledigeRetrievalUit(
+        retrievalContext,
+        {
+          adapter: retrievalAdapter,
+          // D5 — deadline over de hele retrievalketen; fondsvlag met veilige
+          // default (20 s) bij een ontbrekende of buiten-bereik-waarde.
+          timeoutMs: retrievalTimeoutMs,
+          sporen: [
+            {
+              query: {
+                naam: "primair",
+                // Scope PER SPOOR: het primaire spoor is afgebakend tot het
+                // gekozen stuk of de gekoppelde stukken.
+                documentScope: scopeDocumentIds,
+                origineleVraag: gereformuleerd ? vraag : zoekVraag,
+                zoekvraag: zoekVraag,
+                strategie: "gericht" as const,
+                maxResultaten: CHUNK_BUDGET,
+                maxKandidaten: kandidatenpool(CHUNK_BUDGET),
+                maxContextTekens: MAX_CONTEXT_TEKENS,
+                hybrideAan,
+                // Spoor A draagt géén filters in de primaire modi.
+                filters: primairPadActief ? undefined : retrievalFilters,
               },
-            }
-          : {}),
+              grenzen: {
+                maxPerDoc: maxPerDocVoor(CHUNK_BUDGET),
+                representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+                regimeWeging: geresolveerdeVlaggen.regimeWeging,
+                relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+              },
+            },
+            ...(primairPadActief
+              ? [
+                  {
+                    query: {
+                      naam: "aanvullend",
+                      // GEEN documentscope: dit spoor is juist de verbreding
+                      // naar de bibliotheek. Zou het de primaire scope erven,
+                      // dan zocht het alleen in dezelfde stukken.
+                      documentScope: undefined,
+                      origineleVraag: gereformuleerd ? vraag : zoekVraag,
+                      zoekvraag: zoekVraag,
+                      strategie: "gericht" as const,
+                      maxResultaten: AANVULLEND_BUDGET,
+                      maxKandidaten: kandidatenpool(AANVULLEND_BUDGET),
+                      maxContextTekens: MAX_CONTEXT_TEKENS,
+                      hybrideAan,
+                      // Altijd de bibliotheekfilters, óók in agendapunt-modus.
+                      filters: bibliotheekFilters,
+                    },
+                    grenzen: {
+                      maxPerDoc: maxPerDocVoor(AANVULLEND_BUDGET),
+                      representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+                      regimeWeging: geresolveerdeVlaggen.regimeWeging,
+                      relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+                    },
+                  },
+                ]
+              : []),
+          ] as const,
+        },
+        // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
+        // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
+        // Ze draait BEWUST binnen dezelfde aanroep en dus vóór het
+        // voortgangsevent en het scope-auditspoor: de harde contextgrens kan
+        // blokken afkappen, en dan bouwt de orkestratie de meta opnieuw over
+        // exact de opgenomen bronnen. Zou dit later staan, dan meldden de
+        // voortgangsregel en het auditspoor bronnen die nooit naar het model
+        // zijn gegaan.
+        {
+          // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
+          // bibliotheek]; `vandaag` → geldigheidsdeel van het statuslabel.
+          primaireDocumentIds: primaireIds,
+          peildatum: vandaag,
+          // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
+          // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
+          hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
+        }
+      );
+      chunks = retrieval.chunksVoor(voltooid.geselecteerd);
+      contextTekst = voltooid.contextTekst;
+      bronnen = voltooid.bronverwijzingen;
+      // H-10: bron-afbakening en het aantal geneutraliseerde bronlabel-patronen
+      // door naar respectievelijk de systeemprompt en het auditspoor.
+      bronSentinel = voltooid.sentinel;
+      contextGeneutraliseerd = voltooid.geneutraliseerd;
+      retrievalMeta = {
+        // De HERBOUWDE meta: hij beschrijft exact de bronnen die in de context
+        // staan, ook wanneer de grens blokken heeft afgekapt.
+        ...voltooid.meta,
         zoekvraag: zoekVraag,
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
@@ -2512,34 +2650,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           modus: "primair",
         };
       }
-      // Increment D — verrijk notulensegment-chunks met vergadering/agendapunt
-      // zodat de bronvermelding "Vastgestelde notulen …, agendapunt N — …" klopt.
-      chunks = await verrijkNotulenChunks(chunks);
-      // Tranche 2B — documenttype/bestandstype voor de documentlijst bij
-      // antwoordmodus `bronoverzicht`. Bewust hier, ná retrieval, ranking en
-      // fondsdiscipline: het zijn doorgeefvelden voor de WEERGAVE en ze mogen
-      // niets aan de selectie veranderen. Zie verrijkDocumentmetadata().
-      chunks = await verrijkDocumentmetadata(chunks, fondsId);
-      // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
-      // bibliotheek] in de bronkop; `vandaag` → geldigheidsdeel van het
-      // statuslabel. Zonder scope is primaireIds leeg en verandert er niets.
-      const ctx = maakContext(
-        chunks,
-        0,
-        undefined,
-        primaireIds,
-        vandaag,
-        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
-        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
-        agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]"
-      );
-      contextTekst = ctx.contextTekst;
-      bronnen = ctx.bronnen;
-      // H-10: de bron-afbakening en het aantal geneutraliseerde bronlabel-
-      // patronen doorgeven aan respectievelijk de systeemprompt en het
-      // auditspoor.
-      bronSentinel = ctx.sentinel;
-      contextGeneutraliseerd = ctx.geneutraliseerd;
+
 
       // Besluitvorming-modus (Increment G): voeg de Decision Object-
       // besluitregistratie van de relevante procesinstantie(s) toe als LEIDENDE
@@ -2704,7 +2815,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       portaalDelen.length > 0 ? `${portaalDelen.join("\n\n")}\n\n---\n\n` : "";
 
     // Bouw prompt op basis van modus, met persoonlijke context
-    let systeemBlokken: Anthropic.Messages.TextBlockParam[];
+    let systeemBlokken: TekstBlok[];
     let gebruikersPrompt: string;
 
     if (reflectieActief) {
@@ -3101,8 +3212,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       bronsoortprofiel: webBronsoortprofiel,
       bevatPii: piiUitkomst.bevatPii,
     });
+    // #311: neutrale tool voor de gateway; de Anthropic-adapter mapt hem op de
+    // web_search-servertool (zelfde parameters als vóór de gateway).
     const webTool = webGate.mag
-      ? buildWebSearchTool(allowedDomeinenUit(whitelistEntries), WEB_MAX_USES)
+      ? ({ soort: "webzoek", domeinen: allowedDomeinenUit(whitelistEntries), maxGebruik: WEB_MAX_USES } as const)
       : null;
 
     // Voortgang (besluit 0087): alleen melden als live web-retrieval daadwerkelijk
@@ -3302,34 +3415,28 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                   .join("\n\n");
                 mapCalls += 1;
                 try {
-                  const mapResp = await bewaakteAnthropic(aiPoort, MAP_MODEL, (client) =>
-                    client.messages.create(
+                  const mapResp = await gateway.genereer(gatewayCtx, {
+                    taaktype: "chat_mapstap",
+                    systeem: SP_MAP_EXTRACTIE,
+                    berichten: [
                       {
-                        model: MAP_MODEL,
-                        max_tokens: 1200,
-                        temperature: 0,
-                        system: SP_MAP_EXTRACTIE,
-                        messages: [
-                          {
-                            role: "user",
-                            content: `VRAAG: ${effectieveVraag}\n\n${
-                              analyseplanTekst ? `${analyseplanTekst}\n\n` : ""
-                            }DOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
-                          },
-                        ],
+                        role: "user",
+                        content: `VRAAG: ${effectieveVraag}\n\n${
+                          analyseplanTekst ? `${analyseplanTekst}\n\n` : ""
+                        }DOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
                       },
-                      { timeout: MAP_CALL_TIMEOUT_MS, signal: mapAbort.signal }
-                    )
-                  );
-                  const tekst =
-                    mapResp.content[0]?.type === "text"
-                      ? mapResp.content[0].text.trim()
-                      : "";
+                    ],
+                    maxTokens: 1200,
+                    temperature: 0,
+                    timeoutMs: MAP_CALL_TIMEOUT_MS,
+                    signal: mapAbort.signal,
+                  });
+                  const tekst = mapResp.tekst.trim();
                   resultaten[i] = {
                     index: i,
                     tekst,
-                    tokensIn: mapResp.usage?.input_tokens ?? 0,
-                    tokensUit: mapResp.usage?.output_tokens ?? 0,
+                    tokensIn: mapResp.usage.in,
+                    tokensUit: mapResp.usage.out,
                     chunks: breedBatches[i].length,
                     ok: true,
                     timeout: false,
@@ -3459,29 +3566,46 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               : []),
           ];
 
-          // Basis-call; de web_search-server-tool wordt defensief toegevoegd (SDK
-          // 0.39 typeert deze server-tool nog niet — de API ondersteunt hem wel).
-          const streamParams: Anthropic.Messages.MessageStreamParams = {
-            model: AI_MODEL,
-            max_tokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
-            system: streamSysteem,
-            messages: streamMessages,
-          };
-          if (webTool) {
-            (streamParams as { tools?: unknown[] }).tools = [webTool];
-          }
-          // P5 signaal 3: duur van de generatie. De provider-adapter meet dit al
-          // (core/lib/llm-providers/anthropic.ts), maar dit pad loopt daar niet
-          // doorheen — het roept de SDK rechtstreeks aan. Meet vanaf de aanroep
-          // tot finalMessage(), dus inclusief wachttijd bij de provider.
+          // #311 — eindgeneratie via de AI-gateway (taaktype chat_generatie,
+          // taakgroep generatie). Provider/model komen uit de fondsconfiguratie;
+          // de poort draait vlak vóór de call; usage/stopreden komen genormaliseerd
+          // terug. De web_search-servertool gaat als neutrale tool mee.
+          // P5 signaal 3: duur van de generatie, gemeten vanaf de aanroep tot en
+          // met afronden(), dus inclusief wachttijd bij de provider.
           const generatieStart = Date.now();
-          const claudeStream = await bewaakteAnthropicStream(aiPoort, AI_MODEL, (client) =>
-            scopeStrategie === "targeted"
-              ? client.messages.stream(streamParams)
-              : client.messages.stream(streamParams, {
-                  timeout: VOLLEDIGE_ANALYSE_GENERATIE_TIMEOUT_MS,
-                })
+
+          // ── #356 — het tijdsbudget van de generatie ────────────────────────
+          // Geklemd op wat er van de functieduur ná de afrondmarge nog over is
+          // (besluit §5b): retrieval- en generatiebudget zijn onafhankelijk
+          // configureerbaar en tellen op binnen dezelfde invocatie. Zonder klem
+          // kan het platform de functie doden vóórdat onze eigen deadline vuurt,
+          // en dan verdampt precies de marge die audit en afronding nodig hebben.
+          fase = "generatie";
+          const budget = effectiefGeneratiebudget(
+            generatieBudgetMs,
+            performance.now() - ctx.startMonotoonMs
           );
+          if (!budget.genoeg) {
+            // Te weinig tijd om nog iets zinnigs te doen. Géén providercall
+            // starten: die kost geld en levert een respons op die de functie
+            // toch niet kan afmaken. Meteen gecontroleerd afronden.
+            throw new BeurtAfgebroken("timeout");
+          }
+          // De grendel BEZIT de deadline en sluit in `finally` langs elke
+          // uitgang — de les uit PR-B. Samengesteld met het clientsignaal, zodat
+          // een weggelopen bestuurder de providercall óók afbreekt.
+          generatieGrendel = maakAfbreekgrendel(req.signal, budget.budgetMs);
+          const claudeStream = await gateway.stream(gatewayCtx, {
+            signal: generatieGrendel.signal,
+            taaktype: "chat_generatie",
+            systeem: streamSysteem,
+            berichten: streamMessages,
+            maxTokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
+            ...(webTool ? { tools: [webTool] } : {}),
+            ...(scopeStrategie === "targeted"
+              ? {}
+              : { timeoutMs: VOLLEDIGE_ANALYSE_GENERATIE_TIMEOUT_MS }),
+          });
 
           // Besluit 0151 (criterium 11) — tijd tot eerste zichtbare token (TTFT).
           // Gemeten vanaf de generatie-aanroep tot het eerste delta; per module-
@@ -3494,7 +3618,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // opduikt, sturen we tot dáár en daarna niets meer.
           let verzonden = 0;
           let markerGezien = false;
-          claudeStream.on("text", (delta) => {
+          claudeStream.onTekst((delta) => {
             if (ttftMs === null) ttftMs = Date.now() - generatieStart;
             volledig += delta;
             // B-opt tranche 3b — de verdiepingsvraag wordt niet gestreamd: accumuleer
@@ -3518,8 +3642,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             }
           });
 
-          const finaleMsg = await claudeStream.finalMessage();
+          const finaleMsg = await claudeStream.afronden();
           const generatieDuurMs = Date.now() - generatieStart;
+          generatieGrendel.bewaak();
 
           if (bufferReflectievraag) {
             // ── B-opt tranche 3b — genereren → valideren → tonen (guardrail 6) ──
@@ -3601,7 +3726,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // Afkap-signaal: raakt het antwoord het max_tokens-plafond, dan tonen we
           // dat expliciet i.p.v. het stil af te kappen (relevant sinds de Opus-
           // overstap, besluit 0067). De gebruiker kan dan om een vervolg vragen.
-          if (finaleMsg.stop_reason === "max_tokens") {
+          if (finaleMsg.stopReden === "max_tokens") {
             inlineMeldingenFinaal.push(AFGEKAPT_MELDING);
           }
 
@@ -3623,7 +3748,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           let webAudit: RetrievalMeta["web"];
           if (webTool) {
             const ophaaltijdstip = new Date().toISOString();
-            const webRes = extractWebResultaten(finaleMsg.content);
+            const webRes = extractWebResultaten(finaleMsg.inhoud);
             webBronnen = bouwWebbronnen(webRes.geciteerd, whitelistEntries, ophaaltijdstip);
             webAudit = {
               ingezet: true,
@@ -3910,17 +4035,24 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             duur_model_ms: Date.now() - modelStart,
             tokens: {
               in:
-                (finaleMsg.usage?.input_tokens ?? 0) +
-                (finaleMsg.usage?.cache_creation_input_tokens ?? 0) +
-                (finaleMsg.usage?.cache_read_input_tokens ?? 0) +
+                finaleMsg.usage.in +
+                finaleMsg.usage.cacheCreatie +
+                finaleMsg.usage.cacheLezen +
                 mapTokensIn,
-              out: (finaleMsg.usage?.output_tokens ?? 0) + mapTokensUit,
+              out: finaleMsg.usage.out + mapTokensUit,
             },
             tokendekking: {
               map_calls: mapCalls,
               bevat_reranker: false,
               bevat_query_reformulatie: false,
               bevat_web_search: false,
+            },
+            // #311 — de effectieve gateway-configuratie van deze eindgeneratie.
+            gateway: {
+              provider: finaleMsg.provider,
+              model: finaleMsg.model,
+              profiel_id: finaleMsg.profielId,
+              config_versie: finaleMsg.configVersie,
             },
           };
 
@@ -3944,7 +4076,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_antwoord: zichtbaarAntwoord,
             p_bronnen: bronnen,
             p_modus: effectieveModus,
-            p_model: AI_MODEL,
+            p_model: finaleMsg.model,
             p_retrieval_meta: meta_spoor,
             p_retrieval_meta_inhoud: meta_inhoud,
             p_gesprek_audit_id: gesprekAuditId,
@@ -4117,13 +4249,62 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             },
           });
         } catch (streamFout) {
-          console.error("Chat stream fout:", streamFout);
-          send({
-            type: "error",
-            error: "Er is een fout opgetreden bij het verwerken van uw vraag.",
-          });
+          // PR-B — een AFBREKING is geen serverfout. `annulering` betekent dat
+          // de bestuurder zelf weg is: dan is er niemand om iets aan te melden,
+          // en een foutregel in de log zou een storing suggereren die er niet
+          // is. `timeout` is wél een gebeurtenis die de gebruiker moet zien.
+          // Beide landen als genormaliseerde foutcategorie op de ai_actie
+          // (ontwerp §4.4). Zonder die vastlegging bestaat het onderscheid
+          // alleen in een console-regel, en is achteraf niet te zien waaróm
+          // een beurt stopte — een mislukking door een providerstoring en een
+          // bewust weggelopen gebruiker zouden er identiek uitzien.
+          const afbreekreden = foutcategorieVoor(streamFout);
+          if (afbreekreden) {
+            // STRIKTE afronding op het afbreekpad: hier is geen antwoord, en het
+            // spoor dat zegt waaróm de beurt stopte is het enige dat de beurt
+            // nog oplevert. Stil mislukken is hier geen optie.
+            const afgerond = await rondAfStrikt(
+              supabase,
+              aiActieId,
+              "mislukt",
+              `${fase}:${afbreekreden}`
+            );
+            if (!afgerond) {
+              // Het GEZAGHEBBENDE spoor is niet gesloten: de levenscyclus van
+              // deze actie staat nog open. De gatewaylogregel kan er intussen
+              // wél zijn — die wordt door de gateway zelf geschreven — dus dit
+              // is niet "beide sporen ontbreken" maar precies dit ene feit.
+              // Operationeel signaal, geen ruis, en het mag de oorspronkelijke
+              // afbreekreden nooit overschrijven.
+              console.error(
+                `[chat][ALARM] ai_actie niet afgerond — fase=${fase} reden=${afbreekreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
+              );
+            }
+            if (afbreekreden === "timeout") {
+              send({
+                type: "error",
+                error:
+                  fase === "generatie"
+                    ? "Het opstellen van het antwoord duurde te lang. Probeer het opnieuw of stel uw vraag gerichter."
+                    : "Het zoeken in de bronnen duurde te lang. Probeer het opnieuw of stel uw vraag gerichter.",
+              });
+            }
+            console.warn(`[chat] beurt afgebroken (${fase}:${afbreekreden}) — correlatie ${ctx.requestId}`);
+          } else {
+            console.error("Chat stream fout:", streamFout);
+            send({
+              type: "error",
+              error: "Er is een fout opgetreden bij het verwerken van uw vraag.",
+            });
+          }
         } finally {
-          controller.close();
+          // De eigenaar sluit, langs élke uitgang — de les uit PR-B.
+          generatieGrendel?.stop();
+          try {
+            controller.close();
+          } catch {
+            /* al gesloten doordat de client wegviel; niets meer te doen */
+          }
         }
       },
     });

@@ -13,6 +13,13 @@ export const ENV = {
   serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   appBaseUrl: process.env.APP_BASE_URL || "http://127.0.0.1:3000",
   cronSecret: process.env.CRON_SECRET || "",
+  // #311 — de lokale WP4-providerstub. Alleen gezet in de expliciete lokale
+  // E2E-modus (core/lib/ai-provider-endpoint.mjs grendelt de app-kant); de
+  // SSE-scenario's slaan zichzelf over als hij ontbreekt.
+  aiStubUrl: process.env.WP4_E2E_AI_PROVIDER === "local" ? process.env.WP4_E2E_AI_PROVIDER_URL || "" : "",
+  // #349 (F4-T1b) — losse vlag voor de embeddingstub; zonder deze URL valt de
+  // keten terug op FTS en worden de hybride scenario's ZICHTBAAR overgeslagen.
+  embedStubUrl: process.env.WP4_E2E_EMBED_PROVIDER === "local" ? process.env.WP4_E2E_EMBED_PROVIDER_URL || "" : "",
 };
 
 export const FONDS_ID = "00000000-0000-4000-8000-000000000001";
@@ -32,6 +39,19 @@ export const FIX = {
   documentIntrekken: "00000000-0000-4000-8000-0000000d0c02",
   notulenDocument1: "00000000-0000-4000-8000-0000000d0c03",
   documentOnbekend: "00000000-0000-4000-8000-0000000d0cff",
+  // #311 — één FTS-vindbare chunk ONDER document1 (geen extra document: de
+  // documentlijst-snapshots zouden anders omslaan). Chunks staan in geen enkel
+  // bestaand snapshot; alleen de SSE-scenario's zien hem via de retrieval.
+  document1Chunk: "00000000-0000-4000-8000-0000000d0c11",
+  // #322 F4-T1 — retrieval-golden: vier extra chunks ONDER document1 (zelfde
+  // reden: geen extra document). De teksten vermijden bewust elk woord uit de
+  // #311-chatvragen (dekkingsgraad, fonds, actueel, volgens, …) zodat de
+  // bestaande SSE-snapshots ongewijzigd blijven; alleen de w322-scenario's
+  // zoeken erop. Volgorde/rang/dedup/fragmentvorm worden hiermee gepind.
+  retrievalChunkRente1: "00000000-0000-4000-8000-0000000d0c21",
+  retrievalChunkHerstel: "00000000-0000-4000-8000-0000000d0c22",
+  retrievalChunkRente2: "00000000-0000-4000-8000-0000000d0c23",
+  retrievalChunkPremie: "00000000-0000-4000-8000-0000000d0c24",
   procedure1: "00000000-0000-4000-8000-00000000cd01",
   // Alleen Preview-waarneming: vaste UI-fixtures naast de kale lokale W1-seed.
   previewProcedureStap1: "00000000-0000-4000-8000-0000000cd201",

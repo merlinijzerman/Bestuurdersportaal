@@ -4,6 +4,7 @@ import {
   E2E_ASSISTENT_CONTEXT,
   E2E_AI_BRONNEN,
   E2E_FONDSEN,
+  E2E_OIDC,
   E2E_PLATFORM_ACCOUNTS,
   E2E_ROLLEN,
   E2E_WACHTWOORD,
@@ -209,6 +210,24 @@ export async function seedE2e(env = process.env) {
       { onConflict: "host" }
     );
     if (domeinError) throw new Error(`E2E tenant_domains(${fondsSleutel}): ${domeinError.message}`);
+
+    // #335 T2 — Microsoft-loginflag: alleen fonds A aan, met de stub-tenant; fonds B
+    // blijft uit zodat de knop- en 404-negatieven meetbaar zijn. Service-role, want de
+    // publieke tabel heeft bewust geen schrijfpolicy (migratie-/SQL-only).
+    // #344: `modus` is de bron (`pilotstatus` is vervallen); `actief` blijft de
+    // spiegel — de CHECK op de tabel eist dat beide kloppen. `optioneel` is exact
+    // het gedrag dat de bestaande E2E-scenario's meten.
+    const loginAan = fondsSleutel === "a";
+    const { error: loginFlagError } = await admin.from("fonds_microsoft_login").upsert(
+      {
+        fonds_id: fonds.id,
+        actief: loginAan,
+        entra_tenant_id: loginAan ? E2E_OIDC.tenantId : null,
+        modus: loginAan ? "optioneel" : "uit",
+      },
+      { onConflict: "fonds_id" }
+    );
+    if (loginFlagError) throw new Error(`E2E fonds_microsoft_login(${fondsSleutel}): ${loginFlagError.message}`);
 
     users[fondsSleutel] = {};
     for (const rol of E2E_ROLLEN) {

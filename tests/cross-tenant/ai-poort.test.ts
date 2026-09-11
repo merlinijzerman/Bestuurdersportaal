@@ -61,8 +61,8 @@ const SERVERBRONNEN = bronbestanden(["core", "platform", "app"]);
 
 /**
  * Patronen die duiden op een DIRECTE weg naar een betaalde provider.
- * `messages.batches` staat erbij omdat de (nu slapende) Anthropic-batchbaan
- * anders bij activering ongemeten zou draaien.
+ * `messages.batches` staat erbij zodat een nieuwe batchbaan niet ongemerkt
+ * buiten het providerneutrale gatewaycontract kan ontstaan.
  */
 const PROVIDERPATRONEN: { patroon: RegExp; wat: string }[] = [
   { patroon: /new\s+Anthropic\s*\(/, wat: "Anthropic-client" },
@@ -78,22 +78,17 @@ const PROVIDERPATRONEN: { patroon: RegExp; wat: string }[] = [
  * datzelfde bestand.
  */
 const PROVIDERALLOWLIST: Record<string, string> = {
-  "core/lib/ai-poort.ts":
-    "De poort zelf. Bouwt de enige Anthropic-client en geeft die uitsluitend binnen een bewaakte callback.",
+  "core/lib/ai-gateway/adapters/anthropic.ts":
+    "De Anthropic-adapter van de centrale AI-gateway (#311): de ENIGE `new Anthropic(` en het enige runtime-" +
+    "SDK-import. Elke productieaanroep loopt via gateway.ts (fondsconfiguratie → poort → adapter → auditregel).",
+  "core/lib/ai-gateway/adapters/openai.ts":
+    "OpenAI-adapter van de gateway (rauwe fetch); credentials komen van de gateway via een profielreferentie.",
+  "core/lib/ai-gateway/adapters/mistral.ts":
+    "Mistral-chatadapter van de gateway; idem.",
   "core/lib/embeddings.ts":
     "Mistral-embeddings via rauwe fetch; elke aanroep loopt door bewaakteProviderCall.",
   "core/lib/ocr.ts":
     "Mistral-OCR via rauwe fetch; reserveert pagina's per poging en loopt door de poort.",
-  "core/lib/chunk-ingest.ts":
-    "Anthropic Message Batches voor context-prefixes. De baan slaapt " +
-    "(BATCH_BAAN_AAN = false) maar loopt wél door bewaakteAnthropic, zodat activering niet " +
-    "stilzwijgend een ongemeten kanaal opent.",
-  "core/lib/llm-providers/anthropic.ts":
-    "AQLab-adapter (challengervergelijking); poortcontrole in de adapter zelf.",
-  "core/lib/llm-providers/mistral.ts":
-    "AQLab-adapter; idem.",
-  "core/lib/llm-providers/openai.ts":
-    "AQLab-adapter; idem. OpenAI staat standaard uit via de kill switch.",
   "platform/lib/monitoring-health.ts":
     "Healthcheck op api.anthropic.com/v1/models — metadata-endpoint, NIET token-gefactureerd. " +
     "Bewust buiten de kill switch: anders verblindt een stop de monitoring die de stop moet bewaken.",
@@ -136,7 +131,15 @@ test("AI-begrenzing — elke allowlist-regel wijst naar een bestaand bestand", (
  * De healthcheck is de bewuste uitzondering: die mág de poort niet gebruiken,
  * want een gestopte AI moet nog steeds te monitoren zijn.
  */
-const POORTVRIJ = new Set(["core/lib/ai-poort.ts", "platform/lib/monitoring-health.ts"]);
+const POORTVRIJ = new Set([
+  "core/lib/ai-poort.ts",
+  "platform/lib/monitoring-health.ts",
+  // De gateway-adapters zijn technisch: de poort draait in core/lib/ai-gateway/gateway.ts
+  // (stap 4, vóór stap 5) en in llm-providers/index.ts voor het AQLab-pad; test (7) bewaakt dat.
+  "core/lib/ai-gateway/adapters/anthropic.ts",
+  "core/lib/ai-gateway/adapters/openai.ts",
+  "core/lib/ai-gateway/adapters/mistral.ts",
+]);
 
 test("AI-begrenzing — elke providermodule importeert de poort", () => {
   for (const bestand of Object.keys(PROVIDERALLOWLIST)) {
@@ -171,6 +174,8 @@ const KOSTENDRAGENDE_INGANGEN = [
   "platform/lib/ingest-orchestrator.ts",
   "platform/lib/generiek-pipeline.ts",
   "platform/lib/aqlab/run-orchestrator.ts",
+  "platform/lib/semantische-extractie-job.ts",
+  "app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts",
 ];
 
 test("AI-begrenzing — elke kostendragende ingang roept de preflight aan", () => {
@@ -287,4 +292,69 @@ test("STUK-1 — ai/stuk-export logt VÓÓR het bouwen en teruggeven van de .doc
     /if \(logFout\)[\s\S]*status: 500/,
     "ai/stuk-export gaat door na een mislukte log_word_export; de export hoort dan te stoppen."
   );
+});
+
+// ── (7) #311 — de provider-SDK leeft alleen in de adapterlaag ───────────────
+
+/**
+ * Runtime-imports van de Anthropic-SDK mogen uitsluitend in de Anthropic-adapter
+ * staan. Call-sites gebruiken ook voor typen uitsluitend het neutrale contract.
+ */
+const SDK_RUNTIME_ALLOWLIST = new Set(["core/lib/ai-gateway/adapters/anthropic.ts"]);
+const SDK_TYPE_ALLOWLIST = new Set<string>();
+
+test("AI-gateway — runtime-import van @anthropic-ai/sdk alleen in de adapter", () => {
+  const runtime: string[] = [];
+  const typeOnly: string[] = [];
+  for (const bestand of SERVERBRONNEN) {
+    const inhoud = lees(bestand);
+    for (const regel of inhoud.split("\n")) {
+      if (!/from\s+["']@anthropic-ai\/sdk["']/.test(regel)) continue;
+      if (/^\s*import\s+type\s/.test(regel)) typeOnly.push(bestand);
+      else runtime.push(bestand);
+    }
+  }
+  assert.deepEqual(
+    runtime.filter((b) => !SDK_RUNTIME_ALLOWLIST.has(b)),
+    [],
+    "Runtime-import van de provider-SDK buiten de adapterlaag. Laat de call door core/lib/ai-gateway lopen."
+  );
+  assert.deepEqual(
+    typeOnly.filter((b) => !SDK_TYPE_ALLOWLIST.has(b)),
+    [],
+    "Nieuw type-import van de provider-SDK; gebruik de neutrale typen uit core/lib/ai-gateway/contract.ts."
+  );
+});
+
+test("AI-gateway — de gateway toetst de poort vóór de adapter en logt na afloop", () => {
+  const bron = lees("core/lib/ai-gateway/gateway.ts");
+  const poort = bron.indexOf("await deps.poortCheck(");
+  const adapterCall = bron.indexOf("res.adapter.genereer(");
+  const adapterStream = bron.indexOf("res.adapter.stream(");
+  assert.ok(poort !== -1 && adapterCall !== -1 && adapterStream !== -1, "gateway.ts mist poort- of adapteraanroep");
+  assert.ok(poort < adapterCall && poort < adapterStream, "de poort staat niet vóór de adapteraanroep");
+  assert.match(bron, /schrijfLog\(ctx, verzoek, res, \{ ok: true, r \}/, "gateway.ts logt geen geslaagde call");
+});
+
+test("AI-gateway — oude Anthropic-omwegen en kale clientexport zijn verdwenen", () => {
+  const overtredingen = SERVERBRONNEN.filter((bestand) => {
+    const code = lees(bestand).replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    return /bewaakteAnthropic|export\s+(async\s+)?function\s+maakAnthropicClient/.test(code);
+  });
+  assert.deepEqual(overtredingen, [], "Oude provideromweg gevonden:\n" + overtredingen.join("\n"));
+});
+
+test("AI-gateway — geen letterlijke modelstring op fondsgebonden gateway-aanroepen", () => {
+  // Provider/model komen uit fonds + taaktype. Een `model: "claude-…"` naast een
+  // gateway-aanroep zou die keuze weer naar de call-site verplaatsen.
+  const overtredingen: string[] = [];
+  for (const bestand of SERVERBRONNEN) {
+    if (bestand.startsWith("core/lib/ai-gateway/adapters/")) continue;
+    if (/\.(test|sanity)\.ts$/.test(bestand)) continue; // hermetische tests kiezen bewust een model
+    const inhoud = lees(bestand);
+    if (!/\.(genereer|stream)\(\s*(gatewayCtx|ctx|gw\.ctx|input\.ctx|opties!\.gateway!\.ctx)/.test(inhoud)) continue;
+    const re = /\.(genereer|stream)\([\s\S]{0,900}?model:\s*["'`](claude|gpt|mistral)/g;
+    if (re.test(inhoud)) overtredingen.push(bestand);
+  }
+  assert.deepEqual(overtredingen, [], "Letterlijke modelstring naast een gateway-aanroep:\n" + overtredingen.join("\n"));
 });

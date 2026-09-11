@@ -1,0 +1,73 @@
+name: Scanner-signatures Productie
+
+on:
+  schedule:
+    # Dagelijks buiten de overige nachtjobs; GitHub-cron gebruikt UTC.
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scanner-signatures-production
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: ClamAV-signatures verversen en bewijzen
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Het bestaande VERCEL_TOKEN en VERCEL_TEAM_ID zijn hier al afgeschermd.
+    # De workflow gebruikt geen Supabase- of documentcredentials.
+    environment: production-backup
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT_ID: prj_0qA1Ou6KmFnTOiwtJrZYgrbjOeoG
+      SCANNER_HEALTH_URL: https://project-pnkzy.vercel.app/health
+
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: Invoer fail-closed controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${VERCEL_TOKEN:-}" || { echo "Secret VERCEL_TOKEN ontbreekt" >&2; exit 1; }
+          test -n "${VERCEL_ORG_ID:-}" || { echo "Variabele VERCEL_TEAM_ID ontbreekt" >&2; exit 1; }
+          test -n "${VERCEL_PROJECT_ID:-}" || { echo "VERCEL_PROJECT_ID ontbreekt" >&2; exit 1; }
+          test -f scanner/Dockerfile.vercel
+          test -f scripts/verify-scanner-health.mjs
+
+      - name: Scanner cacheloos naar Productie deployen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Uitvoeren vanuit de monoreporoot: de Vercel-projectinstelling kiest
+          # vervolgens scanner/ als Root Directory.
+          # --force = nieuwe deployment zonder buildcache. Daardoor draait
+          # freshclam uit Dockerfile.vercel bij iedere geplande run opnieuw.
+          npx --yes vercel@59.11.7 deploy \
+            --prod \
+            --force \
+            --archive=tgz \
+            --yes \
+            --token "$VERCEL_TOKEN" \
+            --meta signature-refresh=scheduled
+
+      - name: Production-health fail-closed verifiëren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/verify-scanner-health.mjs "$SCANNER_HEALTH_URL" \
+            --max-signature-age-hours 48 \
+            --max-image-age-minutes 30 \
+            --attempts 18 \
+            --interval-seconds 10

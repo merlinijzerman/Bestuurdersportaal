@@ -12,18 +12,19 @@
 // blijft provider-neutraal in de generatiekern.
 // -----------------------------------------------------------------------------
 
-import type Anthropic from "@anthropic-ai/sdk";
 import type { ModelProvider, ReasoningEffort } from "@/core/lib/aqlab/modellen";
+import type { TekstBlok } from "../ai-gateway/contract";
 
 export type { ModelProvider, ReasoningEffort };
 
 /**
- * Provider-neutraal generatieverzoek. De system-blokken zijn Anthropic-getypeerde
- * TextBlockParams (het bestaande formaat uit bouwSysteemBlokken); OpenAI/Mistral
- * lezen daar enkel de `.text` uit en vouwen ze tot één system-message.
+ * Provider-neutraal generatieverzoek. De system-blokken zijn structureel gelijk
+ * aan Anthropic TextBlockParams (het bestaande formaat uit bouwSysteemBlokken),
+ * getypeerd zonder SDK (#311); OpenAI/Mistral lezen daar enkel de `.text` uit en
+ * vouwen ze tot één system-message.
  */
 export interface ProviderRequest {
-  systeemBlokken: Anthropic.Messages.TextBlockParam[];
+  systeemBlokken: TekstBlok[];
   berichten: { role: "user" | "assistant"; content: string }[];
   model: string;
   maxTokens: number;
@@ -47,7 +48,7 @@ export interface ProviderResultaat {
 }
 
 /** Vouwt de system-blokken tot één string (voor OpenAI/Mistral chat-completions). */
-export function systeemBlokkenNaarTekst(blokken: Anthropic.Messages.TextBlockParam[]): string {
+export function systeemBlokkenNaarTekst(blokken: TekstBlok[]): string {
   return blokken
     .map((b) => (typeof b.text === "string" ? b.text : ""))
     .filter((t) => t.length > 0)

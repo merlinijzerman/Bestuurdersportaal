@@ -111,6 +111,95 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$BASELINE_STORAGE"
 echo "OK: baseline toegepast."
 echo
 
+# De Microsoft-migratie faalt bewust wanneer de aparte kluislogin niet vooraf
+# is geprovisioneerd. Deze runner werkt uitsluitend op een ephemere test-DB, dus
+# maakt hier een wachtwoordloze fixture met exact dezelfde minimale rolflags.
+# Preview/Productie blijven een afzonderlijk, beheerd wachtwoord vereisen.
+echo "Ephemere database-loginfixtures gereedmaken…"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'microsoft_vault') then
+    create role microsoft_vault
+      login
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls
+      connection limit 5;
+  end if;
+  -- #311 T2/T3 — de AI-gateway heeft dezelfde minimale loginvorm
+  -- (security/AI-GATEWAY-RUNBOOK.md). Anders dan de kluisrol MOET de app in de
+  -- lokale/CI-stack met deze rol kunnen verbinden (de chat leest zijn
+  -- configuratie erdoor), dus krijgt de fixture een vast, niet-geheim
+  -- wachtwoord. Uitsluitend geldig in de wegwerp-DB; Preview/Productie hebben
+  -- een beheerd wachtwoord in de secretstore.
+  if not exists (select 1 from pg_roles where rolname = 'ai_gateway') then
+    create role ai_gateway
+      login
+      password 'ai_gateway_lokaal'
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls
+      connection limit 5;
+  end if;
+  -- #335 T1 — Microsoft-login fase 1B: minimale loginrol login_gateway (zelfde
+  -- vorm als microsoft_vault; T2-code moet er lokaal mee kunnen verbinden, dus
+  -- een vast, niet-geheim wachtwoord) en de NOLOGIN-eigenaar van de hookhelper
+  -- (security/MICROSOFT-365-F1B-RUNBOOK.md). Uitsluitend voor de wegwerp-DB.
+  if not exists (select 1 from pg_roles where rolname = 'login_gateway') then
+    create role login_gateway
+      login
+      password 'login_gateway_lokaal'
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls
+      connection limit 5;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'login_hook_owner') then
+    create role login_hook_owner
+      nologin
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls;
+  end if;
+  -- #344 — de beperkte portaalrol waarnaar de Auth-hook een break-glass- of
+  -- koppelsessie afschaalt. PostgREST doet `set role` op de claim, dus de rol
+  -- moet bestaan én lid zijn van authenticator (zoals anon/authenticated).
+  if not exists (select 1 from pg_roles where rolname = 'portaal_beperkt') then
+    create role portaal_beperkt
+      nologin
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticator')
+     and not exists (select 1 from pg_auth_members am
+                       join pg_roles r on r.oid = am.roleid
+                       join pg_roles m on m.oid = am.member
+                      where r.rolname = 'portaal_beperkt' and m.rolname = 'authenticator') then
+    grant portaal_beperkt to authenticator;
+  end if;
+end
+$$;
+SQL
+echo "OK: ephemere loginfixtures aanwezig."
+echo
+
 echo "Voorwaartse migraties ná $BASELINE_CUTOFF toepassen (${#MIGRATIES[@]} bestanden)…"
 if [ "${#MIGRATIES[@]}" -gt 0 ]; then
   for f in "${MIGRATIES[@]}"; do

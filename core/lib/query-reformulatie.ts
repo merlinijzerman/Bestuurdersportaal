@@ -25,7 +25,6 @@
 //  gepinde meetset in query-reformulatie.sanity.ts verandert niet.
 // ============================================================
 
-import type Anthropic from "@anthropic-ai/sdk";
 
 // Nederlandse verwijswoorden die sterk wijzen op afhankelijkheid van eerdere
 // context (anafora). Lowercase, als hele woorden gematcht.
@@ -163,32 +162,36 @@ Regels:
 // Reformuleert een vervolgvraag tot een zelfstandige zoekvraag via een lichte
 // Haiku-call. Faalt veilig: bij een lege, te lange of foutieve respons valt de
 // functie terug op de originele vraag, zodat retrieval altijd doorgaat.
+/**
+ * De providercall zelf wordt door de aanroeper geleverd (#311: de chatroute
+ * geeft een closure op de AI-gateway, taaktype `chat_reformulatie`). Zo blijft
+ * dit bestand SDK-vrij en kan geen tweede caller de poort omzeilen (G5).
+ */
+export type ReformulatieAanroep = (invoer: {
+  systeem: string;
+  gebruiker: string;
+  maxTokens: number;
+  temperature: number;
+}) => Promise<string>;
+
 export async function reformuleerVraag(
-  client: Anthropic,
+  roep: ReformulatieAanroep,
   priorBeurten: Beurt[],
-  vraag: string,
-  model: string
+  vraag: string
 ): Promise<string> {
   try {
     const transcript = bouwTranscript(priorBeurten);
-    const response = await client.messages.create({
-      model,
-      max_tokens: 150,
+    const ruw = await roep({
+      systeem: REFORMULATIE_SYSTEEM,
+      gebruiker: `GESPREK TOT NU TOE:\n${transcript}\n\nLAATSTE VRAAG: ${vraag}\n\nHerschreven zelfstandige zoekvraag:`,
+      maxTokens: 150,
       // Besluit 0139 — reproduceerbare retrieval: zonder temperature levert
       // dezelfde vraag + historie twee verschillende zoekvragen (incident
       // 06-08 15:29/15:34). temperature:0 maakt de herschrijving deterministisch.
       temperature: 0,
-      system: REFORMULATIE_SYSTEEM,
-      messages: [
-        {
-          role: "user",
-          content: `GESPREK TOT NU TOE:\n${transcript}\n\nLAATSTE VRAAG: ${vraag}\n\nHerschreven zelfstandige zoekvraag:`,
-        },
-      ],
     });
 
-    const tekst =
-      response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    const tekst = ruw.trim();
 
     // Vangnet: leeg, verdacht lang, of identiek → origineel gebruiken.
     if (!tekst || tekst.length > 300) return vraag;

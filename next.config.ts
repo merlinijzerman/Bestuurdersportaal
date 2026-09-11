@@ -70,6 +70,15 @@ const cspDirectives = [
   "upgrade-insecure-requests",
 ].join("; ");
 
+// Microsoft 365 fase 3 (#321): uitsluitend de SharePoint-previewpagina mag een
+// iframe naar de kortlevende Graph-preview op *.sharepoint.com openen. Het
+// pad-specifieke headerblok hieronder overschrijft alleen de CSP en de
+// Referrer-Policy voor dat pad; alle andere routes houden de strikte CSP.
+const cspDirectivesSharePointPreview = cspDirectives.replace(
+  "frame-src 'self' https://challenges.cloudflare.com",
+  "frame-src 'self' https://challenges.cloudflare.com https://*.sharepoint.com",
+);
+
 const securityHeaders = [
   // Voorkomt clickjacking via iframe-embed door derden. Sluit aan op
   // frame-ancestors 'none' in CSP — die is de moderne variant, X-Frame-Options
@@ -138,6 +147,34 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: securityHeaders,
+      },
+      {
+        // Zelfde sleutel na de algemene regel: de laatste match wint per header.
+        source: "/bibliotheek/sharepoint/:ref",
+        headers: [
+          { key: "Content-Security-Policy", value: cspDirectivesSharePointPreview },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
+        // #344 PR-B: de herstelflow draagt het herkoppeltoken in het URL-fragment.
+        // Geen caching en geen referrer; de analytics van de root-layout is op
+        // dit pad uitgeschakeld (core/components/RouteBewusteAnalytics.tsx).
+        source: "/koppelen",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
+        // #344 PR-B: het activeringsendpoint van diezelfde flow (POST-only, token
+        // in de body). De globale Referrer-Policy hierboven zou de routeheader
+        // overschrijven; de latere regel wint.
+        source: "/auth/microsoft-login/uitnodiging",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
       },
       {
         source: "/video/(.*)",

@@ -1,0 +1,115 @@
+{
+  "body": {
+    "events": [
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "klaar",
+        "type": "progress",
+        "uitkomst": "uit 0 documenten — 0 passages geselecteerd"
+      },
+      {
+        "fase": "generatie",
+        "label": "Antwoord wordt opgesteld",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "alleen_fondsdocumenten": false,
+        "antwoordmodus": "feitelijk",
+        "antwoordmodus_label": "Feitelijk antwoord",
+        "bron_intent": "fonds",
+        "bron_intent_bron": null,
+        "bron_intent_herkomst": null,
+        "bron_intent_override": false,
+        "bron_modus_auto": "combineren",
+        "bron_vertrouwen": "zeker",
+        "bronbasis": "Algemene kennis (geen fondsdocumenten gevonden)",
+        "bronkeuze_aanbod": null,
+        "bronnen": [],
+        "chunks_gevonden": 0,
+        "document_gericht": false,
+        "documentdekking": null,
+        "gereformuleerd": false,
+        "inline_meldingen": [
+          {
+            "tekst": "Geen ACTUELE fondsbron gevonden, maar er is wel 1 stuk over dit onderwerp met de status concept of ter bespreking. Die gelden niet als actuele bron en zijn daarom buiten dit antwoord gelaten.",
+            "type": "niet_vastgestelde_stukken"
+          }
+        ],
+        "module_scope": null,
+        "modus": "combineren",
+        "organisatieprofiel": "geen-profiel",
+        "peildatum": "<datum>",
+        "portaalstand_gebruikt": false,
+        "profielsturing": "geen-profiel",
+        "retrieval_modus": "actueel",
+        "scope": null,
+        "source_summary": {
+          "documenten": 0,
+          "model_kennis": 0,
+          "web": 0,
+          "web_retrieval_actief": false
+        },
+        "sources": [],
+        "transformatie": false,
+        "type": "meta",
+        "verbreding": {
+          "aantal": 1,
+          "label": "Neem dit niet-vastgestelde stuk mee",
+          "titels": [
+            "W1 Document"
+          ],
+          "type": "niet_vastgesteld"
+        },
+        "vraagrouter": null,
+        "web_retrieval_actief": false,
+        "zoekvraag": "Simuleer WP4_PROVIDER_FOUT voor ons fonds."
+      },
+      {
+        "error": "Er is een fout opgetreden bij het verwerken van uw vraag.",
+        "type": "error"
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "text/event-stream; charset=utf-8"
+  },
+  "nawerk": {
+    "provider_verzoeken": [
+      {
+        "max_tokens": 5000,
+        "messages_aantal": 1,
+        "messages_sha256": "b4eaa0670404cba8204b00ba92549daf878e82c156c283928e7405ab31d257b8",
+        "model": "claude-opus-4-8",
+        "stream": true,
+        "system_sha256": "0da264df93436449dbaa635c2aa50b928ac7773e974c9ef45adb39d99656529c",
+        "system_tekens": 5716,
+        "temperature": null,
+        "tool_choice": null,
+        "tools": null,
+        "top_p": null
+      },
+      {
+        "max_tokens": 5000,
+        "messages_aantal": 1,
+        "messages_sha256": "b4eaa0670404cba8204b00ba92549daf878e82c156c283928e7405ab31d257b8",
+        "model": "claude-opus-4-8",
+        "stream": true,
+        "system_sha256": "0da264df93436449dbaa635c2aa50b928ac7773e974c9ef45adb39d99656529c",
+        "system_tekens": 5716,
+        "temperature": null,
+        "tool_choice": null,
+        "tools": null,
+        "top_p": null
+      }
+    ]
+  },
+  "status": 200
+}

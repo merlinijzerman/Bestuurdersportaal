@@ -85,6 +85,12 @@ Een groot deel van de "concreet in jullie product"-lijst uit het advies is **al 
 
 **Al aanwezig:**
 
+- **Centrale providergovernance (#311, besluit 0209):** alle generatieve productietaken lopen
+  via één gateway. Provider/model komen per fonds uit een privaat configuratieschema, iedere
+  logische actie reserveert quotum, iedere call passeert de live kill switch/allowlist en krijgt
+  een inhoudsvrije auditregel. Een fonds kan alleen een platformprofiel of zijn eigen profiel
+  gebruiken. Hiermee is klant-eigen AI configureerbaar zonder een tweede applicatievariant.
+
 - **AI-interactielog (chat):** `governance_log` legt elke AI-vraag vast met `gebruiker_id`, `fonds_id`, vraag, antwoord, `bronnen` (jsonb), `modus` (documenten/combineren/algemeen) en `model`.
 - **AI-interactie + human-validation workflow (Decision Object):** `decision_ai_interactions` heeft `prompt`, `bronnen`, `model`/`modelversie`, `output`, **`validatiestatus`** (concept → gevalideerd → aangepast → afgekeurd → gearchiveerd), `gevalideerd_door`/`gevalideerd_op`, `aangepaste_output`, `gebruikt_in_dossier` en `validatie_domein` (welke rol mag valideren). Dat is vrijwel exact de human-validation workflow uit het advies — al in het schema.
 - **Transparantie:** klikbare `[Bron N]`-bronvermelding in de chat; drie AI-modi met een expliciete disclaimer bij de "Algemeen"-modus. **Herkomstlabels worden strikt gescheiden gehouden** — naast `[Bron N]` (vastgestelde fondsbron) zijn er `[Algemene kennis]`/`[Volgens wetgeving]` (modelkennis) en, sinds de agendapunt-modus (ADR 0028), `[Toelichting agendapunt]` voor ongevalideerde bestuurs-vrijetekst. Kerninvariant: vrije tekst van een bestuurder wordt nooit als vastgestelde fondsbron gepresenteerd; het auditspoor legt de herkomst vast (`governance_log.retrieval_meta.herkomst='agendapunt:<id>'`).

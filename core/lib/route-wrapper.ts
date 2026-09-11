@@ -88,6 +88,25 @@ export type FondsContext = {
   readonly naam: string | null;
   readonly supabase: RlsClient; // RLS-client (anon-key)
   readonly requestId: string;
+  /**
+   * #356 — MONOTOON tijdstip van binnenkomst in de wrapper, vóór authenticatie,
+   * sessieguard en profielresolutie. De platformklok (Vercel: 300 s) loopt vanaf
+   * het verzoek, niet vanaf het moment dat de handler begint; startte de meting
+   * pas in de handler, dan telde die voorbereiding niet mee en kon een
+   * budgetberekening over de functieduur heen schieten.
+   *
+   * `performance.now()`, niet `Date.now()`: een NTP-correctie mag het
+   * resterende budget niet laten springen.
+   */
+  readonly startMonotoonMs: number;
+  /**
+   * PR-C — SERVER-SIDE wandkloktijd van binnenkomst (ISO), naast
+   * `startMonotoonMs` en op hetzelfde moment vastgelegd. De toelatingspoort
+   * toetst hiermee dat een rechtenbewijs uit DIT verzoek komt (V4). Server-side,
+   * nooit uit de body: een client die zijn eigen verzoekstart mag aanleveren,
+   * kan het geldigheidsvenster naar believen oprekken.
+   */
+  readonly verzoekStartOp: string;
 };
 
 export type RouteSpecV1 = {
@@ -217,6 +236,12 @@ export type HostGuardOordeel = { toegestaan: boolean };
 export type WrapperDeps = {
   createServerSupabase: typeof createServerSupabase;
   haalProfiel: typeof haalProfiel;
+  /** Guard L3 (#335 T2): beoordeelt een `oauth`-sessie op een actieve Microsoft-
+   *  binding en beëindigt haar bij weigering. LAZY in echteDeps (sessieguard →
+   *  gateway is server-only); injecteerbaar zodat de sanity de weigertak zonder DB
+   *  toetst. Fase 1C (#344): ook een wachtwoordsessie wordt beoordeeld — in modus
+   *  `verplicht` mag zij niet bestaan zonder levende uitzondering. */
+  beoordeelPortaalSessie: (supabase: RlsClient, gebruikerId: string) => Promise<{ toegestaan: boolean; beperkt?: boolean }>;
   beoordeelRouteHostToegang: (args: HostGuardArgs) => Promise<HostGuardOordeel>;
   /** Leest `ENFORCE_CAPABILITY`. Injecteerbaar zodat de sanity-suite BEIDE
    *  vlagstanden kan bewijzen zonder process.env te muteren — de vlag-aan-stand
@@ -265,6 +290,12 @@ export type WrapperDeps = {
 const echteDeps: WrapperDeps = {
   createServerSupabase,
   haalProfiel,
+  beoordeelPortaalSessie: async (supabase, gebruikerId) => {
+    const mod = await import("@/core/lib/microsoft-login-sessieguard");
+    const oordeel = await mod.beoordeelPortaalSessie(supabase, gebruikerId);
+    if (!oordeel.toegestaan) await mod.beeindigSessie(supabase);
+    return oordeel;
+  },
   capabilityEnforceAan,
   schemaEnforceAan,
   ratelimitEnforceAan,
@@ -303,6 +334,11 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
     // parameter; die verschilt tussen statische en [id]-routes. Eén wrapper dekt
     // beide, dus typen we de context bewust los en normaliseren hem intern.
     return async function (request: NextRequest, invocatie?: any): Promise<Response> {
+      // #356 — als ALLEREERSTE: de platformklok loopt al, dus alles wat de
+      // wrapper hierna doet (auth, guards, profiel) hoort in het verbruikte deel
+      // van de functieduur te vallen.
+      const startMonotoonMs = performance.now();
+      const verzoekStartOp = new Date().toISOString();
       const requestId = crypto.randomUUID();
 
       // 1. Authenticatie.
@@ -311,6 +347,21 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return nietIngelogd();
+
+      // 1b. Guard L3 (#335 T2, uitgebreid in #344): een sessie die volgens het
+      // actuele fondsbeleid niet mag bestaan krijgt EXACT dezelfde 401 als "geen
+      // sessie" — geen nieuwe responsvorm, dus de anon-snapshots en het
+      // 401-contract blijven byte-identiek.
+      const sessieOordeel = await deps.beoordeelPortaalSessie(supabase, user.id);
+      if (!sessieOordeel.toegestaan) return nietIngelogd();
+      // 1c. Een door de Auth-hook afgeschaalde sessie (break-glass op AAL1 of een
+      // koppel-/herstelsessie) draagt de rol `portaal_beperkt` en krijgt van de
+      // datalaag sowieso niets. Hier stopt zij ook vóór de route: alleen het
+      // koppelpad blijft open, en de weigering is dezelfde 401.
+      if (sessieOordeel.beperkt === true) {
+        const { magBeperkteSessieRoute } = await import("@/core/lib/microsoft-login-beleid-core");
+        if (!magBeperkteSessieRoute(new URL(request.url).pathname)) return nietIngelogd();
+      }
 
       // 2. Profielresolutie (vier kolommen).
       const profiel = await deps.haalProfiel(supabase, user.id);
@@ -474,6 +525,8 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
         naam: profiel?.naam ?? null,
         supabase,
         requestId,
+        startMonotoonMs,
+        verzoekStartOp,
       };
 
       // Laatste vangnet: alleen wat de route zélf niet vangt. Dezelfde vorm als

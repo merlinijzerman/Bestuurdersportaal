@@ -273,3 +273,67 @@ De notulen-RPC's (`fn_notulen_segment_bevestig`/`_verwijder`) zijn `create or re
 van bestaande functies — hun grants blijven ongewijzigd (geen nieuwe TSV-regels). De
 fonds/decision-consistentie zit niet in deze functies maar in de composite FK
 `governance_events_decision_zelfde_fonds` (0192 §2e).
+
+## #311 T2 — AI-gateway (migratie 2026_09_04_ai_gateway_configuratie.sql)
+
+Eén nieuw publiek object: `fn_fonds_ai_configuratie_standaard()` — de AFTER
+INSERT-triggerfunctie op `public.fondsen` die voor elk nieuw fonds de vier
+configuratieregels in `ai_gateway_private` aanmaakt. SECURITY DEFINER (de
+invoegende rol heeft bewust geen rechten in het private schema) en **voor niemand
+uitvoerbaar**: `anon -`, `authenticated -`, `service_role -`. Een triggerfunctie
+heeft geen execute-grant nodig om te vuren; elke grant zou alleen een directe
+aanroep mogelijk maken en dat is precies wat niet mag.
+
+Het schema `ai_gateway_private` zelf en de loginrol `ai_gateway` vallen buiten de
+scope van deze gate (die scant `public` en `storage`); hun contract wordt volledig
+door `supabase/checks/2026_09_04_ai_gateway.sql` bewezen (exact vier executes, nul
+tabelrechten, nul toegang voor browser- en servicerollen).
+
+
+## #335 T1 — Microsoft-login fase 1B (migratie 2026_09_06_microsoft_login_fase1b.sql)
+
+Vier nieuwe publieke objecten, allemaal bewust minimaal:
+
+- `fonds_microsoft_login` (tabel) — fondsconfiguratie, standaard `actief=false`.
+  `anon -`, `authenticated SELECT` (RLS: alleen het eigen fonds), `service_role`
+  de Supabase-default (backend-rol). Er is **geen** schrijfpolicy: de configuratie
+  wordt uitsluitend via migratie/gecontroleerde SQL gezet; elke wijziging landt via
+  de audittrigger append-only in `login_private.audit_log`.
+- `fn_fonds_microsoft_login_standaard()` — AFTER INSERT-trigger op `public.fondsen`
+  die ieder nieuw fonds een uit-staande configrij geeft. SECURITY INVOKER; `anon -`,
+  `authenticated -`, `service_role EXECUTE` (default; de invoegende backend-rol).
+- `fn_fonds_microsoft_login_audit()` — audittrigger op de configtabel, SECURITY
+  DEFINER met gepinde `search_path` (schrijft in het private schema) en **voor
+  niemand uitvoerbaar**: `anon -`, `authenticated -`, `service_role -`.
+- `fn_access_token_hook(event jsonb)` — de Custom Access Token Hook. **SECURITY INVOKER**,
+  `search_path = ''`, en uitsluitend uitvoerbaar door `supabase_auth_admin`
+  (buiten het vocabulaire van deze gate): `anon -`, `authenticated -`,
+  `service_role -`. De hook toetst bij elke `oauth`-tokenuitgifte de exacte
+  Microsoft-identiteit tegen de private binding (besluit 0211).
+
+Het schema `login_private`, de loginrol `login_gateway` (exact zesentwintig executes: dertien uit T1,
+`tel_startpoging` uit T2/V9 — migratie `2026_09_07_microsoft_login_startlimiet.sql`, tabel
+`start_pogingen` zonder enig rolrecht — en twaalf uit fase 1C, migratie
+`2026_09_07_microsoft_login_beleidsmodus.sql`;
+nul tabelrechten) en de NOLOGIN-eigenaar `login_hook_owner` (alleen `SELECT` +
+RLS-policy op de bindingstabel, plus kolom-`SELECT` op `public.profielen(id, fonds_id)` en
+`public.fonds_microsoft_login(fonds_id, actief, entra_tenant_id, modus)` met eerlijke `using (true)`-leespolicies
+(de helper moet álle rijen kunnen beoordelen; de beveiliging rust op de afgeschermde NOLOGIN-eigenaar
+en het functiecontract, met een volledig getoetste uitzondering in gates B/C van de r1-suite) —
+rechten van een rol buiten het vocabulaire `anon/authenticated/service_role` van deze gate)
+vallen buiten de scope van deze gate; hun contract
+wordt volledig door `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` bewezen.
+
+## Microsoft-loginbeleid fase 1C (#344, besluit 0212)
+
+* `public.fn_profiel_fondslock()` — triggerfunctie op `public.profielen` die dezelfde advisory
+  fondslock neemt als `login_private.zet_modus`, zodat een nieuw of verplaatst profiel niet tussen de
+  activeringspreflight en de omslag naar `verplicht` kan glippen. `SECURITY DEFINER` omdat de
+  aanroeper (bijvoorbeeld het service-role-provisioningpad) geen rechten in `login_private` heeft; de
+  functie doet niets anders dan de lock nemen. **Geen enkele rol** mag haar los uitvoeren — daarom
+  drie regels met `-`. Zij draait uitsluitend als trigger.
+* De rol **`portaal_beperkt`** valt, net als `login_gateway` en `login_hook_owner`, buiten het
+  vocabulaire `anon/authenticated/service_role` van deze gate. Haar contract — lid van
+  `authenticator`, `USAGE` op `public`, uitsluitend kolom-`SELECT` op
+  `public.profielen(id, fonds_id, rol, naam)` en één policy die haar tot de eigen rij beperkt — wordt
+  volledig bewezen in `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql` (DEEL 1 en M19).

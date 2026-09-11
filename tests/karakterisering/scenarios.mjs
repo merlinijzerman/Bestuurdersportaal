@@ -30,7 +30,23 @@ import {
   LIMIET_CHAT,
   LIMIET_CHAT_ENDPOINT,
 } from "./ratelimit-const.mjs";
-import { FIX, FONDS_ID } from "./config.mjs";
+import { ENV, FIX, FONDS_ID } from "./config.mjs";
+import { E2E_AI_PROVIDER_FOUT_MARKER } from "../e2e/fixtures/config.mjs";
+import { zoekVolgorde, metaVolgorde } from "./retrieval-volgorde.mjs";
+
+// #349 -- inhoudsvrije telling uit de embeddingstub (model + aantal, nooit tekst).
+async function embedVerzoeken() {
+  if (!ENV.embedStubUrl) return null;
+  try {
+    const r = await fetch(new URL("/_verzoeken", ENV.embedStubUrl));
+    const { verzoeken } = await r.json();
+    return verzoeken;
+  } catch { return null; }
+}
+async function wisEmbedVerzoeken() {
+  if (!ENV.embedStubUrl) return;
+  try { await fetch(new URL("/_verzoeken", ENV.embedStubUrl), { method: "DELETE" }); } catch { /* stub uit */ }
+}
 
 const LEEG = {};
 const KANDIDATEN_DOELSLEUTEL = "9|approval|W6 kandidaat kiezen";
@@ -91,6 +107,17 @@ async function vulLimiet(admin, uid, endpoint, limiet) {
   const rijen = Array.from({ length: limiet }, () => ({ gebruiker_id: uid, endpoint }));
   const { error } = await admin.from("rate_limit_events").insert(rijen);
   if (error) throw new Error(`preseed rate_limit_events(${endpoint}): ${error.message}`);
+}
+
+// #311 — stub-vingerafdrukken lezen/wissen (zie tests/e2e/fixtures/ai-provider-stub.mjs).
+async function stubVerzoeken() {
+  const res = await fetch(`${ENV.aiStubUrl}/verzoeken`);
+  if (!res.ok) throw new Error(`stub /verzoeken: ${res.status}`);
+  return res.json();
+}
+async function wisStubVerzoeken() {
+  const res = await fetch(`${ENV.aiStubUrl}/verzoeken`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`stub DELETE /verzoeken: ${res.status}`);
 }
 
 /** Eigen besluit voor de auditdossier-route, met een LEEG gebeurtenissenspoor.
@@ -1647,6 +1674,304 @@ export const scenarios = [
     preseed: async ({ admin }) => wisLimiet(admin, LIMIET_CHAT_ENDPOINT),
   },
 
+  // ── 1b. /api/chat — SSE happy path, gekarakteriseerd via de providerstub ───
+  //  (#311, M365 fase 2B — centrale AI-gateway.)
+  //
+  //  De W5-lacune hierboven ("het streamende happy path is NIET
+  //  gekarakteriseerd") wordt hier gesloten, uitsluitend in de LOKALE E2E-modus:
+  //  `WP4_E2E_AI_PROVIDER=local` + de WP4-providerstub op 127.0.0.1:8790.
+  //  core/lib/ai-provider-endpoint.mjs grendelt dat pad met een dubbele
+  //  controle (SEED_DOELOMGEVING=local én de lokale Supabase-URL), dus een
+  //  Preview- of productieomgeving kan hier nooit in belanden. Zonder stub-URL
+  //  slaat run.mjs deze scenario's zichtbaar over (`vereist: "ai-stub"`).
+  //
+  //  WAT ELK SNAPSHOT VASTLEGT
+  //    body.events   — de volledige SSE-stroom (progress/meta/delta/done/error)
+  //    nawerk        — de VINGERAFDRUK van wat de stub ontving: per providercall
+  //                    model, stream-vlag, max_tokens, temperature/top_p, tools,
+  //                    sha256 van system-blokken en berichten. Geen inhoud.
+  //
+  //  Dat tweede deel is de eigenlijke acceptatie-eis van #311: "het bestaande
+  //  Anthropicgedrag blijft functioneel gelijk". Na de migratie naar de gateway
+  //  moet de route exact hetzelfde verzoek naar de provider sturen — zelfde
+  //  model, zelfde budget, zelfde prompt — en exact dezelfde stroom teruggeven.
+  //  Een omgeslagen hash is dan een gedragswijziging, geen ruis.
+  //
+  //  BEWUST NIET HIER: kill switch/quotum-blokkade (mutatie van append-only
+  //  platformtabellen → snapshotdrift; al gedekt door
+  //  supabase/checks/2026_08_16_ai_begrenzing.sql) en het web_search-pad (vereist
+  //  een actieve whitelist-mutatie met audittrail).
+  //
+  //  DETERMINISME: de stub streamt vaste delta's; de retrieval draait op de
+  //  W1-seed (één FTS-chunk onder document1, geen embedding → zichtbare
+  //  FTS-terugval). `idempotentie: true` geeft elke ronde een verse sleutel,
+  //  zodat verify-ronde 2 en 3 hetzelfde pad lopen als ronde 1.
+  //  De scenario's staan ONVOORWAARDELIJK in de tabel (de statische W7-matrix
+  //  moet omgevingsonafhankelijk zijn); `vereist: "ai-stub"` laat run.mjs ze
+  //  zichtbaar overslaan wanneer de stub-URL ontbreekt.
+        {
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-bronloos",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: { vraag: "Wat is een beleidsdekkingsgraad?" },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({ provider_verzoeken: await stubVerzoeken() }),
+        },
+        {
+          //  Beurt MÉT broncontext. Twee keuzes die gemeten zijn, niet aangenomen:
+          //   • "van ons fonds" in de vraag: zonder die fondsverwijzing stelt de
+          //     bronintentie-gate een verduidelijkingsvraag en komt er GEEN
+          //     providercall (zie het derde scenario hieronder — dat pad is
+          //     apart gekarakteriseerd, het is de guardrail vóór het netwerk);
+          //   • `neem_niet_vastgestelde_mee`: document1 draagt status `concept`
+          //     en valt daardoor buiten de actuele retrieval. De client-vlag van
+          //     de verbredingschip neemt hem mee — het bestaande contract, geen
+          //     seedwijziging (die zou de documentlijst-snapshots omgooien).
+          //  De prompthashes ontbreken hier BEWUST: de bronkop draagt een
+          //  willekeurige bron-sentinel (maakBronSentinel) én de peildatum van
+          //  vandaag, dus de hash is per aanroep anders. Vorm en budget zijn wél
+          //  vast; de hashes staan als expliciete lacune in het snapshot.
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-met-bron",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: {
+            vraag: "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?",
+            neem_niet_vastgestelde_mee: true,
+          },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({
+            provider_verzoeken: (await stubVerzoeken()).map(
+              ({ system_sha256, messages_sha256, system_tekens, ...vorm }) => ({
+                ...vorm,
+                prompthash_niet_gekarakteriseerd: "bronkop bevat bron-sentinel en peildatum",
+              })
+            ),
+          }),
+        },
+        {
+          //  Guardrail vóór het netwerk: een fondsloze, dubbelzinnige vraag krijgt
+          //  een verduidelijkingsvraag en GEEN providercall (provider_verzoeken=[]).
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-verduidelijking",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: { vraag: "Wat is de actuele dekkingsgraad van het fonds?" },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({ provider_verzoeken: await stubVerzoeken() }),
+        },
+        {
+          //  Veilige providerfout: de stub geeft 500 op de fout-marker; de route
+          //  hoort {type:"error"} zonder providerdetail te sturen en géén
+          //  governance_log-regel te schrijven.
+          vereist: "ai-stub",
+          slug: "w311.chat.post.bestuurder.sse-providerfout",
+          method: "POST", path: "/api/chat", rol: "bestuurder",
+          body: { vraag: `Simuleer ${E2E_AI_PROVIDER_FOUT_MARKER} voor ons fonds.` },
+          verwacht: "sse", idempotentie: true,
+          preseed: async ({ admin }) => {
+            await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+            await wisStubVerzoeken();
+          },
+          nawerk: async () => ({ provider_verzoeken: await stubVerzoeken() }),
+        },
+
+  // ── #322 F4-T1 — retrieval-golden vóór verplaatsing achter het contract ────
+  //  Twee waarnemingspunten die samen de huidige Supabase-RAG karakteriseren:
+  //   (a) /api/zoeken: de KANDIDATENSET met volgorde, treffers per document,
+  //       fragmentvorm en retrieval_meta (methode, opgehaald/geselecteerd) op
+  //       het FTS-pad — het lokale pad zonder Mistral-sleutel;
+  //   (b) /api/chat: dezelfde beurt als w311 sse-met-bron, maar het nawerk leest
+  //       de retrieval_meta uit governance_log en projecteert uitsluitend de
+  //       deterministische velden (geen duur/tokens/ttft).
+  //  Deze snapshots zijn de acceptatiegrens van F4-T2: byte-/structuuridentiek
+  //  na de verplaatsing, zonder ze bij te werken.
+  ...[
+    ["renteafdekking", "q=renteafdekking"],
+    ["renteafdekking-actueel", "q=renteafdekking&modus=actueel"],
+    ["renteafdekking-generiek", "q=renteafdekking&bronsoort=generiek"],
+    ["premiebeleid", "q=premiebeleid"],
+    ["premiebeleid-herstelplan", "q=premiebeleid%20herstelplan"],
+    ["onbestaand", "q=xq9onbestaandeterm"],
+    //  Manipulatie met een PROCESREFERENTIE. `?procesinstantie=` gaat vandaag
+    //  rechtstreeks in `filters.procesinstantie_ids` zonder servervalidatie dat
+    //  het dossier bij het fonds hoort (ontwerp §2.6 punt 7, gaplijst G-6). RLS
+    //  en de expliciete fondsfilter maken dat onschadelijk — het snapshot legt
+    //  vast dát het leeg blijft, zodat T2 die eigenschap niet stilzwijgend
+    //  weggeeft bij het verplaatsen van de filters naar de orkestratie.
+    //  Fonds- en documentmanipulatie zijn al gedekt door tests/cross-tenant/
+    //  rag-discipline.test.ts (T11, T12, T14a, T15) en worden hier niet herhaald.
+    ["premiebeleid-procesref-vreemd", "q=premiebeleid&procesinstantie=00000000-0000-4000-8000-0000000000ff"],
+  ].map(([naam, query]) => ({
+    slug: `w322.zoeken.get.bestuurder.${naam}`,
+    method: "GET",
+    path: `/api/zoeken?${query}`,
+    rol: "bestuurder",
+    verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, LIMIET_ZOEKEN_ENDPOINT),
+    //  De body alleen is NIET genoeg: normaliseerJson() sorteert elke array, dus
+    //  een omgekeerde ranking gaf een byte-identiek snapshot (bevinding F4-T1).
+    //  `volgorde` codeert de positie in de waarde en is daardoor wél gevoelig.
+    nawerk: async (_ctx, res) => {
+      let body;
+      try { body = JSON.parse(res.buffer.toString("utf8")); } catch { return { volgorde: null }; }
+      return { volgorde: zoekVolgorde(body) };
+    },
+  })),
+  // -- #349 F4-T1b — het HYBRIDE pad (zoek_chunks_hybride + RRF-fusie) --------
+  //  De w322-goldens hierboven karakteriseren uitsluitend het FTS-terugvalpad:
+  //  zonder embeddingprovider zet rag.ts `embedding_query_success:false` en valt
+  //  deterministisch terug. In productie is hybride juist het PRIMAIRE pad.
+  //
+  //  Deze scenario's draaien daarom tegen een APARTE serverinstantie met
+  //  HYBRID_SEARCH=on en WP4_E2E_EMBED_PROVIDER=local (CI: poort 3003). Zonder
+  //  die stub-URL worden ze ZICHTBAAR overgeslagen (`vereist: "embed-stub"`) --
+  //  nooit stil, en de 390 bestaande snapshots blijven daardoor ongemoeid.
+  //
+  //  Wat ze vastleggen dat het FTS-pad niet kan: `methode: "hybride_rrf"`,
+  //  `embedding_query_success: true`, de per-chunk armherkomst (`fts_rang`
+  //  naast `vec_rang`) en de fusievolgorde. Precies die volgorde is het
+  //  resultaat van de RRF -- en dus wat T2 ongewijzigd moet laten.
+  ...[
+    ["renteafdekking", "q=renteafdekking"],
+    ["premiebeleid-herstelplan", "q=premiebeleid%20herstelplan"],
+    ["uitbesteding", "q=uitbestedingsbeleid%20fiduciair"],
+  ].map(([naam, query]) => ({
+    vereist: "embed-stub",
+    slug: `w322b.zoeken.get.bestuurder.${naam}`,
+    method: "GET",
+    path: `/api/zoeken?${query}`,
+    rol: "bestuurder",
+    verwacht: "json",
+    preseed: async ({ admin }) => {
+      await wisLimiet(admin, LIMIET_ZOEKEN_ENDPOINT);
+      await wisEmbedVerzoeken();
+    },
+    nawerk: async (_ctx, res) => {
+      let body;
+      try { body = JSON.parse(res.buffer.toString("utf8")); } catch { return { volgorde: null, embed: null }; }
+      return {
+        volgorde: zoekVolgorde(body),
+        // Bewijst dat de vraag-embedding daadwerkelijk is opgehaald: zonder deze
+        // regel zou een stille terugval op FTS een groen snapshot opleveren met
+        // een andere methode, en dat is precies wat hier NIET mag gebeuren.
+        embed: await embedVerzoeken(),
+      };
+    },
+  })),
+
+  {
+    //  De zoekroute hierboven toont alleen methode/aantallen. De ARMHERKOMST
+    //  (fts_rang naast vec_rang per chunk), `embedding_query_success` en de
+    //  pogingadministratie leven uitsluitend in `governance_log.retrieval_meta`.
+    //  Deze beurt legt precies die velden vast op het hybride pad — dezelfde
+    //  vraag als w322.chat.…retrieval-meta, maar met HYBRID_SEARCH=on.
+    //  `hybrideZoekenAan()` valt zonder fondsvlag terug op die env, dus de
+    //  chatroute loopt hier hybride zonder dat de seed iets hoeft te zetten —
+    //  en zonder dat het FTS-snapshot op poort 3000 verandert.
+    vereist: "hybride",
+    slug: "w322b.chat.post.bestuurder.hybride-retrieval-meta",
+    method: "POST", path: "/api/chat", rol: "bestuurder",
+    body: {
+      vraag: "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?",
+      neem_niet_vastgestelde_mee: true,
+    },
+    verwacht: "sse", idempotentie: true,
+    preseed: async ({ admin }) => {
+      await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+      await wisStubVerzoeken();
+      await wisEmbedVerzoeken();
+    },
+    nawerk: async ({ admin, users }) => {
+      const { data, error } = await admin
+        .from("governance_log")
+        .select("retrieval_meta, modus")
+        .eq("gebruiker_id", users.bestuurder.userId)
+        .order("aangemaakt", { ascending: false })
+        .limit(1);
+      if (error) throw new Error(`governance_log(349): ${error.message}`);
+      const meta = data?.[0]?.retrieval_meta ?? null;
+      if (!meta) return { retrieval_meta: null, volgorde: null, embed: null };
+      const {
+        methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+        fondsdiscipline_gedropt, embedding_query_success, fallback_reason, retrieval_pogingen,
+        poging_herkomst, bronversie_audit, citaties, selectie, filters, antwoordmodus, gereformuleerd,
+      } = meta;
+      return {
+        modus: data[0].modus,
+        retrieval_meta: {
+          methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+          fondsdiscipline_gedropt, embedding_query_success, fallback_reason, retrieval_pogingen,
+          bronversie_audit, citaties, selectie, filters, antwoordmodus, gereformuleerd,
+          poging_herkomst_geprojecteerd: poging_herkomst == null ? null : Object.keys(poging_herkomst).length,
+        },
+        volgorde: metaVolgorde(meta),
+        embed: await embedVerzoeken(),
+      };
+    },
+  },
+  {
+    vereist: "ai-stub",
+    slug: "w322.chat.post.bestuurder.retrieval-meta",
+    method: "POST", path: "/api/chat", rol: "bestuurder",
+    body: {
+      vraag: "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?",
+      neem_niet_vastgestelde_mee: true,
+    },
+    verwacht: "sse", idempotentie: true,
+    preseed: async ({ admin }) => {
+      await wisLimiet(admin, LIMIET_CHAT_ENDPOINT);
+      await wisStubVerzoeken();
+    },
+    nawerk: async ({ admin, users }) => {
+      const { data, error } = await admin
+        .from("governance_log")
+        .select("retrieval_meta, modus")
+        .eq("gebruiker_id", users.bestuurder.userId)
+        .order("aangemaakt", { ascending: false })
+        .limit(1);
+      if (error) throw new Error(`governance_log(322): ${error.message}`);
+      const meta = data?.[0]?.retrieval_meta ?? null;
+      if (!meta) return { retrieval_meta: null, volgorde: null };
+      // Alleen de reproduceerbare velden; timing en tokens zijn per run anders.
+      const {
+        methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+        fondsdiscipline_gedropt, body_fonds_id_genegeerd, embedding_query_success, fallback_reason,
+        retrieval_pogingen, poging_herkomst, bronversie_audit, citaties, rerank, drempel, parent,
+        selectie, filters, antwoordmodus, bronbasis, gereformuleerd,
+      } = meta;
+      return {
+        modus: data[0].modus,
+        retrieval_meta: {
+          methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
+          fondsdiscipline_gedropt, body_fonds_id_genegeerd, embedding_query_success, fallback_reason,
+          retrieval_pogingen, bronversie_audit, citaties, rerank, drempel, parent,
+          selectie, filters, antwoordmodus, bronbasis, gereformuleerd,
+          // `poging_herkomst` is BEWUST niet rechtstreeks opgenomen: het is het
+          // enige retrievalveld dat chunk-ID's als objectSLEUTEL draagt, en
+          // normaliseer.mjs maskeert alleen string-WAARDEN. Rauw opgenomen zou
+          // het seed-UUID's in het snapshot zetten die bij elke herseed omvallen.
+          // De inhoud zit volledig in `volgorde.poging_herkomst` hieronder.
+          poging_herkomst_geprojecteerd: poging_herkomst == null ? null : Object.keys(poging_herkomst).length,
+        },
+        // Zie retrieval-volgorde.mjs: de rangorde van `chunks`,
+        // `bronversie_audit` en `retrieval_pogingen` overleeft de array-sortering
+        // alleen als de positie in de waarde staat.
+        volgorde: metaVolgorde(meta),
+      };
+    },
+  },
+
   // ── 2. /api/ai/stuk-export — docx-download ────────────────────────────────
   //  De invariant van deze route is de VOLGORDE: `log_word_export` moet slagen
   //  vóór het bestand teruggaat (B-4/G16).
@@ -1810,4 +2135,19 @@ export const scenarios = [
     headers: { "sec-fetch-site": "same-origin" },
     verwacht: "json",
   },
+
+  // ── #335 T2 (B7) — login- en callbackpad als PAGINA-scenario's ────────────
+  //  Ontwerp §6.13: wachtwoordlogin, refresh en /auth/callback voor niet-azure-
+  //  sessies blijven byte-identiek, óók met guard L3/L4 in de layouts en de
+  //  callback. De harnasrollen zijn wachtwoordsessies; de guard raadpleegt de
+  //  gateway dus niet en de snapshots dragen exact het oude gedrag.
+  //  Opgenomen tegen de wegwerpstack (besluit 0192: opnemen, niet voorspellen).
+  //  BESLUIT: `/login` als `vorm` — de HTML draagt build-hashes; status en
+  //  content-type zijn het contract. `/auth/callback` als `redirect` — de query
+  //  wordt door locatieVorm() geredigeerd, het pad `/login` is het contract.
+  { slug: "w335.auth-callback.get.anon.zonder-code", method: "GET", path: "/auth/callback", rol: "anon", verwacht: "redirect" },
+  { slug: "w335.auth-callback.get.anon.ongeldige-code", method: "GET", path: "/auth/callback?code=ongeldig&next=%2Fprofiel", rol: "anon", verwacht: "redirect" },
+  { slug: "w335.login.get.anon", method: "GET", path: "/login", rol: "anon", verwacht: "vorm" },
+  // Ingelogde wachtwoordsessie mét profiel → de login-layout stuurt naar '/' (307).
+  { slug: "w335.login.get.bestuurder.307", method: "GET", path: "/login", rol: "bestuurder", verwacht: "redirect" },
 ];

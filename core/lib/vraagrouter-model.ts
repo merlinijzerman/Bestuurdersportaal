@@ -1,8 +1,7 @@
 // Optionele lichte modelrouter. De pure beslis- en validatielogica staat in
 // vraagrouter.ts; dit bestand is uitsluitend de provider-schil achter de flag.
 
-import { bewaakteAnthropic, type PoortContext } from "./ai-poort";
-import { HAIKU_MODEL } from "./llm-modellen";
+import type { AiGateway, GatewayContext } from "./ai-gateway/contract";
 import {
   isModelRouterKandidaat,
   veiligeRouterTerugval,
@@ -38,7 +37,9 @@ export async function verfijnVraagrouteMetModel(input: {
   basis: Vraagroute;
   documentAantal: number;
   actief: boolean;
-  poort: PoortContext;
+  /** #311: provider/model komen uit fonds + taaktype `chat_vraagrouter` (taakgroep hulp_snel). */
+  gateway: AiGateway;
+  ctx: GatewayContext;
 }): Promise<ModelrouterResultaat> {
   if (!input.actief || !isModelRouterKandidaat(input.basis)) {
     return {
@@ -54,71 +55,70 @@ export async function verfijnVraagrouteMetModel(input: {
     };
   }
   const start = Date.now();
+  let model: string | null = null;
   try {
-    const response = await bewaakteAnthropic(input.poort, HAIKU_MODEL, (client) =>
-      client.messages.create(
+    const response = await input.gateway.genereer(input.ctx, {
+      taaktype: "chat_vraagrouter",
+      maxTokens: ROUTER_MAX_TOKENS,
+      temperature: 0,
+      systeem:
+        "Classificeer uitsluitend de taak en benodigde dekking van de gebruikersvraag. " +
+        "Maak geen inhoudelijke analyse. Volledig/samengesteld mag alleen bij een integrale, volledige of kaderbrede opdracht; een pagina-, artikel-, datum-, percentage- of uitsluitend-vraag is targeted.",
+      berichten: [{ role: "user", content: input.vraag }],
+      tools: [
         {
-          model: HAIKU_MODEL,
-          max_tokens: ROUTER_MAX_TOKENS,
-          temperature: 0,
-          system:
-            "Classificeer uitsluitend de taak en benodigde dekking van de gebruikersvraag. " +
-            "Maak geen inhoudelijke analyse. Volledig/samengesteld mag alleen bij een integrale, volledige of kaderbrede opdracht; een pagina-, artikel-, datum-, percentage- of uitsluitend-vraag is targeted.",
-          messages: [{ role: "user", content: input.vraag }],
-          tools: [
-            {
-              name: "classificeer_vraag",
-              description: "Gesloten routeruitkomst",
-              input_schema: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  taak: {
-                    type: "string",
-                    enum: [
-                      "feitopzoeking",
-                      "uitleg",
-                      "samenvatting",
-                      "volledigheidstoets",
-                      "aansluitingstoets",
-                      "vergelijking",
-                      "risicoanalyse",
-                      "besluitrijpheid",
-                      "onbekend",
-                    ],
-                  },
-                  dekking: {
-                    type: "string",
-                    enum: ["targeted", "volledig_document", "samengesteld"],
-                  },
-                  vertrouwen: { type: "number", minimum: 0, maximum: 1 },
-                  signalen: {
-                    type: "array",
-                    maxItems: 8,
-                    items: { type: "string", pattern: "^[a-z0-9_]{1,50}$" },
-                  },
-                },
-                required: ["taak", "dekking", "vertrouwen", "signalen"],
+          soort: "functie",
+          naam: "classificeer_vraag",
+          beschrijving: "Gesloten routeruitkomst",
+          verplicht: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              taak: {
+                type: "string",
+                enum: [
+                  "feitopzoeking",
+                  "uitleg",
+                  "samenvatting",
+                  "volledigheidstoets",
+                  "aansluitingstoets",
+                  "vergelijking",
+                  "risicoanalyse",
+                  "besluitrijpheid",
+                  "onbekend",
+                ],
+              },
+              dekking: {
+                type: "string",
+                enum: ["targeted", "volledig_document", "samengesteld"],
+              },
+              vertrouwen: { type: "number", minimum: 0, maximum: 1 },
+              signalen: {
+                type: "array",
+                maxItems: 8,
+                items: { type: "string", pattern: "^[a-z0-9_]{1,50}$" },
               },
             },
-          ],
-          tool_choice: { type: "tool", name: "classificeer_vraag" },
+            required: ["taak", "dekking", "vertrouwen", "signalen"],
+          },
         },
-        { timeout: ROUTER_TIMEOUT_MS }
-      )
+      ],
+      timeoutMs: ROUTER_TIMEOUT_MS,
+    });
+    model = response.model;
+    const tool = (response.inhoud as Array<{ type?: string; input?: unknown }>).find(
+      (blok) => blok?.type === "tool_use"
     );
-    const tool = response.content.find((blok) => blok.type === "tool_use");
-    const geldig = tool?.type === "tool_use"
-      ? valideerModelroute(input.basis, tool.input, input.documentAantal)
-      : null;
+    const geldig = tool ? valideerModelroute(input.basis, tool.input, input.documentAantal) : null;
     return {
       route: geldig ?? veiligeRouterTerugval(input.basis),
       meta: {
         toegepast: true,
-        model: HAIKU_MODEL,
+        model: response.model,
         duur_ms: Date.now() - start,
-        tokens_in: response.usage?.input_tokens ?? 0,
-        tokens_uit: response.usage?.output_tokens ?? 0,
+        tokens_in: response.usage.in,
+        tokens_uit: response.usage.out,
         uitkomst: geldig ? "geaccepteerd" : "schema_terugval",
       },
     };
@@ -128,7 +128,7 @@ export async function verfijnVraagrouteMetModel(input: {
       route: veiligeRouterTerugval(input.basis),
       meta: {
         toegepast: true,
-        model: HAIKU_MODEL,
+        model,
         duur_ms: Date.now() - start,
         tokens_in: 0,
         tokens_uit: 0,

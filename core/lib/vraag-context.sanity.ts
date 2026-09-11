@@ -343,7 +343,7 @@ acheck("scenario 10a: timeout → fallback, effectief == origineel", async () =>
 
 acheck("poortweigering vóór de call → geen modelcall, reden poort_geweigerd", async () => {
   // Een lege respons met modelAangeroepen=false modelleert een poortweigering
-  // (bewaakteAnthropic weigerde vóór client.messages.create).
+  // (de centrale gateway weigerde vóór de provideradapter werd aangeroepen).
   const ctx = await resolveVraagContext({
     origineleVraag: "Breng het wettelijke kader in kaart.",
     priorBeurten: HIST,

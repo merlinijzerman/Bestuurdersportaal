@@ -20,12 +20,14 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import {
   extraheerUnits,
-  maakHaikuVoorkomenExtractor,
+  maakGatewayVoorkomenExtractor,
   type VoorkomenExtractor,
 } from "@/core/lib/semantische-extractie";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import type { GatewayAanroep } from "@/core/lib/ai-gateway/contract";
+import { preflightSysteem, rondAf, systeemSleutel, vingerafdruk } from "@/core/lib/ai-preflight";
 import {
   actieveConcepten,
   catalogusVersie,
@@ -202,6 +204,10 @@ export async function verwerkSemantischeExtractieJob(
     return "mislukt";
   }
   const doc = docData as DocRij;
+  if (!doc.fonds_id) {
+    await jobTerminaal(svc, job.id, "overgeslagen", "fonds_ontbreekt");
+    return "overgeslagen";
+  }
   if (doc.actief === false) {
     await jobTerminaal(svc, job.id, "overgeslagen", "document_inactief");
     return "overgeslagen";
@@ -245,16 +251,57 @@ export async function verwerkSemantischeExtractieJob(
   const { teExtraheren, hergebruikt } = await bepaalWerk(svc, doc, huidigeChunks, actieveIds);
 
   // 6. Extractie van alleen de te-extraheren chunks.
+  let actieId: string | null = null;
+  let effectiefModel: string | null = null;
+  let actieveExtractor = extractor;
+  if (!actieveExtractor && teExtraheren.length > 0 && concepten.length > 0) {
+    const pf = await preflightSysteem(svc, {
+      actietype: "semantische_extractie",
+      fondsId: doc.fonds_id,
+      provider: null,
+      model: null,
+      // Eén reservering per logische job, ook wanneer een worker na backoff hervat.
+      idempotentie: systeemSleutel(job.id, "semantische_extractie", 1),
+      vingerafdruk: vingerafdruk({
+        documentId: doc.id,
+        catalogusVersie: catVersie,
+        chunks: teExtraheren.map((c) => ({ id: c.id, hash: teksthash(c.tekst) })),
+      }),
+    });
+    if (
+      (pf.uitkomst !== "nieuw" && pf.uitkomst !== "duplicaat_in_uitvoering") ||
+      !pf.actieId
+    ) {
+      const reden = pf.uitkomst === "geweigerd" ? pf.reden : pf.uitkomst;
+      return await backoff(svc, job, `ai_begrenzing_${reden}`);
+    }
+    actieId = pf.actieId;
+    const gatewayAanroep: GatewayAanroep = {
+      gateway: productieGateway(),
+      ctx: {
+        supabase: svc,
+        fondsId: doc.fonds_id,
+        actor: { soort: "systeem", proces: "semantische-extractie" },
+        actieId,
+        correlatieId: job.id,
+        label: "semantische-extractie",
+      },
+    };
+    actieveExtractor = maakGatewayVoorkomenExtractor(gatewayAanroep, (model) => {
+      effectiefModel = model;
+    });
+  }
   let nieuweUnits: KandidaatUnit[];
   try {
     const r = await extraheerUnits(
       teExtraheren,
       concepten,
       doc.status,
-      extractor ?? maakHaikuVoorkomenExtractor({ supabase: svc, label: "semantische-extractie" })
+      actieveExtractor ?? (async () => [])
     );
     nieuweUnits = r.units;
   } catch (e) {
+    await rondAf(svc, actieId, "mislukt");
     console.error(`[semantische-extractie-job] extractie mislukt (doc ${doc.id}):`, (e as Error).message);
     return await backoff(svc, job, "extractie_fout");
   }
@@ -263,10 +310,10 @@ export async function verwerkSemantischeExtractieJob(
   const alleUnits = ontdubbel([...hergebruikt, ...nieuweUnits]);
 
   // 8. Atomisch wegschrijven (append-only run + vervangbare units).
-  const { error: schrijfErr } = await svc.rpc("fn_schrijf_semantische_extractie", {
+  const { data: extractionRunId, error: schrijfErr } = await svc.rpc("fn_schrijf_semantische_extractie", {
     p_fonds_id: doc.fonds_id,
     p_document_id: doc.id,
-    p_model: HAIKU_MODEL,
+    p_model: effectiefModel ?? "geen_modelcall",
     p_prompt_version: SEMANTISCHE_PROMPT_VERSIE,
     p_extractor_version: SEMANTISCHE_EXTRACTOR_VERSIE,
     p_catalog_version: catVersie,
@@ -274,10 +321,12 @@ export async function verwerkSemantischeExtractieJob(
     p_units: alleUnits,
   });
   if (schrijfErr) {
+    await rondAf(svc, actieId, "mislukt");
     console.error(`[semantische-extractie-job] schrijf mislukt (doc ${doc.id}):`, schrijfErr.message);
     return await backoff(svc, job, "schrijf_fout");
   }
 
+  await rondAf(svc, actieId, "voltooid", extractionRunId ? `extraction_run:${extractionRunId}` : null);
   await jobTerminaal(svc, job.id, "geslaagd", null);
   console.log(
     JSON.stringify({

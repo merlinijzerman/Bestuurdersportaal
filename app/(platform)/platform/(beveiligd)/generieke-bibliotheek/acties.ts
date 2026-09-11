@@ -43,7 +43,9 @@ import {
   QUARANTAINE_PAD_PATROON,
 } from "@/platform/lib/generiek-pipeline";
 import { herindexeerDocument } from "@/core/lib/reindex";
-import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
+import { INDEXERING_VERSIE, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
+import { beheerSleutel, preflightSysteem, rondAf, vingerafdruk } from "@/core/lib/ai-preflight";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 
 const LIJST_PAD = "/platform/generieke-bibliotheek";
 const CAP = "platform.generic.library.manage" as const;
@@ -1032,13 +1034,68 @@ export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> 
           };
         }
 
-        const res = await herindexeerDocument(svc, doc);
+        const correlatieId = randomUUID();
+        const pf = await preflightSysteem(svc, {
+          actietype: "generiek_curatie",
+          fondsId: null,
+          provider: null,
+          model: null,
+          idempotentie: beheerSleutel("generiek_curatie"),
+          vingerafdruk: vingerafdruk({ documentId: doc.id, handeling: "herindexeren" }),
+        });
+        if (pf.uitkomst !== "nieuw" || !pf.actieId) {
+          return {
+            resultaat: {
+              ok: false,
+              foutcode: "ai_begrenzing",
+              melding: "AI-herindexering is op dit moment niet beschikbaar.",
+            },
+            effect: { afgewezen: "ai_begrenzing" },
+          };
+        }
+        let res;
+        try {
+          res = await herindexeerDocument(svc, doc, {
+            gateway: {
+              gateway: productieGateway(),
+              ctx: {
+                supabase: svc,
+                fondsId: null,
+                actor: { soort: "systeem", proces: "generieke-herindexering" },
+                actieId: pf.actieId,
+                correlatieId,
+                label: "generieke-herindexering",
+              },
+            },
+            reserveerOcr: async (paginas, poging) => {
+              const ocrPf = await preflightSysteem(svc, {
+                actietype: "ocr_generiek",
+                fondsId: null,
+                provider: "mistral",
+                model: "mistral-ocr-latest",
+                ocrPaginas: paginas,
+                idempotentie: `${beheerSleutel("ocr_generiek")}:${poging}`,
+                vingerafdruk: vingerafdruk({ documentId: doc.id, paginas, poging }),
+              });
+              return ocrPf.uitkomst === "nieuw";
+            },
+          });
+        } catch (e) {
+          await rondAf(svc, pf.actieId, "mislukt");
+          throw e;
+        }
+        await rondAf(
+          svc,
+          pf.actieId,
+          res.status === "mislukt" ? "mislukt" : "voltooid",
+          `document:${doc.id}`
+        );
 
         // Per-run provenance: generiek → fonds_id NULL, gestart_door = platform-id.
         const { error: runErr } = await svc.from("reindex_runs").insert({
           fonds_id: null,
           bibliotheek: "generiek",
-          prefix_model: PREFIX_MODEL,
+          prefix_model: res.prefixModel,
           prompt_versie: PREFIX_PROMPT_VERSIE,
           indexering_versie: INDEXERING_VERSIE,
           aantal_documenten: res.status === "verwerkt" ? 1 : 0,

@@ -126,9 +126,9 @@ interface MistralOcrResponse {
 // Retry/backoff op 429 en 5xx, gelijk aan embeddings.ts.
 export async function ocrPdfNaarResultaat(
   buffer: Buffer,
-  poort?: PoortContext,
-  reserveer?: OcrReservering,
-  aantalPaginas?: number | null
+  poort: PoortContext,
+  reserveer: OcrReservering,
+  aantalPaginas: number | null
 ): Promise<ExtractieResultaat> {
   const key = process.env.MISTRAL_API_KEY;
   if (!key) throw new Error("MISTRAL_API_KEY ontbreekt in de omgeving");
@@ -146,19 +146,15 @@ export async function ocrPdfNaarResultaat(
     // voor alle pogingen zou het verbruik structureel te laag schatten. En de
     // poort draait hier per poging mee, zodat een stop halverwege de retrylus
     // de volgende poging blokkeert in plaats van hem toch te versturen.
-    if (reserveer) {
-      const paginas = aantalPaginas ?? null;
-      if (paginas == null) {
-        throw new OcrGeweigerdError("paginas_onbekend");
-      }
-      const toegestaan = await reserveer(paginas, poging + 1);
-      if (!toegestaan) {
-        throw new OcrGeweigerdError(poging === 0 ? "quotum_bereikt" : "quotum_bereikt");
-      }
+    const paginas = aantalPaginas ?? null;
+    if (paginas == null) {
+      throw new OcrGeweigerdError("paginas_onbekend");
     }
-    if (poort) {
-      await poortCheck(poort, "mistral", OCR_MODEL);
+    const toegestaan = await reserveer(paginas, poging + 1);
+    if (!toegestaan) {
+      throw new OcrGeweigerdError("quotum_bereikt");
     }
+    await poortCheck(poort, "mistral", OCR_MODEL);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
@@ -268,12 +264,12 @@ export interface OcrFallbackOpties {
   // Bovengrens op het aantal pagina's dat synchroon door OCR mag. Boven deze
   // grens wordt OCR overgeslagen i.p.v. uitgevoerd — de aanroeper beslist wat
   // dat betekent. Weglaten = geen grens (bulk-/scriptpad, geen requesttimeout).
-  maxOcrPaginas?: number;
+  maxOcrPaginas: number;
   // AI-BEGRENZING (besluit 0180). Poortcontext voor de live Mistral-kill-switch
   // en de reserveringsfunctie voor het OCR-paginaquotum. Beide horen samen te
   // gaan: wie reserveert, moet ook gepoort worden.
-  poort?: PoortContext;
-  reserveerOcr?: OcrReservering;
+  poort: PoortContext;
+  reserveerOcr: OcrReservering;
 }
 
 // Hoofdingang voor ingest: probeer eerst de goedkope tekstlaag-extractie en val
@@ -288,7 +284,7 @@ export interface OcrFallbackOpties {
 export async function extractTekstMetOcrFallback(
   buffer: Buffer,
   bestandstype: Bestandstype,
-  opties: OcrFallbackOpties = {}
+  opties: OcrFallbackOpties
 ): Promise<ExtractieResultaatMetOcr> {
   const basis = await extractTekst(buffer, bestandstype);
 

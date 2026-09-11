@@ -82,6 +82,13 @@ export const LIMIETEN = {
   vergelijk: { endpoint: "vergelijk", limiet: 10, venster: "1 hour" },
   // Notulensegment bevestigen doet Mistral-embeddings over de segmentchunks.
   notulen_bevestig: { endpoint: "notulen_bevestig", limiet: 60, venster: "1 hour" },
+
+  // ── #335 T2 (besluit V9) — Microsoft-login: koppelen starten ────────────────
+  // De geauthenticeerde koppel-start (/api/microsoft-login/koppelen/start) telt
+  // per gebruiker op deze DB-sleutel via de wrapper; de ongeauthenticeerde
+  // inlog-start (/auth/microsoft-login/start) gebruikt dezelfde getallen per
+  // IP+host in core/lib/microsoft-login-ratelimit-core.ts (geen auth.uid()).
+  microsoft_login_start: { endpoint: "microsoft_login_start", limiet: 20, venster: "10 minutes" },
 } as const satisfies Record<string, Limiet>;
 
 /** De limietnamen uit het benoemde register — de enige echte declaratiewaarden

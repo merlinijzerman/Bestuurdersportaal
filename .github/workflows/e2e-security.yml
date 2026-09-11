@@ -24,12 +24,32 @@ jobs:
       PLATFORM_HOST: "beheer.localhost"
       TENANT_ENFORCE: "on"
       SEED_DOELOMGEVING: "local"
+      # #311 T3 — de AI-gateway leest zijn fondsconfiguratie via de aparte rol
+      # ai_gateway (fixture met vast wachtwoord uit scripts/testdb-apply-migrations.sh).
+      # TLS uit is alleen toegestaan op loopback + SEED_DOELOMGEVING=local
+      # (core/lib/ai-gateway/config-db-core.ts), nooit op Preview/Productie.
+      AI_GATEWAY_DATABASE_URL: "postgresql://ai_gateway:ai_gateway_lokaal@127.0.0.1:54322/postgres"
+      AI_GATEWAY_DB_SSL: "uit"
       WP3_MALWARESCAN_AAN: "true"
       WP3_SCANNER_URL: "http://127.0.0.1:8787"
       WP3_E2E_SCANNER: "local"
       WP3_E2E_STOP_NA_SCAN: "true"
       WP4_E2E_AI_PROVIDER: "local"
       WP4_E2E_AI_PROVIDER_URL: "http://127.0.0.1:8790"
+      # #335 T2 — Microsoft-login tegen de lokale OIDC-stub (tests/e2e/fixtures/oidc-stub.mjs).
+      # Alle waarden zijn synthetisch; de authority-omleiding is dubbel gegrendeld
+      # (core/lib/microsoft-login-oidc-core.ts: alleen met SEED_DOELOMGEVING=local én de
+      # lokale Supabase-URL). De gateway leest via de lokale rolfixture login_gateway;
+      # TLS uit is alleen op loopback + local toegestaan (T1, gateway-config-core).
+      MICROSOFT_LOGIN_E2E_OIDC: "local"
+      MICROSOFT_LOGIN_E2E_OIDC_URL: "http://127.0.0.1:8791"
+      MICROSOFT_LOGIN_TENANT_ID: "e2e00000-0000-4000-8000-00000000e2e0"
+      MICROSOFT_LOGIN_CLIENT_ID: "e2ec0000-0000-4000-8000-00000000c1c1"
+      MICROSOFT_LOGIN_CLIENT_SECRET: "e2e-synthetisch-clientsecret-niet-echt"
+      MICROSOFT_LOGIN_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      MICROSOFT_LOGIN_KEY_VERSION: "1"
+      LOGIN_GATEWAY_DATABASE_URL: "postgresql://login_gateway:login_gateway_lokaal@127.0.0.1:54322/postgres"
+      LOGIN_GATEWAY_DB_SSL: "uit"
       CRON_SECRET: "wp3-e2e-cron-secret-minimaal-32-tekens"
       E2E_FONDS_A_ORIGIN: "http://fonds-a.localhost:3000"
       E2E_FONDS_B_ORIGIN: "http://fonds-b.localhost:3000"
@@ -96,6 +116,16 @@ jobs:
           done
           exit 1
 
+      - name: Lokale OIDC-stub starten (#335 Microsoft-login)
+        run: |
+          node tests/e2e/fixtures/oidc-stub.mjs > "$RUNNER_TEMP/e2e-oidc.log" 2>&1 &
+          echo "E2E_OIDC_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8791/health >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+
       - name: App eenmaal bouwen
         run: npm run build
 
@@ -118,6 +148,7 @@ jobs:
           node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-server.log" --output test-results/e2e/server.log
           node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-scanner.log" --output test-results/e2e/scanner.log
           node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-ai-provider.log" --output test-results/e2e/ai-provider.log
+          node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-oidc.log" --output test-results/e2e/oidc.log
 
       - name: Browserartifacts veilig maken
         if: failure()
@@ -140,4 +171,5 @@ jobs:
           if [ -n "${E2E_SERVER_PID:-}" ]; then kill "$E2E_SERVER_PID" 2>/dev/null || true; fi
           if [ -n "${E2E_SCANNER_PID:-}" ]; then kill "$E2E_SCANNER_PID" 2>/dev/null || true; fi
           if [ -n "${E2E_AI_PROVIDER_PID:-}" ]; then kill "$E2E_AI_PROVIDER_PID" 2>/dev/null || true; fi
+          if [ -n "${E2E_OIDC_PID:-}" ]; then kill "$E2E_OIDC_PID" 2>/dev/null || true; fi
           supabase stop || true

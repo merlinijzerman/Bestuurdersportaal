@@ -65,14 +65,14 @@ console.log("monitoring-signalen sanity-tests:");
 
 // ── Registry ────────────────────────────────────────────────────────────────
 
-test("registry bevat precies de elf signalen (acht basis + drie uit blok B/C)", () => {
+test("registry bevat precies twaalf signalen (elf bestaand + gateway-audit)", () => {
   const ids = Object.keys(SIGNAAL_REGISTRY);
-  assert.equal(ids.length, 11, `verwacht 11 signalen, kreeg ${ids.length}`);
+  assert.equal(ids.length, 12, `verwacht 12 signalen, kreeg ${ids.length}`);
 });
 
 test("de dashboardvolgorde dekt elk signaal precies één keer", () => {
-  assert.equal(SIGNAAL_VOLGORDE.length, 11);
-  assert.equal(new Set(SIGNAAL_VOLGORDE).size, 11, "dubbele entry in de volgorde");
+  assert.equal(SIGNAAL_VOLGORDE.length, 12);
+  assert.equal(new Set(SIGNAAL_VOLGORDE).size, 12, "dubbele entry in de volgorde");
   for (const id of SIGNAAL_VOLGORDE) {
     assert.ok(SIGNAAL_REGISTRY[id], `${id} staat niet in de registry`);
   }
@@ -88,11 +88,11 @@ test("elke registryrij is intern consistent (interval > 0, drempels gevuld)", ()
   }
 });
 
-test("alleen uptime is platformbreed; de rest telt per fonds (bronneutraal)", () => {
+test("uptime en gateway-audit zijn platformbreed; de rest telt per fonds", () => {
   const breed = Object.values(SIGNAAL_REGISTRY).filter((c) => c.platformbreed);
   assert.deepEqual(
     breed.map((c) => c.signaal),
-    ["uptime_kern"]
+    ["uptime_kern", "gateway_log_fouten"]
   );
 });
 
@@ -422,13 +422,14 @@ test("trend + status: een verdubbeling t.o.v. het weekgemiddelde is rood", () =>
 //  de seed. Zo'n belofte hoort afgedwongen te worden, anders is het een wens:
 //  bij de reviewronde bleek precies deze drift al te zijn ontstaan.
 
-test("registry en migratie-seed dekken dezelfde elf signalen met dezelfde drempels", () => {
+test("registry en migratie-seed dekken dezelfde twaalf signalen met dezelfde drempels", () => {
   // De seed is over TWEE migraties verdeeld: de acht basissignalen in de P5-migratie
   // en de drie uit blok B/C in de P4b-seed. Zonder beide mee te lezen zou deze check
   // breken op precies de drie signalen die deze tranche toevoegt.
   const migraties = [
     "../../supabase/migrations/2026_08_03_p5_monitoring.sql",
     "../../supabase/seeds/schema/2026_08_08_p4b_signalen_seed.sql",
+    "../../supabase/seeds/schema/2026_09_04_ai_gateway_monitoring_seed.sql",
   ];
   let blok = "";
   for (const rel of migraties) {

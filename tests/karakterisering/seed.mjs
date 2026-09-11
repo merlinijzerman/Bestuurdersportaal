@@ -16,6 +16,8 @@ import {
   NOTULEN_DOCUMENT_BYTES, NOTULEN_DOCUMENT_PAD,
 } from "./config.mjs";
 import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
+import { pseudoEmbedding, vectorLiteral } from "../e2e/fixtures/embed-vector.mjs";
+import { EMBED_STUB_MODEL } from "../e2e/fixtures/config.mjs";
 
 // ── W4-BESLUIT: elke delete wordt gecontroleerd ─────────────────────────────
 //  Het defect dat W4 blootlegde bij `seedRisicos` was niet de append-only
@@ -116,6 +118,7 @@ export async function seed(admin = adminClient()) {
   await seedProcedures(admin, { preview: doelomgeving === "preview" });
   await seedAfschrift(admin);
   await seedAgendapunten(admin, users);
+  await seedAiChat(admin, doelomgeving);
   // Preview-waarnemingsdata hoort niet in de lokale CI-stack: die stack
   // karakteriseert de bestaande productroutes en hun vaste snapshots. Alleen
   // de expliciet bevestigde Preview-run vult de extra, synthetische UI-data.
@@ -520,6 +523,87 @@ async function seedDocumenten(admin) {
       actief: false,
     }, { onConflict: "id" });
     if (error) throw new Error(`documenten(intrekken): ${error.message}`);
+  }
+}
+
+// ── #311 — SSE-karakterisering van /api/chat ─────────────────────────────────
+// Twee dingen die de chatroute nodig heeft om de PROVIDER te bereiken:
+//
+//  (1) AI-quota. De begrenzingsmigratie seedt bewust géén quota (ontbrekende
+//      rij = geblokkeerd, besluit 0180). Zonder rij stopt de preflight vóór de
+//      providercall en karakteriseer je alleen de blokkade. Zelfde ruime,
+//      synthetische waarden als de E2E-seed; UITSLUITEND lokaal — op Preview
+//      staan de echte quota en die raakt dit harnas niet aan.
+//  (2) Eén FTS-vindbare chunk onder document1, zodat er een beurt MÉT
+//      broncontext bestaat naast de bronloze. Geen nieuw document: de
+//      documentlijst-snapshots (w4.documents-metadata/-upload) zouden dan
+//      omslaan. `zoek_vector` is een generated column; `tekst` volstaat.
+//      Bewust zonder embedding: de Mistral-arm valt zichtbaar terug op FTS
+//      (embedding_query_success=false in retrieval_meta) en dat is precies het
+//      lokale pad zonder sleutel — deterministisch en gedocumenteerd.
+async function seedAiChat(admin, doelomgeving) {
+  if (doelomgeving !== "local") return;
+  {
+    const { error } = await admin.from("ai_quota_config").upsert(
+      ["gebruiker_maand", "fonds_maand", "globaal_maand", "ocr_fonds_maand"].map(
+        (sleutel) => ({ sleutel, waarde: 10000 })
+      ),
+      { onConflict: "sleutel" }
+    );
+    if (error) throw new Error(`ai_quota_config: ${error.message}`);
+  }
+  {
+    const w311Tekst =
+      "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. " +
+      "De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.";
+    const { error } = await admin.from("document_chunks").upsert({
+      id: FIX.document1Chunk,
+      document_id: FIX.document1,
+      chunk_index: 0,
+      // #349 — zie de toelichting bij de #322-fixtures hieronder.
+      embedding: vectorLiteral(pseudoEmbedding(w311Tekst)),
+      embedding_model: EMBED_STUB_MODEL,
+      tekst:
+        "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. " +
+        "De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
+      pagina: 1,
+      structuur_type: "tekst",
+      structuur_label: "W1 karakteriseringsfixture",
+      indexering_versie: "w1-karakterisering-311",
+    }, { onConflict: "id" });
+    if (error) throw new Error(`document_chunks(311): ${error.message}`);
+  }
+  // #322 F4-T1 — retrieval-golden-fixtures. Vier chunks onder hetzelfde
+  // document1, met onderling overlappende termen (renteafdekking ×2,
+  // premiebeleid ×2, herstelplan ×1) zodat ranking, dedup-per-document en
+  // fragmentafkapping in de zoekroute meetbaar zijn. Géén embedding: het
+  // FTS-pad is het lokale pad zonder Mistral-sleutel (zie seedAiChat hierboven).
+  {
+    const fixtures = [
+      { id: FIX.retrievalChunkRente1, chunk_index: 1, pagina: 2, tekst: "De renteafdekking van de matchingportefeuille is per ultimo verhoogd naar 60 procent van de verplichtingen. De strategische bandbreedte voor de renteafdekking loopt van 50 tot 70 procent." },
+      { id: FIX.retrievalChunkHerstel, chunk_index: 2, pagina: 3, tekst: "Het herstelplan beschrijft de maatregelen bij een reservetekort. Het premiebeleid en het indexatiebeleid worden jaarlijks getoetst aan de uitgangspunten van het herstelplan." },
+      { id: FIX.retrievalChunkRente2, chunk_index: 3, pagina: 4, tekst: "Het uitbestedingsbeleid regelt de selectie en de monitoring van de fiduciair beheerder en de pensioenuitvoerder. De uitvoering van de renteafdekking valt onder het mandaat van de fiduciair beheerder." },
+      { id: FIX.retrievalChunkPremie, chunk_index: 4, pagina: 5, tekst: "De premie voor het komende jaar is vastgesteld op 24 procent van de pensioengrondslag. Het premiebeleid volgt de kostendekkende premie en wordt door het bestuur jaarlijks herijkt." },
+    ];
+    const { error } = await admin.from("document_chunks").upsert(
+      fixtures.map((f) => ({
+        ...f,
+        document_id: FIX.document1,
+        paragraaf: null,
+        structuur_type: "tekst",
+        structuur_label: "W1 retrieval-golden (#322)",
+        indexering_versie: "w1-karakterisering-322",
+        // #349 (F4-T1b) — deterministische pseudo-embedding uit dezelfde module
+        // die de embeddingstub gebruikt voor de VRAAG. Alleen als beide kanten
+        // dezelfde vectorizer gebruiken meet de vectorarm gelijkenis in plaats
+        // van ruis. Raakt het FTS-pad niet: `zoek_chunks` leest deze kolom niet,
+        // en geen enkele bestaande snapshot geeft haar terug.
+        embedding: vectorLiteral(pseudoEmbedding(f.tekst)),
+        embedding_model: EMBED_STUB_MODEL,
+      })),
+      { onConflict: "id" }
+    );
+    if (error) throw new Error(`document_chunks(322): ${error.message}`);
   }
 }
 

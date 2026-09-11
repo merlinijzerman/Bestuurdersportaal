@@ -9,6 +9,7 @@ import {
 } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { isPoortGesloten } from "./ai-poort";
+import { isAfbreking, bewaakNaIO } from "./retrieval/afbreken";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
@@ -32,6 +33,35 @@ import type { DocumentDekking } from "./document-dekking";
 import { expandeerFtsQuery } from "./jargon-expansie";
 import { rerankChunks, type RerankMeta, type RerankClient } from "./rerank";
 import { verrijkMetParents, type ParentMeta } from "./parent-context";
+// T2-1 — verplaatst naar de orkestratielaag (besluit 0213 punt 5); tijdelijk
+// teruggeïmporteerd zodat C5/C6/C7 in PR-A ongewijzigd blijven. T2-2 ruimt dit op.
+import { bouwMeta as bouwMetaNeutraal, type AuditBron } from "./retrieval/meta";
+
+/** Chunk-vormige bron → de neutrale auditkijk. Eén plek, zodat het terugvalpad
+ *  voor C5/C6/C7 exact hetzelfde auditspoor blijft schrijven. */
+function alsAuditBron(c: DocumentChunk): AuditBron {
+  return {
+    ref: c.id,
+    documentId: c.document_id,
+    bron: c.documenten.bron,
+    bibliotheek: c.documenten.bibliotheek,
+    fondsId: c.documenten.fonds_id ?? null,
+    documentstatus: c.documenten.documentstatus ?? null,
+    bronstatus: c.documenten.bronstatus ?? null,
+    documentdatum: c.documenten.documentdatum ?? null,
+    score: c.rang ?? null,
+    fts: c.fts_rang ?? null,
+    vec: c.vec_rang ?? null,
+  };
+}
+
+function bouwMeta(methode: RetrievalMeta["methode"], opgehaald: number, geselecteerd: DocumentChunk[]): RetrievalMeta {
+  return bouwMetaNeutraal(methode, opgehaald, geselecteerd.map(alsAuditBron));
+}
+import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
+import { bouwCitaties } from "./retrieval/citatie";
+import type { Bronresultaat } from "./retrieval/contract";
+export type { SelectieAfvalReden, SelectieDiagnostiek } from "./retrieval/selectie";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
 // RPC's; defaults reproduceren huidig gedrag). De velden zijn gedenormaliseerd
@@ -65,18 +95,6 @@ export interface RetrievalFilters {
 // om vroeg (toonZwakkeGeneriek).
 // Niet-generieke chunks (fondsdocumenten) blijven altijd staan. Gedeelde bron-
 // van-waarheid: isStandaardZichtbaarInRag (zelfde regel als de platform-UI-label).
-function filterZwakkeGeneriek(
-  chunks: DocumentChunk[],
-  filters?: RetrievalFilters
-): DocumentChunk[] {
-  if (filters?.toonZwakkeGeneriek) return chunks;
-  return chunks.filter(
-    (c) =>
-      c.documenten.bibliotheek !== "generiek" ||
-      isStandaardZichtbaarInRag(c.documenten.normgewicht)
-  );
-}
-
 // ── Increment T4: expliciete fonds-discipline op het retrievalpad ───────────
 // Defense-in-depth NÁÁST RLS én de RPC-fondsfilter (p_fonds_id). Dropt elke chunk
 // die de fondsgrens of de published-generiek-regel schendt, en telt de droppings
@@ -86,6 +104,27 @@ function filterZwakkeGeneriek(
 //
 // Vereist dat het pad `documenten.fonds_id` (en voor regel 2 documentstatus/
 // bronstatus) heeft geselecteerd; alle aanroepers hieronder doen dat.
+/** T2-1 — één bron voor de per-document-cap, zodat de orkestratie exact
+ *  dezelfde grens hanteert als de adapter intern deed. */
+/** De peildatum waarmee de retrieval FEITELIJK draait. Zonder expliciet filter
+ *  is dat vandaag — precies wat `zoekRelevanteChunksMetMeta` intern doet. Eén
+ *  bron, zodat de parent-verrijking niet met een andere datum werkt dan de
+ *  retrieval zelf: dan zou de review-vervalcontrole op generieke siblings
+ *  ongemerkt uitvallen. */
+/** PR-B — koppelt het afbreeksignaal aan een PostgREST-builder. Conditioneel,
+ *  want `.abortSignal()` accepteert geen `undefined`. */
+function metSignaal<T extends { abortSignal(s: AbortSignal): T }>(q: T, signal?: AbortSignal): T {
+  return signal ? q.abortSignal(signal) : q;
+}
+
+export function effectievePeildatum(filters?: { peildatum?: string }): string {
+  return filters?.peildatum ?? vandaagISO();
+}
+
+export function maxPerDocVoor(maxResults: number): number {
+  return Math.max(3, Math.ceil(maxResults / 2));
+}
+
 export function isPublishedGeneriek(chunk: DocumentChunk): boolean {
   const d = chunk.documenten;
   if (d.bibliotheek !== "generiek") return true; // niet-generiek: regel n.v.t.
@@ -187,124 +226,6 @@ function fondsMeta(
 // is aantoonbaar door de bronsoort-demotie afgevallen (geen overclaim).
 
 /** Terminale reden waarom een opgehaalde kandidaat niet in het antwoord zat. */
-export type SelectieAfvalReden =
-  | "weging"
-  | "zwak_generiek"
-  | "quotum"
-  | "dedup"
-  | "budget";
-
-/** Selectie-diagnostiek voor retrieval_meta (T3). `selectie` is basis-niveau
- *  (telemetrie, geen identiteit); `selectie_kandidaten` draagt bronidentiteit. */
-export interface SelectieDiagnostiek {
-  selectie: NonNullable<RetrievalMeta["selectie"]>;
-  selectie_kandidaten: NonNullable<RetrievalMeta["selectie_kandidaten"]>;
-}
-
-function isGeneriek(c: DocumentChunk): boolean {
-  return c.documenten.bibliotheek === "generiek";
-}
-
-function weegEnSelecteer(
-  gerangschikt: DocumentChunk[],
-  filters: RetrievalFilters | undefined,
-  maxResults: number,
-  maxPerDoc: number,
-  constraintsAan: boolean,
-  regimeAan: boolean
-): { chunks: DocumentChunk[]; diagnostiek: SelectieDiagnostiek } {
-  const profiel = filters?.bronsoortprofiel;
-  const libVan = (c: DocumentChunk) => c.documenten.bibliotheek;
-
-  // filters — §8.3 #6: zwakke generieke chunks vallen vóór de selectie af.
-  const zichtbaar = filterZwakkeGeneriek(gerangschikt, filters);
-  const zichtbaarSet = new Set(zichtbaar);
-
-  // weging (bronsoort) — herordent alleen; behoudt de relevantievolgorde binnen groep.
-  const bronGewogen = profiel
-    ? weegBronsoort(zichtbaar, libVan, profiel)
-    : zichtbaar;
-
-  // T4 regime-demotie — de gereserveerde plek: ná de bronsoort-weging, vóór de
-  // representatie-constraints. Demoveert chunks met een NIET-geldend (tegengesteld)
-  // regime naar onderaan; `beide`/`algemeen`/NULL nooit. Geen harde uitsluiting.
-  // weegRegime is een no-op als het fonds geen specifiek regime heeft, dus met
-  // REGIME_WEGING uit óf een leeg/cross-cutting fondsregime is dit gedrag-neutraal.
-  const regimeDemoveert =
-    regimeAan && (filters?.primairRegime === "pw" || filters?.primairRegime === "wvb");
-  const gewogen = regimeDemoveert
-    ? weegRegime(bronGewogen, (c) => c.documenten.wettelijk_regime, filters?.primairRegime)
-    : bronGewogen;
-
-  // representatie-constraints → dedup → budget-afkap. De effectieve constraints
-  // worden ALTIJD gelogd, ook bij flag-uit (alle minima 0 = huidig gedrag).
-  const constraints: RepresentatieConstraints = constraintsAan
-    ? constraintsVoorProfiel(profiel, { maxTotal: maxResults, maxPerSource: maxPerDoc })
-    : { fondsMin: 0, generiekMin: 0, perSourceMin: 0, maxPerSource: maxPerDoc, maxTotal: maxResults };
-
-  const trace = constraintsAan
-    ? selecteerMetConstraintsMetTrace(gewogen, constraints, libVan)
-    : selecteerChunksMetTrace(gewogen, maxResults, maxPerDoc);
-  const gekozenSet = new Set(trace.gekozen);
-  const redenVanGewogen = new Map(gewogen.map((c, i) => [c, trace.redenen[i]] as const));
-
-  // Contrafeitelijke selectie op de PRE-weging volgorde: zinvol zodra de weging
-  // daadwerkelijk demoveert — bronsoort (fonds/generiek; 'gecombineerd' herordent
-  // niet) óf regime. `zichtbaar` is de volgorde zónder beide weging-stappen, zodat
-  // een chunk die enkel door de weging afvalt op reden "weging" landt (niet budget).
-  let zonderWegingSet: Set<DocumentChunk> | null = null;
-  if (profiel === "fonds" || profiel === "generiek" || regimeDemoveert) {
-    const cf = constraintsAan
-      ? selecteerMetConstraintsMetTrace(zichtbaar, constraints, libVan)
-      : selecteerChunksMetTrace(zichtbaar, maxResults, maxPerDoc);
-    zonderWegingSet = new Set(cf.gekozen);
-  }
-
-  // Kandidatenset vóór selectie = de volledige input van deze stap (incl. de
-  // zwak_generiek-drops), zodat "opgehaald maar afgevallen" zichtbaar is.
-  const telling: Record<SelectieAfvalReden, number> = {
-    weging: 0,
-    zwak_generiek: 0,
-    quotum: 0,
-    dedup: 0,
-    budget: 0,
-  };
-  const perBib = { fonds: 0, generiek: 0 };
-
-  const kandidaten = gerangschikt.map((c) => {
-    const bibliotheek = c.documenten.bibliotheek;
-    const rang = c.rang ?? null;
-    if (gekozenSet.has(c)) {
-      if (isGeneriek(c)) perBib.generiek++;
-      else perBib.fonds++;
-      return { document_id: c.document_id, bibliotheek, rang, status: "geselecteerd" as const };
-    }
-    let reden: SelectieAfvalReden;
-    if (!zichtbaarSet.has(c)) {
-      reden = "zwak_generiek";
-    } else {
-      const r = redenVanGewogen.get(c) ?? "budget";
-      reden = r === "budget" && zonderWegingSet?.has(c) ? "weging" : r;
-    }
-    telling[reden]++;
-    return { document_id: c.document_id, bibliotheek, rang, status: "afgevallen" as const, reden };
-  });
-
-  return {
-    chunks: trace.gekozen,
-    diagnostiek: {
-      selectie: {
-        intent: profiel ?? null,
-        regime: filters?.modus ?? "alles",
-        constraints,
-        geselecteerd_per_bibliotheek: perBib,
-        afgevallen_telling: telling,
-      },
-      selectie_kandidaten: kandidaten,
-    },
-  };
-}
-
 // Bouwt het RPC-parameterblok voor de filters. Alleen gezette velden worden
 // meegegeven; ontbrekende keys laten de SQL-defaults (huidig gedrag) intact.
 function rpcFilterParams(filters?: RetrievalFilters): Record<string, unknown> {
@@ -343,6 +264,12 @@ const HYBRID_ENABLED = process.env.HYBRID_SEARCH === "on";
 // env-default. Zo blijven overige aanroepers (agendaprep) ongemoeid.
 export interface RetrievalOpties {
   rerank?: boolean; // R1.3 Haiku-reranker
+  /**
+   * #311: de reranker loopt op het productiepad door de AI-gateway (taaktype
+   * `rerank`); de route geeft gateway + servercontext mee. Ontbreekt dit én is er
+   * geen testclient, dan valt de reranker terug op de RRF-volgorde.
+   */
+  gateway?: { gateway: import("./ai-gateway/contract").AiGateway; ctx: import("./ai-gateway/contract").GatewayContext };
   relevantieDrempel?: boolean; // R1.5 ilike-uitsluiting (b1) + scoredrempel (b2)
   jargonExpansie?: boolean; // R1.4 FTS-jargonexpansie
   parentRetrieval?: boolean; // R1.6 small-to-big
@@ -350,6 +277,23 @@ export interface RetrievalOpties {
   regimeWeging?: boolean; // T4 regime-demotie (weegRegime); env-default REGIME_WEGING (AAN, tenzij "off")
   drempelWaarde?: number; // R1.5 b2-drempel op de rerankscore (0–100)
   rerankClient?: RerankClient; // injectie voor hermetische tests
+  /**
+   * T2-1 — de adaptergrens. Met deze vlag stopt de keten NA het rangschikken
+   * (rerank + drempel, beslissing D1) en slaat zij selectie, ilike-uitsluiting
+   * en parent-retrieval over: dat is werk van de orkestratie (besluit 0213
+   * punt 5). De teruggegeven `chunks` zijn dan KANDIDATEN, en de
+   * selectie-afgeleide meta-velden (`geselecteerd`, `chunks`, `bronversie_audit`)
+   * beschrijven die kandidatenset — de orkestratie bouwt ze opnieuw op de
+   * werkelijke selectie. Alleen voor de Supabase-adapter; laat hem weg en je
+   * krijgt het volledige, ongewijzigde gedrag.
+   */
+  stopNaRangschikking?: boolean;
+  /**
+   * PR-B — het samengestelde afbreek-/deadlinesignaal. Gaat naar ELKE RPC, naar
+   * de embedding-fetch, naar de retry-backoff en naar de gateway. Zonder dit
+   * loopt de keten van een geannuleerde beurt gewoon door.
+   */
+  signal?: AbortSignal;
   // Besluit 0139 (M-R3) — de OORSPRONKELIJKE gebruikersvraag, meegegeven wanneer
   // `vraag` een geherformuleerde zoekvraag is. Is deze gezet en wijkt hij af, dan
   // draait de hybride retrieval een EXTRA poging met de originele vraag en fuseert
@@ -372,7 +316,22 @@ type VolledigeOpties = {
   regimeWeging: boolean;
   drempelWaarde: number;
   rerankClient?: RerankClient;
+  gateway?: RetrievalOpties["gateway"];
+  stopNaRangschikking: boolean;
+  signal?: AbortSignal;
 };
+
+/**
+ * T2-1 — ÉÉN resolutie van de retrievalvlaggen, gedeeld door de adapter en de
+ * orkestratie. Zonder deze gedeelde bron zou de orkestratie `regimeWeging`
+ * anders kunnen afleiden dan de adapter: die vlag zit (nog) niet in
+ * `RetrievalVlaggen` per fonds — dat is gaplijst G-11 — en valt terug op de
+ * env-default. Twee afleidingen die uiteenlopen zouden de selectie stil
+ * veranderen.
+ */
+export function resolveerRetrievalVlaggen(o?: RetrievalOpties): VolledigeOpties {
+  return volledigeOpties(o);
+}
 
 function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
   return {
@@ -388,6 +347,9 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     regimeWeging: o?.regimeWeging ?? process.env.REGIME_WEGING !== "off",
     drempelWaarde: o?.drempelWaarde ?? DEFAULT_RELEVANTIE_DREMPEL,
     rerankClient: o?.rerankClient,
+    gateway: o?.gateway,
+    stopNaRangschikking: o?.stopNaRangschikking ?? false,
+    signal: o?.signal,
   };
 }
 
@@ -406,19 +368,22 @@ function ftsQueryVoor(vraag: string, opties: VolledigeOpties): {
 // consistent met wat geëmbed/geïndexeerd wordt (spiegelt lib/chunk-ingest.verrijkTekst).
 // De prefix zit niet op de RPC-return; we halen hem gebatcht op via de id's. De
 // chunks zijn al RLS-geautoriseerd (kwamen via de RPC); dit is puur her-lezen.
-async function haalContextPrefixes(ids: string[]): Promise<Map<string, string | null>> {
+async function haalContextPrefixes(ids: string[], signal?: AbortSignal): Promise<Map<string, string | null>> {
   const map = new Map<string, string | null>();
   if (ids.length === 0) return map;
   try {
     const supabase = await createServerSupabase();
-    const { data } = await supabase
-      .from("document_chunks")
-      .select("id, context_prefix")
-      .in("id", ids);
+    const { data } = await metSignaal(
+      supabase.from("document_chunks").select("id, context_prefix").in("id", ids),
+      signal
+    );
     for (const r of (data ?? []) as { id: string; context_prefix: string | null }[]) {
       map.set(r.id, r.context_prefix ?? null);
     }
   } catch (e) {
+    // Een afbreking is geen "prefix niet beschikbaar": doorgooien, anders
+    // rerankt de keten ná de annulering alsnog over kale tekst.
+    if (isAfbreking(e)) throw e;
     console.error("[rag] context_prefix ophalen mislukt — rerank over kale tekst:", e);
   }
   return map;
@@ -459,17 +424,20 @@ async function naVerwerking(
   // A — Haiku-reranker (alleen op de sterke paden: hybride + Dutch-FTS-ranked).
   let rerankScores: Record<string, number> | null = null;
   if (opties.rerank && rerankToegestaan && kandidaten.length >= 2) {
-    const prefixMap = await haalContextPrefixes(kandidaten.map((c) => c.id));
+    const prefixMap = await haalContextPrefixes(kandidaten.map((c) => c.id), opties.signal);
     const r = await rerankChunks(
       zoekvraag,
       kandidaten,
       (c) => verrijkTekst(prefixMap.get(c.id), c.tekst),
       {
         client: opties.rerankClient,
-        // AI-BEGRENZING (besluit 0180). Zonder geïnjecteerde testclient loopt de
-        // reranker door de poort; is die dicht, dan valt hij terug op de
-        // RRF-volgorde in plaats van een ongemeten call te doen.
-        poort: { supabase: await createServerSupabase(), label: "rag.rerank" },
+        // PR-B — hetzelfde samengestelde signaal als de rest van de keten.
+        signal: opties.signal,
+        // AI-BEGRENZING (besluit 0180) + #311. Zonder geïnjecteerde testclient
+        // loopt de reranker door de gateway (fondsconfiguratie → poort → audit);
+        // is de poort dicht, dan valt hij terug op de RRF-volgorde in plaats van
+        // een ongemeten call te doen.
+        gateway: opties.gateway,
       }
     );
     kandidaten = r.chunks;
@@ -498,35 +466,31 @@ async function naVerwerking(
     kandidaten = behouden;
   }
 
-  // Bronsoort-weging (+ evt. representatie-constraints) + dedup + top-N; werkt op
-  // de nieuwe volgorde. De constraint-laag staat achter opties.representatieConstraints.
-  // T3 — de selectie-diagnostiek (constraints + kandidaten + drop-redenen) reflecteert
-  // deze weeg+select-stap; hij wordt additief in retrieval_meta vastgelegd.
-  const sel = weegEnSelecteer(
-    kandidaten,
-    filters,
-    maxResults,
-    maxPerDoc,
-    opties.representatieConstraints,
-    opties.regimeWeging
-  );
-  let geselecteerd = sel.chunks;
-  extra.selectie = sel.diagnostiek.selectie;
-  extra.selectie_kandidaten = sel.diagnostiek.selectie_kandidaten;
+  // T2-1 — DE ADAPTERGRENS. Tot hier loopt het rangschikken (rerank + drempel);
+  // wat volgt is selectie, en dat is werk van de orkestratie. Met
+  // `stopNaRangschikking` geeft de adapter de kandidaten terug en doet de
+  // orkestratie de rest — zie core/lib/retrieval/orkestratie.ts.
+  if (opties.stopNaRangschikking) return { chunks: kandidaten, extra };
 
-  // B1 — ilike-treffers zijn NOOIT citeerbaar: uit de prompt-set gehaald, alleen
-  // als audit vastgelegd. Leeg resultaat valt op het bestaande geen-treffers-pad.
-  if (opties.relevantieDrempel && methode === "ilike" && geselecteerd.length > 0) {
-    extra.zwakke_bronbasis = true;
-    extra.mogelijk_gerelateerd = geselecteerd.map((c) => ({
-      document_id: c.document_id,
-      titel: c.documenten.titel,
-    }));
-    geselecteerd = [];
-  }
+  // Zonder de vlag blijft het gedrag voor C5/C6/C7 identiek: dezelfde code,
+  // alleen verplaatst naar core/lib/retrieval/selectie.ts (besluit 0213 punt 5).
+  // T2-1 — de selectie draait providerneutraal op SelectieBron; hier heen en
+  // terug via de chunk-id, zodat C5/C6/C7 exact hetzelfde gedrag houden.
+  const perId = new Map(kandidaten.map((c) => [c.id, c]));
+  const sel2 = await selecteerEnVerrijk(kandidaten.map(alsSelectieBron), methode, {
+    filters, maxResults, maxPerDoc,
+    representatieConstraints: opties.representatieConstraints,
+    regimeWeging: opties.regimeWeging,
+    relevantieDrempel: opties.relevantieDrempel,
+  });
+  Object.assign(extra, sel2.extra);
+  let geselecteerd = sel2.chunks
+    .map((b) => perId.get(b.id))
+    .filter((c): c is DocumentChunk => Boolean(c));
 
-  // D — parent-retrieval (small-to-big): treffers uitbreiden met hun structuur-
-  // unit. Fondsdiscipline draait binnen verrijkMetParents op de siblings.
+  // D — parent-retrieval hoort bij de PROVIDER (siblings uit document_chunks) en
+  // is in de orkestratie een adapterhook. Op dit terugvalpad voor C5/C6/C7 blijft
+  // hij hier staan, op exact dezelfde plek als vóór T2-1.
   if (opties.parentRetrieval && geselecteerd.length > 0) {
     const p = await verrijkMetParents(geselecteerd, fondsFilter, peildatum);
     geselecteerd = p.chunks;
@@ -610,6 +574,13 @@ export interface DocumentChunk {
 // geselecteerd voor de prompt. Wordt insert-only weggeschreven in
 // governance_log.retrieval_meta — geen wijziging aan append-only-garanties.
 export interface RetrievalMeta {
+  /**
+   * PR-C — inhoudsvrije samenvatting van de TOELATINGSPOORT: aantallen per
+   * genormaliseerde categorie (`toestemming_geweigerd` / `configuratiefout`) en
+   * per grond. Geen referenties — dat zijn identifiers van stukken die de
+   * gebruiker juist níét mocht zien. Alleen aanwezig als er iets is geweigerd.
+   */
+  toelating?: import("./retrieval/toelatingspoort").Toelatingssamenvatting;
   methode:
     | "hybride_rrf"
     | "fts_dutch_ranked"
@@ -1059,6 +1030,17 @@ export interface RetrievalMeta {
     bevat_query_reformulatie: boolean;
     bevat_web_search: boolean;
   };
+  /**
+   * #311 — de EFFECTIEVE provider/model/profiel/configuratieversie van de
+   * eindgeneratie, zoals de AI-gateway die uit fonds + taakgroep bepaalde.
+   * Auditbaar: welk profiel en welke versie stonden er toen. Geen inhoud.
+   */
+  gateway?: {
+    provider: string;
+    model: string;
+    profiel_id: string;
+    config_versie: number | null;
+  };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
@@ -1158,35 +1140,6 @@ function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
   };
 }
 
-function bouwMeta(
-  methode: RetrievalMeta["methode"],
-  opgehaald: number,
-  geselecteerd: DocumentChunk[]
-): RetrievalMeta {
-  return {
-    methode,
-    opgehaald,
-    geselecteerd: geselecteerd.length,
-    chunks: geselecteerd.map((c) => ({
-      id: c.id,
-      document_id: c.document_id,
-      rang: c.rang ?? null,
-      // Besluit 0139 — arm-herkomst mee in het auditspoor.
-      fts_rang: c.fts_rang ?? null,
-      vec_rang: c.vec_rang ?? null,
-    })),
-    // T4 — minimale bronversie-audit over de daadwerkelijk geselecteerde chunks.
-    bronversie_audit: geselecteerd.map((c) => ({
-      document_id: c.document_id,
-      bron: c.documenten.bron,
-      bibliotheek: c.documenten.bibliotheek,
-      fonds_id: c.documenten.fonds_id ?? null,
-      documentstatus: c.documenten.documentstatus ?? null,
-      bronstatus: c.documenten.bronstatus ?? null,
-      documentdatum: c.documenten.documentdatum ?? null,
-    })),
-  };
-}
 
 // ── Besluit 0139 (M-R3) — generiek "extra retrievalpoging"-mechanisme ────────
 // Harde bovengrens op het aantal hybride RPC-aanroepen per beurt: 1 basispoging
@@ -1253,6 +1206,157 @@ export function fuseerHybridePogingen(pogingen: HybridePogingResultaat[]): {
 // veilig terug op FTS als de embedding of de RPC faalt. De terugval wordt in de
 // meta vastgelegd (embedding_query_success / fallback_reason) zodat een stille
 // terugval zichtbaar is in het auditspoor. Tenant-isolatie loopt overal via RLS.
+/**
+ * Eén hybride RPC-poging, gebonden aan het GEDEELDE parameterblok. Levert de
+ * gerangschikte chunks, of `null` bij een RPC-fout (≠ leeg resultaat, dat is een
+ * lege array). SECURITY INVOKER → RLS blijft gelden; `p_document_ids` scoopt
+ * vóór de fusie.
+ *
+ * Elke poging die deze functie maakt deelt EXACT hetzelfde parameterblok; alleen
+ * `p_query` en `p_embedding` verschillen per aanroep. Zo kan geen extra poging —
+ * ook de verslapte van G-12 niet — scope, filters of fondsgrens verruimen.
+ */
+export function maakHybrideRpc(
+  supabase: { rpc: (fn: string, args: Record<string, unknown>) => any },
+  gedeeldeParams: Record<string, unknown>,
+  signal?: AbortSignal
+): (ftsQuery: string, embedding: number[]) => Promise<DocumentChunk[] | null> {
+  return async (ftsQuery, embedding) => {
+    const { data, error } = await metSignaal(
+      supabase.rpc("zoek_chunks_hybride", {
+        p_query: ftsQuery,
+        p_embedding: naarVectorLiteral(embedding),
+        ...gedeeldeParams,
+      }),
+      signal
+    );
+    // PostgREST GOOIT een abort niet door — hij levert een gewoon
+    // foutresultaat. Het SIGNAAL is dus gezaghebbend, niet de vorm van de fout.
+    bewaakNaIO(signal, error);
+    if (error) {
+      console.error("Hybride RPC-fout:", error);
+      return null;
+    }
+    return Array.isArray(data) ? (data as ZoekChunkRij[]).map(rijNaarChunk) : [];
+  };
+}
+
+export interface HybrideDeps {
+  /** Eén hybride RPC-poging; `null` bij een RPC-fout. */
+  draai(ftsQuery: string, embedding: number[]): Promise<DocumentChunk[] | null>;
+  /** Embedding van de originele vraag (M-R3). */
+  embed(tekst: string): Promise<number[]>;
+  /** De STRIKTE FTS-query voor een tekst (eventueel jargon-verbreed). */
+  ftsQueryVoor(tekst: string): string;
+  signal?: AbortSignal;
+}
+
+export type HybrideUitkomst =
+  | { soort: "rpc_fout" }
+  | {
+      soort: "pogingen";
+      pogingen: HybridePogingResultaat[];
+      pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]>;
+    };
+
+/**
+ * G-12 — mag er een verslapte hybride poging bij? Alleen als de strikte
+ * pogingen SAMEN wél kandidaten opleverden, maar in geen enkele daarvan de
+ * FTS-arm iets bijdroeg (`fts_rang` overal leeg). Dan is de fusie in feite
+ * alleen vector — de strikte AND-keten van `websearch_to_tsquery` vond niets.
+ *
+ *   • geen kandidaten      → nee: de bestaande FTS-terugval neemt het over;
+ *   • ergens een fts-rang  → nee: precisie heeft gewerkt, niet verslappen;
+ *   • kandidaten, geen fts → ja: één verslapte poging.
+ *
+ * Gemeten over ALLE strikte pogingen samen, niet per poging. Anders valt een lege
+ * primaire poging naast een originele met alleen vectorresultaten tussen wal en
+ * schip: de primaire geeft niets om te beoordelen, de originele wordt nooit
+ * bekeken. Gemeten ná de fonds-, scope- en statusfilters (die past de RPC al in
+ * SQL toe) en vóór rerank en selectie — beslissing D2.
+ */
+export function moetHybrideVerslappen(strikt: readonly (readonly DocumentChunk[])[]): boolean {
+  const alle = strikt.flat();
+  if (alle.length === 0) return false;
+  return !alle.some((c) => c.fts_rang !== null && c.fts_rang !== undefined);
+}
+
+/**
+ * De strikte hybride pogingen en — G-12 — hooguit één verslapte.
+ *
+ * `rpc_fout` alleen als de PRIMAIRE poging faalt: dan valt de aanroeper terug op
+ * FTS. Een lege uitkomst is geen fout; die komt als `pogingen` terug en de
+ * aanroeper beslist na de fusie over de terugval.
+ */
+export async function voerHybridePogingenUit(
+  vraag: string,
+  primaireQuery: string,
+  vector: number[],
+  origineleVraag: string | undefined,
+  deps: HybrideDeps
+): Promise<HybrideUitkomst> {
+  const pogingen: HybridePogingResultaat[] = [];
+  const pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]> = [];
+
+  // Poging 1 (primair): de (mogelijk geherformuleerde) vraag.
+  const primair = await deps.draai(primaireQuery, vector);
+  if (primair === null) return { soort: "rpc_fout" };
+  pogingen.push({ naam: "primair", chunks: primair });
+  pogingMeta.push({ naam: "primair", query: primaireQuery, rijen: primair.length });
+
+  // Poging 2 (M-R3): bij een geherformuleerde vraag draaien we OOK de originele
+  // vraag en fuseren, zodat de reformulatie alleen recall kan toevoegen. Faalt de
+  // embedding van de originele vraag, dan blijft de primaire poging staan
+  // (non-destructief).
+  const origineel = origineleVraag?.trim();
+  if (origineel && origineel !== vraag.trim()) {
+    if (pogingen.length < MAX_HYBRIDE_POGINGEN) {
+      const origFts = deps.ftsQueryVoor(origineel);
+      try {
+        const origVec = await deps.embed(origineel);
+        const origChunks = await deps.draai(origFts, origVec);
+        if (origChunks === null) {
+          pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });
+        } else {
+          pogingen.push({ naam: "origineel", chunks: origChunks });
+          pogingMeta.push({ naam: "origineel", query: origFts, rijen: origChunks.length });
+        }
+      } catch (e) {
+        if (isAfbreking(e)) throw e;
+        console.error("Hybride: embedding originele vraag mislukt (M-R3), primair blijft:", e);
+        pogingMeta.push({ naam: "origineel", query: origFts, rijen: null, overgeslagen: true });
+      }
+    } else {
+      pogingMeta.push({ naam: "origineel", query: origineel, rijen: null, overgeslagen: true });
+    }
+  }
+
+  // Poging 3 (G-12): de verslapte OR-keten, op de PRIMAIRE vector — geen extra
+  // embedding. Dezelfde query die het FTS-pad als poging 1b gebruikt
+  // (`bouwTerugvalFtsQuery`), en via `deps.draai` hetzelfde parameterblok als de
+  // strikte pogingen: alleen `p_query` verschilt. Bij één zoekterm is de
+  // verslapte query gelijk aan de strikte; dan levert hij niets toe en draait hij
+  // niet — en komt er ook géén meta-regel bij.
+  if (moetHybrideVerslappen(pogingen.map((p) => p.chunks)) && pogingen.length < MAX_HYBRIDE_POGINGEN) {
+    const terugval = bouwTerugvalFtsQuery(vraag);
+    if (terugval) {
+      // Een extra RPC valt binnen de beurtdeadline; start hem niet als die al
+      // verstreken is.
+      bewaakNaIO(deps.signal);
+      const verslapt = await deps.draai(terugval.query, vector);
+      if (verslapt === null) {
+        // Non-destructief: de strikte uitkomst blijft staan.
+        pogingMeta.push({ naam: "verslapt", query: terugval.query, rijen: null });
+      } else {
+        pogingen.push({ naam: "verslapt", chunks: verslapt });
+        pogingMeta.push({ naam: "verslapt", query: terugval.query, rijen: verslapt.length });
+      }
+    }
+  }
+
+  return { soort: "pogingen", pogingen, pogingMeta };
+}
+
 export async function zoekRelevanteChunksMetMeta(
   vraag: string,
   fondsId: string,
@@ -1275,7 +1379,7 @@ export async function zoekRelevanteChunksMetMeta(
 
   // R1.3–R1.6 — vlaggen resolven (env-default als de aanroeper niets meegeeft).
   const opt = volledigeOpties(opties);
-  const peildatum = filters?.peildatum ?? vandaagISO();
+  const peildatum = effectievePeildatum(filters);
 
   // Per-aanroep instelling (uit het portaal) is leidend; valt terug op de
   // env-default HYBRID_SEARCH als er geen waarde is meegegeven.
@@ -1286,7 +1390,7 @@ export async function zoekRelevanteChunksMetMeta(
 
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
-  const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
+  const maxPerDoc = maxPerDocVoor(maxResults);
 
   // Embed de (al door B1 geherformuleerde) vraag. Faalt dat → FTS-fallback.
   //
@@ -1300,8 +1404,13 @@ export async function zoekRelevanteChunksMetMeta(
   // en blokkers expliciet" verbiedt.
   let vector: number[];
   try {
-    vector = await embedTekst({ supabase, label: "rag.hybride" }, vraag);
+    vector = await embedTekst({ supabase, label: "rag.hybride" }, vraag, opt.signal);
   } catch (e) {
+    // PR-B — een AFBREKING is geen providerfout. De terugval hieronder bestaat
+    // voor een dichte kill-switch of een falende provider; vangt hij ook een
+    // annulering of deadline, dan doet de keten ná het afbreken alsnog een
+    // volledige FTS-retrieval. Doorgooien dus.
+    bewaakNaIO(opt.signal, e);
     const gestopt = isPoortGesloten(e);
     if (gestopt) {
       console.warn(`Hybride: Mistral-poort dicht (${e.reden}) — terugval op FTS.`);
@@ -1330,72 +1439,33 @@ export async function zoekRelevanteChunksMetMeta(
   // versoepelen. Alleen p_query/p_embedding verschillen (zie draaiHybridePoging).
   const gedeeldeRpcParams = gedeeldeHybrideParams(overFetch, scope, filters, fondsFilter);
 
-  // Eén hybride RPC-poging. Geeft de gerangschikte chunks terug, of null bij een
-  // RPC-fout (≠ leeg resultaat, dat is een lege array). SECURITY INVOKER → RLS
-  // blijft gelden; p_document_ids scoopt vóór de fusion.
-  async function draaiHybridePoging(
-    ftsQ: string,
-    emb: number[]
-  ): Promise<DocumentChunk[] | null> {
-    const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
-      p_query: ftsQ,
-      p_embedding: naarVectorLiteral(emb),
-      ...gedeeldeRpcParams,
-    });
-    if (error) {
-      console.error("Hybride RPC-fout:", error);
-      return null;
-    }
-    return Array.isArray(data) ? (data as ZoekChunkRij[]).map(rijNaarChunk) : [];
-  }
-
-  const pogingen: HybridePogingResultaat[] = [];
-  const pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]> = [];
-
-  // Poging 1 (primair): de (mogelijk geherformuleerde) vraag.
-  const primair = await draaiHybridePoging(ftsQuery, vector);
-  if (primair === null) {
-    // RPC faalde → terugval op FTS (embedding lukte wél).
+  // De strikte pogingen (primair, en bij reformulatie de originele vraag) en —
+  // G-12 — hooguit één verslapte. Uitgebreid in `voerHybridePogingenUit`, zodat
+  // de beslisregels hermetisch te toetsen zijn; hier alleen de bedrading.
+  const uitkomst = await voerHybridePogingenUit(vraag, ftsQuery, vector, opties?.origineleVraag, {
+    draai: maakHybrideRpc(supabase, gedeeldeRpcParams, opt.signal),
+    embed: (tekst) => embedTekst({ supabase, label: "rag.hybride.origineel" }, tekst, opt.signal),
+    ftsQueryVoor: (tekst) => ftsQueryVoor(tekst, opt).ftsQuery,
+    signal: opt.signal,
+  });
+  if (uitkomst.soort === "rpc_fout") {
+    // Vóór de terugval: is er intussen afgebroken, dan start hij niet.
+    bewaakNaIO(opt.signal);
+    // RPC faalde → terugval op FTS (embedding lukte wél). GEEN verslapte hybride
+    // poging: de RPC zelf is stuk, een tweede aanroep ervan helpt niet.
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
       chunks: r.chunks,
       meta: { ...r.meta, embedding_query_success: true, fallback_reason: "rpc_error" },
     };
   }
-  pogingen.push({ naam: "primair", chunks: primair });
-  pogingMeta.push({ naam: "primair", query: ftsQuery, rijen: primair.length });
-
-  // Poging 2 (M-R3): bij een geherformuleerde vraag draaien we OOK de originele
-  // vraag en fuseren, zodat de reformulatie alleen recall kan toevoegen. Faalt de
-  // embedding van de originele vraag, dan blijft de primaire poging staan
-  // (non-destructief). De M1-FTS-terugval uit de recall-opdracht komt later als
-  // derde poging op exact deze plek erbij (zelfde bovengrens, zelfde fusie).
-  const origineel = opties?.origineleVraag?.trim();
-  if (origineel && origineel !== vraag.trim()) {
-    if (pogingen.length < MAX_HYBRIDE_POGINGEN) {
-      const { ftsQuery: origFts } = ftsQueryVoor(origineel, opt);
-      try {
-        const origVec = await embedTekst({ supabase, label: "rag.hybride.origineel" }, origineel);
-        const origChunks = await draaiHybridePoging(origFts, origVec);
-        if (origChunks === null) {
-          pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });
-        } else {
-          pogingen.push({ naam: "origineel", chunks: origChunks });
-          pogingMeta.push({ naam: "origineel", query: origFts, rijen: origChunks.length });
-        }
-      } catch (e) {
-        console.error("Hybride: embedding originele vraag mislukt (M-R3), primair blijft:", e);
-        pogingMeta.push({ naam: "origineel", query: origFts, rijen: null, overgeslagen: true });
-      }
-    } else {
-      pogingMeta.push({ naam: "origineel", query: origineel, rijen: null, overgeslagen: true });
-    }
-  }
+  const { pogingen, pogingMeta } = uitkomst;
 
   // Fusie van alle pogingen (union op id, beste RRF-rang wint, deterministisch).
   const { chunks: gefuseerd, herkomstPerId } = fuseerHybridePogingen(pogingen);
 
   if (gefuseerd.length === 0) {
+    bewaakNaIO(opt.signal);
     // Geen enkele poging leverde treffers → terugval op FTS (embedding lukte wél).
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
@@ -1457,10 +1527,10 @@ async function zoekViaFTS(
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
-  const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
+  const maxPerDoc = maxPerDocVoor(maxResults);
   const fMeta = metaFilters(filters);
   const opt = volledigeOpties(opties);
-  const peildatum = filters?.peildatum ?? vandaagISO();
+  const peildatum = effectievePeildatum(filters);
 
   // Poging 1: gerangschikte RPC (Dutch FTS + ts_rank_cd).
   // p_document_ids = scope vóór ranking (null = hele bibliotheek).
@@ -1468,13 +1538,14 @@ async function zoekViaFTS(
   // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af.
   // R1.4 — de FTS-query is hier (evt.) jargon-verbreed (websearch-arm).
   const { ftsQuery, jargon } = ftsQueryVoor(vraag, opt);
-  const { data, error } = await supabase.rpc("zoek_chunks", {
+  const { data, error } = await metSignaal(supabase.rpc("zoek_chunks", {
     p_query: ftsQuery,
     p_limit: overFetch,
     p_document_ids: scope,
     ...rpcFilterParams(filters),
     p_fonds_id: fondsFilter,
-  });
+  }), opt.signal);
+  bewaakNaIO(opt.signal, error);
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
@@ -1509,13 +1580,17 @@ async function zoekViaFTS(
   // waar streng zoeken niets oplevert.
   const terugval = bouwTerugvalFtsQuery(vraag);
   if (terugval) {
-    const { data: dataT, error: errorT } = await supabase.rpc("zoek_chunks", {
-      p_query: terugval.query,
-      p_limit: overFetch,
-      p_document_ids: scope,
-      ...rpcFilterParams(filters),
-      p_fonds_id: fondsFilter,
-    });
+    const { data: dataT, error: errorT } = await metSignaal(
+      supabase.rpc("zoek_chunks", {
+        p_query: terugval.query,
+        p_limit: overFetch,
+        p_document_ids: scope,
+        ...rpcFilterParams(filters),
+        p_fonds_id: fondsFilter,
+      }),
+      opt.signal
+    );
+    bewaakNaIO(opt.signal, errorT);
 
     if (!errorT && Array.isArray(dataT) && dataT.length > 0) {
       const gerangschikt = (dataT as ZoekChunkRij[]).map(rijNaarChunk);
@@ -1591,7 +1666,8 @@ async function zoekViaFTS(
     if (filters?.documentstatus) q2 = q2.in("documentstatus", filters.documentstatus);
     if (filters?.procesinstantie_ids) q2 = q2.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q2 = q2.in("bibliotheek", filters.bronsoort);
-    const { data: data2, error: error2 } = await q2;
+    const { data: data2, error: error2 } = await metSignaal(q2, opt.signal);
+    bewaakNaIO(opt.signal, error2);
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
@@ -1637,7 +1713,8 @@ async function zoekViaFTS(
     if (filters?.documentstatus) q3 = q3.in("documentstatus", filters.documentstatus);
     if (filters?.procesinstantie_ids) q3 = q3.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q3 = q3.in("bibliotheek", filters.bronsoort);
-    const { data: data3 } = await q3;
+    const { data: data3, error: error3 } = await metSignaal(q3, opt.signal);
+    bewaakNaIO(opt.signal, error3);
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
@@ -1779,148 +1856,81 @@ export { neutraliseerBrontekst, maakBronSentinel };
 // je hem weg, dan wordt er één gegenereerd — maar geef bij een prompt met
 // MEERDERE contextblokken dezelfde sentinel mee, anders sluit het model de
 // blokken niet consistent.
+/** Chunk → contract-`Bronresultaat`, inclusief de weergavemetadata die de
+ *  centrale citaatopbouw nodig heeft. Eén plek voor rag.ts en de adapter. */
+export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronresultaat {
+  const d = chunk.documenten;
+  return {
+    ref: chunk.id,
+    bronsoort: d.bibliotheek === "generiek" ? "generiek" : chunk.notulen ? "notulen" : "fonds",
+    titel: d.titel,
+    documentIdentiteit: {
+      documentId: chunk.document_id,
+      bibliotheek: d.bibliotheek ?? null,
+      bron: d.bron ?? null,
+      fondsId: d.fonds_id ?? null,
+    },
+    // R1 (T2-3) brengt de volledige hash. Tot dan is de documentdatum de ZWAKKE
+    // legacyfallback, en is er geen controlemoment: `gecontroleerdOp: null` zegt
+    // dat expliciet. Zonder documentdatum is er helemaal geen versiebewijs.
+    versie: d.documentdatum
+      ? { soort: "status-datum" as const, waarde: d.documentdatum, gecontroleerdOp: null }
+      : { soort: "onbekend" as const, waarde: null, gecontroleerdOp: null },
+    locator: { pagina: chunk.pagina, paragraaf: chunk.paragraaf, chunkIndex: chunk.chunk_index },
+    passage: chunk.tekst,
+    status: {
+      documentstatus: d.documentstatus ?? null,
+      bronstatus: d.bronstatus ?? null,
+      geldigTot: d.geldig_tot ?? null,
+      actueel: (d.documentstatus ?? null) === "van_kracht",
+    },
+    rang: { positie, score: chunk.rang ?? null, fts: chunk.fts_rang ?? null, vec: chunk.vec_rang ?? null },
+    curatie: { normgewicht: d.normgewicht ?? null, wettelijkRegime: d.wettelijk_regime ?? null },
+    weergave: {
+      bronorganisatie: d.bronorganisatie ?? null,
+      documentdatum: d.documentdatum ?? null,
+      opslagPad: d.opslag_pad ?? null,
+      externUrl: d.extern_url ?? null,
+      documenttype: d.documenttype ?? null,
+      bestandstype: d.bestandstype ?? null,
+      notulen: chunk.notulen
+        ? {
+            vergaderingTitel: chunk.notulen.vergadering_titel,
+            agendapuntVolgnummer: chunk.notulen.agendapunt_volgnummer,
+            agendapuntTitel: chunk.notulen.agendapunt_titel,
+          }
+        : null,
+      aangeleverdePassage: chunk.aangeleverde_passage ?? null,
+    },
+  };
+}
+
+/**
+ * T2-1 — DUNNE WRAPPER. De citaatopbouw leeft centraal in
+ * `core/lib/retrieval/citatie.ts`: nummering, sentinel, neutralisatie en
+ * `BronVerwijzing` mogen niet per provider verschillen (besluit 0213 punt 5).
+ * Deze wrapper houdt de bestaande aanroepers (reflectiepad, breed pad, AQLab)
+ * ongewijzigd. Zonder contextgrens — die geldt op het contractpad.
+ */
 export function maakContext(
   chunks: DocumentChunk[],
   startIndex = 0,
   sentinel: string = maakBronSentinel(),
-  // 12-08-2026 — primaire-documentmodus. Is er een door de gebruiker gekozen
-  // hoofddocument, dan krijgt elke bron in de kop een herkomstmarkering, zodat
-  // het model (en daarmee de lezer) ziet welke uitspraak uit het gekozen stuk
-  // komt en welke uit de rest van de bibliotheek. Leeg/afwezig = geen enkele
-  // markering, exact het gedrag van vóór deze wijziging.
   primaireDocumentIds?: ReadonlySet<string> | null,
-  // Peildatum voor het geldigheidsdeel van het statuslabel. Zonder peildatum
-  // doet het label géén uitspraak over verlopen geldigheid (geen schijnzekerheid).
   peildatum?: string,
-  // Het label voor een PRIMAIRE bron. Op /ai is dat het door de gebruiker
-  // gekozen stuk ("hoofddocument"); in agendapunt-modus zijn het de aan het
-  // agendapunt gekoppelde stukken, en dan leest "[gekoppeld stuk]" correcter.
   primairLabel: string = " [hoofddocument]"
-): {
-  contextTekst: string;
-  bronnen: BronVerwijzing[];
-  geneutraliseerd: number;
-  sentinel: string;
-} {
-  if (chunks.length === 0) {
-    return {
-      contextTekst: "Er zijn geen relevante documenten gevonden in de bibliotheek.",
-      bronnen: [],
-      geneutraliseerd: 0,
-      sentinel,
-    };
-  }
-
-  const bronnen: BronVerwijzing[] = [];
-  const contextDelen: string[] = [];
-  let geneutraliseerdTotaal = 0;
-
-  chunks.forEach((chunk, index) => {
-    const doc = chunk.documenten;
-    const bronLabel = `[Bron ${startIndex + index + 1}]`;
-    const locatie = [
-      chunk.paragraaf && `${chunk.paragraaf}`,
-      chunk.pagina && `pag. ${chunk.pagina}`,
-    ]
-      .filter(Boolean)
-      .join(", ");
-
-    // Increment D — notulensegmenten dragen een agendapunt-specifieke bronvermelding
-    // ("Vastgestelde notulen [verg], agendapunt N — [titel]"); overige chunks houden
-    // het bestaande "[bron] — [titel]"-label.
-    const bronTitel = chunk.notulen
-      ? notulenBronLabel(
-          chunk.notulen.vergadering_titel,
-          chunk.notulen.agendapunt_volgnummer,
-          chunk.notulen.agendapunt_titel
-        )
-      : `${doc.bron} — ${doc.titel}`;
-
-    // Increment G — generieke bronnen expliciet labelen, zodat het model ze niet
-    // presenteert als door het fonds bestuurlijk vastgesteld (#22/#23). Het label
-    // staat in de contextregel; de gestructureerde velden gaan mee in `bronnen`.
-    const bronsoortLabel =
-      doc.bibliotheek === "generiek"
-        ? ` [generiek/extern kader${doc.bronorganisatie ? ` — ${doc.bronorganisatie}` : ""}]`
-        : "";
-
-    // R1.6 — is de treffer uitgebreid tot zijn structuur-unit, dan leveren we die
-    // samengevoegde passage als brontekst; het bronlabel/locatie/fragment-preview
-    // blijft op de treffer-chunk. Bewuste small-to-big-afweging: de aangeleverde
-    // passage kan tekst van een náást-liggende pagina/paragraaf bevatten, terwijl
-    // de getoonde locatie die van de treffer-chunk is. De citatie-ANKER (welk
-    // document/welke unit) blijft dus exact; de pagina-aanduiding kan de bredere
-    // unit onder-specificeren. Alleen achter de parent-vlag; kale chunk = default.
-    const ruweBrontekst = chunk.aangeleverde_passage ?? chunk.tekst;
-    const { tekst: brontekst, geneutraliseerd } = neutraliseerBrontekst(ruweBrontekst);
-    geneutraliseerdTotaal += geneutraliseerd;
-
-    // H-10: elke bron in een eigen, met een onvoorspelbare sentinel afgebakend
-    // blok. Alles tussen de openings- en sluittag is DATA, nooit instructie.
-    // 12-08-2026 — statuslabel. Tot nu toe reisde de documentstatus alleen mee
-    // naar de bronkaart in de UI en niet naar de prompt; het model kon dus niet
-    // zien dat een aangeleverde bron nog niet was vastgesteld. Met de bredere
-    // retrieval van deze release is dit label het verschil tussen bruikbare
-    // duiding en versieverwarring. Enige bron: core/lib/documentstatus-label.ts.
-    const statusLabel = statuslabelVoorBron(
-      {
-        documentstatus: doc.documentstatus,
-        bronstatus: doc.bronstatus,
-        geldig_tot: doc.geldig_tot,
-      },
-      peildatum
-    );
-
-    // Herkomstmarkering in de primaire-documentmodus (zie de parameter hierboven).
-    const herkomstLabel =
-      primaireDocumentIds && primaireDocumentIds.size > 0
-        ? primaireDocumentIds.has(chunk.document_id)
-          ? primairLabel
-          : " [aanvullend uit de bibliotheek]"
-        : "";
-
-    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${statusLabel}${herkomstLabel}${locatie ? ` (${locatie})` : ""}`;
-    contextDelen.push(
-      `<bron s="${sentinel}" nr="${startIndex + index + 1}">\n${kop}:\n${brontekst}\n</bron s="${sentinel}">`
-    );
-
-    bronnen.push({
-      document_id: chunk.document_id,
-      titel: chunk.notulen ? bronTitel : doc.titel,
-      bron: doc.bron,
-      pagina: chunk.pagina,
-      paragraaf: chunk.paragraaf,
-      // Het citaat is sinds tranche 2 het bewijsstuk in de hover-preview op de
-      // pill: afkappen op een zinsgrens i.p.v. blind op 150 tekens, en alleen
-      // een beletselteken als er écht is afgekapt (zie core/lib/bronfragment.ts).
-      // Bewust de KALE chunk-tekst, niet `aangeleverde_passage`: de vindplaats
-      // die erbij staat is die van de treffer-chunk.
-      fragment: bouwBronfragment(chunk.tekst),
-      heeft_origineel: !!doc.opslag_pad,
-      documentstatus: doc.documentstatus ?? null,
-      bronstatus: doc.bronstatus ?? null,
-      documentdatum: doc.documentdatum ?? null,
-      geldig_tot: doc.geldig_tot ?? null,
-      bibliotheek: doc.bibliotheek ?? null,
-      bronorganisatie: doc.bronorganisatie ?? null,
-      normgewicht: doc.normgewicht ?? null,
-      extern_url: doc.extern_url ?? null,
-      // Tranche 2B — doorgeefvelden voor de documentlijst. Ze staan hier ná de
-      // context-opbouw hierboven en raken die niet: `contextTekst` wordt uit
-      // expliciet benoemde velden gebouwd, het bronnen-array wordt nergens
-      // geserialiseerd. Zie verrijkDocumentmetadata().
-      documenttype: doc.documenttype ?? null,
-      bestandstype: doc.bestandstype ?? null,
-    });
-  });
-
-  return {
-    contextTekst: contextDelen.join("\n\n"),
-    bronnen,
-    geneutraliseerd: geneutraliseerdTotaal,
+): { contextTekst: string; bronnen: BronVerwijzing[]; geneutraliseerd: number; sentinel: string } {
+  const r = bouwCitaties(chunks.map((c, i) => chunkAlsBronresultaat(c, i)), {
+    primaireDocumentIds: primaireDocumentIds ?? new Set<string>(),
+    peildatum: peildatum ?? "",
+    hoofddocumentLabel: primairLabel,
+    maxContextTekens: 0,
     sentinel,
-  };
+    startIndex,
+  });
+  return { contextTekst: r.contextTekst, bronnen: r.bronnen, geneutraliseerd: r.geneutraliseerd, sentinel: r.sentinel };
 }
+
 
 // Haalt alle technisch toegestane chunks van de gescopete document(en) op,
 // geordend op document en chunk-index — voor full-document en map-reduce. Géén
@@ -2100,13 +2110,14 @@ export async function haalBevrorenChunks(
 // is één gebatchte vervolgquery op de chunk-id's. RLS-veilig (anon-client). Muteert
 // de meegegeven chunks in-place en geeft ze terug.
 export async function verrijkNotulenChunks(
-  chunks: DocumentChunk[]
+  chunks: DocumentChunk[],
+  signal?: AbortSignal
 ): Promise<DocumentChunk[]> {
   if (chunks.length === 0) return chunks;
   const supabase = await createServerSupabase();
   const ids = chunks.map((c) => c.id);
 
-  const { data, error } = await supabase
+  const { data, error } = await metSignaal(supabase
     .from("document_chunks")
     .select(
       `id,
@@ -2118,7 +2129,8 @@ export async function verrijkNotulenChunks(
        )`
     )
     .in("id", ids)
-    .not("notulen_segment_id", "is", null);
+    .not("notulen_segment_id", "is", null), signal);
+  bewaakNaIO(signal, error);
 
   if (error || !data || data.length === 0) return chunks;
 
@@ -2183,18 +2195,24 @@ interface DocumentmetadataRij {
 
 export async function verrijkDocumentmetadata(
   chunks: DocumentChunk[],
-  fondsId: string | null = null
+  fondsId: string | null = null,
+  signal?: AbortSignal
 ): Promise<DocumentChunk[]> {
   if (chunks.length === 0) return chunks;
   const ids = [...new Set(chunks.map((c) => c.document_id))];
   const supabase = await createServerSupabase();
 
-  const { data, error } = await supabase
+  const { data, error } = await metSignaal(supabase
     .from("documenten")
     .select(
       "id, fonds_id, bibliotheek, documenttype, bestandstype, documentdatum, geldig_tot, normgewicht, bronorganisatie, extern_url"
     )
-    .in("id", ids);
+    .in("id", ids), signal);
+
+  // Een AFBREKING is geen "metadata niet beschikbaar": doorgooien vóór de
+  // fail-safe hieronder, anders bouwt de keten na een annulering alsnog de
+  // volledige weergave op.
+  bewaakNaIO(signal, error);
 
   // Fail-safe: zonder deze metadata valt de weergave netjes terug (geen chip,
   // geen badge). Een fout mag het antwoord nooit tegenhouden.

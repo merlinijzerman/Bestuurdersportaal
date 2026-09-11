@@ -1,3 +1,4 @@
+import { bewaakNaIO } from "./retrieval/afbreken";
 // ============================================================================
 //  lib/parent-context.ts — parent-retrieval / small-to-big (R1.6).
 // ----------------------------------------------------------------------------
@@ -122,6 +123,9 @@ interface ParentOpties {
   supabase?: Awaited<ReturnType<typeof createServerSupabase>>;
   perUnitCap?: number;
   totaalCap?: number;
+  /** PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt. Zonder dit
+   *  liep de sibling-fetch na een annulering gewoon door. */
+  signal?: AbortSignal;
 }
 
 // Breidt geselecteerde treffer-chunks uit met hun structuur-unit (parent-passage).
@@ -145,7 +149,7 @@ export async function verrijkMetParents(
   // Eén gebatchte fetch van alle chunks van de betrokken documenten (met de velden
   // die de fondsdiscipline-guard én de sibling-scoping nodig hebben). RLS-veilig
   // (anon-client). Plafond tegen extreem grote documenten.
-  const { data, error } = await supabase
+  const q = supabase
     .from("document_chunks")
     .select(
       `id, document_id, tekst, pagina, paragraaf, chunk_index, structuur_type, structuur_label,
@@ -158,6 +162,8 @@ export async function verrijkMetParents(
     .limit(
       Math.min(SIBLING_FETCH_MAX, Math.max(SIBLING_FETCH_MIN, docIds.length * SIBLING_FETCH_PER_DOC))
     );
+  const { data, error } = await (opties?.signal ? q.abortSignal(opties.signal) : q);
+  bewaakNaIO(opties?.signal, error);
 
   if (error || !data || data.length === 0) {
     // Geen siblings ophaalbaar → alles kaal (fail-safe, geen regressie).

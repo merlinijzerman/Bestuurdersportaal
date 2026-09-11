@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { veiligVervolgpad } from "@/core/lib/redirect-veilig";
+import { beeindigSessie, beoordeelPortaalSessie, heeftAzureIdentiteit } from "@/core/lib/microsoft-login-sessieguard";
 
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
@@ -27,6 +28,20 @@ export async function GET(req: NextRequest) {
     const supabase = await createServerSupabase();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // L4 (#335 T2, ontwerp §3.2): een hosted-flow-restant — `azure`-identiteit
+      // zonder actieve binding — wordt opgeruimd: identiteit weg, sessie weg,
+      // terug naar de login. Sessies zonder azure-identiteit raken de gateway niet.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && heeftAzureIdentiteit(user)) {
+        const oordeel = await beoordeelPortaalSessie(supabase, user.id);
+        if (!oordeel.toegestaan) {
+          const azure = user.identities?.find((i) => i.provider === "azure");
+          if (azure) await supabase.auth.unlinkIdentity(azure).catch(() => undefined);
+          await beeindigSessie(supabase);
+          console.warn("[MICROSOFT-LOGIN] L4: azure-identiteit zonder actieve binding verwijderd");
+          return NextResponse.redirect(`${origin}/login?error=auth_callback`);
+        }
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

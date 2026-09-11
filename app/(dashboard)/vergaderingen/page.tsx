@@ -31,7 +31,7 @@ export default async function VergaderingenPage() {
 
   const { data: vergaderingen } = await supabase
     .from("vergaderingen")
-    .select("id, titel, datum, locatie, status, gearchiveerd_op")
+    .select("id, titel, datum, locatie, status, gearchiveerd_op, outlook_beheerd, outlook_sync_status")
     .eq("fonds_id", profiel?.fonds_id || "")
     .order("datum", { ascending: false });
 

@@ -89,6 +89,7 @@ jobs:
         run: |
           npm ci --prefix scanner
           npm test --prefix scanner
+          node --test scripts/verify-scanner-health.test.mjs
 
       - name: Productiebuild
         env:

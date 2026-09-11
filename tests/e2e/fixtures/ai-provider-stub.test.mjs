@@ -50,3 +50,37 @@ test("stub geeft een gecontroleerde providerfout zonder invoer terug te tonen", 
     assert.equal(stats.failures, 1);
   });
 });
+
+test("stub bewaart per verzoek alleen vorm en hashes, nooit promptinhoud (#311)", async () => {
+  await metStub(async (basis, stats) => {
+    const geheim = "GEHEIME-PROMPTINHOUD-DIE-NOOIT-OPGESLAGEN-MAG-WORDEN";
+    await fetch(`${basis}/v1/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        stream: true,
+        max_tokens: 5000,
+        system: [{ type: "text", text: geheim }],
+        messages: [{ role: "user", content: geheim }],
+      }),
+    });
+    const verzoeken = await (await fetch(`${basis}/verzoeken`)).json();
+    assert.equal(verzoeken.length, 1);
+    const v = verzoeken[0];
+    assert.equal(v.model, "claude-sonnet-4-6");
+    assert.equal(v.stream, true);
+    assert.equal(v.max_tokens, 5000);
+    assert.equal(v.temperature, null);
+    assert.match(v.system_sha256, /^[0-9a-f]{64}$/);
+    assert.match(v.messages_sha256, /^[0-9a-f]{64}$/);
+    assert.equal(v.messages_aantal, 1);
+    assert.doesNotMatch(JSON.stringify(verzoeken), new RegExp(geheim));
+    // `stats` blijft exact de vier tellers: de buffer staat er bewust naast.
+    assert.deepEqual(Object.keys(stats), ["requests", "streams", "nonStreams", "failures"]);
+
+    const reset = await fetch(`${basis}/verzoeken`, { method: "DELETE" });
+    assert.equal(reset.status, 200);
+    assert.deepEqual(await (await fetch(`${basis}/verzoeken`)).json(), []);
+  });
+});

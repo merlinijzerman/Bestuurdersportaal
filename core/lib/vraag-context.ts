@@ -18,7 +18,7 @@
 //    query-reformulatie.ts en de rag-select-familie).
 //  - De modelcall wordt als functie GEÏNJECTEERD (`roepModelAan`), zodat deze
 //    module niets instantieert en de sanitytest hem kan stubben. De route levert
-//    een `roepModelAan` die via de enige Anthropic-poort (`bewaakteAnthropic`)
+//    een `roepModelAan` die via de centrale AI-gateway
 //    op het rewrite-model draait, op temperature 0 (reproduceerbaar, besluit
 //    0139), met een echte AbortController-timeout (patroon map-stap route.ts).
 //  - Fail-safe: elke fout/timeout/ongeldige/laag-vertrouwen-uitkomst valt terug
@@ -326,7 +326,7 @@ export async function resolveVraagContext(input: {
   // NIET uit lege tekst afgeleid maar uit het expliciete `meting.foutreden`.
   //   timeout        — AbortController brak af ná callstart;
   //   providerfout   — call gestart, provider/verbinding gaf een fout;
-  //   poort_geweigerd — call niet gestart (bewaakteAnthropic weigerde);
+  //   poort_geweigerd — call niet gestart (de live AI-poort weigerde);
   //   lege_respons   — succesvolle response zónder tekst;
   //   onparseerbaar  — response zonder geldig JSON-contract.
   if (meting?.timeout) {

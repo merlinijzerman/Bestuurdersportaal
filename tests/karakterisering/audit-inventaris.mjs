@@ -137,7 +137,7 @@ const SPLIT_KLASSE = {
   //    `sluiten` staat hier ook niet meer: de stemmingen-trigger levert zijn
   //    `stemming_gesloten`-event bovenop procedure_log (KETEN_SLUITEN-markering vervalt
   //    zodra het bewijsketen-spoor meet). ketengebeurtenis_vereist is daarmee 0.
-  // B. operationele handeling → handelingen_log — 8
+  // B. operationele handeling → handelingen_log — 10
   "PATCH app/api/documents/[id]/ai-markering/route.ts": "operationeel",
   "POST app/api/documents/[id]/her-extract/route.ts": "operationeel", // gebonden aan pijplijngedrag; zie 0191
   "POST app/api/documents/[id]/opnieuw-verwerken/route.ts": "operationeel", // idem
@@ -146,6 +146,23 @@ const SPLIT_KLASSE = {
   "DELETE app/api/gesprekken/[id]/route.ts": "operationeel",
   "POST app/api/reflectie/transitie/route.ts": "operationeel",
   "PATCH app/api/profiel/route.ts": "operationeel", // fonds_id/rol-tabel (C-01), goedkope verzekering
+  "DELETE app/api/microsoft/connectie/route.ts": "operationeel", // lokaal tokenmateriaal beëindigen; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/test/route.ts": "operationeel", // externe verbindingstest; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/outlook/agendas/route.ts": "operationeel", // fondsgebonden bronselectie; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/outlook/sync/route.ts": "operationeel", // read-only synchronisatierun; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/sharepoint/bron/route.ts": "operationeel", // #321 fondsgebonden SharePoint-bronselectie; wrapper-audit + private connectoraudit
+  "DELETE app/api/microsoft/sharepoint/bron/route.ts": "operationeel", // #321 lokaal ontkoppelen van de SharePoint-bron; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/sharepoint/bron/controle/route.ts": "operationeel", // #321 bereikbaarheidscontrole met actuele rechten; wrapper-audit + private connectoraudit
+  "POST app/api/microsoft/sharepoint/documenten/[ref]/preview/route.ts": "operationeel", // #321 kortlevende preview-URL; wrapper-audit + private audit met alleen referentie/categorie/latency
+  "DELETE app/api/microsoft-login/koppeling/route.ts": "operationeel", // #335 T2 Microsoft-login ontkoppelen (revoking → unlink → revoked); wrapper-audit + private login_private.audit_log via de gateway
+  "POST app/api/microsoft-login/koppeling/route.ts": "operationeel", // #335 T2 idempotent herstel van een half-afgeronde koppeling; wrapper-audit + private login_private.audit_log via de gateway
+  "POST app/api/microsoft-login/verhoging/route.ts": "operationeel", // #344 opent het activeringsvenster van een break-glasssessie; wrapper-audit + `breakglass.gebruikt` in login_private.audit_log via de gateway
+  "PATCH app/api/microsoft-login/beheer/beleid/route.ts": "operationeel", // #344 PR-B modus zetten (zet_modus, preflight in dezelfde transactie); wrapper-audit + login_private.audit_log via de gateway
+  "POST app/api/microsoft-login/beheer/intrekking/route.ts": "operationeel", // #344 PR-B beheerintrekking (revoking/afronden); wrapper-audit + login_private.audit_log via de gateway
+  "POST app/api/microsoft-login/beheer/breakglass/route.ts": "operationeel", // #344 PR-B noodtoegangsaanwijzing verlenen; wrapper-audit + login_private.audit_log via de gateway
+  "DELETE app/api/microsoft-login/beheer/breakglass/[id]/route.ts": "operationeel", // #344 PR-B noodtoegangsaanwijzing intrekken; wrapper-audit + login_private.audit_log via de gateway
+  "POST app/api/microsoft-login/beheer/uitnodiging/route.ts": "operationeel", // #344 PR-B herkoppel-uitnodiging uitgeven (alleen sha256 naar de DB); wrapper-audit + login_private.audit_log via de gateway
+  "DELETE app/api/microsoft-login/beheer/uitnodiging/route.ts": "operationeel", // #344 PR-B herkoppel-uitnodiging intrekken; wrapper-audit + login_private.audit_log via de gateway
   // C. geen spoor nodig — 10
   "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
   "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",

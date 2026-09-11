@@ -27,9 +27,12 @@ import {
 import { extractTekstMetOcrFallback } from "../../core/lib/ocr";
 import {
   preflightSysteem,
+  rondAf,
   systeemSleutel,
   vingerafdruk,
 } from "../../core/lib/ai-preflight";
+import { productieGateway } from "../../core/lib/ai-gateway/gateway-productie";
+import type { GatewayAanroep } from "../../core/lib/ai-gateway/contract";
 
 // AI-BEGRENZING (besluit 0180). Dit pad kende GEEN paginacap: `magOcrDraaien`
 // kreeg geen grens mee en gaf dan onvoorwaardelijk `true` terug, waardoor een
@@ -232,13 +235,45 @@ export async function verwerkGeneriekBestand(
   t = new Date().toISOString();
   await zetStatus(svc, documentId, "chunking");
   await zetStatus(svc, documentId, "embedding");
-  const { records: chunkRecords, aantalChunks, embeddingsGelukt: embeddings } =
-    await bouwChunkRecords({
+  const pf = await preflightSysteem(svc, {
+    actietype: "generiek_curatie",
+    fondsId: null,
+    provider: null,
+    model: null,
+    idempotentie: systeemSleutel(documentId, "generiek_curatie", 1),
+    vingerafdruk: vingerafdruk({ documentId, versieId, bestandstype }),
+  });
+  if (pf.uitkomst !== "nieuw" || !pf.actieId) {
+    await zetStatus(svc, documentId, "mislukt");
+    return { ok: false, foutcode: "extractie_mislukt", verwerkingsstatus: "mislukt" };
+  }
+  const gateway: GatewayAanroep = {
+    gateway: productieGateway(),
+    ctx: {
+      supabase: svc,
+      fondsId: null,
+      actor: { soort: "systeem", proces: "generieke-curatie" },
+      actieId: pf.actieId,
+      correlatieId,
+      label: "generieke-curatie",
+    },
+  };
+  let chunkRecords;
+  let aantalChunks;
+  let embeddings;
+  try {
+    ({ records: chunkRecords, aantalChunks, embeddingsGelukt: embeddings } =
+      await bouwChunkRecords({
       documentId,
       titel,
       segmenten: extractie.segmenten,
       poort: { supabase: svc, label: "generiek-pipeline" },
-    });
+      gateway,
+      }));
+  } catch (error) {
+    await rondAf(svc, pf.actieId, "mislukt");
+    throw error;
+  }
   await schrijfJob(svc, {
     documentId, versieId, correlatieId, stap: "embedding",
     status: embeddings ? "geslaagd" : "overgeslagen", start: t,
@@ -270,6 +305,7 @@ export async function verwerkGeneriekBestand(
         .from("documenten")
         .update({ verwerkingsstatus: "mislukt", geindexeerd: false })
         .eq("id", documentId);
+      await rondAf(svc, pf.actieId, "mislukt");
       return {
         ok: false,
         foutcode: "chunk_insert_mislukt",
@@ -280,6 +316,7 @@ export async function verwerkGeneriekBestand(
   await schrijfJob(svc, {
     documentId, versieId, correlatieId, stap: "chunking", status: "geslaagd", start: t,
   });
+  await rondAf(svc, pf.actieId, "voltooid", `document:${documentId}`);
 
   // ── Indexering klaar → beschikbaar ───────────────────────────────────────
   // F0.2 (bouwticket async-ingest v2.1): invariant geldt overal. Deze pipeline

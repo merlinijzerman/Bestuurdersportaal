@@ -59,6 +59,34 @@ ANTHROPIC_API_KEY=sk-ant-...               (jouw Anthropic sleutel)
 NEXT_PUBLIC_FONDS_NAAM=Stichting Pensioenfonds Horizon
 ```
 
+**Verplicht sinds #311 (M365 fase 2B) — de AI-gateway-databaseverbinding.** De chat en de
+overige AI-taken lezen hun provider-/modelconfiguratie per fonds via een aparte, minimale
+databaserol `ai_gateway` (zie `security/AI-GATEWAY-RUNBOOK.md`). Zonder deze variabelen faalt
+elke AI-taak gesloten (`gateway_db_niet_geconfigureerd`); er is bewust geen fallback naar
+code-constanten.
+
+```
+AI_GATEWAY_DATABASE_URL=postgresql://ai_gateway.<project-ref>:<wachtwoord>@<pooler-host>:6543/postgres
+AI_GATEWAY_CA_CERT_BASE64=<Supabase CA-certificaat, PEM, base64>
+```
+
+Lokaal tegen de wegwerp-stack (`scripts/start-ephemeral-supabase.sh` + `testdb-apply-migrations.sh`,
+die de rol met het vaste wachtwoord `ai_gateway_lokaal` aanmaakt) mag TLS uit, uitsluitend op
+loopback én met `SEED_DOELOMGEVING=local`:
+
+```
+AI_GATEWAY_DATABASE_URL=postgresql://ai_gateway:ai_gateway_lokaal@127.0.0.1:54322/postgres
+AI_GATEWAY_DB_SSL=uit
+```
+
+`AI_MODEL` als omgevingsvariabele wordt sinds #311 **niet meer gelezen** (reviewbesluit R2): het
+model per taakgroep staat in `ai_gateway_private.fonds_configuratie`.
+
+Bij een bestaande omgeving die van fase 2B T3 naar T4/T5 gaat, moeten vóór de code-deploy ook
+`2026_09_04_t4_ai_actietype_semantische_extractie.sql` en de schema-seed
+`2026_09_04_ai_gateway_monitoring_seed.sql` zijn toegepast. De volledige volgorde en rollback
+staan in `security/AI-GATEWAY-RUNBOOK.md`.
+
 **Optioneel — AI Quality Lab multi-provider (AQL-6, alleen voor de providervergelijking).**
 Deze keys zijn **server-side only** (nooit `NEXT_PUBLIC_`) en worden pas gezet nadat de
 governance-poort groen is (decision `0064`, FG/DPO-akkoord). Zonder key blijft de betreffende

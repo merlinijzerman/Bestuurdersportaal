@@ -4,6 +4,8 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 import { haalFondsContext, tenantEnforceAan } from "@/core/lib/tenant-context";
 import { beoordeelToegang, type ToegangsOordeel } from "@/core/lib/tenant-enforce";
 import { haalFondsConfig } from "@/core/lib/fonds-config";
+import { beeindigSessie, beoordeelPortaalSessie, LOGIN_NA_BEEINDIGING } from "@/core/lib/microsoft-login-sessieguard";
+import { BEPERKTE_SESSIE_PAD } from "@/core/lib/microsoft-login-beleid-core";
 import DashboardShell from "@/core/components/DashboardShell";
 import AssistentOppervlak from "./ai/_components/AssistentOppervlak";
 
@@ -20,6 +22,18 @@ export default async function DashboardLayout({
   if (!user) {
     redirect("/login");
   }
+
+  // Guard L3 (#335 T2, besluit 0211; uitgebreid in #344/0212): een `oauth`-sessie
+  // zonder actieve Microsoft-binding wordt direct beëindigd — de hook (L1) weigert
+  // al de eerstvolgende refresh, dit sluit het venster op de portaalsessie zelf.
+  // In een fonds op modus `verplicht` geldt hetzelfde voor een wachtwoordsessie
+  // zonder levende break-glass- of koppel-/herstelsessie-uitzondering.
+  const sessieOordeel = await beoordeelPortaalSessie(supabase, user.id);
+  if (!sessieOordeel.toegestaan) {
+    await beeindigSessie(supabase);
+    redirect(LOGIN_NA_BEEINDIGING);
+  }
+  if (sessieOordeel.beperkt) redirect(BEPERKTE_SESSIE_PAD);
 
   const { data: profiel } = await supabase
     .from("profielen")

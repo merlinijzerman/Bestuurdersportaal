@@ -69,6 +69,10 @@ export const META_BASIS = [
   "drempel",
   "zwakke_bronbasis",
   "parent",
+  // PR-C — toelatingspoort: uitsluitend TELLINGEN per categorie en grond, geen
+  // referenties. Daarom spoor, niet inhoud: er staat niets in dat de gebruiker
+  // niet mocht zien, alleen dát er iets is geweigerd en waarom.
+  "toelating",
   // fondsdiscipline (defense-in-depth, increment T4)
   "toegepaste_fonds_filter",
   "namespace_conventie",
@@ -112,6 +116,9 @@ export const META_BASIS = [
   "duur_model_ms",
   "tokens",
   "tokendekking",
+  // #311 — effectieve gateway-configuratie van de eindgeneratie (provider,
+  // model, profiel-id, configuratieversie). Operationeel, inhoudsvrij.
+  "gateway",
   // Besluit 0151 — TTFT-telemetrie (criterium 11).
   "ttft_ms",
   // T3 — selectie-diagnostiek: intent/regime, de afgedwongen representatie-

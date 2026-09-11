@@ -102,13 +102,35 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // 120: T2 verwijdert de deprecated voorbereidingroute; de voorbereiding loopt
   // sindsdien uitsluitend via de al gewrapte chat-route.
   //
-  // BEDOELDE DIVERGENTIE (geen drift): 120 gewrapte declaraties, maar het aantal
+  // 124: Microsoft fase 1 voegt connect, status, test en lokaal ontkoppelen toe.
+  // 127: Microsoft fase 2A voegt Outlook-status, agendaselectie en handmatige
+  // synchronisatie toe; de vijf handlers zijn allemaal expliciet gewrapt.
+  // 135: Microsoft fase 3A (#321) voegt acht SharePoint-handlers toe: status en
+  // eigen toestemming op de profiel-capabilities, kandidaten/drives/mappen/bron
+  // (kiezen, ontkoppelen, controleren) op fonds.config.manage.
+  // 137: Microsoft fase 3B (#321) voegt de documentenlijst en de preview toe,
+  // beide op documents.view met het gedelegeerde token van de gebruiker zelf.
+  // BEDOELDE DIVERGENTIE (geen drift): 124 gewrapte declaraties, maar het aantal
   // OPGENOMEN 403-cellen in authz-matrix.expected.json blijft op de oude set. Het
   // negatieve contract van de afwijking-route (beheerder/bureau → 403) wordt tegen
   // een DRAAIENDE server opgenomen bij de stack-run, niet voorspeld (besluit 0192,
   // contractwaarde-regel). Zie tests/karakterisering/uitgestelde-opnames.json; die
   // lijst moet leeg zijn vóór P6.
-  assert.equal(HANDLERS.length, 120, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 141: Microsoft-login fase 1B T2 (#335) voegt vier handlers toe onder
+  // app/api/microsoft-login: koppelen starten (profile.manage.own), status
+  // (profile.view.own), ontkoppelen en herstel (profile.manage.own) — strikt
+  // zelfbeheer, dezelfde capabilities als de bestaande Microsoft-connectorroutes.
+  // 142: Microsoft-loginbeleid fase 1C (#344) voegt POST verhoging toe — het
+  // expliciet openen van het activeringsvenster van een break-glasssessie
+  // (profile.manage.own, strikt zelfbeheer). Die route bestaat juist omdat het
+  // openen géén bijwerking van een willekeurig verzoek mag zijn: de Auth-hook
+  // geeft de volledige rol pas als het venster er al is (reviewbevinding P1).
+  // 149: Microsoft-loginbeleid fase 1C PR-B (#344) voegt zeven beheerhandlers toe
+  // onder app/api/microsoft-login/beheer — beleid (GET/PATCH), intrekking (POST),
+  // breakglass (POST, DELETE [id]) en uitnodiging (POST/DELETE) — allemaal op de
+  // smalle capability login.beleid.manage (alleen beheerder) mét inline
+  // requireCapability, zoals /api/profiel.
+  assert.equal(HANDLERS.length, 149, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

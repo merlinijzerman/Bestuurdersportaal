@@ -1,0 +1,450 @@
+{
+  "body": {
+    "events": [
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "fase": "retrieval",
+        "label": "Fondsdocumenten worden doorzocht",
+        "status": "klaar",
+        "type": "progress",
+        "uitkomst": "uit 1 document — 5 passages geselecteerd"
+      },
+      {
+        "fase": "generatie",
+        "label": "Antwoord wordt opgesteld",
+        "status": "bezig",
+        "type": "progress"
+      },
+      {
+        "alleen_fondsdocumenten": false,
+        "antwoordmodus": "feitelijk",
+        "antwoordmodus_label": "Feitelijk antwoord",
+        "bron_intent": "fonds",
+        "bron_intent_bron": null,
+        "bron_intent_herkomst": null,
+        "bron_intent_override": false,
+        "bron_modus_auto": "combineren",
+        "bron_vertrouwen": "zeker",
+        "bronbasis": "Fondsdocumenten, aangevuld met algemene kennis",
+        "bronkeuze_aanbod": null,
+        "bronnen": [
+          {
+            "bestandstype": "pdf",
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "documenttype": null,
+            "extern_url": null,
+            "fragment": "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "normgewicht": null,
+            "pagina": 1,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bestandstype": "pdf",
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "documenttype": null,
+            "extern_url": null,
+            "fragment": "De premie voor het komende jaar is vastgesteld op 24 procent van de pensioengrondslag. Het premiebeleid volgt de kostendekkende premie en wordt door het bestuur jaarlijks herijkt.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "normgewicht": null,
+            "pagina": 5,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bestandstype": "pdf",
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "documenttype": null,
+            "extern_url": null,
+            "fragment": "De renteafdekking van de matchingportefeuille is per ultimo verhoogd naar 60 procent van de verplichtingen. De strategische bandbreedte voor de renteafdekking loopt van 50 tot 70 procent.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "normgewicht": null,
+            "pagina": 2,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bestandstype": "pdf",
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "documenttype": null,
+            "extern_url": null,
+            "fragment": "Het herstelplan beschrijft de maatregelen bij een reservetekort. Het premiebeleid en het indexatiebeleid worden jaarlijks getoetst aan de uitgangspunten van het herstelplan.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "normgewicht": null,
+            "pagina": 3,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bestandstype": "pdf",
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "documenttype": null,
+            "extern_url": null,
+            "fragment": "Het uitbestedingsbeleid regelt de selectie en de monitoring van de fiduciair beheerder en de pensioenuitvoerder. De uitvoering van de renteafdekking valt onder het mandaat van de fiduciair beheerder.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "normgewicht": null,
+            "pagina": 4,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          }
+        ],
+        "chunks_gevonden": 5,
+        "document_gericht": false,
+        "documentdekking": null,
+        "gereformuleerd": false,
+        "inline_meldingen": [],
+        "module_scope": null,
+        "modus": "combineren",
+        "organisatieprofiel": "geen-profiel",
+        "peildatum": "<datum>",
+        "portaalstand_gebruikt": false,
+        "profielsturing": "geen-profiel",
+        "retrieval_modus": "alles",
+        "scope": null,
+        "source_summary": {
+          "documenten": 5,
+          "model_kennis": 0,
+          "web": 0,
+          "web_retrieval_actief": false
+        },
+        "sources": [
+          {
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "extern_url": null,
+            "fragment": "De actuele dekkingsgraad van het fonds bedraagt 118,4 procent per ultimo kwartaal. De beleidsdekkingsgraad ligt op 117,1 procent en blijft boven het vereist eigen vermogen.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "kind": "document",
+            "normgewicht": null,
+            "pagina": 1,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "extern_url": null,
+            "fragment": "De premie voor het komende jaar is vastgesteld op 24 procent van de pensioengrondslag. Het premiebeleid volgt de kostendekkende premie en wordt door het bestuur jaarlijks herijkt.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "kind": "document",
+            "normgewicht": null,
+            "pagina": 5,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "extern_url": null,
+            "fragment": "De renteafdekking van de matchingportefeuille is per ultimo verhoogd naar 60 procent van de verplichtingen. De strategische bandbreedte voor de renteafdekking loopt van 50 tot 70 procent.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "kind": "document",
+            "normgewicht": null,
+            "pagina": 2,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "extern_url": null,
+            "fragment": "Het herstelplan beschrijft de maatregelen bij een reservetekort. Het premiebeleid en het indexatiebeleid worden jaarlijks getoetst aan de uitgangspunten van het herstelplan.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "kind": "document",
+            "normgewicht": null,
+            "pagina": 3,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          },
+          {
+            "bibliotheek": "fonds",
+            "bron": "Intern",
+            "bronorganisatie": null,
+            "bronstatus": null,
+            "document_id": "<uuid:1>",
+            "documentdatum": null,
+            "documentstatus": "concept",
+            "extern_url": null,
+            "fragment": "Het uitbestedingsbeleid regelt de selectie en de monitoring van de fiduciair beheerder en de pensioenuitvoerder. De uitvoering van de renteafdekking valt onder het mandaat van de fiduciair beheerder.",
+            "geldig_tot": null,
+            "heeft_origineel": true,
+            "kind": "document",
+            "normgewicht": null,
+            "pagina": 4,
+            "paragraaf": null,
+            "titel": "W1 Document"
+          }
+        ],
+        "transformatie": false,
+        "type": "meta",
+        "verbreding": null,
+        "vraagrouter": null,
+        "web_retrieval_actief": false,
+        "zoekvraag": "Wat is de actuele dekkingsgraad van ons fonds volgens de fondsdocumenten?"
+      },
+      {
+        "text": "Eerste gestreamde deel: de synthetische uitvoeringsafspraak ",
+        "type": "delta"
+      },
+      {
+        "text": "staat in [Bron 1]. De tweede controlewaarde",
+        "type": "delta"
+      },
+      {
+        "text": " staat in [Bron 2].",
+        "type": "delta"
+      },
+      {
+        "documentdekking": null,
+        "inline_meldingen": [],
+        "log_id": "<uuid:1>",
+        "model_kennis": [],
+        "reflectie": {
+          "beurt": 0,
+          "heeft_bronset": false,
+          "status": "niet_actief"
+        },
+        "source_summary": {
+          "documenten": 5,
+          "model_kennis": 0,
+          "web": 0,
+          "web_retrieval_actief": false
+        },
+        "type": "done",
+        "verbreding": null,
+        "vervolgvragen": [],
+        "volledige_analyse_aanbod": null,
+        "vraagrouter": null,
+        "web_bronnen": [],
+        "web_retrieval_actief": false
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "text/event-stream; charset=utf-8"
+  },
+  "nawerk": {
+    "embed": [
+      {
+        "aantal": 1,
+        "dims": 1024,
+        "model": "mistral-embed"
+      }
+    ],
+    "modus": "combineren",
+    "retrieval_meta": {
+      "antwoordmodus": "feitelijk",
+      "bronversie_audit": [
+        {
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronstatus": null,
+          "document_id": "<uuid:1>",
+          "documentdatum": null,
+          "documentstatus": "concept",
+          "fonds_id": "<uuid:2>"
+        },
+        {
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronstatus": null,
+          "document_id": "<uuid:1>",
+          "documentdatum": null,
+          "documentstatus": "concept",
+          "fonds_id": "<uuid:2>"
+        },
+        {
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronstatus": null,
+          "document_id": "<uuid:1>",
+          "documentdatum": null,
+          "documentstatus": "concept",
+          "fonds_id": "<uuid:2>"
+        },
+        {
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronstatus": null,
+          "document_id": "<uuid:1>",
+          "documentdatum": null,
+          "documentstatus": "concept",
+          "fonds_id": "<uuid:2>"
+        },
+        {
+          "bibliotheek": "fonds",
+          "bron": "Intern",
+          "bronstatus": null,
+          "document_id": "<uuid:1>",
+          "documentdatum": null,
+          "documentstatus": "concept",
+          "fonds_id": "<uuid:2>"
+        }
+      ],
+      "chunks": [
+        {
+          "document_id": "<uuid:1>",
+          "fts_rang": 1,
+          "id": "<uuid:3>",
+          "rang": 0.0327869,
+          "vec_rang": 1
+        },
+        {
+          "document_id": "<uuid:1>",
+          "fts_rang": null,
+          "id": "<uuid:4>",
+          "rang": 0.0153846,
+          "vec_rang": 5
+        },
+        {
+          "document_id": "<uuid:1>",
+          "fts_rang": null,
+          "id": "<uuid:5>",
+          "rang": 0.015625,
+          "vec_rang": 4
+        },
+        {
+          "document_id": "<uuid:1>",
+          "fts_rang": null,
+          "id": "<uuid:6>",
+          "rang": 0.015873,
+          "vec_rang": 3
+        },
+        {
+          "document_id": "<uuid:1>",
+          "fts_rang": null,
+          "id": "<uuid:7>",
+          "rang": 0.016129,
+          "vec_rang": 2
+        }
+      ],
+      "citaties": {
+        "ongeldig": 0,
+        "totaal": 2
+      },
+      "embedding_query_success": true,
+      "filters": {
+        "bronsoort": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "modus": "alles",
+        "peildatum": "<datum>",
+        "procesinstantie_ids": null
+      },
+      "fondsdiscipline_gedropt": 0,
+      "gereformuleerd": false,
+      "geselecteerd": 5,
+      "methode": "hybride_rrf",
+      "namespace_conventie": "bibliotheek",
+      "opgehaald": 5,
+      "poging_herkomst_geprojecteerd": null,
+      "selectie": {
+        "afgevallen_telling": {
+          "budget": 0,
+          "dedup": 0,
+          "quotum": 0,
+          "weging": 0,
+          "zwak_generiek": 0
+        },
+        "constraints": {
+          "fondsMin": 0,
+          "generiekMin": 0,
+          "maxPerSource": 5,
+          "maxTotal": 10,
+          "perSourceMin": 0
+        },
+        "geselecteerd_per_bibliotheek": {
+          "fonds": 5,
+          "generiek": 0
+        },
+        "intent": "fonds",
+        "regime": "alles"
+      },
+      "toegepaste_fonds_filter": "<uuid:2>"
+    },
+    "volgorde": {
+      "bronversie_audit": [
+        "00 doc=<uuid:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "01 doc=<uuid:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "02 doc=<uuid:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "03 doc=<uuid:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
+        "04 doc=<uuid:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
+      ],
+      "chunks": [
+        "00 chunk=<uuid:3> doc=<uuid:1> rang=0.0327869 fts=1 vec=1",
+        "01 chunk=<uuid:7> doc=<uuid:1> rang=0.016129 fts=geen vec=2",
+        "02 chunk=<uuid:6> doc=<uuid:1> rang=0.015873 fts=geen vec=3",
+        "03 chunk=<uuid:5> doc=<uuid:1> rang=0.015625 fts=geen vec=4",
+        "04 chunk=<uuid:4> doc=<uuid:1> rang=0.0153846 fts=geen vec=5"
+      ],
+      "poging_herkomst": null,
+      "retrieval_pogingen": []
+    }
+  },
+  "status": 200
+}

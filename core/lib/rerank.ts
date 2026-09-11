@@ -22,8 +22,9 @@
 //  de Anthropic-client is injecteerbaar voor hermetische tests.
 // ============================================================================
 
-import type Anthropic from "@anthropic-ai/sdk";
-import { bewaakteAnthropic, isPoortGesloten, type PoortContext } from "./ai-poort";
+import type { AiGateway, GatewayContext } from "./ai-gateway/contract";
+import { isGatewayFout } from "./ai-gateway/fout";
+import { bewaakNaIO } from "./retrieval/afbreken";
 import { HAIKU_MODEL } from "./llm-modellen";
 
 // Tijdsbudget voor de rerank-call. Bewust krap: de rerank staat in het kritieke
@@ -47,7 +48,15 @@ Geef UITSLUITEND een JSON-array terug, exact één object per fragment, in de vo
 Geen toelichting, geen extra tekst.`;
 
 /** Injecteerbare, minimale Anthropic-client (hermetische tests). */
-export type RerankClient = Pick<Anthropic["messages"], "create">;
+export type RerankClient = {
+  create(params: {
+    model: string;
+    max_tokens: number;
+    temperature: number;
+    system: string;
+    messages: { role: "user" | "assistant"; content: string }[];
+  }): Promise<{ content: Array<{ type: string; text?: string }> }>;
+};
 
 // AI-BEGRENZING (besluit 0180). Geen eigen client meer: de call loopt door de
 // centrale poort. Blijft de poort dicht, dan valt de reranker terug op de
@@ -69,6 +78,8 @@ export interface RerankMeta {
 export interface RerankOpties {
   client?: RerankClient;
   timeoutMs?: number;
+  /** PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt. */
+  signal?: AbortSignal;
   model?: string;
   /**
    * AI-BEGRENZING (besluit 0180). Verplicht op het productiepad; alleen bij een
@@ -76,7 +87,11 @@ export interface RerankOpties {
    * valt de reranker terug op de RRF-volgorde in plaats van een ongemeten call
    * te doen.
    */
-  poort?: PoortContext;
+  /**
+   * #311: op het productiepad loopt de rerank door de AI-gateway (taaktype
+   * `rerank`, taakgroep hulp_snel); provider/model komen uit de fondsconfiguratie.
+   */
+  gateway?: { gateway: AiGateway; ctx: GatewayContext };
 }
 
 // ── Zuivere kern ─────────────────────────────────────────────────────────────
@@ -171,14 +186,31 @@ export async function rerankChunks<T extends { id: string }>(
     .join("\n\n");
 
   const timeoutMs = opties?.timeoutMs ?? RERANK_TIMEOUT_MS;
+  // PR-B — een EIGEN controller voor deze call. Wint de timeout (of breekt de
+  // beurt af), dan wordt de onderliggende modelcall daadwerkelijk afgebroken;
+  // met alleen `Promise.race` bleef hij doorlopen en betaalden we hem alsnog.
+  const callCtrl = new AbortController();
+  const opBuitenAbort = () => callCtrl.abort(opties?.signal?.reason);
+
   const c = opties?.client ?? null;
   // Zonder injecteerbare client (productiepad) is een poortcontext verplicht:
   // anders zou hier een ongemeten providercall ontstaan.
-  if (!c && !opties?.poort) {
+  //
+  // LET OP DE VOLGORDE: deze uitgang ligt vóór de `try`, dus vóór het `finally`
+  // dat opruimt. Stond het aanhaken van de luisteraar hierboven, dan bleef hij
+  // op dit pad achter op het beurtsignaal — dezelfde levensloopfout als bij de
+  // afbreekgrendel, in het klein. Eerst weigeren, dan pas resources aanhaken.
+  if (!c && !opties?.gateway) {
     return metFallback(kandidaten, "geen_poortcontext", model);
   }
 
+  if (opties?.signal) {
+    if (opties.signal.aborted) callCtrl.abort(opties.signal.reason);
+    else opties.signal.addEventListener("abort", opBuitenAbort, { once: true });
+  }
+
   let ruw: string;
+  let effectiefModel = model;
   // Timer-handle buiten de try zodat we hem in `finally` altijd opruimen: wint de
   // API-call de race, dan blijft de timeout anders 4s gewapend staan en houdt hij
   // de event loop bezig (dangling teardown-latency op het kritieke chatpad).
@@ -194,21 +226,41 @@ export async function rerankChunks<T extends { id: string }>(
       system: SP_RERANK,
       messages: [
         {
-          role: "user",
+          role: "user" as const,
           content: `Zoekvraag: ${zoekvraag}\n\nFragmenten:\n${genummerd}\n\nJSON:`,
         },
       ],
-    } satisfies Anthropic.Messages.MessageCreateParamsNonStreaming;
-    const call = c
-      ? c.create(params)
-      : bewaakteAnthropic(opties!.poort!, model, (anthropic) => anthropic.messages.create(params));
+    };
+    const call: Promise<{ tekst: string; model: string }> = c
+      ? c.create(params).then((r) => ({
+          tekst: r.content[0]?.type === "text" ? (r.content[0].text ?? "") : "",
+          model,
+        }))
+      : opties!.gateway!.gateway
+          .genereer(opties!.gateway!.ctx, {
+            taaktype: "rerank",
+            systeem: SP_RERANK,
+            berichten: params.messages,
+            maxTokens: 1024,
+            temperature: 0,
+            signal: callCtrl.signal,
+          })
+          .then((r) => ({ tekst: r.tekst, model: r.model }));
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error("rerank_timeout")), timeoutMs);
     });
     const response = await Promise.race([call, timeout]);
-    ruw = response.content[0]?.type === "text" ? response.content[0].text : "";
+    ruw = response.tekst;
+    effectiefModel = response.model;
   } catch (e) {
-    const reden = isPoortGesloten(e)
+    // PR-B — een afbreking van de BEURT is geen rerankfout. De fallback op de
+    // RRF-volgorde bestaat voor een dichte poort, een providerfout of een
+    // onparseerbaar antwoord; vangt hij ook een annulering of deadline, dan
+    // gaat de keten ná het afbreken gewoon door met selecteren en genereren.
+    // De gateway normaliseert een abort naar GatewayFout("geannuleerd"); die
+    // vorm is niet altijd te herkennen, dus het SIGNAAL is gezaghebbend.
+    bewaakNaIO(opties?.signal, e);
+    const reden = isGatewayFout(e) && e.categorie === "poort_gesloten"
       ? `poort_dicht:${e.reden}`
       : e instanceof Error && e.message === "rerank_timeout"
         ? "timeout"
@@ -217,6 +269,9 @@ export async function rerankChunks<T extends { id: string }>(
     return metFallback(kandidaten, reden, model);
   } finally {
     if (timer) clearTimeout(timer);
+    // Verloor de call de race, dan mag hij niet doorlopen.
+    callCtrl.abort();
+    opties?.signal?.removeEventListener("abort", opBuitenAbort);
   }
 
   const scores = parseRerankScores(ruw, set.length);
@@ -228,7 +283,7 @@ export async function rerankChunks<T extends { id: string }>(
     chunks: nieuw,
     meta: {
       methode: "haiku_listwise",
-      model,
+      model: effectiefModel,
       toegepast: true,
       scores: scoresPerId,
       volgorde_voor: kandidaten.map((x) => x.id),

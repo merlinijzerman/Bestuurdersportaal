@@ -20,10 +20,10 @@
 // resultaat i.p.v. token-deltas.
 // -----------------------------------------------------------------------------
 
-import Anthropic from "@anthropic-ai/sdk";
 import type { Antwoordmodus } from "@/core/lib/vraagtype";
-import { genereerViaProvider, type ProviderRequest } from "@/core/lib/llm-providers/index";
+import { genereerViaProvider, type ProviderRequest, type AnthropicStreamClient } from "@/core/lib/llm-providers/index";
 import type { ModelProvider, ReasoningEffort } from "@/core/lib/aqlab/modellen";
+import type { GatewayAanroep, TekstBlok } from "@/core/lib/ai-gateway/contract";
 
 // ── Centrale model- en budget-instellingen (verplaatst uit chat-route) ───────
 // Eén plek zodat chat-call, governance_log én het Lab dezelfde waarde gebruiken.
@@ -31,7 +31,10 @@ import type { ModelProvider, ReasoningEffort } from "@/core/lib/aqlab/modellen";
 // vóór deploy. Overschrijfbaar via de AI_MODEL-env-var — één plek voor A/B-testen
 // en terugschakelen; alle generatie-call-sites (chat-route, agendavoorbereiding)
 // lezen deze constante zodat er geen model-drift tussen paden ontstaat.
-export const AI_MODEL = process.env.AI_MODEL ?? "claude-opus-4-8";
+// #311 (reviewbesluit R2): geen runtime-override via AI_MODEL meer. Dit is de
+// seed-/backfill-default van taakgroep `generatie` (ai_gateway_private) en de
+// AQLab-baseline-constante; op productiepaden beslist de database.
+export const AI_MODEL = "claude-opus-4-8";
 // Verhoogd naar 5000 (was 3200) na de overstap naar Opus 4.8 (besluit 0067):
 // ook feitelijke antwoorden schrijft Opus uitgebreider, dus ruimer plafond tegen
 // afkappen. Plafond, geen streefwaarde; het afkap-signaal (AFGEKAPT_MELDING) vangt
@@ -756,7 +759,7 @@ export function bouwSysteemBlokken(
   /** B1 — opsteltaak: doorgegeven aan bouwStatischeInstructies. Default `false`
    *  → byte-identiek aan voorheen voor élke bestaande call-site (nulgrens G23). */
   opstelToon = false
-): Anthropic.Messages.TextBlockParam[] {
+): TekstBlok[] {
   // Het vertrouwensblok is STATISCH per modus en hoort daarom in het gecachte
   // blok; alleen de sentinel zelf varieert per request en gaat mee in het
   // dynamische (ongecachte) blok. Zo blijft de promptcache effectief én
@@ -814,7 +817,7 @@ export interface EffectieveInstellingen {
 
 export interface GenereerAntwoordParams {
   /** Reeds via bouwSysteemBlokken opgebouwde system-blokken (toon + regels + context). */
-  systeemBlokken: Anthropic.Messages.TextBlockParam[];
+  systeemBlokken: TekstBlok[];
   /** Volledige messages-array incl. de laatste user-turn met de RAG/context-prompt. */
   berichten: { role: "user" | "assistant"; content: string }[];
   model: string;
@@ -833,11 +836,11 @@ export interface GenereerAntwoordParams {
   /** Aantal aangeleverde [Bron N]-bronnen, voor de dangling-citatie-telling. */
   bronnenAantal?: number;
   /** Optioneel: injecteer een Anthropic stream-client (tests/mocks). Default = de gedeelde productie-client. */
-  client?: Pick<Anthropic["messages"], "stream">;
+  client?: AnthropicStreamClient;
   /** Optioneel: injecteer fetch voor de OpenAI/Mistral-adapters (hermetische tests). */
   fetchImpl?: typeof fetch;
-  /** AI-BEGRENZING (besluit 0180): poortcontext voor de live kill switch. */
-  poort?: import("@/core/lib/ai-poort").PoortContext;
+  /** Productiepad: centrale gateway met de actie-ID van de AQLab-preflight. */
+  gateway?: GatewayAanroep;
 }
 
 export interface GenereerAntwoordResultaat {
@@ -878,7 +881,7 @@ export async function genereerAntwoord(
     bronnenAantal = 0,
     client,
     fetchImpl,
-    poort,
+    gateway,
   } = params;
 
   const streamSysteem = metVervolgvragen
@@ -903,11 +906,35 @@ export async function genereerAntwoord(
     redeneermodel,
     reasoningEffort,
   };
-  const providerResultaat = await genereerViaProvider(provider, req, {
-    anthropicClient: client,
-    fetchImpl,
-    poort,
-  });
+  const providerResultaat = gateway
+    ? await (async () => {
+        const verzoek = {
+          taaktype: "aqlab_generatie" as const,
+          systeem: streamSysteem,
+          berichten,
+          maxTokens,
+          temperature,
+          topP,
+          modelOverride: {
+            provider,
+            model,
+            redeneermodel,
+            reasoningEffort: reasoningEffort ?? null,
+          },
+        };
+        const r = provider === "anthropic"
+          ? await (await gateway.gateway.stream(gateway.ctx, verzoek)).afronden()
+          : await gateway.gateway.genereer(gateway.ctx, verzoek);
+        return {
+          tekst: r.tekst,
+          tokens: { in: r.usage.in, out: r.usage.out },
+          latency_ms: r.latencyMs,
+        };
+      })()
+    : await genereerViaProvider(provider, req, {
+        anthropicClient: client,
+        fetchImpl,
+      });
   const volledig = providerResultaat.tekst;
   const latency_ms = providerResultaat.latency_ms;
 

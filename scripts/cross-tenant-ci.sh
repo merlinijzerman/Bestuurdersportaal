@@ -185,6 +185,35 @@ SQL_P5C_NOTITIE="supabase/checks/2026_08_30_p5c_stap_notitie_gedrag.sql"
 # unique-constraint, dat de upsert de aantekeningen van de notities-route LAAT
 # STAAN, en dat de voorbereiding privé blijft — ook voor de voorzitter.
 SQL_T2VB="supabase/checks/2026_09_04_t2_voorbereiding_product.sql"
+# Microsoft 365 fase 1 — private tokenkluis, minimale DB-rol, secdef-paths en
+# exact één fail-safe integratieprofiel per fonds.
+SQL_M365F1="supabase/checks/2026_09_04_microsoft_fase1_connectorfundament.sql"
+# #311 T2 — AI-gateway: privaat schema, minimale rol ai_gateway (exact 3 executes,
+# nul tabelrechten), profiel-eigenaarschap, backfill ×4, fail-closed fondstrigger.
+SQL_AIGW="supabase/checks/2026_09_04_ai_gateway.sql"
+# #322 PR-C — de toelatingssamenvatting (en `gateway`) overleven beide
+# leesniveaus van het auditspoor, met de tellingen intact.
+SQL_TOELATING="supabase/checks/2026_09_11_toelating_auditprojectie.sql"
+# Microsoft 365 fase 2A — delta/cursor/run-integriteit en private Outlook-ACL.
+SQL_M365F2A="supabase/checks/2026_09_04_microsoft_outlook_fase2a.sql"
+# Microsoft 365 fase 3A (#321) — fondsgebonden SharePoint-bron, private ACL,
+# geen kandidaat-schrijfpad, cross-fonds dicht, ontkoppelen niet-destructief.
+SQL_M365F3A="supabase/checks/2026_09_04_microsoft_sharepoint_fase3.sql"
+# Microsoft 365 fase 3B (#321) — documentregister zonder inhoud, één referentie
+# per item, fondsgebonden opzoeking en audit-poort tegen URL's/externe id's.
+SQL_M365F3B="supabase/checks/2026_09_04_microsoft_sharepoint_fase3b_documenten.sql"
+# Microsoft-login fase 1B (#335, T1, besluit 0211) — privaat schema login_private,
+# minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
+# SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
+SQL_M365F1B="supabase/checks/2026_09_06_microsoft_login_fase1b.sql"
+# Microsoft-login fase 1B T2 (#335, V9) — atomische startlimiet in login_private
+# (veertiende gatewayfunctie tel_startpoging; tabel zonder rolrechten).
+SQL_M365F1B_V9="supabase/checks/2026_09_07_microsoft_login_startlimiet.sql"
+# Microsoft-loginbeleid fase 1C (#344, PR-A, besluit 0212) — getypeerde modus
+# uit|optioneel|verplicht met spiegelconstraint, het wachtwoordpad in de Auth-hook,
+# MFA-plichtige break-glass, de eenmalige koppel-/herstelsessie, transactionele
+# activeringspreflight en de server-side geweigerde persoonlijke ontkoppeling.
+SQL_M365F1C="supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql"
 # P5d / #256 — procedure beëindigen/heropenen: rolpoort, I2, snapshot en audit.
 SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.sql"
 # #212 — elke browser-uitvoerbare SECURITY DEFINER heeft een aantoonbaar
@@ -383,6 +412,36 @@ echo "-- T2 voorbereidingen-product (eigen schrijfrecht, overschrijven, aanteken
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T2VB"
 echo
 
+echo "-- Microsoft 365 F1 (private vaultrol, grants, secdef-path en fondsprofiel) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F2A"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3A"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
+echo
+echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
+echo
+echo "-- Microsoft-login F1B T2 (#335, V9): atomische startlimiet tel_startpoging --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B_V9"
+echo
+echo "-- Microsoft-loginbeleid F1C (#344): modi, break-glass, koppel-/herstelsessie, activeringspreflight --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1C"
+echo
+# De SQL-suite roept de hookFUNCTIE aan; deze test praat met de echte Auth-API en
+# met PostgREST, en raakt de app niet aan. Dat is de enige manier om te bewijzen
+# dat een client de verhogingsroute niet kan overslaan door rechtstreeks te
+# refreshen (reviewbevinding P1, #344).
+echo "-- Microsoft-loginbeleid F1C (#344): break-glass — directe GoTrue-refresh zonder het portaal --"
+TEST_DATABASE_URL="$DB_URL" node scripts/breakglass-directe-refresh.mjs
+echo
+echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
+echo
+
+echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van het auditspoor --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_TOELATING"
+echo
+
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5D_BEEINDIGEN"
 echo
@@ -429,6 +488,7 @@ echo "  T7   semantische laag: RLS op semantic_units + waardetypering           
 echo "  T8   semantische extractie: gate H op de schrijffunctie + hints         (DB-laag)"
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "  V3   grants-gate: feitelijke rechten op alle relaties/functies == allowlist (DB-laag)"
+echo "  BG   break-glass: directe GoTrue-refresh geeft nooit een volledige rol zonder venster (API-laag)"
 echo "  BBIND bewijsbinding: één-op-één + DB-validatie/audit + snapshotdekking       (DB-laag)"
 echo "  T2   voorbereiding-product: eigen schrijfrecht, overschrijven, notities intact (DB-laag)"
 echo "============================================================================"

@@ -124,7 +124,8 @@ declare
   v_verwacht text[] := array[
     'afschrift_concept','agendapunt_voorbereiding','aqlab_adhoc','aqlab_run',
     'besluit_concept','chat','document_ingest','embeddings_backfill',
-    'generiek_curatie','notulen_bevestig','ocr','ocr_generiek','reindex_backfill','vergelijken'
+    'generiek_curatie','notulen_bevestig','ocr','ocr_generiek','reindex_backfill',
+    'semantische_extractie','vergelijken'
   ];
   t text;
   fouten text := '';
@@ -147,6 +148,12 @@ begin
   end if;
   if (select via_gebruiker from public.fn_ai_actietype_spec('document_ingest')) then
     fouten := fouten || '  - document_ingest is vanuit een sessie aanroepbaar' || chr(10);
+  end if;
+  if not exists (
+    select 1 from public.fn_ai_actietype_spec('semantische_extractie')
+     where bereik='fonds' and ai_acties=1 and not via_gebruiker and via_systeem and lease_seconden=900
+  ) then
+    fouten := fouten || '  - semantische_extractie is niet fondsgebonden systeemwerk (1 actie/900s)' || chr(10);
   end if;
   if fouten <> '' then raise exception E'FAALT #1d:\n%', fouten; end if;
   raise notice 'OK #1d: actietype-spec compleet en fail-closed.';
@@ -636,6 +643,11 @@ begin
     raise exception 'FAALT #2o: een fondsgebonden actie zonder fonds werd toegelaten (%)', v;
   end if;
 
+  v := public.fn_ai_preflight_systeem('semantische_extractie',null,null,null,0,'k-2o-sem-null','vf',false);
+  if v->>'reden' <> 'fonds_ontbreekt' then
+    raise exception 'FAALT #2o: semantische extractie zonder fonds werd toegelaten (%)', v;
+  end if;
+
   -- En andersom: een platformbreed actietype MET fonds evenmin — anders zou
   -- fondswerk stilzwijgend buiten het fondsquotum vallen.
   v := public.fn_ai_preflight_systeem('generiek_curatie','a1111111-1111-1111-1111-111111111111',
@@ -658,6 +670,14 @@ begin
   reset role;
   if v->>'reden' <> 'actietype_niet_toegestaan_op_dit_pad' then
     raise exception 'FAALT #2o: document_ingest was vanuit een sessie aanroepbaar (%)', v;
+  end if;
+
+  v := public.fn_ai_preflight_systeem(
+    'semantische_extractie','a1111111-1111-1111-1111-111111111111',null,null,0,
+    'k-2o-sem-ok','vf-sem-ok',false
+  );
+  if v->>'uitkomst' <> 'nieuw' or v->>'actie_id' is null then
+    raise exception 'FAALT #2o: fondsgebonden semantische systeemactie werd geweigerd (%)', v;
   end if;
   raise notice 'OK #2o: fonds_id = null is geen bypass; de twee paden zijn gescheiden.';
 end $$;

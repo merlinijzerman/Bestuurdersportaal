@@ -29,11 +29,14 @@ test("CI bouwt één app op één ephemere stack en draait de lokale doelgrendel
 
 test("lokale AI-providerseam is dubbel gegrendeld en kan niet extern routeren", async () => {
   const endpoint = await readFile("core/lib/ai-provider-endpoint.mjs", "utf8");
-  const poort = await readFile("core/lib/ai-poort.ts", "utf8");
+  // #311: de SDK-client wordt in de gateway-adapter gebouwd; dáár moet de
+  // dubbel gegrendelde base-URL-resolutie de enige omleiding zijn.
+  const adapter = await readFile("core/lib/ai-gateway/adapters/anthropic.ts", "utf8");
   assert.match(endpoint, /SEED_DOELOMGEVING !== ["']local["']/);
   assert.match(endpoint, /NEXT_PUBLIC_SUPABASE_URL !== LOKALE_SUPABASE_URL/);
   assert.match(endpoint, /\["127\.0\.0\.1", "localhost"\]/);
-  assert.match(poort, /resolveAnthropicBaseUrl/);
+  assert.match(adapter, /resolveAnthropicBaseUrl\(\)/);
+  assert.match(adapter, /new Anthropic\(\{[\s\S]*?baseURL[\s\S]*?\}\)/);
   assert.doesNotMatch(workflow, /api\.anthropic\.com/);
 });
 

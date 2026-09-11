@@ -22,6 +22,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractTekstMetOcrFallback, type OcrReservering } from "./ocr";
+import type { GatewayAanroep } from "./ai-gateway/contract";
 
 /**
  * Bovengrens op het aantal OCR-pagina's per her-indexering (besluit 0180).
@@ -35,7 +36,8 @@ const MAX_OCR_PAGINAS_HERINDEX = 200;
 /** Optionele begrenzing; zonder reserveerOcr blijft alleen de paginacap over. */
 export interface HerindexBegrenzing {
   maxOcrPaginas?: number;
-  reserveerOcr?: OcrReservering;
+  reserveerOcr: OcrReservering;
+  gateway: GatewayAanroep;
 }
 import { bouwChunkRecords, INDEXERING_VERSIE } from "./chunk-ingest";
 import { ONDERSTEUNDE_TYPES, type Bestandstype } from "./document-extractie";
@@ -62,6 +64,7 @@ export interface HerindexDocument {
 export interface HerindexResultaat {
   status: "verwerkt" | "overgeslagen" | "mislukt";
   aantalChunks: number;
+  prefixModel: string | null;
   embeddingsGelukt: boolean;
   reden?: string;
 }
@@ -82,18 +85,18 @@ async function markeerOvergeslagen(
 export async function herindexeerDocument(
   client: SupabaseClient,
   doc: HerindexDocument,
-  begrenzing?: HerindexBegrenzing
+  begrenzing: HerindexBegrenzing
 ): Promise<HerindexResultaat> {
   // Geen origineel → niet structuur-her-chunkbaar. Stempel als overgeslagen.
   if (!doc.opslag_pad) {
     await markeerOvergeslagen(client, doc.id);
-    return { status: "overgeslagen", aantalChunks: 0, embeddingsGelukt: false, reden: "geen_origineel" };
+    return { status: "overgeslagen", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "geen_origineel" };
   }
 
   const bestandstype = (doc.bestandstype as Bestandstype) || "pdf";
   if (!ONDERSTEUNDE_TYPES.includes(bestandstype)) {
     await markeerOvergeslagen(client, doc.id);
-    return { status: "overgeslagen", aantalChunks: 0, embeddingsGelukt: false, reden: "type_niet_ondersteund" };
+    return { status: "overgeslagen", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "type_niet_ondersteund" };
   }
 
   // Origineel ophalen (RLS dekt toegang bij de anon-client; service-role ziet alles).
@@ -102,7 +105,7 @@ export async function herindexeerDocument(
     .download(doc.opslag_pad);
   if (dlErr || !bestand) {
     console.error(`[reindex] download mislukt voor ${doc.id}:`, dlErr?.message);
-    return { status: "mislukt", aantalChunks: 0, embeddingsGelukt: false, reden: "download_mislukt" };
+    return { status: "mislukt", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "download_mislukt" };
   }
 
   const buffer = Buffer.from(await bestand.arrayBuffer());
@@ -114,27 +117,28 @@ export async function herindexeerDocument(
     // geboekt op het fondsquotum — per poging, want een retry wordt opnieuw
     // gefactureerd.
     extractie = await extractTekstMetOcrFallback(buffer, bestandstype, {
-      maxOcrPaginas: begrenzing?.maxOcrPaginas ?? MAX_OCR_PAGINAS_HERINDEX,
+      maxOcrPaginas: begrenzing.maxOcrPaginas ?? MAX_OCR_PAGINAS_HERINDEX,
       poort: { supabase: client, label: "reindex" },
-      reserveerOcr: begrenzing?.reserveerOcr,
+      reserveerOcr: begrenzing.reserveerOcr,
     });
   } catch (e) {
     console.error(`[reindex] extractie mislukt voor ${doc.id}:`, e);
-    return { status: "mislukt", aantalChunks: 0, embeddingsGelukt: false, reden: "extractie_mislukt" };
+    return { status: "mislukt", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "extractie_mislukt" };
   }
   if (!extractie.tekst || extractie.tekst.trim().length < 100) {
     // Ook na OCR geen bruikbare tekst → niet chunkbaar. Dit is een permanente,
     // document-eigen conditie (net als "geen origineel"), géén tijdelijke fout:
     // stempel als overgeslagen zodat de backfill 'm niet eindeloos opnieuw oppakt.
     await markeerOvergeslagen(client, doc.id);
-    return { status: "overgeslagen", aantalChunks: 0, embeddingsGelukt: false, reden: "geen_tekst" };
+    return { status: "overgeslagen", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "geen_tekst" };
   }
 
-  const { records, aantalChunks, embeddingsGelukt } = await bouwChunkRecords({
+  const { records, aantalChunks, prefixModel, embeddingsGelukt } = await bouwChunkRecords({
     documentId: doc.id,
     titel: doc.titel,
     segmenten: extractie.segmenten,
     poort: { supabase: client, label: "reindex" },
+    gateway: begrenzing.gateway,
   });
 
   // Bestaande chunks vervangen: delete dan insert (RLS-policy "fonds chunks"
@@ -145,7 +149,7 @@ export async function herindexeerDocument(
     .eq("document_id", doc.id);
   if (delErr) {
     console.error(`[reindex] oude chunks verwijderen mislukt voor ${doc.id}:`, delErr.message);
-    return { status: "mislukt", aantalChunks: 0, embeddingsGelukt: false, reden: "verwijderen_mislukt" };
+    return { status: "mislukt", aantalChunks: 0, prefixModel, embeddingsGelukt: false, reden: "verwijderen_mislukt" };
   }
 
   const batch = 50;
@@ -155,7 +159,7 @@ export async function herindexeerDocument(
       .insert(records.slice(i, i + batch));
     if (insErr) {
       console.error(`[reindex] chunk-insert mislukt voor ${doc.id}:`, insErr.message);
-      return { status: "mislukt", aantalChunks: 0, embeddingsGelukt, reden: "insert_mislukt" };
+      return { status: "mislukt", aantalChunks: 0, prefixModel, embeddingsGelukt, reden: "insert_mislukt" };
     }
   }
 
@@ -171,5 +175,5 @@ export async function herindexeerDocument(
     .eq("id", doc.id);
 
   void INDEXERING_VERSIE; // versie-stempel zit al op de records via bouwChunkRecords
-  return { status: "verwerkt", aantalChunks, embeddingsGelukt };
+  return { status: "verwerkt", aantalChunks, prefixModel, embeddingsGelukt };
 }

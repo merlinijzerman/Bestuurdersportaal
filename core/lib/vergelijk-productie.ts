@@ -13,11 +13,9 @@
 // ============================================================================
 
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
-import { bewaakteAnthropic, type PoortContext } from "./ai-poort";
+import type { AiGateway, GatewayContext, NeutraleTool } from "./ai-gateway/contract";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AI_MODEL } from "./generatie-kern";
-import { HAIKU_MODEL } from "./llm-modellen";
 import { deterministischVertrouwd } from "./vergelijk-config";
 import { zoekRelevanteChunksMetMeta } from "./rag";
 import type {
@@ -29,6 +27,19 @@ import type {
   VergelijkDeps,
 } from "./vergelijk-kern";
 import type { Dimensie } from "./vergelijk-types";
+
+/** #311: beide modelcalls lopen door de AI-gateway (fondsconfiguratie + poort + audit). */
+type GatewayDeps = { gateway: AiGateway; ctx: GatewayContext };
+
+/** Eerste tool_use-blok uit de ruwe providerinhoud (server-side extractie). */
+function toolUse(inhoud: unknown[]): { input: unknown } | null {
+  for (const b of inhoud) {
+    if (b && typeof b === "object" && (b as { type?: unknown }).type === "tool_use") {
+      return { input: (b as { input?: unknown }).input };
+    }
+  }
+  return null;
+}
 
 // Reproduceerbaarheids-stempels (belanden in comparison_run). Bump bij een bewuste
 // wijziging aan het prompt- of comparator-gedrag.
@@ -90,13 +101,15 @@ function paginaVoorEvidence(passages: PassageLite[], evidence: string | null): n
 }
 
 // ── Haiku: extra (niet-catalogus) dimensies afleiden ─────────────────────────
-const DIM_TOOL: Anthropic.Tool = {
-  name: "stel_dimensies_voor",
-  description:
+const DIM_TOOL: Extract<NeutraleTool, { soort: "functie" }> = {
+  soort: "functie",
+  verplicht: true,
+  naam: "stel_dimensies_voor",
+  beschrijving:
     "Stel de bestuurlijke vergelijkingsdimensies voor die in BEIDE documenten spelen " +
     "en NOG NIET in de gegeven cataloguslijst staan. Alleen concrete, vergelijkbare " +
     "grootheden (parameters, bedragen, datums, beleidskeuzes).",
-  input_schema: {
+  schema: {
     type: "object",
     properties: {
       dimensies: {
@@ -116,7 +129,7 @@ const DIM_TOOL: Anthropic.Tool = {
 };
 
 async function haalExtraDimensies(
-  poort: PoortContext,
+  gw: GatewayDeps,
   fondsId: string,
   bronDocumentId: string,
   doelDocumentId: string,
@@ -133,18 +146,16 @@ async function haalExtraDimensies(
     const tekstDoel = doel.chunks.map((c) => c.aangeleverde_passage ?? c.tekst).join("\n---\n").slice(0, 8000);
     const bekend = catalogus.map((d) => d.key).join(", ") || "(geen)";
 
-    const resp = await bewaakteAnthropic(poort, HAIKU_MODEL, (anthropic) =>
-      anthropic.messages.create({
-      model: HAIKU_MODEL,
-      max_tokens: 512,
+    const resp = await gw.gateway.genereer(gw.ctx, {
+      taaktype: "vergelijk_dimensies",
+      maxTokens: 512,
       temperature: 0,
-      system:
+      systeem:
         "Je bent een analist die twee versies van een pensioenfonds-document vergelijkt. " +
         "Je benoemt uitsluitend concrete, vergelijkbare dimensies die in BEIDE teksten " +
         "voorkomen en niet al in de cataloguslijst staan. Verzin niets.",
       tools: [DIM_TOOL],
-      tool_choice: { type: "tool", name: DIM_TOOL.name },
-      messages: [
+      berichten: [
         {
           role: "user",
           content:
@@ -153,10 +164,9 @@ async function haalExtraDimensies(
             `DOCUMENT B (doel):\n"""\n${tekstDoel}\n"""`,
         },
       ],
-      })
-    );
-    const blok = resp.content.find((b) => b.type === "tool_use");
-    if (!blok || blok.type !== "tool_use") return [];
+    });
+    const blok = toolUse(resp.inhoud);
+    if (!blok) return [];
     const input = blok.input as { dimensies?: { key?: string; label?: string }[] };
     const rijen = Array.isArray(input.dimensies) ? input.dimensies : [];
     const bekendSet = new Set(catalogus.map((d) => d.key.toLowerCase()));
@@ -171,13 +181,15 @@ async function haalExtraDimensies(
 }
 
 // ── Opus: LLM-waardevergelijking per dimensie ────────────────────────────────
-const CMP_TOOL: Anthropic.Tool = {
-  name: "vergelijk_dimensie",
-  description:
+const CMP_TOOL: Extract<NeutraleTool, { soort: "functie" }> = {
+  soort: "functie",
+  verplicht: true,
+  naam: "vergelijk_dimensie",
+  beschrijving:
     "Bepaal de waarde van de dimensie in DOCUMENT A (bron) en DOCUMENT B (doel), met " +
     "een verbatim bronzin als bewijs, en of de twee waarden gelijk zijn. Laat een " +
     "waarde leeg (null) als de dimensie in dat document niet voorkomt. Verzin niets.",
-  input_schema: {
+  schema: {
     type: "object",
     properties: {
       bron_value: { type: ["string", "null"], description: "waarde in A, exact zoals in de tekst; null indien afwezig" },
@@ -195,7 +207,7 @@ function nummerPassages(passages: PassageLite[]): string {
   return passages.map((p, i) => `[${i + 1}${p.page != null ? `, p.${p.page}` : ""}] ${p.tekst}`).join("\n\n");
 }
 
-async function vergelijkWaardeLLM(poort: PoortContext, input: {
+async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
   dimensie: Dimensie;
   passagesBron: PassageLite[];
   passagesDoel: PassageLite[];
@@ -206,18 +218,16 @@ async function vergelijkWaardeLLM(poort: PoortContext, input: {
     doel_value: null, doel_evidence: null, doel_page: null, gelijk: false,
   };
   try {
-    const resp = await bewaakteAnthropic(poort, VERGELIJK_MODEL, (anthropic) =>
-      anthropic.messages.create({
-      model: VERGELIJK_MODEL,
-      max_tokens: 700,
+    const resp = await gw.gateway.genereer(gw.ctx, {
+      taaktype: "vergelijk_waarde",
+      maxTokens: 700,
       temperature: 0,
-      system:
+      systeem:
         "Je vergelijkt één specifieke dimensie tussen twee versies van een pensioenfonds-" +
         "document. Neem bewijszinnen LETTERLIJK over. Bind een waarde alleen als de tekst " +
         "die ondubbelzinnig ondersteunt; bij twijfel of afwezigheid: null. Geen parafrase, verzin niets.",
       tools: [CMP_TOOL],
-      tool_choice: { type: "tool", name: CMP_TOOL.name },
-      messages: [
+      berichten: [
         {
           role: "user",
           content:
@@ -226,10 +236,9 @@ async function vergelijkWaardeLLM(poort: PoortContext, input: {
             `DOCUMENT B (doel):\n${nummerPassages(passagesDoel)}`,
         },
       ],
-      })
-    );
-    const blok = resp.content.find((b) => b.type === "tool_use");
-    if (!blok || blok.type !== "tool_use") return leeg;
+    });
+    const blok = toolUse(resp.inhoud);
+    if (!blok) return leeg;
     const r = blok.input as Partial<LLMVergelijkUitkomst>;
     const bron_evidence = (r.bron_evidence as string | null) ?? null;
     const doel_evidence = (r.doel_evidence as string | null) ?? null;
@@ -296,16 +305,21 @@ async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer): Prom
 }
 
 // ── Deps-fabriek ─────────────────────────────────────────────────────────────
-export function productieDeps(ctx: { supabase: SupabaseClient; fondsId: string }): VergelijkDeps {
+export function productieDeps(ctx: {
+  supabase: SupabaseClient;
+  fondsId: string;
+  gateway: AiGateway;
+  gatewayCtx: GatewayContext;
+}): VergelijkDeps {
   const { supabase, fondsId } = ctx;
-  const poort = { supabase, label: "vergelijk" };
+  const gw: GatewayDeps = { gateway: ctx.gateway, ctx: ctx.gatewayCtx };
   return {
     leesConcepten: () => leesConcepten(supabase),
     leesSemanticUnits: (documentId) => leesSemanticUnits(supabase, documentId),
     bepaalExtraDimensies: ({ bronDocumentId, doelDocumentId, catalogus }) =>
-      haalExtraDimensies(poort, fondsId, bronDocumentId, doelDocumentId, catalogus),
+      haalExtraDimensies(gw, fondsId, bronDocumentId, doelDocumentId, catalogus),
     retrieveerPassages: (documentId, dimensie) => haalPassages(fondsId, documentId, dimensie),
-    vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(poort, input),
+    vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(gw, input),
     persisteer: (inv) => persisteer(supabase, inv),
     deterministischVertrouwd: deterministischVertrouwd(),
   };

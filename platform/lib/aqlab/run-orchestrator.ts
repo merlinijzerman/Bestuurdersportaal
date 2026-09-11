@@ -25,9 +25,13 @@ import { beoordeelMetJudge, type JudgeCriterium, type JudgeInput } from "./judge
 import { fixtureTekst } from "./fixtures";
 import {
   preflightSysteem,
+  beheerSleutel,
+  rondAf,
   systeemSleutel,
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
+import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import type { GatewayAanroep } from "@/core/lib/ai-gateway/contract";
 import type { TestcaseSpec } from "./checks/index";
 import {
   berekenConsistentie,
@@ -304,7 +308,6 @@ async function verwerkJob(
   // echt geld — generatie én een Opus-judge. Eén job = één AI-actie,
   // platformbreed (geen fonds). Weigert de begrenzing, dan draait deze job
   // niet; dat is een beleidsuitkomst, geen storing.
-  const aiPoort = { supabase: svc, label: "aqlab.run" };
   const aiPf = await preflightSysteem(svc, {
     actietype: "aqlab_run",
     fondsId: null,
@@ -316,14 +319,26 @@ async function verwerkJob(
     idempotentie: systeemSleutel(job.id, "aqlab_run", 1),
     vingerafdruk: vingerafdruk({ jobId: job.id }),
   });
-  if (aiPf.uitkomst !== "nieuw") {
+  if (aiPf.uitkomst !== "nieuw" && aiPf.uitkomst !== "duplicaat_in_uitvoering") {
     throw new Error(
       `aqlab_ai_begrenzing: ${aiPf.uitkomst === "geweigerd" ? aiPf.reden : aiPf.uitkomst}`
     );
   }
+  if (!aiPf.actieId) throw new Error("aqlab_ai_begrenzing: reservering_ontbreekt");
+  const gateway: GatewayAanroep = {
+    gateway: productieGateway(),
+    ctx: {
+      supabase: svc,
+      fondsId: null,
+      actor: { soort: "systeem", proces: "aqlab-run" },
+      actieId: aiPf.actieId,
+      correlatieId: job.id,
+      label: "aqlab.run",
+    },
+  };
 
   // Generatie via de productiekern.
-  const gen = await genereerViaAdapter({ vraag, rol, fixtures, modelConfig, poort: aiPoort });
+  const gen = await genereerViaAdapter({ vraag, rol, fixtures, modelConfig, gateway });
 
   // Evaluatie.
   const evalResultaat = await evalueerOutput(
@@ -338,7 +353,7 @@ async function verwerkJob(
       reviewVerplicht,
     },
     judgeEnabled
-      ? { judge: (c: JudgeCriterium, inp: JudgeInput) => beoordeelMetJudge(c, inp, undefined, aiPoort) }
+      ? { judge: (c: JudgeCriterium, inp: JudgeInput) => beoordeelMetJudge(c, inp, { gateway }) }
       : {}
   );
 
@@ -450,6 +465,7 @@ async function verwerkJob(
     gate_status: evalResultaat.gate_status,
     quality_score: evalResultaat.quality_score,
   });
+  await rondAf(svc, aiPf.actieId, "voltooid", `aqlab_run:${run.id}`);
 
   return { kosten };
 }
@@ -809,6 +825,29 @@ export async function draaiAdHocConsistentieSync(
 
   const modelConfig = config.modelConfig ?? await laadModelConfig(svc, config.model_configuration_id);
   const fixtures = await laadFixtures(svc, config.fixtureIds ?? []);
+  const idempotentie = beheerSleutel("aqlab_adhoc");
+  const aiPf = await preflightSysteem(svc, {
+    actietype: "aqlab_adhoc",
+    fondsId: null,
+    provider: (modelConfig.provider ?? "anthropic") as "anthropic" | "mistral" | "openai",
+    model: modelConfig.model ?? null,
+    idempotentie,
+    vingerafdruk: vingerafdruk({ vraag: config.vraag, iteraties: n, model: modelConfig.model ?? null }),
+  });
+  if (aiPf.uitkomst !== "nieuw" || !aiPf.actieId) {
+    throw new Error(`aqlab_ai_begrenzing: ${aiPf.uitkomst}`);
+  }
+  const gateway: GatewayAanroep = {
+    gateway: productieGateway(),
+    ctx: {
+      supabase: svc,
+      fondsId: null,
+      actor: { soort: "systeem", proces: "aqlab-adhoc" },
+      actieId: aiPf.actieId,
+      correlatieId: idempotentie,
+      label: "aqlab.adhoc",
+    },
+  };
 
   const metingen: IteratieMeting[] = [];
   const views: AdHocIteratieView[] = [];
@@ -821,7 +860,7 @@ export async function draaiAdHocConsistentieSync(
   }[] = [];
 
   for (let i = 1; i <= n; i++) {
-    const gen = await genereerViaAdapter({ vraag: config.vraag, rol: config.rol ?? undefined, fixtures, modelConfig });
+    const gen = await genereerViaAdapter({ vraag: config.vraag, rol: config.rol ?? undefined, fixtures, modelConfig, gateway });
     const evalResultaat = await evalueerOutput(
       {
         vraag: config.vraag,
@@ -833,7 +872,7 @@ export async function draaiAdHocConsistentieSync(
         criteria,
         reviewVerplicht: false,
       },
-      judgeEnabled ? { judge: (c: JudgeCriterium, inp: JudgeInput) => beoordeelMetJudge(c, inp) } : {}
+      judgeEnabled ? { judge: (c: JudgeCriterium, inp: JudgeInput) => beoordeelMetJudge(c, inp, { gateway }) } : {}
     );
     const kosten = schatKosten(gen.effectieveInstellingen.model_name, gen.tokengebruik.in, gen.tokengebruik.out) ?? 0;
 
@@ -875,6 +914,7 @@ export async function draaiAdHocConsistentieSync(
 
   // persist_mode = none → NIETS persistent (alleen tonen). Geen run-rij, geen outputs.
   if (persistMode === "none") {
+    await rondAf(svc, aiPf.actieId, "voltooid");
     return { aggregaat, iteraties: views, persisted: false, run_id: null, persist_mode: persistMode, vraag: config.vraag };
   }
 
@@ -959,6 +999,7 @@ export async function draaiAdHocConsistentieSync(
     consistency_status: aggregaat.consistency_status,
     release_eligible: aggregaat.release_eligible,
   });
+  await rondAf(svc, aiPf.actieId, "voltooid", `aqlab_run:${run_id}`);
 
   return { aggregaat, iteraties: views, persisted: true, run_id, persist_mode: persistMode, vraag: config.vraag };
 }

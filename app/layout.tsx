@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Newsreader, Inter } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
+import RouteBewusteAnalytics from "@/core/components/RouteBewusteAnalytics";
 import { isPreviewOmgeving } from "@/core/lib/deploy-omgeving";
 import "./globals.css";
 
@@ -50,7 +50,8 @@ export default function RootLayout({
             PREVIEW · GEEN PRODUCTIEOMGEVING
           </div>
         )}
-        <Analytics />
+        {/* Routebewust: op /koppelen (herstelflow, #344) rendert dit niets. */}
+        <RouteBewusteAnalytics />
       </body>
     </html>
   );

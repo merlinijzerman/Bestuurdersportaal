@@ -20,8 +20,22 @@
 // ============================================================
 
 import { bewaakteProviderCall, type PoortContext } from "./ai-poort";
+import { slaapMetSignaal, isAfbreking } from "./retrieval/afbreken";
+import { resolveMistralBaseUrl } from "./ai-provider-endpoint.mjs";
 
-const EMBED_URL = "https://api.mistral.ai/v1/embeddings";
+const EMBED_ORIGIN = "https://api.mistral.ai";
+const EMBED_PAD = "/v1/embeddings";
+
+// #349 (F4-T1b) — dezelfde, dubbel gegrendelde omleiding als de Anthropic-client
+// (#311). Zonder deze seam valt de keten lokaal en in CI altijd terug op FTS en
+// blijft het hybride pad — in productie het primaire pad — ongekarakteriseerd.
+// `resolveMistralBaseUrl` geeft ALLEEN iets terug bij WP4_E2E_EMBED_PROVIDER=local
+// én SEED_DOELOMGEVING=local én een lokale Supabase-URL; in elke andere vorm gooit
+// hij. Preview en Productie kunnen hier dus niet in belanden.
+function embedUrl(): string {
+  const lokaal = resolveMistralBaseUrl(process.env);
+  return `${lokaal ?? EMBED_ORIGIN}${EMBED_PAD}`;
+}
 
 // Centrale config — wisselen van model/dim vergt een volledige re-embed, dus
 // nooit verspreid hardcoderen. `embedding_model` wordt bij elke chunk vastgelegd.
@@ -59,7 +73,8 @@ export interface EmbedStats {
 async function embedBatch(
   ctx: PoortContext,
   teksten: string[],
-  stats?: EmbedStats
+  stats?: EmbedStats,
+  signal?: AbortSignal
 ): Promise<number[][]> {
   const key = process.env.MISTRAL_API_KEY;
   if (!key) throw new Error("MISTRAL_API_KEY ontbreekt in de omgeving");
@@ -68,8 +83,11 @@ async function embedBatch(
   // verzoek na een 429/5xx; die pogingen vallen binnen dezelfde toestemming.
   return bewaakteProviderCall(ctx, "mistral", EMBED_MODEL, async () => {
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
-    const res = await fetch(EMBED_URL, {
+    const res = await fetch(embedUrl(), {
       method: "POST",
+      // PR-B — het samengestelde afbreek-/deadlinesignaal. Zonder dit loopt een
+      // embeddingcall van een geannuleerde beurt gewoon door.
+      signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${key}`,
@@ -88,7 +106,9 @@ async function embedBatch(
         stats.retries++;
         if (res.status === 429) stats.rate429++;
       }
-      await slaap(500 * 2 ** poging); // 0,5s → 1s → 2s
+      // De backoff moet MEEBREKEN: anders wacht de keten na een annulering
+      // eerst nog twee seconden en doet dáárna een poging die niet meer mag.
+      await slaapMetSignaal(500 * 2 ** poging, signal); // 0,5s → 1s → 2s
       continue;
     }
     throw new Error(`Mistral embeddings ${res.status}`);
@@ -104,7 +124,8 @@ async function embedBatch(
 export async function embedTeksten(
   ctx: PoortContext,
   teksten: string[],
-  stats?: EmbedStats
+  stats?: EmbedStats,
+  signal?: AbortSignal
 ): Promise<number[][]> {
   const resultaat: number[][] = [];
   let i = 0;
@@ -120,14 +141,14 @@ export async function embedTeksten(
       batch.push(teksten[i]);
       i++;
     }
-    resultaat.push(...(await embedBatch(ctx, batch, stats)));
+    resultaat.push(...(await embedBatch(ctx, batch, stats, signal)));
   }
   return resultaat;
 }
 
 // Eén tekst embedden (bijv. een zoekvraag bij retrieval).
-export async function embedTekst(ctx: PoortContext, tekst: string): Promise<number[]> {
-  const [vector] = await embedTeksten(ctx, [tekst]);
+export async function embedTekst(ctx: PoortContext, tekst: string, signal?: AbortSignal): Promise<number[]> {
+  const [vector] = await embedTeksten(ctx, [tekst], undefined, signal);
   return vector;
 }
 

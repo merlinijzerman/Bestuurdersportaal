@@ -2379,3 +2379,62 @@ create table if not exists public.procedure_afschriften (
 -- Schrijven loopt uitsluitend via fn_schrijf_handeling(text,text,text,int,uuid),
 -- die gebruiker en fonds server-side uit auth.uid() afleidt. De wrapper roept deze
 -- RPC pas aan bij ENFORCE_AUDIT=on; de code-deploy is daarom apart van deze DDL.
+
+-- ── Microsoft 365 fase 1 — connectorfundament ─────────────────────────────
+-- Bron van waarheid: supabase/migrations/2026_09_04_microsoft_fase1_connectorfundament.sql.
+-- public.fonds_integratie_profielen: exact één profiel per fonds, expliciet
+-- `eigen|microsoft`; bestaande fondsen zijn `eigen`. authenticated kan uitsluitend
+-- het eigen profiel lezen; de Preview-pilotflag is niet via de browser schrijfbaar.
+-- Een AFTER INSERT-trigger maakt voor ieder nieuw fonds fail-safe profiel `eigen`.
+-- microsoft_private.oauth_transacties, verbindingen, token_cache en audit_log zijn
+-- RLS-on/private en hebben geen anon/authenticated-grants. Alleen de loginrol
+-- microsoft_vault mag de benoemde SECURITY DEFINER-functies aanroepen. Cache en
+-- OAuth-materiaal zijn AES-256-GCM-ciphertext; er zijn geen browser-toegankelijke
+-- decryptie- of cachefuncties.
+-- ── AI-gateway — configuratielaag per fonds (M365 fase 2B, #311, T2) ──────
+-- Bron van waarheid: supabase/migrations/2026_09_04_ai_gateway_configuratie.sql.
+-- ai_gateway_private.provider_profiel: platform- (eigenaar_fonds_id NULL) of
+--   fondsgebonden profiel; alleen secret_ref/endpoint_ref als SLEUTELNAAM, nooit
+--   een key of URL. Seed: platform-anthropic, platform-openai, platform-mistral.
+-- ai_gateway_private.taakgroep_default: productbeleid per taakgroep
+--   (generatie|hulp_sterk|concept|hulp_snel), uitsluitend platformprofielen.
+-- ai_gateway_private.fonds_configuratie: fonds × taakgroep → profiel + model,
+--   FK naar public.ai_model_allowlist; trigger dwingt af: profiel actief, provider
+--   consistent, eigenaar platform óf dit fonds, reden bij update, versie++.
+-- ai_gateway_private.fonds_configuratie_log en gateway_log: append-only; de
+--   gateway_log is inhoudsvrij (provider, model, profiel, versies, resultaat-
+--   categorie, latency, tokens, correlatie-id) — geen prompt of documentinhoud.
+-- Alle vijf: RLS aan, geen policies, nul rechten voor anon/authenticated/
+--   service_role. Alleen loginrol ai_gateway mag lees_config(uuid,text),
+--   schrijf_log(jsonb), lees_log_platform(uuid,int) en lees_platform_profiel(text)
+--   uitvoeren (SECURITY DEFINER,
+--   gepinde search_path). public.fn_fonds_ai_configuratie_standaard() (AFTER
+--   INSERT op fondsen, SECURITY DEFINER, voor niemand uitvoerbaar) maakt voor elk
+--   nieuw fonds vier rijen transactioneel; onvolledige defaults laten de
+--   fondscreatie falen. Backfill: elk bestaand fonds vier rijen op platform-anthropic
+--   met het huidige model per taakgroep.
+
+-- ── Microsoft 365 — Outlook fase 2A (read-only, #310) ─────────────────────
+-- Fase 2A voegt private agenda_configuraties, sync_runs en event_koppelingen toe.
+-- Calendar/event-id's en delta-cursors blijven private; de publieke vergadering
+-- draagt alleen een veilige Outlook-projectie, zonder ruwe deelnemersgegevens.
+
+-- ── Microsoft 365 — SharePoint fase 3A (read-only bronregistratie, #321) ────
+-- Bron van waarheid: supabase/migrations/2026_09_04_microsoft_sharepoint_fase3.sql.
+-- microsoft_private.sharepoint_kandidaatsites (per runbook gevuld, geen
+-- schrijffunctie voor het portaal) en microsoft_private.sharepoint_bronnen
+-- (fonds ↔ verbinding ↔ tenant/site/drive/rootmap, configuratieversie) zijn
+-- RLS-on/private zonder anon/authenticated/vault-tabelrechten. Vijf gepinde
+-- SECURITY DEFINER-functies (lees_kandidaten, lees_bron, configureer_bron,
+-- registreer_controle, ontkoppel_bron) zijn alleen voor de loginrol
+-- microsoft_vault. Site-, drive- en item-id's zijn niet browserleesbaar.
+-- Fondsvlag: fonds_feature_flags.microsoft_sharepoint_fase3 (JSON true).
+
+-- ── Microsoft 365 — SharePoint fase 3B (documentreferenties, #321) ──────────
+-- Bron van waarheid: supabase/migrations/2026_09_04_microsoft_sharepoint_fase3b_documenten.sql.
+-- microsoft_private.sharepoint_documenten vertaalt een lokale uuid naar
+-- (bron, drive, item) met minimale metadata en eTag/cTag; geen inhoud, tekst,
+-- chunks, embeddings of preview-URL. Eén rij per (bron, item). Vier extra
+-- SECURITY DEFINER-functies alleen voor microsoft_vault; de audit-functie
+-- weigert details met URL's, tokens of externe id's. Zichtbaarheid en preview
+-- worden per request live via Graph met het token van de gebruiker bepaald.

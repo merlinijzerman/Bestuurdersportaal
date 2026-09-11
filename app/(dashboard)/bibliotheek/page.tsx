@@ -22,6 +22,7 @@ import {
 } from "@/core/lib/document-bijzonderheden";
 import { BRONSTATUS_LABEL } from "@/core/lib/document-status-transities";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
+import SharePointDocumentenSectie from "./_components/SharePointDocumentenSectie";
 import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 
 interface Document {
@@ -926,6 +927,8 @@ export default function BibliotheekPage() {
           </div>
         </div>
       )}
+      {/* Microsoft 365 fase 3 (#321): rendert niets zolang de fondsvlag uit staat. */}
+      {actieveTab === "fonds" && <SharePointDocumentenSectie />}
       </>
       )}
 

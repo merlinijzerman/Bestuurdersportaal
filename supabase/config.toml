@@ -57,6 +57,16 @@ max_enrolled_factors = 10
 enroll_enabled = true
 verify_enabled = true
 
+# #344 (besluit 0212): de Custom Access Token Hook draait in de wegwerpstack mee,
+# zodat de E2E-securityflows het ECHTE pad meten — inclusief de weigering van een
+# wachtwoordlogin in modus `verplicht` en de beperkte rol die een break-glass- of
+# koppelsessie krijgt. Zonder deze regels loopt elke lokale login langs de hook
+# heen en bewijst een groene E2E niets over de afdwinging. In fase 1B stond de hook
+# hier bewust nog uit omdat er toen niets te meten viel op het wachtwoordpad.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/fn_access_token_hook"
+
 [studio]
 enabled = false
 

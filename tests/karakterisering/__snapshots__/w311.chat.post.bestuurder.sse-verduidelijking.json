@@ -1,0 +1,30 @@
+{
+  "body": {
+    "events": [
+      {
+        "opties": [
+          {
+            "intent": "algemeen",
+            "label": "In algemene zin"
+          },
+          {
+            "intent": "fonds",
+            "label": "Voor mijn fonds"
+          }
+        ],
+        "type": "verduidelijking",
+        "vraag": "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?"
+      },
+      {
+        "type": "done"
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "text/event-stream; charset=utf-8"
+  },
+  "nawerk": {
+    "provider_verzoeken": []
+  },
+  "status": 200
+}

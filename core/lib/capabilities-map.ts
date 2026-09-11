@@ -32,6 +32,11 @@ export type Capability =
   | "organisation.profile.manage"
   // Increment T8 (besluit 0040 / v0.4 §9) — beheer van de fonds-configuratielaag.
   | "fonds.config.manage"
+  // M365 fase 1C (#344, besluit 0212) — organisatiebreed Microsoft-loginbeleid:
+  // modus zetten, bindingen intrekken, break-glass en koppel-/herstelsessies.
+  // BEWUST SMALLER dan fonds.config.manage: deze gate kan een heel fonds
+  // buitensluiten, dus alleen de rol `beheerder` draagt hem.
+  | "login.beleid.manage"
   // Increment T11 — LEESrecht op stuurinformatie en klantbeeld (aggregaat).
   | "stuurinformatie.view"
   | "klantbeeld.view"
@@ -94,6 +99,8 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "profile.manage.own",
     "organisation.profile.manage",
     "fonds.config.manage",
+    // #344: uitsluitend de beheerder (zie de toelichting bij de capability).
+    "login.beleid.manage",
     "stuurinformatie.view",
     "stuurinformatie.manage",
     "klantbeeld.view",
