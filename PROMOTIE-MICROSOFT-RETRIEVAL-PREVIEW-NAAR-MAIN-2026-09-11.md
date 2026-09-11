@@ -1,10 +1,14 @@
 # Promotie `preview` → `main` — Microsoft 365-fundament, AI-gateway en retrieval T2-1
 
-**Peildatum:** 11 september 2026  
-**Bron:** `origin/preview` op `1b70bf2`  
-**Doel:** `origin/main` op `c43bc53`  
-**Huidige delta:** 106 commits, 358 bestanden (+40.060 / −3.999).  
-**Releaseoordeel:** **CONDITIONELE GO** — niet mergen voordat de twee blokkers in §1 zijn gesloten en de Supabase-eerst-volgorde uit §5 is uitgevoerd.
+**Peildatum:** 11 september 2026
+
+**Bron:** `origin/preview` op `8c7c49f`
+
+**Doel:** `origin/main` op `55f4da6`
+
+**Huidige delta:** 110 commits, 359 bestanden (+40.119 / −3.999).
+
+**Releaseoordeel:** **CONDITIONELE GO** — de branchreconciliaties zijn gesloten; niet mergen voordat de productieprovisioning uit §1/§5 is uitgevoerd en de opdrachtgever daarna afzonderlijk akkoord geeft.
 
 De release brengt het duale productmodel naar productie: bestaande fondsen blijven op de eigen
 variant werken; Microsoft-onderdelen worden per fonds afzonderlijk en standaard uit aangezet.
@@ -13,28 +17,22 @@ Daarom moeten de gatewayrol, databaseverbinding en migratie vóór de code-deplo
 
 ---
 
-## 1. Blokkers vóór het openen/mergen van de promotie-PR
+## 1. Blokker vóór het mergen van de promotie-PR
 
-### B1 — `main` en `preview` zijn uiteengelopen op de ingestworker
+### Gesloten — `main` en `preview` zijn weer gelijkgericht
 
-`main` bevat productiehotfix #359 (`c43bc53`); `preview` bevat de bredere gateway-ingestwijziging
-uit #358. Een proefmerge geeft een echt contentconflict in
-`platform/lib/ingest-orchestrator.ts`.
+De productiehotfix #359 en de bredere Preview-ingestwijziging #358 zijn via PR #371
+gereconcilieerd. De Preview-semantiek is behouden en met een regressietest vastgelegd:
+één reservering per logische ingestjob, generieke ingest/OCR globaal gequoteerd en
+fondsdocumenten fondsgebonden. Daarna is de rechtstreeks op `main` uitgebrachte website v0.8
+(#365) via PR #372 zonder conflicten teruggebracht in `preview`.
 
-De beveiligingskern uit #359 is op Preview behouden: generieke stukken tellen globaal via
-`generiek_curatie`/`ocr_generiek`, fondsdocumenten via het fonds. Het resterende inhoudelijke
-verschil is de ingest-idempotentie:
+`origin/main` op `55f4da6` is nu aantoonbaar een voorouder van `origin/preview` op `8c7c49f`.
+De promotie kan daardoor uitsluitend vooruit mergen en draait geen productiehotfix of websitewerk
+terug. PR #371 en #372 waren beide volledig groen, inclusief cross-tenant/DB-laag,
+karakterisering, E2E en Vercel-builds.
 
-- `main`: een nieuwe reservering per retry;
-- `preview`: één reservering per logische ingestjob; yield/backoff hergebruikt dezelfde actie;
-- OCR blijft op beide paden per providerpoging reserveren.
-
-**Voorstel:** behoud de Preview-semantiek. Dat sluit aan op het gatewaycontract (één AI-actie per
-logische ingestjob), terwijl betaalde OCR-retries apart blijven tellen. Verwerk dit eerst via een
-reconciliatie-PR naar `preview`, met een regressietest die zowel de globale generieke scope als de
-idempotentiesleutel vastlegt. Pas daarna kan de promotie-PR schoon van `preview` naar `main`.
-
-### B2 — productie moet vóór de code zijn geprovisioneerd
+### Open — productie moet vóór de code zijn geprovisioneerd
 
 De nieuwe code verwacht databasefuncties en minimale loginrollen. Vooral de AI-gateway en de
 Microsoft-loginsessieguard falen gesloten wanneer hun databasecontract ontbreekt. De rollen,
@@ -140,10 +138,10 @@ zijn. Zie §5.
 
 | Tranche | Nog te bouwen |
 |---|---|
-| T2-2 | `/zoeken` en `/vergelijk` volledig door de orkestratie; scopevalidatie, PII-gate en één bronvorm |
-| T2-3 | Volledige versie-identiteit per passage en `correlationId` in retrievalmetadata |
-| T2-4 | Vijf directe evidencelezingen achter het contract; typed en begrensd contextcontract voor de overige modelcontext |
-| T2-5 | Microsoft-adapterstub en contracttests voor capabilities, versie-/rechtenbewijs, truncatie en alle foutcategorieën |
+| T2-2 | [#369](https://github.com/merlinijzerman/Bestuurdersportaal/issues/369) — `/zoeken` en `/vergelijk` volledig door de orkestratie; scopevalidatie, PII-gate en één bronvorm |
+| T2-3 | [#367](https://github.com/merlinijzerman/Bestuurdersportaal/issues/367) — volledige versie-identiteit per passage en `correlationId` in retrievalmetadata |
+| T2-4 | [#368](https://github.com/merlinijzerman/Bestuurdersportaal/issues/368) — vijf directe evidencelezingen achter het contract; typed en begrensd contextcontract voor de overige modelcontext |
+| T2-5 | [#370](https://github.com/merlinijzerman/Bestuurdersportaal/issues/370) — Microsoft-adapterstub en contracttests voor capabilities, versie-/rechtenbewijs, truncatie en alle foutcategorieën |
 
 ### SharePoint live retrieval
 
@@ -232,7 +230,7 @@ van deze codepromotie.
 
 ### 5.5 Deploy en smoke
 
-1. Reconciliatie-PR naar `preview` groen en Preview opnieuw waargenomen.
+1. Reconciliatie-PR's #371 en #372 naar `preview` groen; controleer vlak voor promotie opnieuw dat `main` een voorouder van `preview` is.
 2. Productierollen, migraties, checks en minimale gatewayconfiguratie gereed.
 3. Promotie-PR uitsluitend `preview` → `main`; alle verplichte checks en deployments groen.
 4. Pas na expliciet opdrachtgeverakkoord mergen.
