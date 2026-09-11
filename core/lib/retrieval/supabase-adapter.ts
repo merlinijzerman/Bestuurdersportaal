@@ -60,15 +60,29 @@ const SELECTIE_AFGELEID = ["geselecteerd", "chunks", "bronversie_audit", "opgeha
 export interface SupabaseRetrieval {
   adapter: RetrievalAdapter;
   chunksVoor(bronnen: Bronresultaat[]): DocumentChunk[];
+  /** Server-only brug voor het bestaande lokale downloadpad; nooit audit. */
+  lokaleDocumentRefVoor(documentIdentiteit: string): string | null;
 }
 
-export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdienst = {}): SupabaseRetrieval {
+export interface SupabaseAdapterDependencies {
+  zoek?: typeof zoekRelevanteChunksMetMeta;
+  leesVersies?: typeof leesSupabaseVersies;
+}
+
+export function maakSupabaseAdapter(
+  vlaggen: Adaptervlaggen,
+  rerank: Rerankdienst = {},
+  dependencies: SupabaseAdapterDependencies = {}
+): SupabaseRetrieval {
   // PROVIDERPRIVAAT. De chunk hoort niet in het contract — anders is de vorm van
   // deze database het contract, en komt een Microsoftresultaat er niet doorheen.
   // De adapter houdt de koppeling ref → chunk dus zelf bij en gebruikt haar
   // alleen in zijn eigen hooks.
   const chunkPerRef = new Map<string, DocumentChunk>();
   const identiteitPerRef = new Map<string, Pick<Bronresultaat, "documentIdentiteit" | "passageIdentiteit" | "versie">>();
+  const lokaalDocumentPerIdentiteit = new Map<string, string>();
+  const zoek = dependencies.zoek ?? zoekRelevanteChunksMetMeta;
+  const leesVersies = dependencies.leesVersies ?? leesSupabaseVersies;
 
   const behoudIdentiteit = (bron: Bronresultaat): Bronresultaat => {
     const eerder = identiteitPerRef.get(bron.ref);
@@ -110,7 +124,7 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
 
     async zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst> {
       const t0 = Date.now();
-      const { chunks, meta } = await zoekRelevanteChunksMetMeta(
+      const { chunks, meta } = await zoek(
         query.zoekvraag,
         ctx.fondsId,
         query.maxResultaten,
@@ -134,13 +148,14 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
       const diagnostiek: Partial<RetrievalMeta> = { ...meta };
       for (const veld of SELECTIE_AFGELEID) delete (diagnostiek as Record<string, unknown>)[veld];
 
-      const versies = await leesSupabaseVersies(chunks, ctx.fondsId, ctx.signal);
+      const versies = await leesVersies(chunks, ctx.fondsId, ctx.signal);
       const kandidaten = chunks.map((c, i) => ({
         ...chunkAlsBronresultaat(c, i),
         versie: versies.get(c.id) ?? { soort: "onbekend" as const, waarde: null, gecontroleerdOp: null },
       }));
       for (const [index, kandidaat] of kandidaten.entries()) {
         chunkPerRef.set(kandidaat.ref, chunks[index]);
+        lokaalDocumentPerIdentiteit.set(kandidaat.documentIdentiteit.id, chunks[index].document_id);
         identiteitPerRef.set(kandidaat.ref, {
           documentIdentiteit: kandidaat.documentIdentiteit,
           passageIdentiteit: kandidaat.passageIdentiteit,
@@ -159,8 +174,16 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
     },
     async verifieerVersies(ctx: RetrievalContext, refs: readonly string[]) {
       const chunks = refs.map((ref) => chunkPerRef.get(ref)).filter((c): c is DocumentChunk => Boolean(c));
-      const versies = await leesSupabaseVersies(chunks, ctx.fondsId, ctx.signal);
-      return new Map(refs.map((ref) => [ref, alsActueleVersiestand(versies.get(ref))]));
+      const versies = await leesVersies(chunks, ctx.fondsId, ctx.signal);
+      return new Map(refs.map((ref) => {
+        const chunk = chunkPerRef.get(ref);
+        const identiteit = identiteitPerRef.get(ref);
+        return [ref, alsActueleVersiestand(
+          chunk ? versies.get(chunk.id) : undefined,
+          identiteit?.documentIdentiteit.id,
+          identiteit?.passageIdentiteit.id
+        )];
+      }));
     },
     /**
      * Parent-context (small-to-big): siblings uit `document_chunks`. Puur
@@ -206,6 +229,9 @@ export function maakSupabaseAdapter(vlaggen: Adaptervlaggen, rerank: Rerankdiens
       return bronnen
         .map((b) => chunkPerRef.get(b.ref))
         .filter((c): c is DocumentChunk => Boolean(c));
+    },
+    lokaleDocumentRefVoor(documentIdentiteit: string): string | null {
+      return lokaalDocumentPerIdentiteit.get(documentIdentiteit) ?? null;
     },
   };
 }

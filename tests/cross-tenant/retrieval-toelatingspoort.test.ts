@@ -25,8 +25,23 @@ import type {
   RetrievalQuery,
   Toegangsbewijs,
 } from "../../core/lib/retrieval/contract";
+import {
+  maakDocumentIdentiteit,
+  maakPassageIdentiteit,
+  maakVolledigeVersieHash,
+} from "../../core/lib/retrieval/identiteit";
 
 const GEBRUIKER = "22222222-2222-4222-8222-222222222222";
+const BESTAND_HASH = "a".repeat(64);
+const VERSIE_V1 = maakVolledigeVersieHash("testdocument", "1", BESTAND_HASH);
+const VERSIE_V2 = maakVolledigeVersieHash("testdocument", "2", BESTAND_HASH);
+
+function identiteiten(sleutel: string) {
+  const document = maakDocumentIdentiteit("test", `document:${sleutel}`);
+  return { document, passage: maakPassageIdentiteit(document, `passage:${sleutel}`) };
+}
+
+const bronPerRef = new Map<string, Bronresultaat>();
 const CTX: RetrievalContext = {
   fondsId: "11111111-1111-4111-8111-111111111111",
   actor: { soort: "gebruiker", id: GEBRUIKER },
@@ -39,7 +54,7 @@ const CTX: RetrievalContext = {
 function bewijs(over: Partial<Toegangsbewijs> = {}): Toegangsbewijs {
   return {
     toegestaan: true,
-    resultaatRef: "sp-1",
+    resultaatRef: identiteiten("sp-1").passage,
     bronregistratieRef: "bron-A",
     gebruikerId: GEBRUIKER,
     correlationId: CTX.correlationId,
@@ -52,21 +67,24 @@ function bewijs(over: Partial<Toegangsbewijs> = {}): Toegangsbewijs {
 
 /** Een resultaat met een ONAFHANKELIJKE bronregistratieRef, los van het bewijs. */
 function bron(ref: string, tc?: Toegangsbewijs | null, over: Partial<Bronresultaat> = {}): Bronresultaat {
-  return {
-    ref,
+  const identiteit = identiteiten(ref);
+  const resultaat: Bronresultaat = {
+    ref: identiteit.passage,
     bronsoort: "sharepoint",
     titel: "T",
-    documentIdentiteit: { id: `doc_v1_${ref}` },
-    passageIdentiteit: { id: `passage_v1_${ref}` },
-    versie: { soort: "etag", waarde: "e", gecontroleerdOp: null },
+    documentIdentiteit: { id: identiteit.document },
+    passageIdentiteit: { id: identiteit.passage },
+    versie: { soort: "etag", waarde: VERSIE_V1, gecontroleerdOp: null },
     bronregistratieRef: "bron-A",
-    ...(tc === null ? {} : { toegangscontrole: tc ?? bewijs({ resultaatRef: ref }) }),
+    ...(tc === null ? {} : { toegangscontrole: tc ?? bewijs({ resultaatRef: identiteit.passage }) }),
     locator: {},
     passage: `passage van ${ref}`,
     status: { actueel: true },
     rang: { positie: 1, score: 1 },
     ...over,
   };
+  bronPerRef.set(resultaat.ref, resultaat);
+  return resultaat;
 }
 
 function caps(over: Partial<AdapterCapabilities> = {}): AdapterCapabilities {
@@ -74,16 +92,14 @@ function caps(over: Partial<AdapterCapabilities> = {}): AdapterCapabilities {
     bronsoorten: ["sharepoint"],
     strategieen: ["gericht"],
     ondersteundeFilters: [],
-    versiebewijs: false,
+    versiebewijs: true,
+    versiebeleid: { sterk: ["etag", "ctag", "hash"], gedegradeerd: [] },
     permissionProof: true,
     preview: false,
     cancellation: true,
     timeout: true,
     ...over,
   };
-  if (uit.versiebewijs && !uit.versiebeleid) {
-    uit.versiebeleid = { sterk: ["etag", "ctag", "hash"], gedegradeerd: [] };
-  }
   return uit;
 }
 
@@ -107,12 +123,15 @@ function adapter(opties: {
         opgehaald: 0,
       })),
     ...(opties.hook ? { verifieerBronregistratie: opties.hook } : {}),
-    ...(c.versiebewijs
-      ? { verifieerVersies: opties.versieHook ?? (async (_ctx, refs) => new Map(refs.map((ref) => [ref, {
-          beschikbaar: true,
-          versie: { soort: "etag" as const, waarde: "e" },
-        }]))) }
-      : {}),
+    verifieerVersies: opties.versieHook ?? (async (_ctx, refs) => new Map(refs.map((ref) => {
+      const kandidaat = bronPerRef.get(ref);
+      return [ref, {
+        beschikbaar: !!kandidaat,
+        documentIdentiteit: kandidaat?.documentIdentiteit.id ?? null,
+        passageIdentiteit: kandidaat?.passageIdentiteit.id ?? null,
+        versie: { soort: kandidaat?.versie.soort ?? "onbekend", waarde: kandidaat?.versie.waarde ?? null },
+      }];
+    }))),
   };
 }
 
@@ -167,14 +186,14 @@ test("PR-C — een adapter die GEEN bewijs belooft mag er ook geen meesturen (co
 
 test("PR-C — V2: een bewijs van een ANDERE gebruiker wordt geweigerd", async () => {
   const uit = await poort(CTX, adapter({ hook: STAND() }), [
-    bron("sp-1", bewijs({ resultaatRef: "sp-1", gebruikerId: "33333333-3333-4333-8333-333333333333" })),
+    bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-1").passage, gebruikerId: "33333333-3333-4333-8333-333333333333" })),
   ]);
   assert.equal(uit.geweigerd[0].grond, "v2_andere_gebruiker");
 });
 
 test("PR-C — V3: een bewijs uit een EERDER verzoek wordt geweigerd", async () => {
   const uit = await poort(CTX, adapter({ hook: STAND() }), [
-    bron("sp-1", bewijs({ resultaatRef: "sp-1", correlationId: "corr-vorige" })),
+    bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-1").passage, correlationId: "corr-vorige" })),
   ]);
   assert.equal(uit.geweigerd[0].grond, "v3_ander_verzoek");
 });
@@ -189,7 +208,7 @@ test("PR-C — V4: te oud, uit de toekomst, van vóór het verzoek, onleesbaar o
     ["leeg", ""],
   ];
   for (const [label, waarde] of gevallen) {
-    const uit = await poort(CTX, a, [bron("sp-1", bewijs({ resultaatRef: "sp-1", gecontroleerdOp: waarde }))]);
+    const uit = await poort(CTX, a, [bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-1").passage, gecontroleerdOp: waarde }))]);
     assert.equal(uit.geweigerd[0]?.grond, "v4_venster", `${label} hoort geweigerd te worden`);
   }
 });
@@ -202,9 +221,9 @@ test("PR-C — een onleesbare verzoekstart weigert; hij vervalt niet stil tot 'n
 test("PR-C — `basis: \"rls\"` kent geen venster, maar V2 en V3 gelden onverkort", async () => {
   const a = adapter({ hook: STAND() });
   const oud = new Date(Date.now() - 10 * BEWIJS_MAX_LEEFTIJD_MS).toISOString();
-  const door = await poort(CTX, a, [bron("sp-1", bewijs({ resultaatRef: "sp-1", basis: "rls", gecontroleerdOp: oud }))]);
+  const door = await poort(CTX, a, [bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-1").passage, basis: "rls", gecontroleerdOp: oud }))]);
   assert.equal(door.toegelatenPerSpoor[0].length, 1, "geen venster op het RLS-pad");
-  const weg = await poort(CTX, a, [bron("sp-1", bewijs({ resultaatRef: "sp-1", basis: "rls", correlationId: "corr-vorige" }))]);
+  const weg = await poort(CTX, a, [bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-1").passage, basis: "rls", correlationId: "corr-vorige" }))]);
   assert.equal(weg.geweigerd[0].grond, "v3_ander_verzoek", "V3 geldt óók op het RLS-pad");
 });
 
@@ -214,8 +233,8 @@ test("PR-C — VERWISSELDE bewijzen tussen twee kandidaten worden beide geweiger
   // Binnen één verzoek zijn actor, correlatie-id en configuratieversie per
   // definitie gelijk; zonder binding past een geldig bewijs voor A op B.
   const uit = await poort(CTX, adapter({ hook: STAND() }), [
-    bron("sp-1", bewijs({ resultaatRef: "sp-2" })),
-    bron("sp-2", bewijs({ resultaatRef: "sp-1" })),
+    bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-2").passage })),
+    bron("sp-2", bewijs({ resultaatRef: identiteiten("sp-1").passage })),
   ]);
   assert.deepEqual(uit.toegelatenPerSpoor[0], []);
   assert.deepEqual(uit.geweigerd.map((g) => g.grond), ["binding_ander_resultaat", "binding_ander_resultaat"]);
@@ -226,14 +245,14 @@ test("PR-C — juiste `resultaatRef`, maar VERKEERDE bronreferentie → geweiger
   // was dus een bewering over zichzelf. De poort vergelijkt nu met de
   // referentie die de adapter OP HET RESULTAAT zette.
   const uit = await poort(CTX, adapter({ hook: STAND() }), [
-    bron("sp-1", bewijs({ resultaatRef: "sp-1", bronregistratieRef: "bron-B" }), { bronregistratieRef: "bron-A" }),
+    bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-1").passage, bronregistratieRef: "bron-B" }), { bronregistratieRef: "bron-A" }),
   ]);
   assert.equal(uit.geweigerd[0].grond, "binding_andere_bron");
 });
 
 test("PR-C — een resultaat zónder eigen bronreferentie kan niet worden gebonden", async () => {
   const uit = await poort(CTX, adapter({ hook: STAND() }), [
-    bron("sp-1", bewijs({ resultaatRef: "sp-1" }), { bronregistratieRef: undefined }),
+    bron("sp-1", bewijs({ resultaatRef: identiteiten("sp-1").passage }), { bronregistratieRef: undefined }),
   ]);
   assert.equal(uit.geweigerd[0].grond, "binding_andere_bron");
 });
@@ -247,10 +266,10 @@ test("PR-C — belooft de adapter versiebewijs maar ontbreekt het → configurat
     assert.equal(uit.geweigerd[0]?.grond, "versiebewijs_ontbreekt", `waarde=${JSON.stringify(waarde)}`);
   }
   assert.equal(categorieVan("versiebewijs_ontbreekt"), "configuratiefout");
-  // …terwijl een adapter ZONDER die belofte er niet op wordt afgerekend.
+  // Capability=false is geen bypass: alleen expliciet beleid kan degraderen.
   const zonder = adapter({ caps: { versiebewijs: false }, hook: STAND() });
-  const door = await poort(CTX, zonder, [bron("sp-1", undefined, { versie: { soort: "onbekend", waarde: "", gecontroleerdOp: null } })]);
-  assert.equal(door.toegelatenPerSpoor[0].length, 1);
+  const dicht = await poort(CTX, zonder, [bron("sp-1", undefined, { versie: { soort: "onbekend", waarde: "", gecontroleerdOp: null } })]);
+  assert.equal(dicht.geweigerd[0].grond, "versiebewijs_ontbreekt");
 });
 
 test("#367 — ontbrekende of niet-opaque identiteit wordt vóór ranking geweigerd", async () => {
@@ -266,27 +285,67 @@ test("#367 — ontbrekende of niet-opaque identiteit wordt vóór ranking geweig
   assert.deepEqual(uit.geweigerd.map((w) => w.grond), ["identiteit_ontbreekt", "identiteit_ontbreekt"]);
 });
 
+test("#367 — ref is exact de opaque passage-identiteit; raw en verwisseld weigeren", async () => {
+  const a = adapter({ caps: { permissionProof: false }, hook: STAND() });
+  const raw = bron("raw", null, { ref: "database-chunk-id" });
+  const verwisseld = bron("verwisseld", null, { ref: identiteiten("ander-resultaat").passage });
+  const uit = await poort(CTX, a, [raw, verwisseld]);
+  assert.deepEqual(uit.geweigerd.map((w) => w.grond), ["identiteit_ontbreekt", "identiteit_ontbreekt"]);
+});
+
 test("#367 — sterke actuele versie komt door; gewijzigde, ontbrekende en corrupte stand weigeren", async () => {
-  const kandidaat = bron("sp-1", undefined, { versie: { soort: "hash", waarde: "version-v1", gecontroleerdOp: new Date().toISOString() } });
+  const kandidaat = bron("sp-1", undefined, { versie: { soort: "hash", waarde: VERSIE_V1, gecontroleerdOp: new Date().toISOString() } });
   const capsSterk = { versiebewijs: true, versiebeleid: { sterk: ["hash" as const], gedegradeerd: [] } };
   const actuele = async (_ctx: RetrievalContext, refs: readonly string[]) =>
-    new Map(refs.map((ref) => [ref, { beschikbaar: true, versie: { soort: "hash" as const, waarde: "version-v1" } }]));
+    new Map(refs.map((ref) => [ref, { beschikbaar: true, documentIdentiteit: kandidaat.documentIdentiteit.id, passageIdentiteit: kandidaat.passageIdentiteit.id, versie: { soort: "hash" as const, waarde: VERSIE_V1 } }]));
   assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: actuele }), [kandidaat])).toegelatenPerSpoor[0].length, 1);
 
   const gewijzigd = async (_ctx: RetrievalContext, refs: readonly string[]) =>
-    new Map(refs.map((ref) => [ref, { beschikbaar: true, versie: { soort: "hash" as const, waarde: "version-v2" } }]));
+    new Map(refs.map((ref) => [ref, { beschikbaar: true, documentIdentiteit: kandidaat.documentIdentiteit.id, passageIdentiteit: kandidaat.passageIdentiteit.id, versie: { soort: "hash" as const, waarde: VERSIE_V2 } }]));
   assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: gewijzigd }), [kandidaat])).geweigerd[0].grond, "versie_gewijzigd");
   const ontbreekt = async () => new Map();
   assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: ontbreekt }), [kandidaat])).geweigerd[0].grond, "versiestand_ontbreekt");
   const corrupt = async (_ctx: RetrievalContext, refs: readonly string[]) =>
-    new Map(refs.map((ref) => [ref, { beschikbaar: false, versie: { soort: "onbekend" as const, waarde: null } }]));
+    new Map(refs.map((ref) => [ref, { beschikbaar: false, documentIdentiteit: null, passageIdentiteit: null, versie: { soort: "onbekend" as const, waarde: null } }]));
   assert.equal((await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: corrupt }), [kandidaat])).geweigerd[0].grond, "versiestand_ontbreekt");
+
+  const verwisseldeBinding = async (_ctx: RetrievalContext, refs: readonly string[]) =>
+    new Map(refs.map((ref) => [ref, {
+      beschikbaar: true,
+      documentIdentiteit: identiteiten("ander-document").document,
+      passageIdentiteit: kandidaat.passageIdentiteit.id,
+      versie: { soort: "hash" as const, waarde: VERSIE_V1 },
+    }]));
+  assert.equal(
+    (await poort(CTX, adapter({ caps: capsSterk, hook: STAND(), versieHook: verwisseldeBinding }), [kandidaat])).geweigerd[0].grond,
+    "versie_gewijzigd"
+  );
+});
+
+test("#367 — alleen volledig opaque versiehashformaat geldt als sterk bewijs", async () => {
+  for (const waarde of ["version_v1_kort", `version_v1_${"A".repeat(64)}`, `sha256:${"a".repeat(64)}`, "a".repeat(64)]) {
+    const kandidaat = bron(`ongeldig-${waarde.length}`, null, {
+      versie: { soort: "hash", waarde, gecontroleerdOp: null },
+    });
+    const uit = await poort(CTX, adapter({ caps: { permissionProof: false } }), [kandidaat]);
+    assert.equal(uit.geweigerd[0]?.grond, "versiebewijs_ontbreekt", waarde);
+  }
+});
+
+test("#367 — status-datum is alleen via expliciet degradatiebeleid en als echte kalenderdatum geldig", async () => {
+  const onmogelijkeDatum = bron("februari-31", null, {
+    versie: { soort: "status-datum", waarde: "2026-02-31", gecontroleerdOp: null },
+  });
+  const uit = await poort(CTX, adapter({
+    caps: { permissionProof: false, versiebeleid: { sterk: [], gedegradeerd: ["status-datum"] } },
+  }), [onmogelijkeDatum]);
+  assert.equal(uit.geweigerd[0]?.grond, "versiebewijs_ontbreekt");
 });
 
 test("#367 — historische status-datum mag alleen expliciet gedegradeerd", async () => {
   const historisch = bron("sp-1", undefined, { versie: { soort: "status-datum", waarde: "2020-01-01", gecontroleerdOp: new Date().toISOString() } });
   const hook = async (_ctx: RetrievalContext, refs: readonly string[]) =>
-    new Map(refs.map((ref) => [ref, { beschikbaar: true, versie: { soort: "status-datum" as const, waarde: "2020-01-01" } }]));
+    new Map(refs.map((ref) => [ref, { beschikbaar: true, documentIdentiteit: historisch.documentIdentiteit.id, passageIdentiteit: historisch.passageIdentiteit.id, versie: { soort: "status-datum" as const, waarde: "2020-01-01" } }]));
   const toegestaan = adapter({
     caps: { versiebewijs: true, versiebeleid: { sterk: ["hash"], gedegradeerd: ["status-datum"] } },
     hook: STAND(), versieHook: hook,
@@ -300,8 +359,16 @@ test("#367 — historische status-datum mag alleen expliciet gedegradeerd", asyn
   assert.equal((await poort(CTX, dicht, [historisch])).geweigerd[0].grond, "versiesoort_niet_toegestaan");
 });
 
+test("#367 — ontbrekend versiebeleid is ook bij capability=false geen bypass", async () => {
+  const a = adapter({ caps: { permissionProof: false, versiebewijs: false } });
+  const runtimeCaps = a.capabilities();
+  delete (runtimeCaps as Partial<AdapterCapabilities>).versiebeleid;
+  const uit = await poort(CTX, a, [bron("zonder-beleid", null)]);
+  assert.equal(uit.geweigerd[0]?.grond, "versiebeleid_ontbreekt");
+});
+
 test("#367 — ontbrekende of falende versieherlezing is zichtbaar en fail-closed", async () => {
-  const kandidaat = bron("sp-1", undefined, { versie: { soort: "hash", waarde: "v", gecontroleerdOp: new Date().toISOString() } });
+  const kandidaat = bron("sp-1", undefined, { versie: { soort: "hash", waarde: VERSIE_V1, gecontroleerdOp: new Date().toISOString() } });
   const capsSterk = { versiebewijs: true, versiebeleid: { sterk: ["hash" as const], gedegradeerd: [] } };
   const zonder = adapter({ caps: capsSterk, hook: STAND() });
   delete zonder.verifieerVersies;
@@ -382,7 +449,7 @@ test("PR-C — unieke bronnen worden gededupliceerd over alle sporen heen", asyn
   };
   await verifieerToelating(CTX, adapter({ hook }), [
     [bron("sp-1"), bron("sp-2")],
-    [bron("sp-3", bewijs({ resultaatRef: "sp-3", bronregistratieRef: "bron-B" }), { bronregistratieRef: "bron-B" })],
+    [bron("sp-3", bewijs({ resultaatRef: identiteiten("sp-3").passage, bronregistratieRef: "bron-B" }), { bronregistratieRef: "bron-B" })],
   ]);
   assert.deepEqual([...gezien].sort(), ["bron-A", "bron-B"]);
 });
@@ -390,7 +457,7 @@ test("PR-C — unieke bronnen worden gededupliceerd over alle sporen heen", asyn
 test("PR-C — alle kandidaten worden tegen HETZELFDE `nu` beoordeeld", async () => {
   const opDeRand = new Date(Date.now() - BEWIJS_MAX_LEEFTIJD_MS + 300).toISOString();
   const kandidaten = Array.from({ length: 40 }, (_, i) =>
-    bron(`sp-${i}`, bewijs({ resultaatRef: `sp-${i}`, gecontroleerdOp: opDeRand }))
+    bron(`sp-${i}`, bewijs({ resultaatRef: identiteiten(`sp-${i}`).passage, gecontroleerdOp: opDeRand }))
   );
   const uit = await poort(CTX, adapter({ hook: STAND() }), kandidaten);
   assert.ok(
@@ -549,12 +616,52 @@ test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in `meta_proje
     assert.ok(m, `${naam} niet gevonden in ${laatste}`);
     return new Set([...m![1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
   };
+  const basis = lijst("c_basis");
+  const bron = lijst("c_bron");
+  // Uitgebrachte `meta_projectie` blijft immutabel. Latere uitbreidingen lopen
+  // daarom via de twee publieke wrappers en worden als cumulatieve sleutelset
+  // meegenomen in deze pariteitsgate.
+  const aanvullingen = readdirSync(dir)
+    .filter((f) => f > laatste! && f.endsWith(".sql"))
+    .map((f) => readFileSync(join(dir, f), "utf8"))
+    .join("\n");
+  if (/meta_basisniveau[\s\S]*?jsonb_build_object\('correlation_id'/.test(aanvullingen)) basis.add("correlation_id");
   const { META_BASIS, META_BRON } = await import("../../core/lib/audit-meta");
   const verschil = (a: Iterable<string>, b: Set<string>) => [...a].filter((x) => !b.has(x)).sort();
-  assert.deepEqual(verschil(META_BASIS as readonly string[], lijst("c_basis")), [], `basis ontbreekt in ${laatste}`);
-  assert.deepEqual(verschil(META_BRON as readonly string[], lijst("c_bron")), [], `bron ontbreekt in ${laatste}`);
-  assert.deepEqual(verschil(lijst("c_basis"), new Set(META_BASIS as readonly string[])), [], "DB-basis kent een sleutel die TS niet kent");
-  assert.deepEqual(verschil(lijst("c_bron"), new Set(META_BRON as readonly string[])), [], "DB-bron kent een sleutel die TS niet kent");
+  assert.deepEqual(verschil(META_BASIS as readonly string[], basis), [], `basis ontbreekt in ${laatste} plus wrappers`);
+  assert.deepEqual(verschil(META_BRON as readonly string[], bron), [], `bron ontbreekt in ${laatste} plus wrappers`);
+  assert.deepEqual(verschil(basis, new Set(META_BASIS as readonly string[])), [], "DB-basis kent een sleutel die TS niet kent");
+  assert.deepEqual(verschil(bron, new Set(META_BRON as readonly string[])), [], "DB-bron kent een sleutel die TS niet kent");
+});
+
+test("#367 — uitgebrachte migratie/check blijven bytegelijk; forward en rollback zijn replay-consistent", async () => {
+  const { createHash } = await import("node:crypto");
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const migraties = new URL("../../supabase/migrations/", import.meta.url);
+  const checks = new URL("../../supabase/checks/", import.meta.url);
+  const rollbacks = new URL("../../supabase/rollbacks/", import.meta.url);
+  const digest = (url: URL) => createHash("sha256").update(readFileSync(url)).digest("hex");
+  assert.equal(
+    digest(new URL("2026_09_11_toelating_auditprojectie.sql", migraties)),
+    "806c4c1b406765629f6e8a27668b11b3ce23960b9cb7d8224fc399000a58eb72"
+  );
+  assert.equal(
+    digest(new URL("2026_09_11_toelating_auditprojectie.sql", checks)),
+    "163bad0cebb63711968776a2ab235b63a114d9686b1e2681415f805796651c14"
+  );
+
+  const namen = readdirSync(migraties).filter((f) => f.endsWith(".sql")).sort();
+  const bestaand = namen.indexOf("2026_09_11_toelating_auditprojectie.sql");
+  const forwardNaam = "2026_09_11_z367_retrieval_identiteit_auditprojectie.sql";
+  assert.ok(namen.indexOf(forwardNaam) > bestaand, "fresh replay moet #367 pas na de uitgebrachte wrapper toepassen");
+  const forward = readFileSync(new URL(forwardNaam, migraties), "utf8");
+  const rollback = readFileSync(new URL("2026_09_11_z367_retrieval_identiteit_auditprojectie_ROLLBACK.sql", rollbacks), "utf8");
+  for (const naam of ["meta_basisniveau", "meta_bronniveau"]) {
+    assert.match(forward, new RegExp(`create or replace function public\\.${naam}`));
+    assert.match(rollback, new RegExp(`create or replace function public\\.${naam}`));
+  }
+  assert.match(forward, /jsonb_build_object\('correlation_id'/);
+  assert.doesNotMatch(rollback, /jsonb_build_object\('correlation_id'/, "rollback moet de correlation-uitbreiding volledig verwijderen");
 });
 
 // ── Providerneutraliteit, statisch afgedwongen ──────────────────────────────

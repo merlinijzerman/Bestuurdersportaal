@@ -134,6 +134,9 @@ export interface Versiebeleid {
 /** Actuele versie, herlezen na adapterresultaat en vóór ranking/selectie. */
 export interface ActueleVersiestand {
   beschikbaar: boolean;
+  /** Ontbrekend is een onvolledige stand en wordt door de poort geweigerd. */
+  documentIdentiteit?: string | null;
+  passageIdentiteit?: string | null;
   versie: Pick<Versiebewijs, "soort" | "waarde">;
 }
 
@@ -253,8 +256,8 @@ export interface AdapterCapabilities {
   /** Een filter dat hier niet in staat is een FOUT, nooit een stille no-op. */
   ondersteundeFilters: (keyof RetrievalFilters)[];
   versiebewijs: boolean;
-  /** Verplicht zodra `versiebewijs` waar is; bepaalt fail-closed vs degradatie. */
-  versiebeleid?: Versiebeleid;
+  /** Altijd verplicht; bepaalt expliciet fail-closed versus degradatie. */
+  versiebeleid: Versiebeleid;
   permissionProof: boolean;
   preview: boolean;
   cancellation: boolean;

@@ -22,6 +22,11 @@ import type {
   RetrievalContext,
   RetrievalQuery,
 } from "../../core/lib/retrieval/contract";
+import {
+  maakDocumentIdentiteit,
+  maakPassageIdentiteit,
+  maakVolledigeVersieHash,
+} from "../../core/lib/retrieval/identiteit";
 
 const CTX: RetrievalContext = {
   fondsId: "11111111-1111-4111-8111-111111111111",
@@ -34,18 +39,20 @@ const CTX: RetrievalContext = {
 
 /** Een SharePoint-resultaat: geen chunk, geen chunk-id, wel volledig bewijs. */
 function sharepointBron(n: number, doc: string, passage: string): Bronresultaat {
+  const documentId = maakDocumentIdentiteit("test-sharepoint", doc);
+  const passageId = maakPassageIdentiteit(documentId, `passage:${n}`);
   return {
-    ref: `sp-${n}`,
+    ref: passageId,
     bronsoort: "sharepoint",
     titel: `SharePointstuk ${n}`,
-    documentIdentiteit: { id: `doc_v1_${doc}`, bibliotheek: "fonds", bron: "SharePoint", fondsId: CTX.fondsId },
-    passageIdentiteit: { id: `passage_v1_sp-${n}` },
-    versie: { soort: "etag", waarde: `etag-${n}`, gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
+    documentIdentiteit: { id: documentId, bibliotheek: "fonds", bron: "SharePoint", fondsId: CTX.fondsId },
+    passageIdentiteit: { id: passageId },
+    versie: { soort: "etag", waarde: maakVolledigeVersieHash(doc, `etag-${n}`, "a".repeat(64)), gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
     // ONAFHANKELIJK van het bewijs, door de adapter op het resultaat gezet.
     bronregistratieRef: "bron-1",
     toegangscontrole: {
       toegestaan: true,
-      resultaatRef: `sp-${n}`,
+      resultaatRef: passageId,
       bronregistratieRef: "bron-1",
       gebruikerId: CTX.actor.soort === "gebruiker" ? CTX.actor.id : "",
       correlationId: CTX.correlationId,
@@ -61,6 +68,14 @@ function sharepointBron(n: number, doc: string, passage: string): Bronresultaat 
     rang: { positie: n, score: 1 / n },
     curatie: { normgewicht: null, wettelijkRegime: null },
   };
+}
+
+function documentIdVoor(doc: string): string {
+  return maakDocumentIdentiteit("test-sharepoint", doc);
+}
+
+function passageIdVoor(n: number, doc: string): string {
+  return maakPassageIdentiteit(documentIdVoor(doc), `passage:${n}`);
 }
 
 const QUERY = (naam: string, over: Partial<RetrievalQuery> = {}): RetrievalQuery => ({
@@ -111,10 +126,15 @@ function nepAdapter(opties: {
       return new Map(refs.map((r) => [r, { verbonden: true, versie: 3 }]));
     },
     async verifieerVersies(_ctx, refs) {
-      const perRef = new Map(Object.values(opties.perQuery).flat().map((b) => [b.ref, b.versie]));
+      const perRef = new Map(Object.values(opties.perQuery).flat().map((b) => [b.ref, b]));
       return new Map(refs.map((ref) => {
-        const versie = perRef.get(ref);
-        return [ref, { beschikbaar: !!versie?.waarde, versie: { soort: versie?.soort ?? "onbekend", waarde: versie?.waarde ?? null } }];
+        const bron = perRef.get(ref);
+        return [ref, {
+          beschikbaar: !!bron?.versie.waarde,
+          documentIdentiteit: bron?.documentIdentiteit.id ?? null,
+          passageIdentiteit: bron?.passageIdentiteit.id ?? null,
+          versie: { soort: bron?.versie.soort ?? "onbekend", waarde: bron?.versie.waarde ?? null },
+        }];
       }));
     },
     async zoek(ctxVanSpoor, query): Promise<AdapterUitkomst> {
@@ -151,9 +171,9 @@ test("T2-1 — een kandidaat ZONDER DocumentChunk wordt geselecteerd én gecitee
   const tussen = await voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }] });
 
   assert.equal(tussen.geselecteerd.length, 2, "chunkloze kandidaten mogen niet stil verdwijnen");
-  assert.deepEqual(tussen.geselecteerd.map((b) => b.ref), ["sp-1", "sp-2"]);
+  assert.deepEqual(tussen.geselecteerd.map((b) => b.ref), [passageIdVoor(1, "doc-a"), passageIdVoor(2, "doc-b")]);
   // Het auditspoor draagt ze óók — anders is de beurt niet reproduceerbaar.
-  assert.deepEqual(tussen.meta.chunks.map((c) => c.id), ["sp-1", "sp-2"]);
+  assert.deepEqual(tussen.meta.chunks.map((c) => c.id), [passageIdVoor(1, "doc-a"), passageIdVoor(2, "doc-b")]);
   assert.deepEqual(tussen.meta.bronversie_audit?.map((b) => b.bron), ["SharePoint", "SharePoint"]);
 
   const voltooid = await citeer(CTX, adapter, tussen, LEGE_OPDRACHT);
@@ -254,7 +274,7 @@ test("T2-1 — een document uit het primaire spoor komt niet nóg eens uit het a
   });
   assert.deepEqual(
     tussen.geselecteerd.map((b) => b.ref),
-    ["sp-1", "sp-3"],
+    [passageIdVoor(1, "doc-gedeeld"), passageIdVoor(3, "doc-uniek")],
     "sp-2 hoort bij een document dat al primair is — één document, één bronnummer"
   );
   assert.deepEqual(tussen.meta.aanvullend, { chunks: 1, documenten: 1 });
@@ -341,7 +361,7 @@ test("T2-1 — het aanvullende spoor erft de documentscope van het primaire spoo
   // het eindresultaat.
   assert.deepEqual(
     tussen.geselecteerd.map((b) => b.documentIdentiteit.id),
-    ["doc_v1_doc-primair", "doc_v1_doc-bibliotheek"]
+    [documentIdVoor("doc-primair"), documentIdVoor("doc-bibliotheek")]
   );
 });
 
@@ -392,7 +412,7 @@ test("T2-1 — een kandidaat buiten de eerste N kan door de centrale weging alsn
     ],
   });
   assert.ok(
-    tussen.geselecteerd.some((b) => b.ref === "sp-99"),
+    tussen.geselecteerd.some((b) => b.ref === passageIdVoor(99, "doc-fonds")),
     "de fondsbron stond op plek 9 en moet door de weging alsnog in de top-2 komen"
   );
 });
@@ -500,8 +520,8 @@ test("T2-1 — na afkappen noemt het auditspoor exact de opgenomen bronnen", asy
   const voltooid = await citeer(CTX, adapter, tussen, LEGE_OPDRACHT);
   assert.equal(voltooid.geselecteerd.length, 1, "de tweede bron past niet meer");
   assert.equal(voltooid.meta.geselecteerd, 1);
-  assert.deepEqual(voltooid.meta.chunks.map((c) => c.id), ["sp-1"]);
-  assert.deepEqual(voltooid.meta.bronversie_audit?.map((b) => b.document_id), ["doc_v1_doc-primair"]);
+  assert.deepEqual(voltooid.meta.chunks.map((c) => c.id), [passageIdVoor(1, "doc-primair")]);
+  assert.deepEqual(voltooid.meta.bronversie_audit?.map((b) => b.document_id), [documentIdVoor("doc-primair")]);
   // `aanvullend` telde één bron; die is afgekapt, dus moet nu op nul staan.
   assert.deepEqual(voltooid.meta.aanvullend, { chunks: 0, documenten: 0 });
 });

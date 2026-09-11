@@ -72,7 +72,7 @@ export function metaVolgorde(meta) {
   return {
     chunks: chunks.map((c, i) => `${positie(i)} chunk=${c?.id ?? "geen"} doc=${c?.document_id ?? "geen"} rang=${c?.rang ?? "geen"} fts=${c?.fts_rang ?? "geen"} vec=${c?.vec_rang ?? "geen"}`),
     poging_herkomst: herkomst === null ? null : chunks.map((c, i) => `${positie(i)} chunk=${c?.id ?? "geen"} poging=${herkomst[c?.id] ?? "geen"}`),
-    bronversie_audit: audit.map((b, i) => `${positie(i)} doc=${b?.document_id ?? "geen"} bib=${b?.bibliotheek ?? "geen"} fonds=${b?.fonds_id ?? "geen"} docstatus=${b?.documentstatus ?? "geen"} bronstatus=${b?.bronstatus ?? "geen"} datum=${b?.documentdatum ?? "geen"}`),
+    bronversie_audit: audit.map((b, i) => `${positie(i)} doc=${b?.document_id ?? "geen"} docid=${b?.document_identiteit ?? "geen"} passage=${b?.passage_identiteit ?? "geen"} citation=${b?.citation_id ?? "geen"} versie=${b?.versie?.soort ?? "geen"}:${b?.versie?.waarde ?? "geen"} bib=${b?.bibliotheek ?? "geen"} fonds=${b?.fonds_id ?? "geen"} docstatus=${b?.documentstatus ?? "geen"} bronstatus=${b?.bronstatus ?? "geen"} datum=${b?.documentdatum ?? "geen"}`),
     retrieval_pogingen: pogingen.map((p, i) => `${positie(i)} naam=${p?.naam ?? "geen"} rijen=${p?.rijen ?? "geen"} overgeslagen=${p?.overgeslagen === true}`),
   };
 }

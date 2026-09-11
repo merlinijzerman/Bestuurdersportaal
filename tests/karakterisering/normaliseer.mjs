@@ -21,6 +21,7 @@
 // ============================================================================
 
 const UUID_RE = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+const OPAQUE_IDENTITEIT_RE = /\b(doc|passage|version|citation)_v1_[a-f0-9]{64}\b/g;
 // ISO-8601 met optionele fractie/zone; ook de spatie-variant (Postgres) toegestaan.
 const TS_RE = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?/g;
 
@@ -57,7 +58,14 @@ function isObject(v) {
 
 // 1. Vervang timestamps in alle strings.
 function vervangTimestamps(node) {
-  if (typeof node === "string") return node.replace(TS_RE, "<ts>");
+  if (typeof node === "string") {
+    return node
+      .replace(TS_RE, "<ts>")
+      // BESLUIT (#367): de digest zelf is geen contractwaarde. Het prefix en
+      // de volledige 64-hexvorm zijn dat wel. Zo legt de golden de nieuwe
+      // providerneutrale identiteit expliciet vast zonder seed-private input.
+      .replace(OPAQUE_IDENTITEIT_RE, (_waarde, soort) => `<${soort}-identiteit>`);
+  }
   if (Array.isArray(node)) return node.map(vervangTimestamps);
   if (isObject(node)) {
     const out = {};
@@ -69,7 +77,11 @@ function vervangTimestamps(node) {
 
 // Maskeer UUID's voor een orde-onafhankelijke sorteersleutel.
 function maskeerUuids(node) {
-  if (typeof node === "string") return node.replace(UUID_RE, "<uuid>");
+  if (typeof node === "string") {
+    return node
+      .replace(OPAQUE_IDENTITEIT_RE, (_waarde, soort) => `<${soort}-identiteit>`)
+      .replace(UUID_RE, "<uuid>");
+  }
   if (Array.isArray(node)) return node.map(maskeerUuids);
   if (isObject(node)) {
     const out = {};
@@ -141,9 +153,26 @@ function vervangPeildatum(node) {
   return node;
 }
 
+// BESLUIT (#367): correlation_id moet aanwezig en ongewijzigd zijn, maar de
+// requestwaarde zelf is per opname willekeurig. Sleutelgebonden normalisatie
+// houdt precies die structurele invariant zichtbaar in de golden.
+function vervangCorrelationId(node) {
+  if (Array.isArray(node)) return node.map(vervangCorrelationId);
+  if (isObject(node)) {
+    const out = {};
+    for (const k of Object.keys(node)) {
+      out[k] = k === "correlation_id" && typeof node[k] === "string"
+        ? "<correlation-id>"
+        : vervangCorrelationId(node[k]);
+    }
+    return out;
+  }
+  return node;
+}
+
 /** Normaliseer een geparste JSON-body naar canonieke vorm. */
 export function normaliseerJson(body) {
-  const stap1 = vervangTimestamps(vervangPeildatum(body));
+  const stap1 = vervangTimestamps(vervangCorrelationId(vervangPeildatum(body)));
   const stap2 = sorteerArrays(stap1);
   const stap3 = mapUuids(stap2, new Map());
   return stap3;

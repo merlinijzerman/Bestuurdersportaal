@@ -22,7 +22,6 @@ set local role authenticated;
 do $$
 declare
   v_meta jsonb := jsonb_build_object(
-    'correlation_id', 'corr-367',
     'methode', 'sharepoint_live',
     'toelating', jsonb_build_object(
       'geweigerd', 4,
@@ -48,9 +47,6 @@ begin
 
     if not (v ? 'toelating') then
       raise exception '[toelating] % niveau: de samenvatting verdwijnt bij het lezen', niveau;
-    end if;
-    if v->>'correlation_id' <> 'corr-367' then
-      raise exception '[toelating] % niveau: correlation_id ontbreekt of wijzigde', niveau;
     end if;
     if (v->'toelating'->>'geweigerd')::int <> 4 then
       raise exception '[toelating] % niveau: totaal niet intact (%)', niveau, v->'toelating'->>'geweigerd';

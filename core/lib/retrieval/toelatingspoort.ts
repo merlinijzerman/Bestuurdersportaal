@@ -153,6 +153,12 @@ function tijdstip(waarde: string | null | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function geldigeKalenderdatum(waarde: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(waarde)) return false;
+  const datum = new Date(`${waarde}T00:00:00.000Z`);
+  return Number.isFinite(datum.getTime()) && datum.toISOString().slice(0, 10) === waarde;
+}
+
 interface Oordeelcontext {
   ctx: RetrievalContext;
   caps: AdapterCapabilities;
@@ -170,11 +176,12 @@ function beoordeel(bron: Bronresultaat, o: Oordeelcontext): Weigergrond | null {
   // omzeilen. Alleen onze versiegebonden opaque sleutels mogen ranking bereiken.
   if (
     typeof bron.ref !== "string" ||
-    bron.ref.length === 0 ||
+    !/^passage_v1_[a-f0-9]{64}$/.test(bron.ref) ||
     typeof bron.documentIdentiteit?.id !== "string" ||
-    !bron.documentIdentiteit.id.startsWith("doc_v1_") ||
+    !/^doc_v1_[a-f0-9]{64}$/.test(bron.documentIdentiteit.id) ||
     typeof bron.passageIdentiteit?.id !== "string" ||
-    !bron.passageIdentiteit.id.startsWith("passage_v1_")
+    !/^passage_v1_[a-f0-9]{64}$/.test(bron.passageIdentiteit.id) ||
+    bron.ref !== bron.passageIdentiteit.id
   ) {
     return "identiteit_ontbreekt";
   }
@@ -182,23 +189,31 @@ function beoordeel(bron: Bronresultaat, o: Oordeelcontext): Weigergrond | null {
   // VERSIEBEWIJS — los van rechten. Een adapter die versiebewijs belooft maar
   // het niet levert, laat een resultaat door dat later niet meer is terug te
   // voeren op de versie die het model zag.
-  if (o.caps.versiebewijs === true) {
-    const w = bron.versie?.waarde;
-    if (typeof w !== "string" || w.length === 0 || bron.versie.soort === "onbekend") {
-      return "versiebewijs_ontbreekt";
-    }
-    const beleid = o.caps.versiebeleid;
-    if (!beleid) return "versiebeleid_ontbreekt";
-    if (!beleid.sterk.includes(bron.versie.soort) && !beleid.gedegradeerd.includes(bron.versie.soort)) {
-      return "versiesoort_niet_toegestaan";
-    }
-    if (o.versieHookFout) return "versie_hook_fout";
-    if (o.versiestanden === null) return "versie_hook_ontbreekt";
-    const actuele = o.versiestanden.get(bron.ref);
-    if (!actuele?.beschikbaar) return "versiestand_ontbreekt";
-    if (actuele.versie.soort !== bron.versie.soort || actuele.versie.waarde !== w) {
-      return "versie_gewijzigd";
-    }
+  const w = bron.versie?.waarde;
+  if (typeof w !== "string" || w.length === 0 || bron.versie.soort === "onbekend") {
+    return "versiebewijs_ontbreekt";
+  }
+  const beleid = o.caps.versiebeleid;
+  if (!beleid) return "versiebeleid_ontbreekt";
+  if (!beleid.sterk.includes(bron.versie.soort) && !beleid.gedegradeerd.includes(bron.versie.soort)) {
+    return "versiesoort_niet_toegestaan";
+  }
+  const sterkeVorm = /^(etag|ctag|hash)$/.test(bron.versie.soort)
+    && /^version_v1_[a-f0-9]{64}$/.test(w);
+  const gedegradeerdeVorm = bron.versie.soort === "status-datum"
+    && geldigeKalenderdatum(w);
+  if (!sterkeVorm && !gedegradeerdeVorm) return "versiebewijs_ontbreekt";
+  if (o.versieHookFout) return "versie_hook_fout";
+  if (o.versiestanden === null) return "versie_hook_ontbreekt";
+  const actuele = o.versiestanden.get(bron.ref);
+  if (!actuele?.beschikbaar) return "versiestand_ontbreekt";
+  if (
+    actuele.documentIdentiteit !== bron.documentIdentiteit.id ||
+    actuele.passageIdentiteit !== bron.passageIdentiteit.id ||
+    actuele.versie.soort !== bron.versie.soort ||
+    actuele.versie.waarde !== w
+  ) {
+    return "versie_gewijzigd";
   }
 
   const bewijs = bron.toegangscontrole;
@@ -280,8 +295,15 @@ export async function verifieerToelating(
   let versiestanden: Map<string, ActueleVersiestand> | null = null;
   let versieHookFout = false;
 
-  if (caps.versiebewijs === true) {
-    const refs = [...new Set(kandidatenPerSpoor.flat().map((k) => k.ref).filter((r) => r.length > 0))];
+  {
+    const refs = [
+      ...new Set(
+        kandidatenPerSpoor
+          .flat()
+          .map((k) => k.ref)
+          .filter((r): r is string => typeof r === "string" && r.length > 0)
+      ),
+    ];
     if (!adapter.verifieerVersies) {
       versiestanden = null;
     } else if (refs.length === 0) {

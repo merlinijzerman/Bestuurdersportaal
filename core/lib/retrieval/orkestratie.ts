@@ -66,7 +66,7 @@ function alsAuditBron(b: Bronresultaat): AuditBron {
     fondsId: b.documentIdentiteit.fondsId ?? null,
     documentstatus: b.status.documentstatus ?? null,
     bronstatus: b.status.bronstatus ?? null,
-    documentdatum: b.versie.waarde ?? null,
+    documentdatum: b.weergave?.documentdatum ?? null,
     score: b.rang.score ?? null,
     fts: b.rang.fts ?? null,
     vec: b.rang.vec ?? null,

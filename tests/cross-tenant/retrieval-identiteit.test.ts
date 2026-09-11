@@ -9,12 +9,22 @@ import {
 import { bouwCitaties } from "../../core/lib/retrieval/citatie";
 import { splitsRetrievalMeta } from "../../core/lib/audit-meta";
 import { bewijsUitVersierij } from "../../core/lib/retrieval/supabase-versie";
-import { voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
+import { voerRetrievalUit, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
+import { maakSupabaseAdapter, type Adaptervlaggen } from "../../core/lib/retrieval/supabase-adapter";
+import type { DocumentChunk, RetrievalMeta } from "../../core/lib/rag";
 import type { Bronresultaat, RetrievalAdapter, RetrievalContext } from "../../core/lib/retrieval/contract";
 
 const DOC_REF = "11111111-1111-4111-8111-111111111111";
 const FONDS_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const FONDS_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const SUPABASE_CTX: RetrievalContext = {
+  fondsId: FONDS_A,
+  actor: { soort: "gebruiker", id: "user-367" },
+  taaktype: "chat_generatie",
+  bronbeleid: { bronsoorten: ["fonds"] },
+  correlationId: "corr-367-supabase",
+  verzoekStartOp: "2026-09-11T09:59:59.000Z",
+};
 
 function bron(over: Partial<Bronresultaat> = {}): Bronresultaat {
   const documentId = maakDocumentIdentiteit(`fonds:${FONDS_A}`, DOC_REF);
@@ -25,7 +35,7 @@ function bron(over: Partial<Bronresultaat> = {}): Bronresultaat {
     titel: "Oude titel",
     documentIdentiteit: { id: documentId, bibliotheek: "fonds", bron: "upload", fondsId: FONDS_A },
     passageIdentiteit: { id: passageId },
-    versie: { soort: "hash", waarde: maakVolledigeVersieHash(DOC_REF, "r1", "sha256:bestand"), gecontroleerdOp: "2026-09-11T10:00:00.000Z" },
+    versie: { soort: "hash", waarde: maakVolledigeVersieHash(DOC_REF, "r1", "a".repeat(64)), gecontroleerdOp: "2026-09-11T10:00:00.000Z" },
     locator: { pagina: 4, mappad: "/oude/map" },
     passage: "Persoonsnaam die alleen in het inhoudsniveau mag staan.",
     status: { actueel: true },
@@ -44,6 +54,13 @@ test("#367 — publieke identiteiten zijn deterministisch, opaque en tenantgebon
   assert.match(a1, /^doc_v1_[a-f0-9]{64}$/);
 });
 
+test("#367 — het publieke retrievalcontract bevat geen provider- of database-identifiers", async () => {
+  const { readFileSync } = await import("node:fs");
+  const contract = readFileSync(new URL("../../core/lib/retrieval/contract.ts", import.meta.url), "utf8");
+  const code = contract.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  assert.doesNotMatch(code, /\b(?:driveId|drive_id|itemId|item_id|chunkId|chunk_id|databaseId|database_id|document_id)\b/);
+});
+
 test("#367 — de volledige versiehash kantelt op elk R1-ingrediënt", () => {
   const basis = maakVolledigeVersieHash(DOC_REF, "index-v1", "bestand-a");
   assert.notEqual(basis, maakVolledigeVersieHash("ander-document", "index-v1", "bestand-a"));
@@ -59,14 +76,14 @@ test("#367 — citation-id blijft gelijk bij hernoemen/verplaatsen en wijzigt bi
   const id1 = bouwCitaties([eerste], opdracht).bronnen[0].citation_id;
   const id2 = bouwCitaties([verplaatst], opdracht).bronnen[0].citation_id;
   assert.equal(id1, id2);
-  const gewijzigdeVersie = bron({ versie: { ...eerste.versie, waarde: "version_v1_gewijzigd" } });
+  const gewijzigdeVersie = bron({ versie: { ...eerste.versie, waarde: maakVolledigeVersieHash(DOC_REF, "r2", "a".repeat(64)) } });
   assert.notEqual(id1, bouwCitaties([gewijzigdeVersie], opdracht).bronnen[0].citation_id);
   assert.equal(id1, maakCitationId(eerste.documentIdentiteit.id, eerste.passageIdentiteit.id, eerste.versie.soort, eerste.versie.waarde!));
 });
 
 test("#367 — Supabase-versiebewijs degradeert expliciet en faalt cross-tenant/corrupt dicht", () => {
   const basis = { id: "chunk", document_id: DOC_REF, indexering_versie: "r1", documenten: {
-    id: DOC_REF, fonds_id: FONDS_A, bibliotheek: "fonds", bestand_hash: "hash", documentdatum: "2026-09-11",
+    id: DOC_REF, fonds_id: FONDS_A, bibliotheek: "fonds", bestand_hash: "a".repeat(64), documentdatum: "2026-09-11",
   } };
   assert.equal(bewijsUitVersierij(basis, DOC_REF, FONDS_A, "nu").soort, "hash");
   assert.deepEqual(
@@ -76,6 +93,22 @@ test("#367 — Supabase-versiebewijs degradeert expliciet en faalt cross-tenant/
   assert.equal(bewijsUitVersierij(basis, DOC_REF, FONDS_B, "nu").soort, "onbekend");
   assert.equal(bewijsUitVersierij({ ...basis, document_id: "verwisseld" }, DOC_REF, FONDS_A, "nu").soort, "onbekend");
   assert.equal(bewijsUitVersierij(undefined, DOC_REF, FONDS_A, "nu").soort, "onbekend");
+});
+
+test("#367 — ongeldige bestand_hash is nooit sterk bewijs", () => {
+  const basis = { id: "chunk", document_id: DOC_REF, indexering_versie: "r1", documenten: {
+    id: DOC_REF, fonds_id: FONDS_A, bibliotheek: "fonds", bestand_hash: "a".repeat(64), documentdatum: "2026-09-11",
+  } };
+  for (const bestand_hash of ["kort", "A".repeat(64), `sha256:${"a".repeat(64)}`, `${"a".repeat(63)}g`]) {
+    const bewijs = bewijsUitVersierij({ ...basis, documenten: { ...basis.documenten, bestand_hash } }, DOC_REF, FONDS_A, "nu");
+    assert.equal(bewijs.soort, "status-datum", bestand_hash);
+    assert.notEqual(bewijs.soort, "hash", "ongeldige SHA-256 mag nooit sterk bewijs worden");
+  }
+  const zonderFallback = bewijsUitVersierij({
+    ...basis,
+    documenten: { ...basis.documenten, bestand_hash: "ongeldig", documentdatum: null },
+  }, DOC_REF, FONDS_A, "nu");
+  assert.equal(zonderFallback.soort, "onbekend");
 });
 
 test("#367 — correlation is basisniveau; versie-identiteit bronniveau; passage blijft inhoud", () => {
@@ -131,6 +164,8 @@ test("#367 — correlation-id blijft gelijk door adapter, poort, selectie, citat
       controleer(ontvangen);
       return new Map(refs.map((ref) => [ref, {
         beschikbaar: true,
+        documentIdentiteit: kandidaat.documentIdentiteit.id,
+        passageIdentiteit: kandidaat.passageIdentiteit.id,
         versie: { soort: kandidaat.versie.soort, waarde: kandidaat.versie.waarde },
       }]));
     },
@@ -166,4 +201,114 @@ test("#367 — correlation-id blijft gelijk door adapter, poort, selectie, citat
   assert.deepEqual(gezien, [correlationId, correlationId, correlationId, correlationId]);
   assert.equal(uitkomst.meta.correlation_id, correlationId);
   assert.match(uitkomst.bronverwijzingen[0].citation_id ?? "", /^citation_v1_/);
+});
+
+test("#367 — echte Supabase-adapter herleest via private chunk-id en levert een bron aan ranking", async () => {
+  const chunk: DocumentChunk = {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    document_id: DOC_REF,
+    tekst: "Een inhoudelijke passage over de governance.",
+    pagina: 2,
+    paragraaf: "2.1",
+    chunk_index: 3,
+    indexering_versie: "r1",
+    rang: 0.91,
+    documenten: {
+      titel: "Bestuursdocument",
+      bron: "upload",
+      bibliotheek: "fonds",
+      opslag_pad: "fonds/bestuursdocument.pdf",
+      fonds_id: FONDS_A,
+      bestand_hash: "a".repeat(64),
+      documentdatum: "2026-09-11",
+    },
+  };
+  const meta: RetrievalMeta = {
+    methode: "fts_dutch_ranked",
+    opgehaald: 1,
+    geselecteerd: 1,
+    chunks: [{ id: chunk.id, document_id: chunk.document_id, rang: chunk.rang ?? null }],
+  };
+  const gelezen: string[][] = [];
+  const retrieval = maakSupabaseAdapter({ parentRetrieval: false } as Adaptervlaggen, {}, {
+    zoek: async () => ({ chunks: [chunk], meta }),
+    leesVersies: async (chunks) => {
+      gelezen.push(chunks.map((c) => c.id));
+      return new Map(chunks.map((c) => [c.id, bewijsUitVersierij({
+        id: c.id,
+        document_id: c.document_id,
+        indexering_versie: c.indexering_versie ?? null,
+        documenten: {
+          id: c.document_id,
+          fonds_id: c.documenten.fonds_id ?? null,
+          bibliotheek: c.documenten.bibliotheek,
+          bestand_hash: c.documenten.bestand_hash ?? null,
+          documentdatum: c.documenten.documentdatum ?? null,
+        },
+      }, c.document_id, FONDS_A, "2026-09-11T10:00:00.000Z")]));
+    },
+  });
+  const uit = await voerRetrievalUit(SUPABASE_CTX, {
+    adapter: retrieval.adapter,
+    sporen: [{
+      query: {
+        naam: "primair", origineleVraag: "governance", zoekvraag: "governance",
+        strategie: "gericht", maxResultaten: 1, maxKandidaten: 1,
+        maxContextTekens: 10_000, hybrideAan: false,
+      },
+      grenzen: { maxPerDoc: 1, representatieConstraints: false, regimeWeging: false, relevantieDrempel: false },
+    }],
+  });
+  try {
+    assert.equal(uit.geselecteerd.length, 1, "de versieherlezing mag de echte Supabasebron niet tot nul reduceren");
+    assert.deepEqual(gelezen, [[chunk.id], [chunk.id]], "eerste bewijs en herlezing gebruiken beide de private chunk-id");
+    assert.match(uit.geselecteerd[0].ref, /^passage_v1_[a-f0-9]{64}$/);
+    assert.notEqual(uit.geselecteerd[0].ref, chunk.id);
+    assert.equal(uit.meta.chunks[0].id, uit.geselecteerd[0].ref);
+    assert.equal(uit.meta.chunks[0].document_id, uit.geselecteerd[0].documentIdentiteit.id);
+    assert.doesNotMatch(JSON.stringify(uit.meta), new RegExp(`${chunk.id}|${chunk.document_id}`));
+    assert.equal(retrieval.lokaleDocumentRefVoor(uit.geselecteerd[0].documentIdentiteit.id), chunk.document_id);
+  } finally {
+    uit.grendel?.stop();
+  }
+});
+
+test("#367 — ontbrekende private map-entry faalt gesloten en zero-source is zichtbaar", async () => {
+  const chunk: DocumentChunk = {
+    id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", document_id: DOC_REF,
+    tekst: "Passage", pagina: null, paragraaf: null, chunk_index: 0,
+    indexering_versie: "r1", rang: 1,
+    documenten: { titel: "D", bron: "upload", bibliotheek: "fonds", opslag_pad: null, fonds_id: FONDS_A, bestand_hash: "b".repeat(64) },
+  };
+  let ronde = 0;
+  const retrieval = maakSupabaseAdapter({ parentRetrieval: false } as Adaptervlaggen, {}, {
+    zoek: async () => ({ chunks: [chunk], meta: { methode: "fts_dutch_ranked", opgehaald: 1, geselecteerd: 1, chunks: [] } as RetrievalMeta }),
+    leesVersies: async (chunks) => {
+      ronde++;
+      const bewijs = { soort: "hash" as const, waarde: maakVolledigeVersieHash(DOC_REF, "r1", "b".repeat(64)), gecontroleerdOp: "nu" };
+      return ronde === 1 ? new Map([[chunk.id, bewijs]]) : new Map([["verkeerde-map-key", bewijs]]);
+    },
+  });
+  const uit = await voerRetrievalUit(SUPABASE_CTX, {
+    adapter: retrieval.adapter,
+    sporen: [{
+      query: { naam: "primair", origineleVraag: "x", zoekvraag: "x", strategie: "gericht", maxResultaten: 1, maxKandidaten: 1, maxContextTekens: 1000, hybrideAan: false },
+      grenzen: { maxPerDoc: 1, representatieConstraints: false, regimeWeging: false, relevantieDrempel: false },
+    }],
+  });
+  try {
+    assert.equal(uit.geselecteerd.length, 0);
+    assert.equal(uit.meta.toelating?.gronden.versiestand_ontbreekt, 1);
+  } finally {
+    uit.grendel?.stop();
+  }
+});
+
+test("#367 — lokale download-id blijft server-only en voedt het bestaande UI-pad", async () => {
+  const { readFileSync } = await import("node:fs");
+  const route = readFileSync(new URL("../../app/api/chat/route.ts", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../../app/(dashboard)/ai/_components/AntwoordWeergave.tsx", import.meta.url), "utf8");
+  assert.match(route, /lokaleDocumentRefVoor\(bron\.document_id\)/);
+  assert.doesNotMatch(route, /document_id:\s*lokaleDocumentRefVoor[^\n]*retrievalMeta/);
+  assert.match(ui, /`\/api\/documents\/\$\{bron\.document_id\}\/bestand`/);
 });

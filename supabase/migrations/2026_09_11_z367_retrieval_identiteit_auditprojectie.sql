@@ -1,11 +1,11 @@
 -- ============================================================================
 -- #367 — correlation-id in de leesprojectie van het retrieval-auditspoor
 -- ----------------------------------------------------------------------------
--- Verse omgevingen krijgen de sleutel ook via de cumulatieve bronmigratie
--- 2026_09_11_toelating_auditprojectie.sql. Deze forwardmigratie is nodig voor
--- omgevingen waar die eerdere migratie al is uitgevoerd: append-only rijen
--- worden niet herschreven; uitsluitend de twee read-time allowlistprojecties
--- worden cumulatief uitgebreid.
+-- Deze additieve migratie sorteert bewust NA de reeds uitgebrachte
+-- 2026_09_11_toelating_auditprojectie.sql. Daardoor leveren zowel een upgrade
+-- als een verse, alfabetisch afgespeelde migratiereeks dezelfde wrappers op.
+-- Append-only rijen worden niet herschreven; alleen de read-time projectie
+-- wordt cumulatief uitgebreid.
 -- ============================================================================
 
 create or replace function public.meta_basisniveau(p_meta jsonb) returns jsonb

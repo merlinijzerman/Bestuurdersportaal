@@ -22,6 +22,8 @@ interface Versierij {
   } | null;
 }
 
+const SHA256_HEX = /^[a-f0-9]{64}$/;
+
 function nietLeeg(waarde: unknown): waarde is string {
   return typeof waarde === "string" && waarde.length > 0;
 }
@@ -38,7 +40,7 @@ export function bewijsUitVersierij(
   if (!rij || !d || rij.document_id !== verwachtDocumentId || d.id !== verwachtDocumentId || !tenantKlopt) {
     return { soort: "onbekend", waarde: null, gecontroleerdOp };
   }
-  if (nietLeeg(rij.indexering_versie) && nietLeeg(d.bestand_hash)) {
+  if (nietLeeg(rij.indexering_versie) && nietLeeg(d.bestand_hash) && SHA256_HEX.test(d.bestand_hash)) {
     return {
       soort: "hash",
       waarde: maakVolledigeVersieHash(rij.document_id, rij.indexering_versie, d.bestand_hash),
@@ -78,9 +80,15 @@ export async function leesSupabaseVersies(
   );
 }
 
-export function alsActueleVersiestand(versie: Versiebewijs | undefined): ActueleVersiestand {
+export function alsActueleVersiestand(
+  versie: Versiebewijs | undefined,
+  documentIdentiteit?: string,
+  passageIdentiteit?: string
+): ActueleVersiestand {
   return {
     beschikbaar: versie?.soort !== "onbekend" && typeof versie?.waarde === "string" && versie.waarde.length > 0,
+    documentIdentiteit: documentIdentiteit ?? null,
+    passageIdentiteit: passageIdentiteit ?? null,
     versie: { soort: versie?.soort ?? "onbekend", waarde: versie?.waarde ?? null },
   };
 }

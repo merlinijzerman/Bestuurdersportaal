@@ -1906,6 +1906,7 @@ export const scenarios = [
         methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
         fondsdiscipline_gedropt, embedding_query_success, fallback_reason, retrieval_pogingen,
         poging_herkomst, bronversie_audit, citaties, selectie, filters, antwoordmodus, gereformuleerd,
+        correlation_id,
       } = meta;
       return {
         modus: data[0].modus,
@@ -1913,6 +1914,7 @@ export const scenarios = [
           methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
           fondsdiscipline_gedropt, embedding_query_success, fallback_reason, retrieval_pogingen,
           bronversie_audit, citaties, selectie, filters, antwoordmodus, gereformuleerd,
+          correlation_id,
           poging_herkomst_geprojecteerd: poging_herkomst == null ? null : Object.keys(poging_herkomst).length,
         },
         volgorde: metaVolgorde(meta),
@@ -1948,7 +1950,7 @@ export const scenarios = [
         methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
         fondsdiscipline_gedropt, body_fonds_id_genegeerd, embedding_query_success, fallback_reason,
         retrieval_pogingen, poging_herkomst, bronversie_audit, citaties, rerank, drempel, parent,
-        selectie, filters, antwoordmodus, bronbasis, gereformuleerd,
+        selectie, filters, antwoordmodus, bronbasis, gereformuleerd, correlation_id,
       } = meta;
       return {
         modus: data[0].modus,
@@ -1956,7 +1958,7 @@ export const scenarios = [
           methode, opgehaald, geselecteerd, chunks, toegepaste_fonds_filter, namespace_conventie,
           fondsdiscipline_gedropt, body_fonds_id_genegeerd, embedding_query_success, fallback_reason,
           retrieval_pogingen, bronversie_audit, citaties, rerank, drempel, parent,
-          selectie, filters, antwoordmodus, bronbasis, gereformuleerd,
+          selectie, filters, antwoordmodus, bronbasis, gereformuleerd, correlation_id,
           // `poging_herkomst` is BEWUST niet rechtstreeks opgenomen: het is het
           // enige retrievalveld dat chunk-ID's als objectSLEUTEL draagt, en
           // normaliseer.mjs maskeert alleen string-WAARDEN. Rauw opgenomen zou
