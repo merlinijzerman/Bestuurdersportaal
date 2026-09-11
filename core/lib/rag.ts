@@ -589,6 +589,8 @@ export interface RetrievalMeta {
    * gebruiker juist níét mocht zien. Alleen aanwezig als er iets is geweigerd.
    */
   toelating?: import("./retrieval/toelatingspoort").Toelatingssamenvatting;
+  /** Inhoudsvrije uitkomst van de bevroren bronsetresolutie bij reflectie. */
+  contextbron_resolutie?: BevrorenChunksResultaat["status"];
   methode:
     | "hybride_rrf"
     | "fts_dutch_ranked"
@@ -2156,21 +2158,75 @@ const REFLECTIE_SELECT = `id, document_id, tekst, pagina, paragraaf, chunk_index
   documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status,
     bronstatus, documentdatum, geldig_tot, volgende_review, bestand_hash)`;
 
+export interface BevrorenChunksResultaat {
+  chunks: DocumentChunk[];
+  status: {
+    volledig: boolean;
+    reden: "opgelost" | "kandidaatcap" | "ontbrekende_ref" | "ontbrekende_binding" | "private_scope_ontbreekt" | "providerfout";
+    kandidaatcap: number;
+  };
+}
+
+function bevrorenUitkomst(
+  chunks: DocumentChunk[],
+  volledig: boolean,
+  reden: BevrorenChunksResultaat["status"]["reden"]
+): BevrorenChunksResultaat {
+  return {
+    // Atomair: een onvolledige bronset mag nooit als gedeeltelijke context naar
+    // het model. Ook reeds gevonden geldige chunks vallen dan volledig weg.
+    chunks: volledig ? chunks : [],
+    status: { volledig, reden, kandidaatcap: REFLECTIE_KANDIDATEN_MAX },
+  };
+}
+
+/** Pure atomaire eindpoort, apart getest met cap- en missing-refgevallen. */
+export function finaliseerBevrorenChunks(
+  gevonden: DocumentChunk[],
+  passageRefs: readonly string[],
+  onderzocht: number
+): BevrorenChunksResultaat {
+  const uniekeRefs = new Set(passageRefs);
+  const uniekGevonden = [...new Map(gevonden.map((chunk) => [chunk.id, chunk])).values()];
+  const opgelosteRefs = new Set<string>();
+  for (const chunk of uniekGevonden) {
+    if (uniekeRefs.has(chunk.id)) opgelosteRefs.add(chunk.id);
+    const passage = chunkAlsBronresultaat(chunk).passageIdentiteit.id;
+    if (uniekeRefs.has(passage)) opgelosteRefs.add(passage);
+  }
+  if ([...uniekeRefs].every((ref) => opgelosteRefs.has(ref))) {
+    return bevrorenUitkomst(uniekGevonden, true, "opgelost");
+  }
+  return bevrorenUitkomst(
+    [],
+    false,
+    onderzocht >= REFLECTIE_KANDIDATEN_MAX ? "kandidaatcap" : "ontbrekende_ref"
+  );
+}
+
 export async function haalBevrorenChunks(
   passageRefs: string[],
   lokaleDocumentRefs: string[],
   fondsId: string | null = null,
   bronbindingen: readonly BevrorenBronbinding[] = [],
   signal?: AbortSignal
-): Promise<DocumentChunk[]> {
-  if (passageRefs.length === 0) return [];
+): Promise<BevrorenChunksResultaat> {
+  if (passageRefs.length === 0) return bevrorenUitkomst([], true, "opgelost");
   bewaakNaIO(signal);
   const supabase = await createServerSupabase();
   const legacyIds = [...new Set(passageRefs.filter((ref) => LOKALE_UUID_EXACT.test(ref)))];
   const opaqueRefs = passageRefs.filter((ref) => PASSAGE_IDENTITEIT_EXACT.test(ref));
   const documentRefs = [...new Set(lokaleDocumentRefs.filter((ref) => LOKALE_UUID_EXACT.test(ref)))];
+  const uniekeRefs = new Set(passageRefs);
   const gevonden: DocumentChunk[] = [];
   const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
+  if (legacyIds.length + opaqueRefs.length !== uniekeRefs.size) {
+    return bevrorenUitkomst([], false, "ontbrekende_ref");
+  }
+  const gebondenPassages = new Set(bronbindingen.map((binding) => binding.passageIdentiteit));
+  if (opaqueRefs.some((ref) => !gebondenPassages.has(ref))) {
+    return bevrorenUitkomst([], false, "ontbrekende_binding");
+  }
 
   if (legacyIds.length > 0) {
     let query = supabase
@@ -2185,7 +2241,7 @@ export async function haalBevrorenChunks(
     bewaakNaIO(signal, error);
     if (error || !data) {
       console.error("haalBevrorenChunks legacy-fout:", error);
-      return [];
+      return bevrorenUitkomst([], false, "providerfout");
     }
     const toegestaan = handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks;
     gevonden.push(...selecteerBevrorenChunksOpRefs(toegestaan, legacyIds));
@@ -2193,8 +2249,11 @@ export async function haalBevrorenChunks(
 
   // Geen lokale documentroute bij een opaque bronset: fail-closed. Zonder die
   // server-side begrenzing zouden we de hele corpus-tabel moeten scannen.
-  if (opaqueRefs.length > 0 && documentRefs.length === 0) return [];
+  if (opaqueRefs.length > 0 && documentRefs.length === 0) {
+    return bevrorenUitkomst([], false, "private_scope_ontbreekt");
+  }
 
+  let onderzocht = 0;
   if (opaqueRefs.length > 0) {
     let van = 0;
     while (true) {
@@ -2215,8 +2274,9 @@ export async function haalBevrorenChunks(
       bewaakNaIO(signal, error);
       if (error || !data) {
         console.error("haalBevrorenChunks opaque-resolutiefout:", error);
-        return [];
+        return bevrorenUitkomst([], false, "providerfout");
       }
+      onderzocht += data.length;
       const toegestaan = handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks;
       gevonden.push(...selecteerBevrorenChunksOpRefs(toegestaan, opaqueRefs, bronbindingen));
       const gevondenPassages = new Set(
@@ -2228,7 +2288,7 @@ export async function haalBevrorenChunks(
   }
 
   bewaakNaIO(signal);
-  return [...new Map(gevonden.map((chunk) => [chunk.id, chunk])).values()];
+  return finaliseerBevrorenChunks(gevonden, passageRefs, onderzocht);
 }
 
 // Increment D — verrijk opgehaalde chunks met de vergadering/agendapunt van hun

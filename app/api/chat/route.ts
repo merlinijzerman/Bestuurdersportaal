@@ -2344,6 +2344,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     let bronSentinel = maakBronSentinel();
     let contextGeneutraliseerd = 0;
     let retrievalMeta: RetrievalMeta | null = null;
+    let reflectieBronsetResolutie: RetrievalMeta["contextbron_resolutie"];
 
     // ── G3 (plateau B) — de bevroren reflectiebronset ───────────────────────
     // Tijdens een actieve reflectieflow draait er GEEN retrieval: geen embedding,
@@ -2365,13 +2366,15 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // retrievalgrendel onbegrensd doorlopen na een disconnect.
         const reflectieGrendel = maakAfbreekgrendel(req.signal, timeoutUitConfig(undefined));
         try {
-          chunks = await haalBevrorenChunks(
+          const resolutie = await haalBevrorenChunks(
             reflectieBronsetChunkIds,
             reflectieBronsetDocumentRefs,
             fondsId,
             reflectieBronbindingen,
             reflectieGrendel.signal
           );
+          chunks = resolutie.chunks;
+          reflectieBronsetResolutie = resolutie.status;
           reflectieGrendel.bewaak();
           chunks = await verrijkNotulenChunks(chunks, reflectieGrendel.signal);
           chunks = await verrijkDocumentmetadata(chunks, fondsId, reflectieGrendel.signal);
@@ -2444,6 +2447,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             } : {}),
           };
         }),
+        ...(reflectieBronsetResolutie
+          ? { contextbron_resolutie: reflectieBronsetResolutie }
+          : {}),
         toegepaste_fonds_filter: fondsId ?? null,
         namespace_conventie: "bibliotheek",
         fondsdiscipline_gedropt: 0,

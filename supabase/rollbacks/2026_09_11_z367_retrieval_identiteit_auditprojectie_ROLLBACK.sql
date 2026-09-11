@@ -1,4 +1,4 @@
--- Rollback #367 — herstel de wrappers zonder de nieuwe correlation-id-toevoeging.
+-- Rollback #367 — herstel de wrappers zonder correlation-id/bronresolutiestatus.
 -- De onderliggende meta_projectie uit de voorgaande migratie blijft leidend.
 
 create or replace function public.meta_basisniveau(p_meta jsonb) returns jsonb

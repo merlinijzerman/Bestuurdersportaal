@@ -654,6 +654,7 @@ test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in `meta_proje
     .map((f) => readFileSync(join(dir, f), "utf8"))
     .join("\n");
   if (/meta_basisniveau[\s\S]*?jsonb_build_object\('correlation_id'/.test(aanvullingen)) basis.add("correlation_id");
+  if (/meta_basisniveau[\s\S]*?jsonb_build_object\('contextbron_resolutie'/.test(aanvullingen)) basis.add("contextbron_resolutie");
   const { META_BASIS, META_BRON } = await import("../../core/lib/audit-meta");
   const verschil = (a: Iterable<string>, b: Set<string>) => [...a].filter((x) => !b.has(x)).sort();
   assert.deepEqual(verschil(META_BASIS as readonly string[], basis), [], `basis ontbreekt in ${laatste} plus wrappers`);

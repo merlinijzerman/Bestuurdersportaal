@@ -1,4 +1,4 @@
--- #367 — additieve correlation-projectie na alle forward-migraties.
+-- #367 — additieve correlation-/bronresolutieprojectie na alle forward-migraties.
 -- Read-only gedragstoets; draait als de werkelijke auditreader. Dit is bewust
 -- GEEN rollback→forward-replay: daarvoor is een aparte wegwerp-DB-run nodig.
 -- ROL: authenticated — dit is de rol die execute op beide auditprojecties
@@ -13,6 +13,9 @@ declare
   v_meta jsonb := jsonb_build_object(
     'correlation_id', 'corr-367',
     'methode', 'fts_dutch_ranked',
+    'contextbron_resolutie', jsonb_build_object(
+      'volledig', false, 'reden', 'kandidaatcap', 'kandidaatcap', 2000
+    ),
     'bronversie_audit', jsonb_build_array(jsonb_build_object(
       'document_identiteit', 'doc_v1_' || repeat('a', 64),
       'passage_identiteit', 'passage_v1_' || repeat('b', 64),
@@ -43,6 +46,15 @@ begin
      or public.meta_basisniveau('{"correlation_id":""}'::jsonb) ? 'correlation_id'
      or public.meta_basisniveau('{"correlation_id":42}'::jsonb) ? 'correlation_id' then
     raise exception '#367: ontbrekende, lege of niet-string correlation_id wordt geprojecteerd';
+  end if;
+  if v_basis->'contextbron_resolutie' <> v_meta->'contextbron_resolutie'
+     or v_bron->'contextbron_resolutie' <> v_meta->'contextbron_resolutie' then
+    raise exception '#367: contextbron_resolutie ontbreekt in auditprojectie';
+  end if;
+  if public.meta_basisniveau(
+       '{"contextbron_resolutie":{"volledig":false,"reden":"kandidaatcap","kandidaatcap":2000,"lek":"x"}}'::jsonb
+     ) ? 'contextbron_resolutie' then
+    raise exception '#367: onbeheerst contextbron_resolutie-object wordt geprojecteerd';
   end if;
 end;
 $$;

@@ -14,6 +14,7 @@ import { voerRetrievalUit, voerVolledigeRetrievalUit } from "../../core/lib/retr
 import { maakSupabaseAdapter, type Adaptervlaggen } from "../../core/lib/retrieval/supabase-adapter";
 import {
   chunkAlsBronresultaat,
+  finaliseerBevrorenChunks,
   haalBevrorenChunks,
   maakContext,
   planReflectieKandidatenPagina,
@@ -372,6 +373,7 @@ test("#367 — lokale download-id blijft server-only en voedt het bestaande UI-p
   assert.match(route, /id:\s*identiteit\.passageIdentiteit\.id/);
   assert.match(route, /document_id:\s*identiteit\.documentIdentiteit\.id/);
   assert.match(route, /bronversie_audit:\s*chunks\.map/);
+  assert.match(route, /contextbron_resolutie:\s*reflectieBronsetResolutie/);
   assert.match(orkestratie, /bronversie_audit:\s*volledigeBronmeta\.bronversie_audit/);
   assert.match(route, /maakAfbreekgrendel\(req\.signal,[^)]*timeoutUitConfig\(undefined\)/);
   assert.match(route, /haalBevrorenChunks\([\s\S]*reflectieGrendel\.signal/);
@@ -385,6 +387,45 @@ test("#367 — reflectieresolutie heeft een harde kandidaatcap", () => {
   assert.deepEqual(planReflectieKandidatenPagina(1_500), { van: 1_500, tot: 1_999 });
   assert.equal(planReflectieKandidatenPagina(2_000), null);
   assert.equal(planReflectieKandidatenPagina(-1), null);
+
+  const kandidaat: DocumentChunk = {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    document_id: DOC_REF,
+    tekst: "reeds gevonden geldige bron",
+    pagina: 1,
+    paragraaf: null,
+    chunk_index: 1,
+    indexering_versie: "r1",
+    documenten: {
+      titel: "Bron",
+      bron: "upload",
+      bibliotheek: "fonds",
+      opslag_pad: null,
+      fonds_id: FONDS_A,
+      bestand_hash: "a".repeat(64),
+    },
+  };
+  const gevondenRef = chunkAlsBronresultaat(kandidaat).passageIdentiteit.id;
+  const ontbrekendeRef = `passage_v1_${"f".repeat(64)}`;
+  const naCap = finaliseerBevrorenChunks(
+    [kandidaat],
+    [gevondenRef, ontbrekendeRef],
+    REFLECTIE_KANDIDATEN_MAX
+  );
+  assert.deepEqual(naCap.chunks, [], "een cap mag reeds gevonden deelbronnen niet doorlaten");
+  assert.deepEqual(naCap.status, {
+    volledig: false,
+    reden: "kandidaatcap",
+    kandidaatcap: REFLECTIE_KANDIDATEN_MAX,
+  });
+  assert.deepEqual(
+    splitsRetrievalMeta({ contextbron_resolutie: naCap.status }),
+    { spoor: { contextbron_resolutie: naCap.status }, inhoud: {}, onbekend: [] },
+    "de inhoudsvrije capreden moet in het auditspoor blijven"
+  );
+  const voorCap = finaliseerBevrorenChunks([kandidaat], [gevondenRef, ontbrekendeRef], 500);
+  assert.deepEqual(voorCap.chunks, [], "een ontbrekende ref mag evenmin gedeeltelijke context geven");
+  assert.equal(voorCap.status.reden, "ontbrekende_ref");
 });
 
 test("#367 — reflectieresolutie start geen I/O na clientannulering", async () => {
