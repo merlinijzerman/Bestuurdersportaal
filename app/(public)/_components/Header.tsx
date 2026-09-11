@@ -2,35 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import ThemeToggle from "./ThemeToggle";
 import MobileMenu from "./MobileMenu";
 
-// Marketing-header. variant "full" = volledige navigatie + hamburger/mobiel menu
-// (homepage + subpagina's). variant "simple" = compacte balk voor tekstpagina's
-// (privacy, contact). "Inloggen"/"/login" is een gewone link: op de marketing-
-// host redirect de middleware naar de app-login (TO §2.5). Primaire CTA is
-// overal "Neem contact op" (Bouwoverdracht §1 punt 3), nooit "Plan een demo".
-//
-// De `actief`-prop markeert het huidige menu-item (aria-current) voor a11y +
-// visuele nadruk. Waarden = route-paden ("/product", "/voor-wie", …).
+// Marketing-header v0.8. Navigatie teruggebracht tot vier items; /sectoren is
+// samengevoegd in /voor-wie. Primaire CTA is overal "Plan een live demo"
+// (voorheen "Neem contact op"). De themaknop is vervallen: de site kent nog één
+// lichte huisstijl.
 export type NavKey =
   | "/product"
   | "/voor-wie"
-  | "/sectoren"
   | "/governance-ai"
-  | "/over-ons"
   | null;
 
-// De nav bevat sinds besluit 0103 geen externe links meer: The Paradox is uit
-// de hoofdnavigatie gehaald ten gunste van "Over". De herkomst blijft zichtbaar
-// via de hero-regel op de homepage, de Over-pagina en de footer — daar staat de
-// externe link nog wél.
 const NAV: { href: string; label: string }[] = [
+  { href: "/#werkwijze", label: "Werkwijze" },
   { href: "/product", label: "Product" },
   { href: "/voor-wie", label: "Voor wie" },
-  { href: "/sectoren", label: "Sectoren" },
-  { href: "/governance-ai", label: "Governance & AI" },
-  { href: "/over-ons", label: "Over" },
+  { href: "/governance-ai", label: "AI & governance" },
 ];
 
 export default function Header({
@@ -50,10 +38,9 @@ export default function Header({
             <span className="mark">B</span>Bestuurdersportaal
           </Link>
           <span style={{ marginLeft: "auto" }} />
-          <a href="/contact" className="btn">
-            Neem contact op
+          <a href="/contact" className="btn btn-primary btn-sm">
+            Plan een live demo
           </a>
-          <ThemeToggle />
         </div>
       </header>
     );
@@ -77,13 +64,12 @@ export default function Header({
                 {item.label}
               </a>
             ))}
-            <a href="/contact" className="btn btn-primary">
-              Neem contact op
+            <a href="/contact" className="btn btn-primary btn-sm">
+              Plan een live demo
             </a>
-            <a href="/login" className="btn btn-outline">
+            <a href="/login" className="btn btn-outline btn-sm">
               Inloggen
             </a>
-            <ThemeToggle />
             <button
               type="button"
               className="hamburger"

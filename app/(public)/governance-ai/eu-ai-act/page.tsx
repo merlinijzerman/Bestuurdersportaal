@@ -3,6 +3,7 @@ import Header from "../../_components/Header";
 import Footer from "../../_components/Footer";
 import Crumb from "../../_components/Crumb";
 import CtaBand from "../../_components/CtaBand";
+import { OPEN_GRAPH_IMAGE } from "../../open-graph";
 
 // /governance-ai/eu-ai-act — verdieping onder Governance & AI (contentplan v1.0 §11).
 // GEEN eigen hoofdmenu-item: dit is bewust een verdiepingspagina onder /governance-ai.
@@ -26,6 +27,7 @@ export const metadata: Metadata = {
     description: OMSCHRIJVING,
     type: "website",
     url: "/governance-ai/eu-ai-act",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 
@@ -274,8 +276,8 @@ export default function EuAiActPage() {
       {/* CTA — Sectie 7 */}
       <CtaBand
         kop="Bespreek verantwoord AI-gebruik in uw bestuur"
-        tekst="Benieuwd hoe verantwoord AI-gebruik er in uw bestuurspraktijk uitziet? Neem contact op voor een verkennend gesprek."
-        primair={{ href: "/contact", label: "Neem contact op" }}
+        tekst="Benieuwd hoe verantwoord AI-gebruik er in uw bestuurspraktijk uitziet? We laten het in een demo van dertig minuten zien."
+        primair={{ href: "/contact", label: "Plan een live demo" }}
       />
 
       <Footer variant="full" />
