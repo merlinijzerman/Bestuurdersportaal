@@ -1,150 +1,149 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
-import Crumb from "../_components/Crumb";
-import CtaBand from "../_components/CtaBand";
+import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
-// /voor-wie — de organen die samen tot een besluit komen (copy v0.2 §3).
-// Besluit 0035 #1: 5 doelgroepblokken; pensioen als verwijzing (niet als 6e
-// blok), diepte-uitwerking op /sectoren/pensioenfondsen.
+// /voor-wie v0.8 — samenvoeging van de oude /voor-wie, /sectoren en
+// /sectoren/pensioenfondsen. Die twee routes redirecten hierheen.
 export const metadata: Metadata = {
-  title: {
-    absolute: "Voor wie — besturen, commissies, RvT, GRC | Bestuurdersportaal",
-  },
+  title: { absolute: "Voor wie: besturen en commissies — Bestuurdersportaal" },
   description:
-    "Voor besturen en commissies waar besluiten aantoonbaar zorgvuldig moeten zijn — van bestuur en toezicht tot bestuursbureau en GRC.",
+    "Voor de organen die samen tot een besluit komen: bestuur, commissies, toezicht, bestuursbureau en GRC. Pensioenfondsen zijn de eerste specialisatie.",
   alternates: { canonical: "/voor-wie" },
   openGraph: {
-    title: "Voor wie — besturen, commissies, RvT, GRC",
+    title: "Voor wie: besturen en commissies — Bestuurdersportaal",
     description:
-      "Voor besturen en commissies waar besluiten aantoonbaar zorgvuldig moeten zijn — van bestuur en toezicht tot bestuursbureau en GRC.",
+      "Voor de organen die samen tot een besluit komen: bestuur, commissies, toezicht, bestuursbureau en GRC. Pensioenfondsen zijn de eerste specialisatie.",
     type: "website",
     url: "/voor-wie",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 
-const DOELGROEPEN: { titel: string; tekst: string; output: string }[] = [
-  {
-    titel: "Besturen en directies",
-    tekst:
-      "Veel informatie, beperkte tijd, grote verantwoordingsdruk. Voor strategische en bestuurlijke besluiten waarbij informatie, risico's, alternatieven en verantwoordelijkheden zorgvuldig moeten worden gewogen. Bestuurdersportaal helpt de besluitvorming voor te bereiden, alternatieven te expliciteren en besluiten herleidbaar vast te leggen.",
-    output: "besluitdossier, afwegingsoverzicht",
-  },
-  {
-    titel: "Commissies",
-    tekst:
-      "Voorbereiding en advisering moeten navolgbaar zijn richting bestuur — op beleid, risico, audit, beleggingen, uitbesteding of governance. De omgeving helpt commissieadvies te onderbouwen met bronnen, risico's, aannames en opvolgpunten.",
-    output: "adviesdossier, opvolglijst",
-  },
-  {
-    titel: "Raden van toezicht / raden van commissarissen",
-    tekst:
-      "Toezicht op besluitkwaliteit vraagt inzicht in onderbouwing, opvolging en bestuurlijke zorgvuldigheid. De omgeving helpt afwegingen, risico's en besluitvorming beter reconstrueerbaar te maken.",
-    output: "reconstrueerbaar besluitdossier",
-  },
-  {
-    titel: "Bestuursbureaus en secretariaten",
-    tekst:
-      "Dossiervorming, acties, versies en opvolging zijn vaak versnipperd. Bestuurdersportaal helpt structuur aan te brengen in besluitdossiers, procesondersteuning, opvolging van acties en voorbereiding van besluitvorming.",
-    output: "gestructureerd dossier, actieoverzicht",
-  },
-  {
-    titel: "Governance-, risk- en compliance-teams",
-    tekst:
-      "Risico's, controls en beleidskaders staan vaak los van het bestuurlijke besluit. De omgeving helpt toetsing, signalering, risicoduiding en de borging van verantwoorde besluitvorming direct aan de besluitvorming te koppelen.",
-    output: "besluit met gekoppelde risico's en controls",
-  },
-];
-
-export default function VoorWiePage() {
+export default function Pagina() {
   return (
     <div className="bp-page">
-      <Header variant="full" actief="/voor-wie" />
+      <Header actief="/voor-wie" />
 
-      {/* HERO */}
       <section className="phero">
-        <div className="grid-bg" />
+        <div className="grid-bg"></div>
         <div className="wrap">
-          <Crumb items={[{ label: "Voor wie" }]} />
-          <h1>
-            Voor besturen en commissies waar besluiten aantoonbaar zorgvuldig
-            moeten zijn
-          </h1>
-          <p className="sub">
-            Gebouwd voor bestuurlijke omgevingen waar besluiten gevolgen hebben en
-            verantwoording vragen. Bestuursbureaus, secretariaten en GRC-teams
-            ondersteunen daarbij het bestuurlijke proces.
+          <div className="eyebrow-label">Voor wie</div>
+          <h1>Voor de organen die samen tot een besluit komen.</h1>
+          <p className="lede">
+            Gebouwd voor bestuurlijke omgevingen waar besluiten gevolgen hebben en verantwoording
+            vragen. Pensioenfondsen zijn de eerste sector waarvoor we het diepst hebben ingericht.
           </p>
-          <div className="cta">
-            <a href="/contact" className="btn btn-primary">
-              Neem contact op
-            </a>
-            <a href="/product" className="btn btn-outline">
-              Bekijk hoe het werkt
-            </a>
+          <p><a href="/product" className="textlink">Bekijk hoe een besluitdossier werkt →</a></p>
+        </div>
+      </section>
+
+      <section className="sec-cool">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">Rollen</div>
+            <h2>Wie werkt er in een besluitdossier?</h2>
+          </div>
+          <div className="rolgrid">
+            <div className="rol">
+              <h3>Besturen en directies</h3>
+              <p>Veel informatie, beperkte tijd, grote verantwoordingsdruk. Voor besluiten waarbij informatie, risico's, alternatieven en verantwoordelijkheden tegen elkaar moeten worden gewogen.</p>
+              <span className="out">Levert op: besluitdossier, afwegingsoverzicht.</span>
+            </div>
+            <div className="rol">
+              <h3>Commissies</h3>
+              <p>Voorbereiding en advisering moeten navolgbaar zijn richting bestuur — op beleid, risico, audit, beleggingen, uitbesteding of governance.</p>
+              <span className="out">Levert op: adviesdossier, opvolglijst.</span>
+            </div>
+            <div className="rol">
+              <h3>Raden van toezicht en commissarissen</h3>
+              <p>Toezicht op besluitkwaliteit vraagt inzicht in onderbouwing, opvolging en bestuurlijke zorgvuldigheid.</p>
+              <span className="out">Levert op: reconstrueerbaar besluitdossier.</span>
+            </div>
+            <div className="rol">
+              <h3>Bestuursbureaus en secretariaten</h3>
+              <p>Dossiervorming, acties, versies en opvolging zijn vaak versnipperd. Hier staan ze bij het besluit waar ze bij horen.</p>
+              <span className="out">Levert op: gestructureerd dossier, actieoverzicht.</span>
+            </div>
+            <div className="rol">
+              <h3>Governance, risk en compliance</h3>
+              <p>Risico's, beheersmaatregelen en beleidskaders staan vaak los van het bestuurlijke besluit. Hier hangen ze eraan vast.</p>
+              <span className="out">Levert op: besluit met gekoppelde risico's.</span>
+            </div>
+          </div>
+          <p className="sharp">Ongeacht de rol draait het om hetzelfde: navolgbaar maken waarop een besluit rust.</p>
+        </div>
+      </section>
+
+      <section className="sec-app">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">Herkenning</div>
+            <h2>Past dit bij uw organisatie?</h2>
+            <p className="lede">
+              Bestuurdersportaal is niet aan één sector gebonden, maar aan een type besluitvorming.
+              Herkent u deze kenmerken, dan sluit het waarschijnlijk aan.
+            </p>
+          </div>
+          <div className="chips">
+            <span className="chip">toezicht op de besluitvorming</span>
+            <span className="chip">hoge verantwoordingsdruk, intern en extern</span>
+            <span className="chip">uitbestedingsketens waarin het bestuur verantwoordelijk blijft</span>
+            <span className="chip">documentintensieve besluiten met veel bronnen</span>
+            <span className="chip">commissies, toezicht en bestuursbureaus die samen tot een besluit komen</span>
+            <span className="chip">AI die alleen binnen kaders toepasbaar is</span>
           </div>
         </div>
       </section>
 
-      {/* DOELGROEPBLOKKEN */}
-      <section>
+      <section className="sec-cool">
         <div className="wrap">
-          <div className="label">Doelgroepen</div>
-          <h2>Voor de organen die samen tot een besluit komen.</h2>
-          <div className="blocks">
-            {DOELGROEPEN.map((d) => (
-              <div key={d.titel} className="bl">
-                <h3>{d.titel}</h3>
-                <p>{d.tekst}</p>
-                <span className="out">Relevante output: {d.output}.</span>
-              </div>
-            ))}
+          <div className="sec-head">
+            <div className="eyebrow-label">Eerste specialisatie</div>
+            <h2>Pensioenfondsen.</h2>
+            <p className="lede">
+              Bij pensioenfondsen komen toezicht, uitbesteding, risicobeheersing en bestuurlijke
+              verantwoordelijkheid tegelijk samen. Het is de sector waarvoor we het product het
+              diepst hebben ingericht — de opzet eronder is breder toepasbaar.
+            </p>
+          </div>
+          <div className="trio">
+            <div className="m">
+              <div className="st">Uitbestedingsketen</div>
+              <h3>Verantwoordelijk op afstand</h3>
+              <p>Uitvoering, vermogensbeheer en administratie zijn vaak uitbesteed. Het bestuur
+                 blijft verantwoordelijk en moet kunnen sturen én verantwoorden.</p>
+            </div>
+            <div className="m">
+              <div className="st">Toezicht</div>
+              <h3>Verantwoording is de norm</h3>
+              <p>Fondsen leggen verantwoording af aan interne toezichtorganen en externe
+                 stakeholders — vaak over besluiten van jaren terug.</p>
+            </div>
+            <div className="m">
+              <div className="st">Documentintensiteit</div>
+              <h3>Veel bronnen per besluit</h3>
+              <p>Beleidsstukken, adviezen, data en verslagen. Het overzicht daarvan bepaalt mede
+                 de kwaliteit van het besluit.</p>
+            </div>
+          </div>
+          <div className="sec-head" style={{marginTop: '56px', marginBottom: '0'}}>
+            <div className="eyebrow-label">Gebruikssituaties</div>
+            <h2>Waar het bij helpt.</h2>
+            <p className="lede">Elke situatie beschrijft ondersteuning, geen garantie of naleving.</p>
+          </div>
+          <div className="kaartjes">
+            <div className="kaartje"><h3>Uitbesteding en sturing</h3><p>Besluiten over uitbesteding en het sturen op uitbestede partijen onderbouwen en vastleggen.</p></div>
+            <div className="kaartje"><h3>Beleggingsbeleid en risicohouding</h3><p>De afweging en de vastlegging rond beleggingsbeleid en risicohouding ondersteunen.</p></div>
+            <div className="kaartje"><h3>Risicobeheersing en compliance</h3><p>Risico's, beheersmaatregelen en beleidskaders aan het bestuurlijke besluit verbinden.</p></div>
+            <div className="kaartje"><h3>Bestuurs- en commissiebesluiten</h3><p>Voorbereiding, advisering en besluitvorming met bronnen, aannames en opvolgpunten in één dossier.</p></div>
+            <div className="kaartje"><h3>Verantwoording</h3><p>Afwegingen, besluiten en opvolging herleidbaar maken voor intern toezicht en externe stakeholders.</p></div>
+            <div className="kaartje"><h3>Evaluatie</h3><p>Toetsen of voorwaarden zijn nagekomen en of de aannames klopten.</p></div>
           </div>
         </div>
       </section>
 
-      {/* PENSIOEN-VERWIJZING */}
-      <section>
-        <div className="wrap">
-          <div className="label">Eerste specialisatie</div>
-          <h2>Pensioenfondsbesturen en -commissies.</h2>
-          <p className="lede">
-            Pensioenfondsen zijn onze eerste specialisatie: toezicht, uitbesteding,
-            risicobeheersing en bestuurlijke verantwoordelijkheid komen daar scherp
-            en gelijktijdig samen.
-          </p>
-          <p className="link-row">
-            <a href="/sectoren/pensioenfondsen" className="textlink">
-              Bekijk de pensioenspecialisatie →
-            </a>
-          </p>
-        </div>
-      </section>
-
-      {/* RODE DRAAD */}
-      <section>
-        <div className="wrap">
-          <div className="label">Rode draad</div>
-          <h2>Ongeacht de rol: navolgbare besluitvorming.</h2>
-          <p className="lede">
-            Ongeacht de rol draait het om hetzelfde: navolgbaar maken welke
-            informatie is gebruikt, welke afwegingen zijn gemaakt en hoe een
-            besluit tot stand is gekomen.
-          </p>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <CtaBand
-        kop="Past dit bij uw rol?"
-        primair={{ href: "/contact", label: "Neem contact op" }}
-        secundair={[
-          { href: "/product", label: "Bekijk hoe het werkt" },
-          { href: "/sectoren", label: "Past dit bij uw sector?" },
-        ]}
-      />
-
-      <Footer variant="full" />
+      <Footer />
     </div>
   );
 }
