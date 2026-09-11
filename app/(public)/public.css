@@ -1790,10 +1790,20 @@
 @media (max-width:620px) {
 .bp-public .wrap {padding:0 20px
 }
+.bp-public header .nav > .btn {display:none
+}
 .bp-public .pcards {grid-template-columns:1fr;gap:38px
 }
 .bp-public .kaartjes {grid-template-columns:1fr
 }
 .bp-public .geheugen {grid-template-columns:1fr
+}
+.bp-public .ctapanel {padding:24px
+}
+.bp-public .ctapanel > * {min-width:0
+}
+.bp-public .ctapanel .acts, .bp-public .ctapanel .btn {width:100%
+}
+.bp-public .ctapanel .btn {justify-content:center;text-align:center;white-space:normal;line-height:1.35
 }
 }

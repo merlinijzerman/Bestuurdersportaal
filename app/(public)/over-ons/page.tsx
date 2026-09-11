@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
+import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
 // /over-ons v0.8 — opent met de visie, daarna de oprichters met bio's en
 // LinkedIn, de werkprincipes en de volg-ons-strook.
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
       "AI levert waarde als ze een specifieke bedrijfscontext begrijpt én mensen gericht ondersteunt. Wie we zijn, waar we in geloven en wat we bouwen.",
     type: "website",
     url: "/over-ons",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 

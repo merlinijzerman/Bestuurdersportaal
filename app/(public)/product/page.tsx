@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
+import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
 // /product v0.8 — per module één sectie met het bijbehorende productfragment.
 export const metadata: Metadata = {
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
       "Modules die samen het besluitproces bedienen: een brongebonden AI-assistent op uw eigen bibliotheek, vergaderingen met voorbereiding, en besluitdossiers.",
     type: "website",
     url: "/product",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 

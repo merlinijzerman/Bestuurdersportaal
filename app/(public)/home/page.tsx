@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
+import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
 // Homepage v0.8 — productomschrijving, drie momenten, bestuurlijk geheugen,
 // zes productfragmenten, brongebonden AI en de pilot-CTA.
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
       "Eén digitale plek om bestuursbesluiten voor te bereiden, te onderbouwen en vast te leggen. Met beheerste AI die laat zien welke bronnen zijn gebruikt.",
     type: "website",
     url: "/",
+    images: [OPEN_GRAPH_IMAGE],
   },
 };
 
