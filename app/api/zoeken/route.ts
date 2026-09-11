@@ -1,10 +1,9 @@
 // ============================================================================
 //  GET /api/zoeken — Increment H (zoekmodule, UI op bestaande retrieval).
 // ----------------------------------------------------------------------------
-//  Volwaardige zoek-UI bovenop dezelfde retrieval-RPC's als de AI-assistent
-//  (zoek_chunks / zoek_chunks_hybride, Increment G). GEEN migratie en GEEN nieuwe
-//  retrieval-engine: dezelfde scope-vóór-ranking, dezelfde filters, dezelfde RLS
-//  (SECURITY INVOKER → tenant-isolatie blijft gelden).
+//  Volwaardige zoek-UI via het providerneutrale RetrievalAdapter-contract en de
+//  centrale orkestratie (#369). De Supabase-adapter gebruikt dezelfde RPC's als
+//  de AI-assistent; scope-vóór-ranking, filters en SECURITY INVOKER-RLS blijven.
 //
 //  Query-parameters:
 //    q              — zoekterm (verplicht, ≥ 2 tekens)
@@ -21,12 +20,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
-import {
-  zoekRelevanteChunksMetMeta,
-  type DocumentChunk,
-  type RetrievalFilters,
-} from "@/core/lib/rag";
+import { type RetrievalFilters } from "@/core/lib/rag";
 import type { RetrievalModus } from "@/core/lib/vraagtype";
+import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
+import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
+import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
+import type { Bronsoort } from "@/core/lib/retrieval/contract";
+import {
+  citaatOpdracht,
+  bevatClientScopeSturing,
+  geldigeUuid,
+  groepeerZoekresultaten,
+  maakZoekSpoor,
+} from "@/core/lib/retrieval/productiepaden-core";
 
 export const dynamic = "force-dynamic";
 
@@ -37,29 +45,6 @@ const MODUS_MAP: Record<string, RetrievalModus> = {
   actueel: "actueel",
   historisch: "historisch",
 };
-
-interface Treffer {
-  pagina: number | null;
-  paragraaf: string | null;
-  fragment: string;
-}
-
-interface ZoekResultaat {
-  document_id: string;
-  titel: string;
-  bron: string;
-  bibliotheek: string | null;
-  procesinstantie_id: string | null;
-  documentstatus: string | null;
-  bronstatus: string | null;
-  documentdatum: string | null;
-  geldig_tot: string | null;
-  bronorganisatie: string | null;
-  normgewicht: string | null;
-  extern_url: string | null;
-  heeft_origineel: boolean;
-  treffers: Treffer[];
-}
 
 export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-eigen", audit: "geen", capability: "zoeken.use", label: "zoeken.GET", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
@@ -86,6 +71,9 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
     }
 
     const sp = req.nextUrl.searchParams;
+    if (bevatClientScopeSturing(sp.keys())) {
+      return NextResponse.json({ error: "Ongeldige scope-invoer." }, { status: 400 });
+    }
     const q = (sp.get("q") ?? "").trim();
     if (q.length < 2) {
       return NextResponse.json(
@@ -94,59 +82,72 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
       );
     }
 
+    // #369 — de zoekterm kan naar een embedding- of rerankprovider gaan. De
+    // PII-poort staat daarom vóór scope-resolutie, fondsvlaggen en de adapter:
+    // een geweigerde term veroorzaakt aantoonbaar geen retrievalnetwerkcall.
+    const pii = bevatPersoonsgegevens(q);
+    if (pii.bevatPii) {
+      return NextResponse.json(
+        { error: "Zoeken met persoonsgegevens is niet toegestaan." },
+        { status: 400 }
+      );
+    }
+
     const modus = MODUS_MAP[sp.get("modus") ?? "alles"] ?? "alles";
     const bronsoortParam = sp.get("bronsoort") ?? "alles";
     const procesinstantie = sp.get("procesinstantie");
+
+    // De query-string mag de scope niet bepalen zonder servervalidatie. Een
+    // ongeldige of fondsvreemde referentie eindigt als dezelfde lege zoekset als
+    // voorheen, maar stopt nu vóór de adapter (dus vóór embedding/rerank/RPC).
+    if (procesinstantie) {
+      if (!geldigeUuid(procesinstantie)) {
+        return NextResponse.json({ resultaten: [], procesinstanties: [], bronnen: [], meta: null });
+      }
+      const { data: proces } = await supabase
+        .from("procedures")
+        .select("id")
+        .eq("id", procesinstantie)
+        .eq("fonds_id", fondsId)
+        .maybeSingle();
+      if (!proces) {
+        return NextResponse.json({ resultaten: [], procesinstanties: [], bronnen: [], meta: null });
+      }
+    }
 
     const filters: RetrievalFilters = { modus };
     if (bronsoortParam === "fonds") filters.bronsoort = ["fonds"];
     else if (bronsoortParam === "generiek") filters.bronsoort = ["generiek"];
     if (procesinstantie) filters.procesinstantie_ids = [procesinstantie];
 
-    // Ruimere top-N dan de chat (een zoekpagina toont meer): 40 chunks.
-    const { chunks, meta } = await zoekRelevanteChunksMetMeta(
-      q,
-      fondsId, // T4 — expliciete fondsfilter náást RLS (server-side geresolveerd)
-      40,
-      undefined,
-      undefined,
-      filters
+    // #369 — dezelfde adapter en volledige orkestratie als de chat: centrale
+    // selectie/dedup/toelating/citatie en één deadline over de hele keten.
+    // Fonds, actor, bronbeleid en processcope komen uitsluitend uit de
+    // servercontext en de hierboven gevalideerde referentie.
+    const [hybrideAan, vlaggen] = await Promise.all([
+      hybrideZoekenAan(fondsId),
+      retrievalVlaggenVoorFonds(fondsId),
+    ]);
+    const retrieval = maakSupabaseAdapter(vlaggen);
+    const voltooid = await voerVolledigeRetrievalUit(
+      {
+        fondsId,
+        actor: { soort: "gebruiker", id: ctx.gebruikerId },
+        taaktype: "rerank",
+        bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+        scope: procesinstantie ? { procesId: procesinstantie } : undefined,
+        correlationId: ctx.requestId,
+        verzoekStartOp: ctx.verzoekStartOp,
+        signal: req.signal,
+      },
+      {
+        adapter: retrieval.adapter,
+        timeoutMs: timeoutUitConfig(vlaggen.retrievalTimeoutMs),
+        sporen: [maakZoekSpoor({ vraag: q, filters, hybrideAan, vlaggen })],
+      },
+      citaatOpdracht([])
     );
-
-    // Aggregeer chunks per document (volgorde = relevantie van de eerste treffer).
-    const perDoc = new Map<string, ZoekResultaat>();
-    for (const c of chunks as DocumentChunk[]) {
-      const d = c.documenten;
-      let r = perDoc.get(c.document_id);
-      if (!r) {
-        r = {
-          document_id: c.document_id,
-          titel: d.titel,
-          bron: d.bron,
-          bibliotheek: d.bibliotheek ?? null,
-          procesinstantie_id: d.procesinstantie_id ?? null,
-          documentstatus: d.documentstatus ?? null,
-          bronstatus: d.bronstatus ?? null,
-          documentdatum: d.documentdatum ?? null,
-          geldig_tot: d.geldig_tot ?? null,
-          bronorganisatie: d.bronorganisatie ?? null,
-          normgewicht: d.normgewicht ?? null,
-          extern_url: d.extern_url ?? null,
-          heeft_origineel: !!d.opslag_pad,
-          treffers: [],
-        };
-        perDoc.set(c.document_id, r);
-      }
-      // Max. 3 treffers per document tonen — houdt de lijst leesbaar.
-      if (r.treffers.length < 3) {
-        r.treffers.push({
-          pagina: c.pagina,
-          paragraaf: c.paragraaf,
-          fragment: c.tekst.length > 220 ? c.tekst.slice(0, 220) + "…" : c.tekst,
-        });
-      }
-    }
-    const resultaten = [...perDoc.values()];
+    const resultaten = groepeerZoekresultaten(voltooid.geselecteerd);
 
     // Resolveer procesinstantie-titels (dossiers) voor groepering + filter-UI.
     // RLS bepaalt zichtbaarheid; ontbreekt een titel, dan valt de client terug op
@@ -166,14 +167,29 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
     return NextResponse.json({
       resultaten,
       procesinstanties,
+      // Providerneutrale bronvorm met centrale citatievolgorde. De bestaande
+      // `resultaten` blijven voor de huidige UI beschikbaar.
+      bronnen: voltooid.bronverwijzingen,
       meta: {
-        methode: meta.methode,
-        opgehaald: meta.opgehaald,
-        geselecteerd: meta.geselecteerd,
+        methode: voltooid.meta.methode,
+        opgehaald: voltooid.meta.opgehaald,
+        geselecteerd: voltooid.meta.geselecteerd,
         modus,
+        // Alleen tellingen/categorieën, nooit refs of passages.
+        ...(voltooid.meta.toelating ? { toelating: voltooid.meta.toelating } : {}),
       },
     });
   } catch (e) {
+    const afbreking = foutcategorieVoor(e);
+    if (afbreking === "annulering") {
+      return new Response(null, { status: 499 });
+    }
+    if (afbreking === "timeout") {
+      return NextResponse.json(
+        { error: "Het zoeken duurde te lang. Probeer het opnieuw of zoek gerichter." },
+        { status: 504 }
+      );
+    }
     console.error("Fout in GET /api/zoeken:", e);
     return NextResponse.json({ error: "Serverfout bij zoeken." }, { status: 500 });
   }

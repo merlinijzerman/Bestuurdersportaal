@@ -42,6 +42,7 @@ import { isAfbreking } from "./afbreken";
 export type Weigergrond =
   | "filter_niet_ondersteund"
   | "identiteit_ontbreekt"
+  | "buiten_server_scope"
   | "geen_bewijs"
   | "bewijs_niet_beloofd"
   | "versiebewijs_ontbreekt"
@@ -74,10 +75,15 @@ export type Weigergrond =
  * een gewone autorisatieweigering zou het incident onzichtbaar maken én de
  * gebruiker ten onrechte als "niet bevoegd" boeken.
  */
-export type Weigercategorie = "toestemming_geweigerd" | "configuratiefout" | "providerfout";
+export type Weigercategorie =
+  | "buiten_scope"
+  | "toestemming_geweigerd"
+  | "configuratiefout"
+  | "providerfout";
 
 const CATEGORIE: Record<Weigergrond, Weigercategorie> = {
   identiteit_ontbreekt: "configuratiefout",
+  buiten_server_scope: "buiten_scope",
   geen_bewijs: "toestemming_geweigerd",
   binding_ander_resultaat: "toestemming_geweigerd",
   binding_andere_bron: "toestemming_geweigerd",

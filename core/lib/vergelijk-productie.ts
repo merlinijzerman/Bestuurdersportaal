@@ -2,7 +2,7 @@
 //  core/lib/vergelijk-productie.ts — productie-wiring van de vergelijkmodus (T5).
 // ----------------------------------------------------------------------------
 //  De ONZUIVERE helft: bouwt een VergelijkDeps met de echte I/O — semantic_units
-//  lezen (RLS-client), per-bron retrieval + parent-retrieval (rag.ts), Haiku voor
+//  lezen (RLS-client), per-bron retrieval via adapter + orkestratie, Haiku voor
 //  extra dimensies, Opus voor de LLM-waardevergelijking, en de append-only schrijf
 //  via de SECURITY DEFINER-RPC fn_schrijf_vergelijking. De pure beslislogica leeft
 //  in vergelijk-kern.ts; hier worden alleen de deps ingevuld. "server-only": raakt
@@ -17,7 +17,11 @@ import type { AiGateway, GatewayContext, NeutraleTool } from "./ai-gateway/contr
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AI_MODEL } from "./generatie-kern";
 import { deterministischVertrouwd } from "./vergelijk-config";
-import { zoekRelevanteChunksMetMeta } from "./rag";
+import type { RetrievalOpties } from "./rag";
+import { voerVolledigeRetrievalUit } from "./retrieval/orkestratie";
+import { isAfbreking } from "./retrieval/afbreken";
+import type { RetrievalAdapter, RetrievalContext } from "./retrieval/contract";
+import { citaatOpdracht, maakVergelijkSpoor } from "./retrieval/productiepaden-core";
 import type {
   ConceptLite,
   LLMVergelijkUitkomst,
@@ -52,6 +56,14 @@ export const VERGELIJK_MODEL = AI_MODEL;
 const MAX_PASSAGES_PER_ZIJDE = 4;
 const MAX_EXTRA_DIMENSIES = 6;
 
+interface VergelijkRetrieval {
+  adapter: RetrievalAdapter;
+  context: RetrievalContext;
+  timeoutMs: number;
+  hybrideAan: boolean;
+  vlaggen: RetrievalOpties;
+}
+
 // AI-BEGRENZING (besluit 0180). Geen eigen client: beide modelcalls lopen door
 // de centrale poort, die vlak vóór elke call de kill switch en de allowlist
 // toetst. Het quotum is al gereserveerd door /api/vergelijk (of, als de chat de
@@ -60,29 +72,41 @@ const MAX_EXTRA_DIMENSIES = 6;
 
 // ── Retrieval per (document, dimensie) ───────────────────────────────────────
 // Scope op één document → gebalanceerd per bron (elke zijde krijgt een eigen budget,
-// structureel sterker dan perSourceMin op een gecombineerde set). parentRetrieval aan
-// voor de omliggende structuur-unit. Faalt zacht: bij een fout geen passages.
+// structureel sterker dan perSourceMin op een gecombineerde set). De fondsvlaggen
+// sturen o.a. parent-retrieval. Een providerfout blijft best-effort; afbraak niet.
 async function haalPassages(
-  fondsId: string,
+  retrieval: VergelijkRetrieval,
   documentId: string,
-  dimensie: Dimensie
+  dimensie: Dimensie,
+  maxResultaten = MAX_PASSAGES_PER_ZIJDE
 ): Promise<PassageLite[]> {
   const vraag = `${dimensie.label} (${dimensie.key})`;
   try {
-    const { chunks } = await zoekRelevanteChunksMetMeta(
-      vraag,
-      fondsId,
-      MAX_PASSAGES_PER_ZIJDE,
-      undefined,
-      [documentId],
-      {},
-      { parentRetrieval: true }
+    const uitkomst = await voerVolledigeRetrievalUit(
+      { ...retrieval.context, scope: { ...retrieval.context.scope, documentIds: [documentId] } },
+      {
+        adapter: retrieval.adapter,
+        timeoutMs: retrieval.timeoutMs,
+        sporen: [
+          maakVergelijkSpoor({
+            vraag,
+            documentId,
+            hybrideAan: retrieval.hybrideAan,
+            vlaggen: retrieval.vlaggen,
+            maxResultaten,
+          }),
+        ],
+      },
+      citaatOpdracht([documentId])
     );
-    return chunks.map((c) => ({
-      tekst: c.aangeleverde_passage ?? c.tekst,
-      page: c.pagina,
+    return uitkomst.geselecteerd.map((b) => ({
+      tekst: b.weergave?.aangeleverdePassage ?? b.passage,
+      page: b.locator.pagina ?? null,
     }));
   } catch (e) {
+    // Een providerfout blijft best-effort zoals vóór #369; annulering en onze
+    // deadline zijn terminal en mogen nooit als een lege evidence-set doorgaan.
+    if (isAfbreking(e)) throw e;
     console.error(`[vergelijk] retrieval mislukt (doc ${documentId}, dim ${dimensie.key}):`, (e as Error).message);
     return [];
   }
@@ -130,7 +154,7 @@ const DIM_TOOL: Extract<NeutraleTool, { soort: "functie" }> = {
 
 async function haalExtraDimensies(
   gw: GatewayDeps,
-  fondsId: string,
+  retrieval: VergelijkRetrieval,
   bronDocumentId: string,
   doelDocumentId: string,
   catalogus: Dimensie[]
@@ -138,18 +162,20 @@ async function haalExtraDimensies(
   try {
     // Representatieve passages van beide zijden (generieke bestuurlijke query).
     const generiek = "kernparameters, percentages, bedragen, datums en beleidskeuzes";
+    const generiekeDimensie: Dimensie = { key: "generiek", label: generiek, herkomst: "aangevuld" };
     const [bron, doel] = await Promise.all([
-      zoekRelevanteChunksMetMeta(generiek, fondsId, 5, undefined, [bronDocumentId], {}, { parentRetrieval: true }),
-      zoekRelevanteChunksMetMeta(generiek, fondsId, 5, undefined, [doelDocumentId], {}, { parentRetrieval: true }),
+      haalPassages(retrieval, bronDocumentId, generiekeDimensie, 5),
+      haalPassages(retrieval, doelDocumentId, generiekeDimensie, 5),
     ]);
-    const tekstBron = bron.chunks.map((c) => c.aangeleverde_passage ?? c.tekst).join("\n---\n").slice(0, 8000);
-    const tekstDoel = doel.chunks.map((c) => c.aangeleverde_passage ?? c.tekst).join("\n---\n").slice(0, 8000);
+    const tekstBron = bron.map((p) => p.tekst).join("\n---\n").slice(0, 8000);
+    const tekstDoel = doel.map((p) => p.tekst).join("\n---\n").slice(0, 8000);
     const bekend = catalogus.map((d) => d.key).join(", ") || "(geen)";
 
     const resp = await gw.gateway.genereer(gw.ctx, {
       taaktype: "vergelijk_dimensies",
       maxTokens: 512,
       temperature: 0,
+      signal: retrieval.context.signal,
       systeem:
         "Je bent een analist die twee versies van een pensioenfonds-document vergelijkt. " +
         "Je benoemt uitsluitend concrete, vergelijkbare dimensies die in BEIDE teksten " +
@@ -175,6 +201,7 @@ async function haalExtraDimensies(
       .slice(0, MAX_EXTRA_DIMENSIES)
       .map((d) => ({ key: d.key!.trim(), label: d.label!.trim(), herkomst: "llm" as const }));
   } catch (e) {
+    if (isAfbreking(e)) throw e;
     console.error(`[vergelijk] dimensiebepaling mislukt:`, (e as Error).message);
     return [];
   }
@@ -211,6 +238,7 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
   dimensie: Dimensie;
   passagesBron: PassageLite[];
   passagesDoel: PassageLite[];
+  signal?: AbortSignal;
 }): Promise<LLMVergelijkUitkomst> {
   const { dimensie, passagesBron, passagesDoel } = input;
   const leeg: LLMVergelijkUitkomst = {
@@ -222,6 +250,7 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
       taaktype: "vergelijk_waarde",
       maxTokens: 700,
       temperature: 0,
+      signal: input.signal,
       systeem:
         "Je vergelijkt één specifieke dimensie tussen twee versies van een pensioenfonds-" +
         "document. Neem bewijszinnen LETTERLIJK over. Bind een waarde alleen als de tekst " +
@@ -252,23 +281,30 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
       gelijk: r.gelijk === true,
     };
   } catch (e) {
+    if (isAfbreking(e)) throw e;
     console.error(`[vergelijk] LLM-vergelijking mislukt (dim ${dimensie.key}):`, (e as Error).message);
     return leeg;
   }
 }
 
 // ── Semantic units + concepten lezen (RLS-client) ────────────────────────────
-async function leesConcepten(supabase: SupabaseClient): Promise<ConceptLite[]> {
-  const { data, error } = await supabase.from("concepts").select("id, key, label, type, status");
+async function leesConcepten(supabase: SupabaseClient, signal?: AbortSignal): Promise<ConceptLite[]> {
+  let query = supabase.from("concepts").select("id, key, label, type, status");
+  if (signal) query = query.abortSignal(signal);
+  const { data, error } = await query;
+  if (isAfbreking(error)) throw error;
   if (error || !data) return [];
   return data as ConceptLite[];
 }
 
-async function leesSemanticUnits(supabase: SupabaseClient, documentId: string): Promise<SemanticUnitLite[]> {
-  const { data, error } = await supabase
+async function leesSemanticUnits(supabase: SupabaseClient, documentId: string, signal?: AbortSignal): Promise<SemanticUnitLite[]> {
+  let query = supabase
     .from("semantic_units")
     .select("concept_id, type, value_num, value_date, value_text, value_raw, value_unit, page, evidence")
     .eq("document_id", documentId);
+  if (signal) query = query.abortSignal(signal);
+  const { data, error } = await query;
+  if (isAfbreking(error)) throw error;
   if (error || !data) return [];
   return data as SemanticUnitLite[];
 }
@@ -310,16 +346,21 @@ export function productieDeps(ctx: {
   fondsId: string;
   gateway: AiGateway;
   gatewayCtx: GatewayContext;
+  retrieval: VergelijkRetrieval;
 }): VergelijkDeps {
-  const { supabase, fondsId } = ctx;
+  const { supabase } = ctx;
   const gw: GatewayDeps = { gateway: ctx.gateway, ctx: ctx.gatewayCtx };
   return {
-    leesConcepten: () => leesConcepten(supabase),
-    leesSemanticUnits: (documentId) => leesSemanticUnits(supabase, documentId),
+    leesConcepten: () => leesConcepten(supabase, ctx.retrieval.context.signal),
+    // Gemotiveerde uitzondering: semantic_units zijn reeds geëxtraheerde,
+    // getypeerde waarden voor het deterministische vergelijkpad. Ze zijn geen
+    // zoekprovider en worden onder dezelfde RLS-client, documentbinding en
+    // request-cancellation gelezen. T2-4 kan dit evidencepad typed opnemen.
+    leesSemanticUnits: (documentId) => leesSemanticUnits(supabase, documentId, ctx.retrieval.context.signal),
     bepaalExtraDimensies: ({ bronDocumentId, doelDocumentId, catalogus }) =>
-      haalExtraDimensies(gw, fondsId, bronDocumentId, doelDocumentId, catalogus),
-    retrieveerPassages: (documentId, dimensie) => haalPassages(fondsId, documentId, dimensie),
-    vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(gw, input),
+      haalExtraDimensies(gw, ctx.retrieval, bronDocumentId, doelDocumentId, catalogus),
+    retrieveerPassages: (documentId, dimensie) => haalPassages(ctx.retrieval, documentId, dimensie),
+    vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(gw, { ...input, signal: ctx.retrieval.context.signal }),
     persisteer: (inv) => persisteer(supabase, inv),
     deterministischVertrouwd: deterministischVertrouwd(),
   };

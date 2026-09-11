@@ -35,7 +35,10 @@ const CTX: RetrievalContext = {
   fondsId: "11111111-1111-4111-8111-111111111111",
   actor: { soort: "gebruiker", id: "22222222-2222-4222-8222-222222222222" },
   taaktype: "chat_generatie",
-  bronbeleid: { bronsoorten: ["fonds"] },
+  // De suite gebruikt zowel fonds- als synthetische SharePointbronnen. Sinds
+  // #369 wordt dit beleid werkelijk afgedwongen, dus beide horen expliciet in
+  // de hermetische testcontext.
+  bronbeleid: { bronsoorten: ["fonds", "sharepoint"] },
   correlationId: "corr-b",
   verzoekStartOp: new Date().toISOString(),
 };

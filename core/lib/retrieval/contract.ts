@@ -180,6 +180,8 @@ export interface Bronresultaat {
     bibliotheek?: string | null;
     bron?: string | null;
     fondsId?: string | null;
+    /** Providerneutrale dossierbinding voor scopevalidatie en groepering. */
+    procesId?: string | null;
   };
   passageIdentiteit: { id: string };
   versie: Versiebewijs;

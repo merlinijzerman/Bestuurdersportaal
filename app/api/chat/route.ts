@@ -1841,15 +1841,62 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const koppeling = koppelDocumenten(vergelijkIntent.bronHint, vergelijkIntent.doelHint, documenten);
 
       if (koppeling.eenduidig && koppeling.bron && koppeling.doel) {
-        const resultaat = await voerVergelijkingUit(
-          {
-            mode: "symmetrisch",
-            bronDocumentId: koppeling.bron.id,
-            doelDocumentId: koppeling.doel.id,
-            versies: VERGELIJK_VERSIES,
-          },
-          productieDeps({ supabase, fondsId, gateway, gatewayCtx })
-        );
+        const [vergelijkHybrideAan, vergelijkVlaggen] = await Promise.all([
+          hybrideZoekenAan(fondsId),
+          retrievalVlaggenVoorFonds(fondsId),
+        ]);
+        const vergelijkRetrieval = maakSupabaseAdapter(vergelijkVlaggen, {
+          gateway: { gateway, ctx: gatewayCtx },
+        });
+        let resultaat;
+        try {
+          resultaat = await voerVergelijkingUit(
+            {
+              mode: "symmetrisch",
+              bronDocumentId: koppeling.bron.id,
+              doelDocumentId: koppeling.doel.id,
+              versies: VERGELIJK_VERSIES,
+            },
+            productieDeps({
+              supabase,
+              fondsId,
+              gateway,
+              gatewayCtx,
+              retrieval: {
+                adapter: vergelijkRetrieval.adapter,
+                context: {
+                  fondsId,
+                  actor: { soort: "gebruiker", id: ctx.gebruikerId },
+                  taaktype: "vergelijk_waarde",
+                  bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+                  scope: { documentIds: [koppeling.bron.id, koppeling.doel.id] },
+                  correlationId: ctx.requestId,
+                  verzoekStartOp: ctx.verzoekStartOp,
+                  signal: req.signal,
+                },
+                timeoutMs: timeoutUitConfig(vergelijkVlaggen.retrievalTimeoutMs),
+                hybrideAan: vergelijkHybrideAan,
+                vlaggen: vergelijkVlaggen,
+              },
+            })
+          );
+        } catch (e) {
+          const afbreking = foutcategorieVoor(e);
+          await rondAf(
+            supabase,
+            aiActieId,
+            "mislukt",
+            afbreking ? `retrieval:${afbreking}` : null
+          );
+          if (afbreking === "annulering") return new Response(null, { status: 499 });
+          if (afbreking === "timeout") {
+            return NextResponse.json(
+              { error: "Het ophalen van vergelijkingsbronnen duurde te lang. Probeer het opnieuw." },
+              { status: 504 }
+            );
+          }
+          throw e;
+        }
 
         // Governance-logging: een vergelijking is een AI-interactie (verplicht spoor,
         // reproduceerbaar via comparison_run). Fail-safe: een mislukte logregel mag
@@ -2580,9 +2627,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       //  voegt samen en bouwt het auditspoor (besluit 0213 punt 5). De twee
       //  sporen, hun budgetten en hun filters zijn ONGEWIJZIGD — dit is een
       //  verplaatsing, geen gedragswijziging.
-      // Dezelfde resolutie die de adapter intern gebruikt — zie
-      // resolveerRetrievalVlaggen(): `regimeWeging` valt terug op de env-default
-      // omdat de fondsvlag nog niet bestaat (gaplijst G-11).
+      // Dezelfde resolutie die de adapter intern gebruikt. Sinds #369 wordt ook
+      // `regimeWeging` per fonds geresolveerd; ontbrekend behoudt de env-default.
       const geresolveerdeVlaggen = resolveerRetrievalVlaggen(retrievalOpties);
       // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
       // providerprivaat bij, en de citaatvorming heeft die later nodig.

@@ -21,11 +21,18 @@ import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
-import { verifieerToelating, nietOndersteundeFilters, vatToelatingSamen } from "./toelatingspoort";
+import {
+  verifieerToelating,
+  nietOndersteundeFilters,
+  vatToelatingSamen,
+  type Weigering,
+} from "./toelatingspoort";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
-import type { Afbreekgrendel } from "./afbreken";import type {
+import type { Afbreekgrendel } from "./afbreken";
+import type {
   AdapterUitkomst,
   Bronresultaat,
+  Bronsoort,
   CitaatOpdracht,
   Queries,
   RetrievalAdapter,
@@ -87,6 +94,19 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
     normgewicht: b.curatie?.normgewicht ?? null,
     wettelijkRegime: b.curatie?.wettelijkRegime ?? null,
   };
+}
+
+/**
+ * Een adapter krijgt server-afgeleide scope, maar mag niet de enige bewaker
+ * daarvan zijn. Een foutieve of kwaadwillige adapteruitkomst wordt hier nog
+ * eenmaal providerneutraal tegen fonds, document en proces getoetst.
+ */
+function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): boolean {
+  const identiteit = bron.documentIdentiteit;
+  if (identiteit.fondsId != null && identiteit.fondsId !== ctx.fondsId) return false;
+  if (ctx.scope?.documentIds?.length && !ctx.scope.documentIds.includes(identiteit.id)) return false;
+  if (ctx.scope?.procesId && identiteit.procesId !== ctx.scope.procesId) return false;
+  return true;
 }
 
 /**
@@ -197,7 +217,18 @@ export async function voerRetrievalUit(
     //     zoekt hij breder dan gevraagd en ziet niemand het. Dat spoor wordt
     //     dan niet bevraagd; `zoek()` wordt aantoonbaar niet aangeroepen.
     const caps = opdracht.adapter.capabilities();
-    const nietOndersteund = sporen.map(({ query }) => nietOndersteundeFilters(caps, query));
+    const toegestaneBronsoorten = new Set(ctx.bronbeleid.bronsoorten);
+    const adapterBronsoorten = new Set(caps.bronsoorten);
+    const nietOndersteund = sporen.map(({ query }) => {
+      const fouten = nietOndersteundeFilters(caps, query);
+      if (!caps.strategieen.includes(query.strategie)) fouten.push(`strategie:${query.strategie}`);
+      for (const bronsoort of query.filters?.bronsoort ?? []) {
+        if (!toegestaneBronsoorten.has(bronsoort as Bronsoort)) {
+          fouten.push(`bronbeleid:${bronsoort}`);
+        }
+      }
+      return fouten;
+    });
     const filterweigeringen = nietOndersteund.filter((f) => f.length > 0).length;
 
     const uitkomsten: AdapterUitkomst[] = await Promise.all(
@@ -226,16 +257,35 @@ export async function voerRetrievalUit(
     //    ÉÉN BATCH over alle sporen: één `poortNu` en één V5-herlezing per unieke
     //    bron. Per spoor apart zou dezelfde bron twee keer worden gelezen en bij
     //    een intrekking tussen die lezingen verschillend worden beoordeeld.
+    // Bronbeleid is server-side context. Ook een adapter die per ongeluk of
+    // kwaadwillig een niet-toegestane soort terugstuurt, kan die grens niet
+    // verruimen. De filtering staat vóór de toelatingspoort en selectie.
+    const scopeweigeringen: Weigering[] = [];
+    const beleidsToegelaten = uitkomsten.map((u, spoor) =>
+      u.kandidaten.filter((b) => {
+        const toegestaan =
+          toegestaneBronsoorten.has(b.bronsoort) &&
+          adapterBronsoorten.has(b.bronsoort) &&
+          binnenServerScope(spoorContext[spoor], b);
+        if (!toegestaan) {
+          scopeweigeringen.push({ spoor, ref: b.ref, grond: "buiten_server_scope" });
+        }
+        return toegestaan;
+      })
+    );
     const poort = await verifieerToelating(
       ctxMetGrendel,
       opdracht.adapter,
-      uitkomsten.map((u) => u.kandidaten)
+      beleidsToegelaten
     );
     grendel.bewaak();
     const toegelatenPerSpoor = poort.toegelatenPerSpoor;
-    const geweigerdPerSpoor = sporen.map((_, i) => poort.geweigerd.filter((w) => w.spoor === i).length);
+    const alleWeigeringen = [...scopeweigeringen, ...poort.geweigerd];
+    const geweigerdPerSpoor = sporen.map(
+      (_, i) => alleWeigeringen.filter((w) => w.spoor === i).length
+    );
     // Inhoudsvrij, alleen tellingen; `null` als er niets is geweigerd.
-    const toelating = vatToelatingSamen(poort.geweigerd, filterweigeringen);
+    const toelating = vatToelatingSamen(alleWeigeringen, filterweigeringen);
 
     // 3. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
     //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
@@ -248,7 +298,7 @@ export async function voerRetrievalUit(
       methode: u.methode,
       latencyMs: u.latencyMs,
       kandidaten: toegelatenPerSpoor[i].length,
-      fout: u.fout,
+      fout: u.fout ?? (scopeweigeringen.some((w) => w.spoor === i) ? "buiten_scope" : undefined),
       // Alleen aanwezig als er werkelijk iets is geweigerd: een veld dat altijd
       // op 0 staat zou elke bestaande snapshot veranderen zonder iets te melden.
       ...(geweigerdPerSpoor[i] > 0 ? { geweigerd: geweigerdPerSpoor[i] } : {}),
@@ -337,7 +387,9 @@ export async function voerRetrievalUit(
       perAdapter,
       latencyMs: Date.now() - t0,
       truncatie,
-      fout: uitkomsten.find((u) => u.fout)?.fout,
+      fout:
+        uitkomsten.find((u) => u.fout)?.fout ??
+        (scopeweigeringen.length > 0 ? "buiten_scope" : undefined),
       meta,
       // De gezaghebbende grens komt van de primaire query en reist mee, zodat
       // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).

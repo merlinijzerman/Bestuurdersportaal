@@ -99,9 +99,7 @@
     "app/api/zoeken/route.ts": {
       "modules": {
         "rag": [
-          "DocumentChunk",
-          "RetrievalFilters",
-          "zoekRelevanteChunksMetMeta"
+          "RetrievalFilters"
         ]
       },
       "rpcs": [],
@@ -204,6 +202,18 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/retrieval/productiepaden-core.ts": {
+      "modules": {
+        "rag": [
+          "RetrievalFilters",
+          "RetrievalOpties",
+          "maxPerDocVoor",
+          "resolveerRetrievalVlaggen"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
     "core/lib/retrieval/selectie.ts": {
       "modules": {
         "rag": [
@@ -255,7 +265,7 @@
     "core/lib/vergelijk-productie.ts": {
       "modules": {
         "rag": [
-          "zoekRelevanteChunksMetMeta"
+          "RetrievalOpties"
         ]
       },
       "rpcs": [],
