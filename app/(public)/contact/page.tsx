@@ -3,16 +3,18 @@ import Header from "../_components/Header";
 import Footer from "../_components/Footer";
 import ContactForm from "./_components/ContactForm";
 
-// Contactpagina (W2 / copy v0.2 §7). Formulier + server-side verwerking via
-// /api/contact (opslag in contact_aanvragen + e-mailnotificatie, soft-fail).
-// Claimdiscipline: bewust géén reactietermijn toegezegd (besluit 0035 #6), geen
-// e-mailadres in de front-end (FO REQ-PV-016/045), introtekst zonder salesdruk.
-// `/contact?type=pilot` preselecteert de pilot-optie in het formulier.
+// Contactpagina v0.8. De primaire CTA op de site is "Plan een live demo", dus
+// deze pagina vertelt wat daarna gebeurt: dertig minuten, online, één dossier.
+// Claimdiscipline ongewijzigd: geen reactietermijn toegezegd, geen e-mailadres
+// in de front-end. `/contact?type=pilot` preselecteert de pilot-optie.
+// Bewust buiten de zoekresultaten (noindex): deze pagina hoort bij een bezoek
+// aan de site, niet als los zoekresultaat.
 export const metadata: Metadata = {
-  title: "Contact | Bestuurdersportaal",
+  title: { absolute: "Plan een live demo — Bestuurdersportaal" },
   description:
-    "Neem laagdrempelig contact op — een vraag, een verkenning, een demo of een pilot. We denken graag met u mee.",
+    "Dertig minuten, online: we lopen door één besluitdossier — voorbereiding, afweging, besluit en opvolging. Geen voorbereiding nodig.",
   alternates: { canonical: "/contact" },
+  robots: { index: false, follow: true },
 };
 
 export default async function ContactPage({
@@ -31,11 +33,11 @@ export default async function ContactPage({
         <div className="contact-grid">
           <div className="intro">
             <div className="label">Contact</div>
-            <h1>Neem contact op</h1>
+            <h1>Plan een live demo.</h1>
             <p>
-              Een vraag, een verkenning of een concrete pilot — neem contact op
-              zoals het u past. Start desgewenst met één besluitdossier in uw
-              eigen omgeving.
+              Dertig minuten, online. We lopen door één besluitdossier —
+              voorbereiding, afweging, besluit en opvolging. Neem gerust een
+              lopend vraagstuk in gedachten.
             </p>
             <div className="what">
               <div>
@@ -53,11 +55,14 @@ export default async function ContactPage({
               <div>
                 <span className="d">—</span>
                 <span>
-                  <b>Een demo of pilot</b> — een voorbeeld zien of samen één
-                  besluitdossier inrichten.
+                  <b>Een pilot</b> — samen één besluitdossier inrichten met uw
+                  eigen stukken.
                 </span>
               </div>
             </div>
+            <p className="privacy-note">
+              Geen voorbereiding nodig. We vragen niet vooraf om documenten.
+            </p>
           </div>
 
           <ContactForm initialType={initialType} />

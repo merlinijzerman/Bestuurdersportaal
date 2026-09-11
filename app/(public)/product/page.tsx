@@ -1,206 +1,215 @@
 import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
-import Crumb from "../_components/Crumb";
-import Flow from "../_components/Flow";
-import Steps from "../_components/Steps";
-import DossierKaart from "../_components/DossierKaart";
-import CtaBand from "../_components/CtaBand";
 
-// /product — de besluitcyclus in één besluitomgeving (copy v0.2 §2).
+// /product v0.8 — per module één sectie met het bijbehorende productfragment.
 export const metadata: Metadata = {
-  title: {
-    absolute:
-      "Product — de volledige besluitcyclus in één omgeving | Bestuurdersportaal",
-  },
+  title: { absolute: "Product: modules voor het besluitproces — Bestuurdersportaal" },
   description:
-    "Van vraagstuk tot evaluatie: één omgeving die de volledige besluitcyclus ondersteunt, met brongebonden AI die put uit uw eigen documentatie, dossiers en historie.",
+    "Modules die samen het besluitproces bedienen: een brongebonden AI-assistent op uw eigen bibliotheek, vergaderingen met voorbereiding, en besluitdossiers.",
   alternates: { canonical: "/product" },
   openGraph: {
-    title: "Product — de volledige besluitcyclus in één omgeving",
+    title: "Product: modules voor het besluitproces — Bestuurdersportaal",
     description:
-      "Van vraagstuk tot evaluatie: één omgeving die de volledige besluitcyclus ondersteunt, met brongebonden AI die put uit uw eigen documentatie, dossiers en historie.",
+      "Modules die samen het besluitproces bedienen: een brongebonden AI-assistent op uw eigen bibliotheek, vergaderingen met voorbereiding, en besluitdossiers.",
     type: "website",
     url: "/product",
   },
 };
 
-export default function ProductPage() {
+export default function Pagina() {
   return (
     <div className="bp-page">
-      <Header variant="full" actief="/product" />
+      <Header actief="/product" />
 
-      {/* HERO */}
       <section className="phero">
-        <div className="grid-bg" />
+        <div className="grid-bg"></div>
         <div className="wrap">
-          <Crumb items={[{ label: "Product" }]} />
-          <h1>Eén omgeving voor de volledige besluitcyclus</h1>
-          <p className="sub">
-            Van vraagstuk naar besluit — en van besluit naar verantwoording en
-            evaluatie. Niet als losse stappen, maar als één doorlopend dossier dat
-            blijft leren van wat eerder is besloten.
+          <div className="eyebrow-label">Product</div>
+          <h1>Modules die samen het besluitproces bedienen.</h1>
+          <p className="lede">
+            Een brongebonden AI-assistent die put uit uw eigen bibliotheek en context. Vergaderingen
+            met voorbereiding per agendapunt. En complete besluitdossiers met risico's, aannames,
+            voorwaarden en opvolging — inclusief afschrift en auditdossier.
           </p>
-          <div className="cta">
-            <a href="/contact" className="btn btn-primary">
-              Neem contact op
-            </a>
-            <a href="/governance-ai" className="btn btn-outline">
-              Zo borgen we verantwoord AI-gebruik
-            </a>
+          <p><a href="/governance-ai" className="textlink">Zo begrenzen we het AI-gebruik →</a></p>
+        </div>
+      </section>
+
+      <section className="sec-cool">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">Vergaderingen</div>
+            <h2>De stukken en de vraag komen bij elkaar.</h2>
+          </div>
+          <div className="duoshot">
+            <div className="tekst">
+              <h3>Alles bij het agendapunt</h3>
+              <p>Het voorstel, de samenvatting en de gerichte verdieping staan bij het onderwerp
+                 waarover wordt besloten — niet in een aparte map en niet in een los gesprek.</p>
+              <ul className="lijst">
+                <li><span className="ck">—</span><span>Stukken koppelen uit de bibliotheek of direct uploaden.</span></li>
+                <li><span className="ck">—</span><span>Een samenvatting per stuk, met het gevraagde besluit erbij.</span></li>
+                <li><span className="ck">—</span><span>Aandachtspunten of kritische vragen opvragen voor de vergadering.</span></li>
+                <li><span className="ck">—</span><span>Eigen aantekeningen en inbreng vooraf van andere leden.</span></li>
+              </ul>
+            </div>
+            <div>
+              <div className="pshot"><img src="/website/01-voorbereiding-agendapunt.png" alt="Productweergave: een agendapunt met voorstel, samenvatting en verdiepingsvragen." /></div>
+              <p className="bijschrift">Voorbereiding bij het agendapunt · demonstratiedata</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* DE BESLUITCYCLUS */}
-      <section>
+      <section className="sec-app">
         <div className="wrap">
-          <div className="label">De besluitcyclus</div>
-          <h2>Van vraagstuk tot evaluatie.</h2>
-          <Flow />
-          <Steps />
-        </div>
-      </section>
-
-      {/* VOORBEELDFLOW (legacy-anker #dossiers) */}
-      <section id="dossiers">
-        <div className="wrap">
-          <div className="label">Voorbeeldflow</div>
-          <h2>Van vraagstuk naar besluitdossier.</h2>
-          <div className="own">
-            <ul>
-              <li>
-                <span className="ck">—</span>
-                <span>Van bestuursstuk naar besluitdossier.</span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>Van risico naar expliciete afweging.</span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>Van besluit naar opvolgbare actie.</span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>Van losse documenten naar reconstrueerbare onderbouwing.</span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>Van afgerond besluit naar leerpunt voor het volgende.</span>
-              </li>
-            </ul>
-            <DossierKaart
-              titel="Dossier · investeringsbesluit"
-              status="onderbouwd"
-              rijen={[
-                { label: "Bronnen", waarde: "samengevat & gekoppeld" },
-                { label: "Risico's", waarde: "gesignaleerd" },
-                { label: "Aannames", waarde: "expliciet" },
-                { label: "Afwegingen", waarde: "alternatieven" },
-                { label: "Besluit", waarde: "+ onderbouwing" },
-                { label: "Acties", waarde: "toegewezen" },
-                { label: "Evaluatie", waarde: "opvolging gepland" },
-              ]}
-            />
+          <div className="sec-head">
+            <div className="eyebrow-label">Besluitdossier</div>
+            <h2>Wat het besluit draagt, staat op papier.</h2>
+          </div>
+          <div className="duoshot omgekeerd">
+            <div className="tekst">
+              <h3>Aannames, risico's en voorwaarden</h3>
+              <p>Elk besluitdossier kent dezelfde vaste onderdelen. Wat open staat blijft zichtbaar,
+                 ook als het bestuur besluit door te gaan.</p>
+              <ul className="lijst">
+                <li><span className="ck">—</span><span><b>Aannames</b> met een onzekerheid en een evaluatiecriterium.</span></li>
+                <li><span className="ck">—</span><span><b>Risico's</b> met impact, kans, categorie en beheersmaatregel.</span></li>
+                <li><span className="ck">—</span><span><b>Voorwaarden</b> met KPI, drempelwaarde en monitorfrequentie.</span></li>
+                <li><span className="ck">—</span><span><b>Afwijkende standpunten</b> apart genoteerd in plaats van weggemasseerd.</span></li>
+              </ul>
+            </div>
+            <div>
+              <div className="pshot"><img src="/website/03-risicos-en-aannames.png" alt="Productweergave: het onderbouwingspaneel met aannames, risico's en voorwaarden." /></div>
+              <p className="bijschrift">De afweging wordt expliciet · demonstratiedata</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* AI IN DE PRAKTIJK */}
-      <section>
+      <section className="sec-cool">
         <div className="wrap">
-          <div className="label">AI in de praktijk</div>
-          <h2>Brongebonden ondersteuning, binnen uw context.</h2>
-          <p className="lede">
-            De AI in Bestuurdersportaal werkt brongebonden: ze ordent en ontsluit
-            de documentcontext binnen uw eigen omgeving, met verwijzing naar de
-            bron en de historie — niet op basis van een onzichtbaar
-            achtergrondmodel. De analyse ondersteunt de afweging; het bestuur
-            beslist.
-          </p>
-        </div>
-      </section>
-
-      {/* WAT KRIJGT EEN BESTUUR CONCREET */}
-      <section>
-        <div className="wrap">
-          <div className="label">Concreet</div>
-          <h2>Wat krijgt een bestuur concreet?</h2>
-          <ul className="pledge">
-            <li>Een eigen online besluitomgeving voor uw organisatie.</li>
-            <li>Een gestructureerd besluitdossier per vraagstuk.</li>
-            <li>
-              AI-ondersteuning op uw eigen documentatie, dossiers en historie —
-              samenvatten, toetsen, risico’s signaleren en alternatieven ordenen,
-              met verwijzing naar de bron.
-            </li>
-            <li>
-              Vastlegging van aannames, risico’s, overwegingen, voorwaarden en
-              acties.
-            </li>
-            <li>Een reconstrueerbare audittrail of export voor verantwoording.</li>
-            <li>
-              Evaluatie en opvolging: aannames toetsen, effecten beoordelen,
-              leerpunten vastleggen en opnieuw agenderen.
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      {/* GEBRUIKSSITUATIES (legacy-anker #gebruikssituaties) */}
-      <section id="gebruikssituaties">
-        <div className="wrap">
-          <div className="label">Gebruikssituaties</div>
-          <h2>Voor welk besluit?</h2>
-          <p className="lede">
-            Bestuurdersportaal is gemaakt voor besluiten die zorgvuldige
-            voorbereiding, verantwoording en opvolging vragen.
-          </p>
-          <div className="who">
-            <span className="chip">Beleidsbesluiten</span>
-            <span className="chip">Investeringsbesluiten</span>
-            <span className="chip">Uitbestedingsbesluiten</span>
-            <span className="chip">Risicodossiers</span>
-            <span className="chip">Commissieadviezen</span>
-            <span className="chip">Toezicht- &amp; verantwoordingsdossiers</span>
-            <span className="chip">Governance-evaluaties</span>
-            <span className="chip">Pensioendossiers</span>
+          <div className="sec-head">
+            <div className="eyebrow-label">Processen</div>
+            <h2>Elke stap laat zien wat nog ontbreekt.</h2>
+            <p className="lede">
+              Een besluitdossier doorloopt vaste fasen. Bij de actieve stap staat wat gereed is,
+              wat nog moet gebeuren en wie aan zet is.
+            </p>
+          </div>
+          <div className="duoshot">
+            <div className="tekst">
+              <ul className="lijst">
+                <li><span className="ck">—</span><span>Aanleiding en intake</span></li>
+                <li><span className="ck">—</span><span>Onderbouwing</span></li>
+                <li><span className="ck">—</span><span>Risico- en kaderscheck</span></li>
+                <li><span className="ck">—</span><span>Bestuursoverleg en agendering</span></li>
+                <li><span className="ck">—</span><span>Besluit vastleggen</span></li>
+                <li><span className="ck">—</span><span>Implementatie en evaluatie</span></li>
+              </ul>
+              <p className="bijschrift">Een stap sluit pas als de checklist en het vereiste bewijsstuk er zijn.
+                Doorgaan mag — met een reden die wordt vastgelegd.</p>
+            </div>
+            <div>
+              <div className="pshot"><img src="/website/04-besluit-heeft-een-route.png" alt="Productweergave: de fasen van een besluitproces met de actieve stap en de openstaande vereisten." /></div>
+              <p className="bijschrift">Het besluit heeft een route · demonstratiedata</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* RODE DRAAD */}
-      <section>
+      <section className="sec-app">
         <div className="wrap">
-          <div className="label">Rode draad</div>
-          <h2>Een besluitomgeving, geen portaal.</h2>
-          <p className="lede">
-            Waar klassieke bestuurdersportalen vooral documenten ontsluiten en
-            vergaderingen ondersteunen, richt Bestuurdersportaal zich op het
-            besluit zelf: de voorbereiding, afweging, vastlegging, verantwoording
-            en evaluatie. Niet alleen het besluit, maar ook de onderbouwing en de
-            opvolging.
-          </p>
-          {/* De link "Waarom dit een eigen categorie is →" wees naar het
-              onderscheidingsblok op de homepage. Dat blok is per besluit 0103
-              vervallen, waarmee de link een belofte deed die de homepage niet
-              meer waarmaakt. Vervangende differentiatie-copy vraagt volgens dat
-              besluit een apart akkoord, dus hier alleen de link weggehaald —
-              de lede hierboven draagt de boodschap zelf. */}
+          <div className="sec-head">
+            <div className="eyebrow-label">Afschrift en audit</div>
+            <h2>Het besluit draagt zijn motivering.</h2>
+          </div>
+          <div className="duoshot omgekeerd">
+            <div className="tekst">
+              <h3>Besluit, voorwaarden en opvolging</h3>
+              <p>Formulering, motivering, verworpen alternatieven en voorwaarden blijven bijeen.
+                 Acties krijgen een eigenaar en een termijn, en de evaluatie staat geagendeerd
+                 voordat iemand erom vraagt.</p>
+              <ul className="lijst">
+                <li><span className="ck">—</span><span>Een afschrift van het besluitmoment als bevroren snapshot.</span></li>
+                <li><span className="ck">—</span><span>Een auditdossier van de huidige stand of van dat moment.</span></li>
+                <li><span className="ck">—</span><span>Acties gekoppeld aan de voorwaarde die ze bewaken.</span></li>
+              </ul>
+            </div>
+            <div>
+              <div className="pshot"><img src="/website/05-besluit-en-voorwaarden.png" alt="Productweergave: een vastgelegd besluit met motivering, alternatieven en voorwaarden." /></div>
+              <p className="bijschrift">Besluit en voorwaarden vastgelegd · demonstratiedata</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <CtaBand
-        kop="Zien hoe dit bij uw besluitvorming past?"
-        primair={{ href: "/contact", label: "Neem contact op" }}
-        secundair={[
-          { href: "/governance-ai", label: "Zo borgen we verantwoord AI-gebruik" },
-        ]}
-      />
+      <section className="sec-cool">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">AI-assistent</div>
+            <h2>Ondersteuning die haar bronnen laat zien.</h2>
+          </div>
+          <div className="duoshot">
+            <div className="tekst">
+              <p>De assistent zoekt in uw eigen bibliotheek, uw dossiers en uw eerdere besluiten,
+                 en daarnaast in een centraal gecureerd kader met wet- en regelgeving en
+                 toezichtdocumentatie. Onder elk antwoord staat welke bronnen zijn gebruikt.</p>
+              <ul className="lijst">
+                <li><span className="ck">—</span><span>U kiest wat u terugkrijgt: samenvatting, aandachtspunten of kritische vragen.</span></li>
+                <li><span className="ck">—</span><span>Verwijzing per stelling: document, hoofdstuk, pagina.</span></li>
+                <li><span className="ck">—</span><span>Zichtbaar of het antwoord alleen op eigen documenten rust.</span></li>
+                <li><span className="ck">—</span><span>Doorvragen — feitelijker, kritischer, korter — blijft in hetzelfde spoor.</span></li>
+              </ul>
+              <p style={{marginTop: '18px'}}><a href="/governance-ai" className="textlink">Zo begrenzen we het AI-gebruik →</a></p>
+            </div>
+            <div>
+              <div className="pshot"><img src="/website/02-antwoorden-zichtbare-bronnen.png" alt="Productweergave: een antwoord met het paneel Onderbouwing en bronnen." /></div>
+              <p className="bijschrift">Antwoorden met zichtbare bronnen · demonstratiedata</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <Footer variant="full" />
+      <section className="sec-app">
+        <div className="wrap">
+          <div className="sec-head">
+            <div className="eyebrow-label">Koppelingen</div>
+            <h2>Uw stukken blijven staan waar ze staan.</h2>
+          </div>
+          <div className="duoshot omgekeerd">
+            <div className="tekst">
+              <p>Documenten uit SharePoint worden als bron aan het dossier verbonden, terwijl
+                 gebruikers met hun vertrouwde werkaccount inloggen.</p>
+              <p className="bijschrift">Illustratieve weergave — geen applicatiescherm.</p>
+            </div>
+            <div>
+              <div className="pshot"><img src="/website/06-microsoft-365-sharepoint.png" alt="Illustratie van de koppeling tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
+              <p className="bijschrift">Microsoft 365 en SharePoint · illustratieve weergave</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <section className="sec-cool" id="demo">
+        <div className="wrap">
+          <div className="ctapanel">
+            <div>
+              <h2>Bekijk een herkenbaar besluitdossier in een live demo.</h2>
+              <p>We lopen door één dossier — voorbereiding, afweging, besluit en opvolging.</p>
+            </div>
+            <div className="acts">
+              <a href="/contact" className="btn btn-primary">Plan een live demo</a>
+              <a href="/contact?type=pilot" className="btn btn-outline">Bespreek daarna een pilot met uw eigen dossier</a>
+              <span className="fine">Dertig minuten, online. Geen voorbereiding nodig.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Footer />
     </div>
   );
 }

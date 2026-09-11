@@ -24,34 +24,37 @@ const MARKETING_ORIGIN = `https://${
 export const metadata: Metadata = {
   metadataBase: new URL(MARKETING_ORIGIN),
   title: {
-    default:
-      "Bestuurdersportaal — eigen online besluitomgeving met AI voor besturen",
+    default: "Bestuurdersportaal — online besluitomgeving voor besturen",
     template: "%s — Bestuurdersportaal",
   },
   description:
-    "Het Bestuurdersportaal geeft besturen en commissies een eigen online besluitomgeving waarin AI werkt met de eigen documentatie, besluitdossiers en historische context — voor zorgvuldig voorbereiden, besluiten, verantwoorden en evalueren.",
+    "Eén digitale plek om bestuursbesluiten voor te bereiden, te onderbouwen en vast te leggen. Met beheerste AI die laat zien welke bronnen zijn gebruikt.",
   openGraph: {
     type: "website",
     locale: "nl_NL",
     siteName: "Bestuurdersportaal",
+    images: [
+      {
+        url: "/website/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Bestuurdersportaal — een online besluitomgeving voor besturen, met beheerste AI-ondersteuning.",
+      },
+    ],
   },
+  twitter: { card: "summary_large_image" },
 };
 
-// Thema-bootstrap: zet data-theme op de wrapper vóór paint (geen flash). Klein,
-// geen externe library; de ThemeToggle beheert daarna de wissel. Default = licht.
-const themeInit = `(function(){try{var t=localStorage.getItem('bp-theme');var el=document.currentScript&&document.currentScript.parentElement;if(el&&(t==='dark'||t==='light')){el.setAttribute('data-theme',t);}}catch(e){}})();`;
-
+// v0.8: de themawissel is vervallen. De publieke site kent één lichte huisstijl,
+// gelijk aan het palet achter de login; de themabootstrap en ThemeToggle zijn
+// daarmee overbodig geworden.
 export default function PublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={`bp-public ${newsreader.variable} ${inter.variable}`}
-      suppressHydrationWarning
-    >
-      <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+    <div className={`bp-public ${newsreader.variable} ${inter.variable}`}>
       {children}
     </div>
   );

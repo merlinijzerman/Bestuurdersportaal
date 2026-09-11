@@ -274,8 +274,8 @@ export default function EuAiActPage() {
       {/* CTA — Sectie 7 */}
       <CtaBand
         kop="Bespreek verantwoord AI-gebruik in uw bestuur"
-        tekst="Benieuwd hoe verantwoord AI-gebruik er in uw bestuurspraktijk uitziet? Neem contact op voor een verkennend gesprek."
-        primair={{ href: "/contact", label: "Neem contact op" }}
+        tekst="Benieuwd hoe verantwoord AI-gebruik er in uw bestuurspraktijk uitziet? We laten het in een demo van dertig minuten zien."
+        primair={{ href: "/contact", label: "Plan een live demo" }}
       />
 
       <Footer variant="full" />
