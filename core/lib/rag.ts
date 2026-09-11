@@ -574,6 +574,13 @@ export interface DocumentChunk {
 // geselecteerd voor de prompt. Wordt insert-only weggeschreven in
 // governance_log.retrieval_meta — geen wijziging aan append-only-garanties.
 export interface RetrievalMeta {
+  /**
+   * PR-C — inhoudsvrije samenvatting van de TOELATINGSPOORT: aantallen per
+   * genormaliseerde categorie (`toestemming_geweigerd` / `configuratiefout`) en
+   * per grond. Geen referenties — dat zijn identifiers van stukken die de
+   * gebruiker juist níét mocht zien. Alleen aanwezig als er iets is geweigerd.
+   */
+  toelating?: import("./retrieval/toelatingspoort").Toelatingssamenvatting;
   methode:
     | "hybride_rrf"
     | "fts_dutch_ranked"

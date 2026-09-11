@@ -40,6 +40,8 @@ function sharepointBron(n: number, doc: string, passage: string): Bronresultaat 
     titel: `SharePointstuk ${n}`,
     documentIdentiteit: { documentId: doc, bibliotheek: "fonds", bron: "SharePoint", fondsId: CTX.fondsId },
     versie: { soort: "etag", waarde: `etag-${n}`, gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
+    // ONAFHANKELIJK van het bewijs, door de adapter op het resultaat gezet.
+    bronregistratieRef: "bron-1",
     toegangscontrole: {
       toegestaan: true,
       resultaatRef: `sp-${n}`,
@@ -90,7 +92,10 @@ function nepAdapter(opties: {
     capabilities: () => ({
       bronsoorten: ["sharepoint"],
       strategieen: ["gericht"],
-      ondersteundeFilters: [],
+      // De filters die deze suite werkelijk gebruikt. Stond hier `[]`, dan
+      // werden `modus`, `bronsoortprofiel` en `peildatum` tot PR-C stil
+      // genegeerd — precies de no-op die de toelatingspoort nu weigert.
+      ondersteundeFilters: ["modus", "bronsoortprofiel", "peildatum"],
       versiebewijs: true,
       permissionProof: true,
       preview: true,

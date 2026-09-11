@@ -159,6 +159,14 @@ export interface Bronresultaat {
   titel: string;
   documentIdentiteit: { documentId: string; bibliotheek?: string | null; bron?: string | null; fondsId?: string | null };
   versie: Versiebewijs;
+  /**
+   * PR-C — de opaque BRONREGISTRATIEreferentie van dit resultaat, gezet door de
+   * adapter OP HET RESULTAAT, los van het bewijs. Dat is het punt: stond hij
+   * alleen in `toegangscontrole`, dan was hij een bewering ín hetzelfde bewijs
+   * dat hij moet staven. De poort eist dat beide gelijk zijn, en herleest V5
+   * onder DEZE waarde — niet onder wat het bewijs over zichzelf zegt.
+   */
+  bronregistratieRef?: string;
   /** Verplicht zodra de adapter `permissionProof` claimt (§4.2.1). */
   toegangscontrole?: Toegangsbewijs;
   locator: { pagina?: number | null; paragraaf?: string | null; mappad?: string; chunkIndex?: number };
@@ -283,14 +291,6 @@ export interface RetrievalTussenresultaat {
    * naar het model zijn gegaan.
    */
   meta: RetrievalMeta;
-  /**
-   * PR-C — wat de toelatingspoort weigerde, over alle sporen. ALLEEN aanwezig
-   * als er werkelijk iets is geweigerd: een altijd-aanwezig veld zou elke
-   * bestaande snapshot veranderen zonder iets te melden.
-   *
-   * Inhoudsvrij: referentie en grond, nooit een passage of een titel.
-   */
-  toelating?: { geweigerd: { ref: string; grond: string }[] };
   /** De gezaghebbende contextgrens, overgenomen van de primaire query. */
   maxContextTekens: number;
   /**
