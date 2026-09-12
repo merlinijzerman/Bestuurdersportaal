@@ -269,14 +269,17 @@ test("#368 vergelijking — deterministische findings behouden opaque evidencebi
       page: 2, evidence: "Premie 25%.", passage_ref: `passage_v1_${"b".repeat(64)}`,
     }]],
   ]);
-  let gepersisteerd: Parameters<VergelijkDeps["persisteer"]>[0] | null = null;
+  let gepersisteerdeBronRef: string | null = null;
   const deps: VergelijkDeps = {
     leesConcepten: async () => [{ id: "private-concept", key: "premie", label: "Premie", type: "percentage", status: "actief" }],
     leesSemanticUnits: async (documentId) => perDocument.get(documentId) ?? [],
     bepaalExtraDimensies: async () => [],
     retrieveerPassages: async () => [],
     vergelijkWaardeLLM: async () => ({ bron_value: null, bron_evidence: null, bron_page: null, doel_value: null, doel_evidence: null, doel_page: null, gelijk: false }),
-    persisteer: async (invoer) => { gepersisteerd = invoer; return "run-a"; },
+    persisteer: async (invoer) => {
+      gepersisteerdeBronRef = invoer.findings[0]?.bron.passage_ref ?? null;
+      return "run-a";
+    },
     deterministischVertrouwd: true,
   };
   const resultaat = await voerVergelijkingUit({
@@ -287,5 +290,5 @@ test("#368 vergelijking — deterministische findings behouden opaque evidencebi
   }, deps);
   assert.equal(resultaat.findings[0].bron.passage_ref, `passage_v1_${"a".repeat(64)}`);
   assert.equal(resultaat.findings[0].doel.passage_ref, `passage_v1_${"b".repeat(64)}`);
-  assert.equal(gepersisteerd?.findings[0].bron.passage_ref, resultaat.findings[0].bron.passage_ref);
+  assert.equal(gepersisteerdeBronRef, resultaat.findings[0].bron.passage_ref);
 });

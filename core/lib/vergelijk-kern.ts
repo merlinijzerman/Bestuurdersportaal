@@ -258,9 +258,13 @@ export async function voerVergelijkingUit(
       dimensie: dim.key,
     });
 
-    const unitSleutel = dim.concept_key ?? conceptId;
-    const bu = unitSleutel ? bronUnits.get(unitSleutel) : undefined;
-    const du = unitSleutel ? doelUnits.get(unitSleutel) : undefined;
+    // Productie-evidence koppelt providerneutraal op conceptsleutel. Bestaande
+    // injecteerbare deps/tests mogen nog de interne concept-id aanleveren; die
+    // compatibiliteitsroute blijft server-side en komt niet in evidencecontracten.
+    const bu = (dim.concept_key ? bronUnits.get(dim.concept_key) : undefined)
+      ?? (conceptId ? bronUnits.get(conceptId) : undefined);
+    const du = (dim.concept_key ? doelUnits.get(dim.concept_key) : undefined)
+      ?? (conceptId ? doelUnits.get(conceptId) : undefined);
 
     // Deterministisch pad: alleen als de poort open is ÉN BEIDE zijden een unit
     // hebben (acceptatiecriterium). Anders LLM.
