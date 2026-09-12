@@ -20,8 +20,9 @@ import type { ActueleVersiestand, Bronresultaat, RetrievalAdapter, RetrievalCont
 import { verifieerToelating } from "./toelatingspoort";
 import { binnenCentraleServergrens } from "./orkestratie";
 import { neutraliseerBrontekst } from "../bron-afbakening";
+import { neutraliseerModelcontextTekst } from "./modelcontext";
 import { bevatPersoonsgegevens } from "../pii-gate";
-import { isActueleGeneriekeBron, isReviewVerlopen } from "../generiek-status";
+import { generiekGeldigheidsstatus, isReviewVerlopen } from "../generiek-status";
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 export const MAX_PRESENTIE_DOCUMENTEN = 2000;
@@ -41,16 +42,26 @@ function isGeneriekDocument(document: Pick<DocumentVersieRij, "fonds_id" | "bibl
   return document.fonds_id == null && document.bibliotheek === "generiek";
 }
 
-function documentIsActueel(document: DocumentVersieRij, opdracht: EvidenceOpdracht): boolean {
+function documentIsActueel(
+  document: DocumentVersieRij,
+  opdracht: EvidenceOpdracht,
+  opties: { explicieteDocumentScope?: boolean } = {}
+): boolean {
   const peil = peildatum(opdracht);
   if (document.actief === false) return false;
   if (document.geldig_vanaf && document.geldig_vanaf > peil) return false;
   if (document.geldig_tot && document.geldig_tot < peil) return false;
   if (isGeneriekDocument(document)) {
-    return isActueleGeneriekeBron(document) && !isReviewVerlopen(document.volgende_review, peil);
+    const status = generiekGeldigheidsstatus(document);
+    const statusToegestaan = status === "published"
+      || (opties.explicieteDocumentScope === true && status === "draft");
+    return statusToegestaan && !isReviewVerlopen(document.volgende_review, peil);
   }
+  const fondsStatusToegestaan = ["vastgesteld", "van_kracht"].includes(document.status ?? "")
+    || (opties.explicieteDocumentScope === true
+      && (document.status == null || document.status === "concept"));
   return document.fonds_id === opdracht.context.fondsId
-    && ["vastgesteld", "van_kracht"].includes(document.status ?? "")
+    && fondsStatusToegestaan
     && (document.bronstatus ?? "actief") === "actief";
 }
 
@@ -151,7 +162,8 @@ async function toetsMetCentralePoort<T>(
 export async function controleerChunkPresentie(
   supabase: SupabaseClient,
   opdracht: EvidenceOpdracht,
-  privateDocumentRefs: readonly string[]
+  privateDocumentRefs: readonly string[],
+  opties: { explicieteDocumentScope?: boolean } = {}
 ): Promise<PresentieUitkomst> {
   const refs = [...new Set(privateDocumentRefs)];
   const basis = {
@@ -193,8 +205,38 @@ export async function controleerChunkPresentie(
     const buitenScope = (data ?? []).some((r) => {
       const gekoppeld = (r as unknown as { documenten?: DocumentVersieRij | DocumentVersieRij[] | null }).documenten;
       const document = Array.isArray(gekoppeld) ? gekoppeld[0] : gekoppeld;
-      if (!document || !refs.includes(r.document_id as string) || !documentIsActueel(document, opdracht)) return true;
+      if (!document || !refs.includes(r.document_id as string) || !documentIsActueel(document, opdracht, opties)) return true;
       if (!isGeneriekDocument(document) && document.fonds_id !== opdracht.context.fondsId) return true;
+      const bronsoort = isGeneriekDocument(document) ? "generiek" as const : "fonds" as const;
+      const documentIdentiteit = maakDocumentIdentiteit(
+        bronsoort === "generiek" ? "generiek" : `fonds:${opdracht.context.fondsId}`,
+        r.document_id as string
+      );
+      const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, "chunk-presentie");
+      const binnenGrens = binnenCentraleServergrens(
+        {
+          ...opdracht.context,
+          scope: { ...opdracht.context.scope, documentIds: refs },
+        },
+        { bronsoorten: ["fonds", "generiek"] },
+        {
+          ref: passageIdentiteit,
+          bronsoort,
+          titel: "",
+          documentIdentiteit: {
+            id: documentIdentiteit,
+            fondsId: bronsoort === "generiek" ? null : opdracht.context.fondsId,
+            bibliotheek: bronsoort === "generiek" ? "generiek" : "fonds",
+          },
+          passageIdentiteit: { id: passageIdentiteit },
+          versie: { soort: "onbekend", waarde: null, gecontroleerdOp: null },
+          locator: {},
+          passage: "",
+          status: { actueel: true },
+          rang: { positie: 0 },
+        }
+      );
+      if (!binnenGrens) return true;
       documentenPerRef.set(r.document_id as string, document);
       return false;
     });
@@ -282,22 +324,22 @@ function besluitWaarde(r: BesluitRij): BesluitEvidenceWaarde {
 }
 
 function neutraliseerVeld(waarde: string | null): string | null {
-  return waarde == null ? null : neutraliseerBrontekst(waarde).tekst;
+  return waarde == null ? null : neutraliseerModelcontextTekst(waarde).tekst;
 }
 
 function neutraliseerBesluitWaarde(waarde: BesluitEvidenceWaarde): BesluitEvidenceWaarde {
   return {
     ...waarde,
-    besluitCode: neutraliseerBrontekst(waarde.besluitCode).tekst,
-    titel: neutraliseerBrontekst(waarde.titel).tekst,
-    besluitvraag: neutraliseerBrontekst(waarde.besluitvraag).tekst,
+    besluitCode: neutraliseerModelcontextTekst(waarde.besluitCode).tekst,
+    titel: neutraliseerModelcontextTekst(waarde.titel).tekst,
+    besluitvraag: neutraliseerModelcontextTekst(waarde.besluitvraag).tekst,
     aanleiding: neutraliseerVeld(waarde.aanleiding),
     reikwijdte: neutraliseerVeld(waarde.reikwijdte),
     governanceOrgaan: neutraliseerVeld(waarde.governanceOrgaan),
     complexiteit: neutraliseerVeld(waarde.complexiteit),
     risiconiveau: neutraliseerVeld(waarde.risiconiveau),
     aiRisicoklasse: neutraliseerVeld(waarde.aiRisicoklasse),
-    status: neutraliseerBrontekst(waarde.status).tekst,
+    status: neutraliseerModelcontextTekst(waarde.status).tekst,
   };
 }
 
@@ -370,6 +412,10 @@ export async function leesBesluitEvidence(
     bewaakNaIO(opdracht.context.signal, error);
     if (error) return geweigerd(opdracht, "besluitregistratie", gevraagd, "providerfout");
     const rows = (data ?? []) as unknown as BesluitRij[];
+    if (selectie.privateDecisionRef
+      && (rows.length !== 1 || rows[0]?.id !== selectie.privateDecisionRef)) {
+      return geweigerd(opdracht, "besluitregistratie", gevraagd, "buiten_scope");
+    }
     if (rows.length > max || rows.some((r) => r.fonds_id !== opdracht.context.fondsId)) {
       return geweigerd(opdracht, "besluitregistratie", gevraagd, rows.length > max ? "afgekapt" : "buiten_scope");
     }
@@ -447,7 +493,12 @@ export async function leesBesluitEvidence(
       ...opdracht.context,
       // Procedureselectie kent de concrete Decision Object-refs pas na de
       // server/RLS-query. Bind de centrale poort alsnog aan exact die set.
-      scope: { ...opdracht.context.scope, documentIds: rows.map((r) => r.id) },
+      scope: {
+        ...opdracht.context.scope,
+        documentIds: selectie.privateDecisionRef
+          ? opdracht.context.scope.documentIds
+          : rows.map((r) => r.id),
+      },
     };
     if (!await toetsMetCentralePoort(toelatingsContext, items, actueleVersies, procesPerRef)) {
       return geweigerd(opdracht, "besluitregistratie", gevraagd, "onvolledig");
@@ -515,6 +566,23 @@ interface DocumentVersieRij {
   volgende_review: string | null;
 }
 
+function documentProjectieHash(document: DocumentVersieRij): string {
+  return hash({
+    id: document.id,
+    fonds_id: document.fonds_id,
+    bibliotheek: document.bibliotheek,
+    bestand_hash: document.bestand_hash,
+    documentdatum: document.documentdatum,
+    status: document.status,
+    bronstatus: document.bronstatus,
+    actief: document.actief,
+    titel: document.titel,
+    geldig_vanaf: document.geldig_vanaf,
+    geldig_tot: document.geldig_tot,
+    volgende_review: document.volgende_review,
+  });
+}
+
 const SEMANTIC_SELECT = "id, fonds_id, document_id, extraction_run_id, type, value_num, value_date, value_text, value_raw, value_unit, page, evidence, concepts!inner(key)";
 const DOCUMENT_VERSIE_SELECT = "id, fonds_id, bibliotheek, bestand_hash, documentdatum, status, bronstatus, actief, titel, geldig_vanaf, geldig_tot, volgende_review";
 
@@ -536,12 +604,12 @@ function ruweSemantischeWaarde(r: SemanticRij): SemantischeEvidenceWaarde | null
 function neutraliseerSemantischeWaarde(waarde: SemantischeEvidenceWaarde): SemantischeEvidenceWaarde {
   return {
     ...waarde,
-    conceptSleutel: neutraliseerBrontekst(waarde.conceptSleutel).tekst,
-    type: neutraliseerBrontekst(waarde.type).tekst,
+    conceptSleutel: neutraliseerModelcontextTekst(waarde.conceptSleutel).tekst,
+    type: neutraliseerModelcontextTekst(waarde.type).tekst,
     valueText: neutraliseerVeld(waarde.valueText),
-    valueRaw: neutraliseerBrontekst(waarde.valueRaw).tekst,
+    valueRaw: neutraliseerModelcontextTekst(waarde.valueRaw).tekst,
     valueUnit: neutraliseerVeld(waarde.valueUnit),
-    evidence: neutraliseerBrontekst(waarde.evidence).tekst,
+    evidence: neutraliseerModelcontextTekst(waarde.evidence).tekst,
   };
 }
 
@@ -622,7 +690,8 @@ export async function leesSemantischeEvidence(
     if (documentResult.error || unitsResult.error) return geweigerd(opdracht, "semantische_unit", 1, "providerfout");
     const document = documentResult.data as unknown as DocumentVersieRij | null;
     const gelezenRows = (unitsResult.data ?? []) as unknown as SemanticRij[];
-    if (!document || (!isGeneriekDocument(document) && document.fonds_id !== opdracht.context.fondsId)) {
+    if (!document || document.id !== privateDocumentRef
+      || (!isGeneriekDocument(document) && document.fonds_id !== opdracht.context.fondsId)) {
       return geweigerd(opdracht, "semantische_unit", 1, "buiten_scope");
     }
     const namespace = isGeneriekDocument(document) ? "generiek" : `fonds:${opdracht.context.fondsId}`;
@@ -661,7 +730,7 @@ export async function leesSemantischeEvidence(
     let tekens = 0;
     for (const [index, r] of rows.entries()) {
       const waarde = neutraliseerSemantischeWaarde(set.ruweWaarden[index]);
-      const titel = neutraliseerBrontekst(document.titel ?? "Document").tekst;
+      const titel = neutraliseerModelcontextTekst(document.titel ?? "Document").tekst;
       const gerenderd = renderSemantischeWaarde(titel, waarde);
       tekens += gerenderd.length + (items.length > 0 ? 2 : 0);
       gerenderdeBlokken.push(gerenderd);
@@ -720,9 +789,11 @@ export async function leesSemantischeEvidence(
     const v5Geldig = Boolean(
       v5Document
       && v5Set
+      && v5Document.id === privateDocumentRef
       && v5Rows.length <= max
       && documentIsActueel(v5Document, opdracht)
       && v5DocumentIdentiteit === documentIdentiteit
+      && documentProjectieHash(v5Document) === documentProjectieHash(document)
       && v5Set.runId === set.runId
       && hash(v5Set.ruweWaarden) === setHash
     );

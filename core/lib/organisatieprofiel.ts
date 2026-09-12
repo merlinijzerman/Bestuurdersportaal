@@ -18,7 +18,7 @@ import type { RetrievalMeta } from "@/core/lib/rag";
 import type { RetrievalContext } from "@/core/lib/retrieval/contract";
 import { bewaakNaIO } from "@/core/lib/retrieval/afbreken";
 import { isAfbreking } from "@/core/lib/retrieval/afbreken";
-import { leesModelcontext } from "@/core/lib/retrieval/modelcontext-reader";
+import { fondsModelcontextRij, leesModelcontext, MODELCONTEXT_GEEN_GELDIGHEID } from "@/core/lib/retrieval/modelcontext-reader";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerSupabase>>;
 
@@ -54,21 +54,21 @@ function tekstOfNull(v: unknown): string | null {
 async function haalOrganisatieprofielProvider(
   supabase: SupabaseClient,
   fondsId: string,
-  context?: RetrievalContext
-): Promise<Organisatieprofiel | null> {
+  context: RetrievalContext
+): Promise<{ waarde: Organisatieprofiel; fondsId: string } | null> {
   let query = supabase
     .from("organisatie_profielen")
     .select(
-      "organisatietype, uitvoerende_partijen, omvang, kernfeiten, missie, visie, strategische_speerpunten, risicohouding, peildatum"
+      "fonds_id, organisatietype, uitvoerende_partijen, omvang, kernfeiten, missie, visie, strategische_speerpunten, risicohouding, peildatum"
     )
     .eq("fonds_id", fondsId);
-  if (context?.signal) query = query.abortSignal(context.signal);
+  if (context.signal) query = query.abortSignal(context.signal);
   const { data: p, error } = await query.single();
-  bewaakNaIO(context?.signal, error);
+  bewaakNaIO(context.signal, error);
   if (error) throw error;
   if (!p) return null;
 
-  return {
+  const waarde: Organisatieprofiel = {
     organisatietype: tekstOfNull(p.organisatietype),
     uitvoerendePartijen: tekstOfNull(p.uitvoerende_partijen),
     omvang: tekstOfNull(p.omvang),
@@ -79,20 +79,28 @@ async function haalOrganisatieprofielProvider(
     risicohouding: tekstOfNull(p.risicohouding),
     peildatum: tekstOfNull(p.peildatum),
   };
+  return { waarde, fondsId: p.fonds_id as string };
 }
 
 export async function haalOrganisatieprofiel(
   supabase: SupabaseClient,
   fondsId: string,
-  context?: RetrievalContext
+  context: RetrievalContext
 ): Promise<Organisatieprofiel | null> {
-  if (!context) return haalOrganisatieprofielProvider(supabase, fondsId);
   const rows = await leesModelcontext({
     context, soort: "organisatie", scope: { fondsId }, maxItems: 1,
     lees: async () => {
       try {
-        const waarde = await haalOrganisatieprofielProvider(supabase, fondsId, context);
-        return { data: waarde ? [{ waarde, fondsId }] : [], error: null };
+        const bevestigd = await haalOrganisatieprofielProvider(supabase, fondsId, context);
+        return {
+          data: bevestigd ? [fondsModelcontextRij(
+            bevestigd.waarde,
+            bevestigd.fondsId,
+            null,
+            MODELCONTEXT_GEEN_GELDIGHEID
+          )] : [],
+          error: null,
+        };
       } catch (error) {
         if (isAfbreking(error)) throw error;
         return { data: [], error };
@@ -204,7 +212,7 @@ GEBRUIK:
 export async function bouwOrganisatieprofiel(
   supabase: SupabaseClient,
   fondsId: string,
-  context?: RetrievalContext
+  context: RetrievalContext
 ): Promise<{ tekst: string; aspecten: OrganisatieprofielAspecten } | null> {
   const p = await haalOrganisatieprofiel(supabase, fondsId, context);
   if (!p) return null;

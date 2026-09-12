@@ -15,9 +15,31 @@ export interface ModelcontextOpdracht {
   pii: ModelcontextAudit["pii"];
 }
 
+const INSTRUCTIE_PATRONEN: RegExp[] = [
+  /\b(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?\b/gi,
+  /\b(?:negeer|vergeet)\s+(?:alle\s+)?(?:vorige|eerdere|bovenstaande)\s+instructies?\b/gi,
+  /\b(?:reveal|toon|openbaar)\s+(?:the\s+)?(?:secrets?|geheimen?)\b/gi,
+];
+
+export function neutraliseerModelcontextTekst(tekst: string): {
+  tekst: string;
+  geneutraliseerd: number;
+} {
+  const bron = neutraliseerBrontekst(tekst);
+  let uit = bron.tekst;
+  let geneutraliseerd = bron.geneutraliseerd;
+  for (const patroon of INSTRUCTIE_PATRONEN) {
+    uit = uit.replace(patroon, () => {
+      geneutraliseerd++;
+      return "[geneutraliseerde instructiepoging]";
+    });
+  }
+  return { tekst: uit, geneutraliseerd };
+}
+
 export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): ModelcontextBlok {
   const limiet = Math.max(0, Math.floor(opdracht.maxGerenderdeTekens));
-  const neutraal = neutraliseerBrontekst(opdracht.tekst);
+  const neutraal = neutraliseerModelcontextTekst(opdracht.tekst);
   const afgekapt = neutraal.tekst.length > limiet;
   const tekst = afgekapt ? neutraal.tekst.slice(0, limiet) : neutraal.tekst;
   const piiAnalyse = bevatPersoonsgegevens(tekst);
@@ -34,6 +56,7 @@ export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): Modelconte
       limiet,
       afgekapt,
       ...(neutraal.geneutraliseerd > 0 ? { geneutraliseerd: neutraal.geneutraliseerd } : {}),
+      ...(piiAnalyse.soorten.length > 0 ? { pii_soorten: piiAnalyse.soorten } : {}),
       ...(afgekapt ? { fout: "afgekapt" as const } : {}),
     },
   };
@@ -49,6 +72,7 @@ export function combineerModelcontext(
   const opgenomen: string[] = [];
   let gebruikt = 0;
   let afgekapt = false;
+  const piiSoorten = new Set<NonNullable<ModelcontextAudit["pii_soorten"]>[number]>();
   for (const blok of blokken) {
     if (!blok.tekst) continue;
     const scheiding = opgenomen.length === 0 ? 0 : 2;
@@ -57,6 +81,7 @@ export function combineerModelcontext(
       continue;
     }
     opgenomen.push(blok.tekst);
+    for (const soort of blok.audit.pii_soorten ?? []) piiSoorten.add(soort);
     gebruikt += scheiding + blok.tekst.length;
   }
   return {
@@ -72,6 +97,7 @@ export function combineerModelcontext(
       gerenderde_tekens: gebruikt,
       limiet,
       afgekapt,
+      ...(piiSoorten.size > 0 ? { pii_soorten: [...piiSoorten] } : {}),
       ...(afgekapt ? { fout: "afgekapt" as const } : {}),
     },
   };

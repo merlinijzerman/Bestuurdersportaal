@@ -80,6 +80,7 @@ export interface ModelcontextAudit {
   limiet: number;
   afgekapt: boolean;
   geneutraliseerd?: number;
+  pii_soorten?: Array<"bsn" | "email" | "iban" | "telefoon" | "persoonsaanduiding" | "fondsnaam">;
   fout?: "buiten_scope" | "providerfout" | "afgekapt";
 }
 

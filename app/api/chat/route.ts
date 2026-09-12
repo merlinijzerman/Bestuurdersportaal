@@ -21,8 +21,16 @@ import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import { controleerChunkPresentie, leesBesluitEvidence } from "@/core/lib/retrieval/supabase-evidence";
 import { bouwModelcontextBlok, combineerModelcontext } from "@/core/lib/retrieval/modelcontext";
-import { leesModelcontext } from "@/core/lib/retrieval/modelcontext-reader";
-import type { EvidenceAudit, ModelcontextAudit } from "@/core/lib/retrieval/evidence-contract";
+import {
+  actorModelcontextRij,
+  documentModelcontextRij,
+  fondsModelcontextRij,
+  geverifieerdeModelcontextGeldigheid,
+  leesModelcontext,
+  MODELCONTEXT_GEEN_GELDIGHEID,
+  voerDuurzameSchrijfBinnenDeadlineUit,
+} from "@/core/lib/retrieval/modelcontext-reader";
+import type { EvidenceAudit, ModelcontextAudit, ModelcontextBlok } from "@/core/lib/retrieval/evidence-contract";
 import { maakCitationId, maakDocumentIdentiteit } from "@/core/lib/retrieval/identiteit";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, chunkAlsBronresultaat, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
@@ -651,7 +659,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           lees: async (signal) => {
             const { data, error } = await supabase.from("governance_log_inhoud")
               .select("log_id, vraag").eq("log_id", vorigId).abortSignal(signal).maybeSingle();
-            return { data: data ? [{ waarde: data, privateRef: data.log_id as string, actorId: ctx.gebruikerId }] : [], error };
+            return {
+              data: data ? [actorModelcontextRij(data, fondsId, ctx.gebruikerId, data.log_id as string, MODELCONTEXT_GEEN_GELDIGHEID)] : [],
+              error,
+            };
           },
         }),
       ]);
@@ -747,7 +758,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         const { data, error } = await supabase.from("profielen")
           .select("id, naam, fonds_id, fondsen(naam)")
           .eq("id", ctx.gebruikerId).eq("fonds_id", fondsId).abortSignal(signal).maybeSingle();
-        return { data: data ? [{ waarde: data, fondsId: data.fonds_id as string, actorId: data.id as string, privateRef: data.id as string }] : [], error };
+        return {
+          data: data ? [actorModelcontextRij(data, data.fonds_id as string, data.id as string, data.id as string, MODELCONTEXT_GEEN_GELDIGHEID)] : [],
+          error,
+        };
       },
     });
     const evidenceAudits: EvidenceAudit[] = [];
@@ -879,12 +893,22 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         lees: async (signal) => {
           const { data, error } = await supabase
             .from("agendapunten")
-            .select("id, titel, beschrijving")
+            .select("id, titel, beschrijving, verwijderd_op, vergaderingen!inner(fonds_id)")
             .eq("id", agendapuntIdRaw)
+            .eq("vergaderingen.fonds_id", fondsId)
+            .is("verwijderd_op", null)
             .abortSignal(signal)
             .maybeSingle();
+          const vergadering = Array.isArray(data?.vergaderingen)
+            ? data?.vergaderingen[0]
+            : data?.vergaderingen;
           return {
-            data: data ? [{ waarde: data, privateRef: data.id as string }] : [],
+            data: data ? [fondsModelcontextRij(
+              data,
+              (vergadering as { fonds_id?: string } | null)?.fonds_id ?? "",
+              data.id as string,
+              MODELCONTEXT_GEEN_GELDIGHEID
+            )] : [],
             error,
           };
         },
@@ -898,6 +922,16 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       }
     }
     const agendapuntModusActief = agendapuntSeed !== null;
+    const agendapuntContextBlok = agendapuntSeed
+      ? bouwModelcontextBlok({
+          context: evidenceContext,
+          soort: "agendapunt",
+          tekst: bouwToelichtingBlok(agendapuntSeed),
+          maxGerenderdeTekens: 8_000,
+          pii: "persoonsgebonden",
+        })
+      : null;
+    if (agendapuntContextBlok) modelcontextAudits.push(agendapuntContextBlok.audit);
 
     // ── FO duiding v0.3 (06-07) — fondsbrede module-context ─────────────────
     // Actieve risico's + lopende procedures gaan compact mee (zelfde selecties als
@@ -906,7 +940,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // al generiek via Increment F). Wordt ingezet in agendapunt-modus én — sinds
     // contextbesef (besluit 0090) — bij een persoonlijke/statusgerichte vraag; bij
     // een zuiver algemene vraag gaat er niets extra's mee (kosten/ruis-afweging).
-    const haalModuleContextBlok = async (fid: string): Promise<string> => {
+    const haalModuleContextBlok = async (fid: string): Promise<ModelcontextBlok> => {
       const [risicoRows, procedureRows] = await Promise.all([
         leesModelcontext({
           context: evidenceContext, soort: "fondsmodules", scope: { fondsId: fid }, maxItems: 15,
@@ -919,7 +953,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               .order("niveau", { ascending: false })
               .limit(16)
               .abortSignal(signal);
-            return { data: (data ?? []).map((rij) => ({ waarde: rij, fondsId: rij.fonds_id as string, status: rij.status as string })), error };
+            return {
+              data: (data ?? []).map((rij) => fondsModelcontextRij(
+                rij, rij.fonds_id as string, null,
+                geverifieerdeModelcontextGeldigheid({ status: rij.status as string, actief: true, geldigVanaf: null, geldigTot: null })
+              )),
+              error,
+            };
           },
         }),
         leesModelcontext({
@@ -933,7 +973,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               .order("gestart_op", { ascending: false })
               .limit(11)
               .abortSignal(signal);
-            return { data: (data ?? []).map((rij) => ({ waarde: rij, fondsId: rij.fonds_id as string, status: rij.status as string })), error };
+            return {
+              data: (data ?? []).map((rij) => fondsModelcontextRij(
+                rij, rij.fonds_id as string, null,
+                geverifieerdeModelcontextGeldigheid({ status: rij.status as string, actief: true, geldigVanaf: null, geldigTot: null })
+              )),
+              error,
+            };
           },
         }),
       ]);
@@ -960,7 +1006,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               .join("\n")
         );
       }
-      return delen.length > 0 ? `\n\n${delen.join("\n\n")}` : "";
+      return bouwModelcontextBlok({
+        context: evidenceContext,
+        soort: "fondsmodules",
+        tekst: delen.length > 0 ? `\n\n${delen.join("\n\n")}` : "",
+        maxGerenderdeTekens: 8_000,
+        pii: "persoonsgebonden",
+      });
     };
 
     // In agendapunt-modus staat de fondsbrede context al vóór het streamen vast
@@ -968,10 +1020,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // de fondsbrede context voor een gewone persoonlijke/statusvraag worden PAS in
     // de stream opgebouwd (ná de verduidelijkingstak), zodat een onzekere statusvraag
     // die terugvraagt geen queries verspilt.
-    let modulesBlok =
+    let modulesContextBlok =
       agendapuntModusActief && profiel?.fonds_id
         ? await haalModuleContextBlok(profiel.fonds_id)
-        : "";
+        : null;
+    if (modulesContextBlok) modelcontextAudits.push(modulesContextBlok.audit);
+    let modulesBlok = modulesContextBlok?.tekst ?? "";
 
     // ── Document-scope (increment 1): server-side validatie vóór retrieval ──
     // De client mag document_id's meesturen, maar de server valideert altijd
@@ -1107,6 +1161,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // terwijl een tweede gelijknamig document buiten de eerste pagina valt.
       // Boven de defensieve cap leiden we daarom géén scope af (veilig targeted).
       const benoembareRijen: { id: string; titel: string }[] = [];
+      const benoembareNamespace = new Map<string, "fonds" | "generiek">();
       const titelPagina = 1000;
       const titelCap = 5000;
       let titelsetCompleet = true;
@@ -1117,14 +1172,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             context: evidenceContext, soort: "documentlabels", scope: { fondsId }, maxItems: titelPagina,
             lees: async (signal) => {
               const { data, error } = await supabase.from("documenten")
-                .select("id, titel, fonds_id, status, actief, geldig_vanaf, geldig_tot")
+                .select("id, titel, fonds_id, bibliotheek, status, actief, geldig_vanaf, geldig_tot")
                 .not("actief", "is", false).eq("geindexeerd", true)
                 .order("id", { ascending: true }).range(vanaf, vanaf + titelPagina - 1).abortSignal(signal);
-              return { data: (data ?? []).map((rij) => ({
-                waarde: rij, fondsId: rij.fonds_id as string | null, status: rij.status as string,
-                actief: rij.actief as boolean, geldigVanaf: rij.geldig_vanaf as string | null,
+              return { data: (data ?? []).map((rij) => documentModelcontextRij(rij, {
+                fondsId: rij.fonds_id as string | null,
+                bibliotheek: rij.bibliotheek as string | null,
+                status: rij.status as string | null,
+                actief: rij.actief as boolean | null,
+                geldigVanaf: rij.geldig_vanaf as string | null,
                 geldigTot: rij.geldig_tot as string | null,
-              })), error };
+              }, null)), error };
             },
           });
         } catch (error) {
@@ -1138,6 +1196,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             titel: (d.titel as string) || "(zonder titel)",
           }))
         );
+        for (const d of pagina) {
+          benoembareNamespace.set(
+            d.id as string,
+            d.fonds_id == null && d.bibliotheek === "generiek" ? "generiek" : "fonds"
+          );
+        }
         if (pagina.length < titelPagina) break;
         if (vanaf + titelPagina >= titelCap) titelsetCompleet = false;
       }
@@ -1161,10 +1225,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           context: evidenceContext,
           maxItems: 1,
           maxGerenderdeTekens: 0,
-        }, [naamResultaat.document.id]);
+        }, [naamResultaat.document.id], { explicieteDocumentScope: true });
         evidenceAudits.push(presentie.audit);
         if (presentie.status === "geweigerd") throw new Error("chunk_presentie_onvolledig");
-        if (presentie.documentIdentiteiten.has(maakDocumentIdentiteit(`fonds:${fondsId}`, naamResultaat.document.id))) {
+        const naamNamespace = benoembareNamespace.get(naamResultaat.document.id) ?? "fonds";
+        if (presentie.documentIdentiteiten.has(maakDocumentIdentiteit(
+          naamNamespace === "generiek" ? "generiek" : `fonds:${fondsId}`,
+          naamResultaat.document.id
+        ))) {
           gevraagdeScopeIds = [naamResultaat.document.id];
           scopeHerkomst = "genoemd_document";
         }
@@ -1184,13 +1252,16 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         context: evidenceContext, soort: "documentlabels", scope: { fondsId, privateRefs: gevraagdeScopeIds }, maxItems: gevraagdeScopeIds.length,
         lees: async (signal) => {
           const { data, error } = await supabase.from("documenten")
-            .select("id, fonds_id, titel, bron, actief, geindexeerd, gepubliceerd, aangemaakt, status, geldig_vanaf, geldig_tot")
+            .select("id, fonds_id, bibliotheek, titel, bron, actief, geindexeerd, gepubliceerd, aangemaakt, status, geldig_vanaf, geldig_tot")
             .in("id", gevraagdeScopeIds).limit(gevraagdeScopeIds.length + 1).abortSignal(signal);
-          return { data: (data ?? []).map((rij) => ({
-            waarde: rij, fondsId: rij.fonds_id as string | null, privateRef: rij.id as string,
-            status: rij.status as string, actief: rij.actief as boolean,
-            geldigVanaf: rij.geldig_vanaf as string | null, geldigTot: rij.geldig_tot as string | null,
-          })), error };
+          return { data: (data ?? []).map((rij) => documentModelcontextRij(rij, {
+            fondsId: rij.fonds_id as string | null,
+            bibliotheek: rij.bibliotheek as string | null,
+            status: rij.status as string | null,
+            actief: rij.actief as boolean | null,
+            geldigVanaf: rij.geldig_vanaf as string | null,
+            geldigTot: rij.geldig_tot as string | null,
+          }, rij.id as string)), error };
         },
       });
 
@@ -1199,7 +1270,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         context: evidenceContext,
         maxItems: 2000,
         maxGerenderdeTekens: 0,
-      }, gevraagdeScopeIds);
+      }, gevraagdeScopeIds, { explicieteDocumentScope: true });
       evidenceAudits.push(presentie.audit);
       if (presentie.status === "geweigerd") throw new Error("chunk_presentie_onvolledig");
 
@@ -1212,7 +1283,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         gepubliceerd: (d.gepubliceerd as string | null) ?? null,
         aangemaakt: (d.aangemaakt as string | null) ?? null,
         heeft_chunks: presentie.documentIdentiteiten.has(
-          maakDocumentIdentiteit(`fonds:${fondsId}`, d.id as string)
+          maakDocumentIdentiteit(
+            d.fonds_id == null && d.bibliotheek === "generiek"
+              ? "generiek"
+              : `fonds:${fondsId}`,
+            d.id as string
+          )
         ),
       }));
 
@@ -1272,7 +1348,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               .order("niveau", { ascending: false })
               .limit(501)
               .abortSignal(signal);
-            return { data: (data ?? []).map((rij) => ({ waarde: rij as RisicoRij, fondsId: rij.fonds_id as string })), error };
+            return { data: (data ?? []).map((rij) => fondsModelcontextRij(
+              rij as RisicoRij,
+              rij.fonds_id as string,
+              null,
+              geverifieerdeModelcontextGeldigheid({
+                status: rij.status as string | null,
+                actief: true,
+                geldigVanaf: null,
+                geldigTot: null,
+              })
+            )), error };
           },
         });
         const titelPerId = new Map(risicos.map((r) => [r.id, r.titel]));
@@ -1289,7 +1375,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 .order("tijdstip", { ascending: false })
                 .limit(81)
                 .abortSignal(signal);
-              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.risico_id as string })), error };
+              return { data: (data ?? []).map((rij) => fondsModelcontextRij(
+                rij, fondsId, rij.risico_id as string, MODELCONTEXT_GEEN_GELDIGHEID
+              )), error };
             },
           });
           logs = logRows.map((l) => ({
@@ -1314,7 +1402,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               .eq("fonds_id", fondsId)
               .abortSignal(signal)
               .maybeSingle();
-            return { data: data ? [{ waarde: data, fondsId: data.fonds_id as string, privateRef: data.id as string }] : [], error };
+            return { data: data ? [fondsModelcontextRij(
+              data,
+              data.fonds_id as string,
+              data.id as string,
+              geverifieerdeModelcontextGeldigheid({
+                status: data.status as string | null,
+                actief: true,
+                geldigVanaf: null,
+                geldigTot: null,
+              })
+            )] : [], error };
           },
         });
         if (!r?.id) {
@@ -1336,7 +1434,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               const { data, error } = await supabase.from("risico_log")
                 .select("risico_id, event_type, payload, actor_naam, tijdstip")
                 .eq("risico_id", risico.id).order("tijdstip", { ascending: false }).limit(201).abortSignal(signal);
-              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.risico_id as string })), error };
+              return { data: (data ?? []).map((rij) => fondsModelcontextRij(
+                rij, fondsId, rij.risico_id as string, MODELCONTEXT_GEEN_GELDIGHEID
+              )), error };
             },
           }),
           leesModelcontext({
@@ -1345,7 +1445,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               const { data, error } = await supabase.from("risico_maatregelen")
                 .select("risico_id, beschrijving, status, verantwoordelijke, volgorde")
                 .eq("risico_id", risico.id).order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
-              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.risico_id as string })), error };
+              return { data: (data ?? []).map((rij) => fondsModelcontextRij(
+                rij,
+                fondsId,
+                rij.risico_id as string,
+                geverifieerdeModelcontextGeldigheid({
+                  status: rij.status as string | null,
+                  actief: true,
+                  geldigVanaf: null,
+                  geldigTot: null,
+                })
+              )), error };
             },
           }),
         ]);
@@ -1372,7 +1482,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               .eq("fonds_id", fondsId)
               .abortSignal(signal)
               .maybeSingle();
-            return { data: data ? [{ waarde: data, fondsId: data.fonds_id as string, privateRef: data.id as string, status: data.status as string }] : [], error };
+            return { data: data ? [fondsModelcontextRij(
+              data,
+              data.fonds_id as string,
+              data.id as string,
+              geverifieerdeModelcontextGeldigheid({
+                status: data.status as string | null,
+                actief: true,
+                geldigVanaf: null,
+                geldigTot: null,
+              })
+            )] : [], error };
           },
         });
         if (!proc?.id) {
@@ -1430,7 +1550,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             const { data, error } = await supabase.from("procedure_stappen")
               .select("id, procedure_id, volgorde, naam, beschrijving, status")
               .eq("procedure_id", proc.id).order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
-            return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.procedure_id as string })), error };
+            return { data: (data ?? []).map((rij) => fondsModelcontextRij(
+              rij,
+              fondsId,
+              rij.procedure_id as string,
+              geverifieerdeModelcontextGeldigheid({
+                status: rij.status as string | null,
+                actief: true,
+                geldigVanaf: null,
+                geldigTot: null,
+              })
+            )), error };
           },
         });
         const huidigeStapRij =
@@ -1462,7 +1592,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 .eq("stap_volgorde", huidigeStap.volgorde);
               if (proc.template_versie) reqQuery = reqQuery.eq("template_versie", proc.template_versie as string);
               const { data, error } = await reqQuery.limit(201).abortSignal(signal);
-              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.template_code as string })), error };
+              return { data: (data ?? []).map((rij) => fondsModelcontextRij(
+                rij, fondsId, rij.template_code as string, MODELCONTEXT_GEEN_GELDIGHEID
+              )), error };
             },
           });
         }
@@ -1477,7 +1609,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               const { data, error } = await supabase.from("procedure_bewijs")
                 .select("stap_id, document_id, titel, documenttype")
                 .in("stap_id", stapIds).limit(501).abortSignal(signal);
-              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.stap_id as string })), error };
+              return { data: (data ?? []).map((rij) => fondsModelcontextRij(
+                rij, fondsId, rij.stap_id as string, MODELCONTEXT_GEEN_GELDIGHEID
+              )), error };
             },
           });
         }
@@ -1493,26 +1627,34 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               context: evidenceContext, soort: "documentlabels", scope: { fondsId, privateRefs: bewijsDocIds }, maxItems: bewijsDocIds.length,
               lees: async (signal) => {
                 const { data, error } = await supabase.from("documenten")
-                  .select("id, fonds_id, titel, actief, geindexeerd, status, bronstatus, geldig_vanaf, geldig_tot")
+                  .select("id, fonds_id, bibliotheek, titel, actief, geindexeerd, status, bronstatus, geldig_vanaf, geldig_tot")
                   .in("id", bewijsDocIds).limit(bewijsDocIds.length + 1).abortSignal(signal);
-                return { data: (data ?? []).map((rij) => ({
-                  waarde: rij, fondsId: rij.fonds_id as string | null, privateRef: rij.id as string,
-                  status: rij.status as string, actief: rij.actief as boolean,
-                  geldigVanaf: rij.geldig_vanaf as string | null, geldigTot: rij.geldig_tot as string | null,
-                })), error };
+                return { data: (data ?? []).map((rij) => documentModelcontextRij(rij, {
+                  fondsId: rij.fonds_id as string | null,
+                  bibliotheek: rij.bibliotheek as string | null,
+                  status: rij.status as string | null,
+                  actief: rij.actief as boolean | null,
+                  geldigVanaf: rij.geldig_vanaf as string | null,
+                  geldigTot: rij.geldig_tot as string | null,
+                }, rij.id as string)), error };
               },
             }),
             controleerChunkPresentie(supabase, {
               context: evidenceContext,
               maxItems: 2000,
               maxGerenderdeTekens: 0,
-            }, bewijsDocIds),
+            }, bewijsDocIds, { explicieteDocumentScope: true }),
           ]);
           evidenceAudits.push(presentie.audit);
           if (presentie.status === "geweigerd") throw new Error("chunk_presentie_onvolledig");
           const geldigeDocs = docRows.filter(
             (d) => d.actief !== false && d.geindexeerd === true && presentie.documentIdentiteiten.has(
-              maakDocumentIdentiteit(`fonds:${fondsId}`, d.id as string)
+              maakDocumentIdentiteit(
+                d.fonds_id == null && d.bibliotheek === "generiek"
+                  ? "generiek"
+                  : `fonds:${fondsId}`,
+                d.id as string
+              )
             )
           );
           moduleScopeBronIds = geldigeDocs.map((d) => d.id as string);
@@ -1831,7 +1973,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               lees: async (signal) => {
                 const { data, error } = await supabase.from("governance_log_inhoud")
                   .select("log_id, bronnen").eq("log_id", rij.bronset_log_id).abortSignal(signal).maybeSingle();
-                return { data: data ? [{ waarde: data, privateRef: data.log_id as string, actorId: ctx.gebruikerId }] : [], error };
+                return { data: data ? [actorModelcontextRij(
+                  data,
+                  fondsId,
+                  ctx.gebruikerId,
+                  data.log_id as string,
+                  MODELCONTEXT_GEEN_GELDIGHEID
+                )] : [], error };
               },
             }),
           ]);
@@ -2039,14 +2187,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         context: evidenceContext, soort: "documentlabels", scope: { fondsId }, maxItems: 5000,
         lees: async (signal) => {
           const { data, error } = await supabase.from("documenten")
-            .select("id, fonds_id, titel, status, actief, geldig_vanaf, geldig_tot")
+            .select("id, fonds_id, bibliotheek, titel, status, actief, geldig_vanaf, geldig_tot")
             // "niet expliciet inactief" — NULL ≡ actief (spiegelt ingest).
             .not("actief", "is", false).limit(5001).abortSignal(signal);
-          return { data: (data ?? []).map((rij) => ({
-            waarde: rij, fondsId: rij.fonds_id as string | null, status: rij.status as string,
-            actief: rij.actief as boolean, geldigVanaf: rij.geldig_vanaf as string | null,
+          return { data: (data ?? []).map((rij) => documentModelcontextRij(rij, {
+            fondsId: rij.fonds_id as string | null,
+            bibliotheek: rij.bibliotheek as string | null,
+            status: rij.status as string | null,
+            actief: rij.actief as boolean | null,
+            geldigVanaf: rij.geldig_vanaf as string | null,
             geldigTot: rij.geldig_tot as string | null,
-          })), error };
+          }, null)), error };
         },
       });
       const documenten: DocumentRef[] = docRijen.map((d) => ({ id: d.id, titel: d.titel }));
@@ -2128,9 +2279,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             `Vergelijking ${koppeling.bron.titel} ↔ ${koppeling.doel.titel}: ` +
             `${resultaat.findings.length} bevinding(en) over ${resultaat.dimensies.length} dimensie(s).`;
           const zegel = bouwInhoudZegel(vraag, samenvatting);
-          const { data: vergelijkLogId, error: logFout } = await supabase.rpc(
-            "schrijf_ai_interactie",
-            {
+          const { data: vergelijkLogId, error: logFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
+            contextSignal,
+            () => supabase.rpc("schrijf_ai_interactie", {
               p_vraag: vraag,
               p_antwoord: samenvatting,
               // Dezelfde centraal gevormde verwijzingen die de vergelijkrespons
@@ -2142,8 +2293,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               p_retrieval_meta: {
                 vergelijkmodus: true,
                 comparison_run_id: resultaat.comparison_run_id,
-                bron_document_id: koppeling.bron.id,
-                doel_document_id: koppeling.doel.id,
+                bron_document_id: vergelijkBron.id,
+                doel_document_id: vergelijkDoel.id,
                 aantal_findings: resultaat.findings.length,
                 dimensies: resultaat.dimensies.map((d) => d.key),
                 correlation_id: resultaat.retrieval_meta?.correlation_id ?? ctx.requestId,
@@ -2182,7 +2333,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
               p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
               p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
-            }
+            }).abortSignal(contextSignal)
           );
           if (logFout) throw logFout;
           // AI-begrenzing (besluit 0180): sluit de gereserveerde AI-actie op deze
@@ -2210,9 +2361,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           `Vergelijkingsverduidelijking: bron «${vergelijkIntent.bronHint ?? "?"}» ↔ ` +
           `doel «${vergelijkIntent.doelHint ?? "?"}» — meerdere kandidaten, gericht nagevraagd.`;
         const vvZegel = bouwInhoudZegel(vraag, vvSamenvatting);
-        const { data: vvLogId, error: vvLogFout } = await supabase.rpc(
-          "schrijf_ai_interactie",
-          {
+        const { data: vvLogId, error: vvLogFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
+          contextSignal,
+          () => supabase.rpc("schrijf_ai_interactie", {
             p_vraag: vraag,
             p_antwoord: vvSamenvatting,
             p_bronnen: [],
@@ -2239,7 +2390,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_inhoud_hmac: vvZegel?.inhoud_hmac ?? null,
             p_hmac_schema_versie: vvZegel?.hmac_schema_versie ?? null,
             p_hmac_sleutel_versie: vvZegel?.hmac_sleutel_versie ?? null,
-          }
+          }).abortSignal(contextSignal)
         );
         if (vvLogFout) throw vvLogFout;
         await rondAf(
@@ -2278,9 +2429,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // `geen_modelcall` false en registreren we het effectieve resolvermodel;
         // `geen_generatiecall` legt afzonderlijk vast dat er geen generatie was.
         const resolverModelGebruikt = vraagContext?.modelAangeroepen ?? false;
-        const { data: verduidelijkingLogId, error: logFout } = await supabase.rpc(
-          "schrijf_ai_interactie",
-          {
+        const { data: verduidelijkingLogId, error: logFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
+          contextSignal,
+          () => supabase.rpc("schrijf_ai_interactie", {
             p_vraag: vraag,
             p_antwoord: VERDUIDELIJKINGSVRAAG,
             p_bronnen: [],
@@ -2321,7 +2472,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
             p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
             p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
-          }
+          }).abortSignal(contextSignal)
         );
         if (logFout) throw logFout;
         // AI-begrenzing (besluit 0180): sluit de gereserveerde AI-actie óók op deze
@@ -3248,9 +3399,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // onder dezelfde conditie (stap 2). Agendapunt-modus vulde modulesBlok al vóór
       // het streamen; die tak komt hier niet.
       if (modulesBlok === "") {
-        modulesBlok = begrensModelcontext(
-          "fondsmodules", await haalModuleContextBlok(fondsId), 8_000, "persoonsgebonden"
-        );
+        modulesContextBlok = await haalModuleContextBlok(fondsId);
+        modelcontextAudits.push(modulesContextBlok.audit);
+        modulesBlok = modulesContextBlok.tekst;
       }
     }
     const portaalstandGebruikt = portaalstandBlok.length > 0;
@@ -3261,21 +3412,28 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // Leeg bij een zuiver algemene vraag → geen prefix. Het module-scope-blok draagt
     // zijn eigen instructie (signaleren/spiegelen), dus de toon-systeemprompt blijft
     // byte-identiek.
-    const portaalDelen = [
-      ["portaalstand", portaalstandBlok, "persoonsgebonden"],
-      ["fondsmodules", modulesBlok.trim(), "persoonsgebonden"],
-      ["module_scope", moduleScopeInPrompt ? moduleScopeBlok : "", "persoonsgebonden"],
-    ].filter(([, tekst]) => tekst.length > 0).map(([soort, tekst, pii]) =>
-      bouwModelcontextBlok({
+    const portaalDelen: ModelcontextBlok[] = [];
+    if (portaalstandBlok.length > 0) {
+      portaalDelen.push(bouwModelcontextBlok({
         context: evidenceContext,
-        soort,
-        tekst,
+        soort: "portaalstand",
+        tekst: portaalstandBlok,
         maxGerenderdeTekens: 12_000,
-        pii: pii as ModelcontextAudit["pii"],
-      })
-    );
+        pii: "persoonsgebonden",
+      }));
+    }
+    if (!agendapuntModusActief && modulesContextBlok?.tekst) portaalDelen.push(modulesContextBlok);
+    if (moduleScopeInPrompt && moduleScopeBlok.length > 0) {
+      portaalDelen.push(bouwModelcontextBlok({
+        context: evidenceContext,
+        soort: "module_scope",
+        tekst: moduleScopeBlok,
+        maxGerenderdeTekens: 12_000,
+        pii: "persoonsgebonden",
+      }));
+    }
     const samengesteldeModelcontext = combineerModelcontext(evidenceContext, portaalDelen, 16_000);
-    modelcontextAudits.push(samengesteldeModelcontext.audit);
+    if (portaalDelen.length > 0) modelcontextAudits.push(samengesteldeModelcontext.audit);
     const portaalContextPrefix = samengesteldeModelcontext.tekst.length > 0
       ? `${samengesteldeModelcontext.tekst}\n\n---\n\n`
       : "";
@@ -3378,7 +3536,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         antwoordmodus,
         chunks.length > 0 ? bronSentinel : null
       );
-      const toelichtingBlok = bouwToelichtingBlok(agendapuntSeed!);
+      const toelichtingBlok = agendapuntContextBlok?.tekst ?? "";
       const stukkenBlok =
         // T2 (#304) — de bronloze voorbereiding heeft wél bronnen, maar geen
         // gekoppelde stukken. Er is dan niets als [gekoppeld stuk] gemarkeerd
@@ -4539,7 +4697,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             splitsRetrievalMeta(teLoggenMeta);
           const zegel = bouwInhoudZegel(vraag, zichtbaarAntwoord);
 
-          const { data: logId, error: logFout } = await supabase.rpc("schrijf_ai_interactie", {
+          const { data: logId, error: logFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
+            contextSignal,
+            () => supabase.rpc("schrijf_ai_interactie", {
             p_vraag: vraag,
             p_antwoord: zichtbaarAntwoord,
             p_bronnen: bronnen,
@@ -4551,7 +4711,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
             p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
             p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
-          });
+            }).abortSignal(contextSignal)
+          );
           // Ongewijzigd gedrag: een mislukte logregel valt in de outer catch en
           // levert de client {type:"error"} in plaats van {type:"done"}. Het
           // auditspoor is geen bijzaak die stil mag mislukken.
@@ -4595,9 +4756,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               // `eigen_notities` en `vrije_notities` van de notities-route
               // blijven staan. Dat is geen aanname: het is gepind in
               // tests/cross-tenant/voorbereiding-product.test.ts.
-              const { error: productFout } = await supabase
-                .from("voorbereidingen")
-                .upsert(
+              const { error: productFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
+                contextSignal,
+                () => supabase.from("voorbereidingen").upsert(
                   {
                     agendapunt_id: agendapuntSeed.id,
                     gebruiker_id: ctx.gebruikerId,
@@ -4607,7 +4768,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                     bijgewerkt_op: product.ai_output.opgesteld_op,
                   },
                   { onConflict: "agendapunt_id,gebruiker_id" }
-                );
+                ).abortSignal(contextSignal)
+              );
               if (productFout) throw productFout;
             } catch (productFout) {
               console.error(

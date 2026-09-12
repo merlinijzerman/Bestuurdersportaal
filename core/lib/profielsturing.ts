@@ -15,7 +15,7 @@ import type { RetrievalMeta } from "@/core/lib/rag";
 import type { RetrievalContext } from "@/core/lib/retrieval/contract";
 import { bewaakNaIO } from "@/core/lib/retrieval/afbreken";
 import { isAfbreking } from "@/core/lib/retrieval/afbreken";
-import { leesModelcontext } from "@/core/lib/retrieval/modelcontext-reader";
+import { actorModelcontextRij, leesModelcontext, MODELCONTEXT_GEEN_GELDIGHEID } from "@/core/lib/retrieval/modelcontext-reader";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerSupabase>>;
 
@@ -43,31 +43,32 @@ export interface ProfielVoorkeuren {
 async function haalProfielVoorkeurenProvider(
   supabase: SupabaseClient,
   userId: string,
-  context?: RetrievalContext
-): Promise<ProfielVoorkeuren | null> {
+  context: RetrievalContext
+): Promise<{ waarde: ProfielVoorkeuren; fondsId: string; actorId: string } | null> {
   let profielQuery = supabase
     .from("profielen")
     .select(
-      "bestuurlijke_rol, primaire_expertise_id, antwoordvoorkeur, detailniveau"
+      "id, fonds_id, bestuurlijke_rol, primaire_expertise_id, antwoordvoorkeur, detailniveau"
     )
-    .eq("id", userId);
-  if (context?.signal) profielQuery = profielQuery.abortSignal(context.signal);
+    .eq("id", userId)
+    .eq("fonds_id", context.fondsId);
+  if (context.signal) profielQuery = profielQuery.abortSignal(context.signal);
   const { data: p, error: profielError } = await profielQuery.single();
-  bewaakNaIO(context?.signal, profielError);
+  bewaakNaIO(context.signal, profielError);
   if (profielError) throw profielError;
   if (!p) return null;
 
   let expQuery = supabase.from("profiel_expertises").select("expertise_id").eq("profiel_id", userId);
   let gremQuery = supabase.from("profiel_gremia").select("gremium_id").eq("profiel_id", userId);
   let focusQuery = supabase.from("profiel_focusgebieden").select("focusgebied_id").eq("profiel_id", userId);
-  if (context?.signal) {
+  if (context.signal) {
     expQuery = expQuery.abortSignal(context.signal);
     gremQuery = gremQuery.abortSignal(context.signal);
     focusQuery = focusQuery.abortSignal(context.signal);
   }
   const [expR, gremR, focusR] = await Promise.all([expQuery, gremQuery, focusQuery]);
   for (const resultaat of [expR, gremR, focusR]) {
-    bewaakNaIO(context?.signal, resultaat.error);
+    bewaakNaIO(context.signal, resultaat.error);
     if (resultaat.error) throw resultaat.error;
   }
   const secExpIds = (expR.data ?? []).map((r) => r.expertise_id as string);
@@ -90,10 +91,10 @@ async function haalProfielVoorkeurenProvider(
       : Promise.resolve(leeg),
   ];
   const [expNamen, gremNamen, focusNamen] = await Promise.all(naamQueries.map((query) =>
-    "abortSignal" in query && context?.signal ? query.abortSignal(context.signal) : query
+    "abortSignal" in query && context.signal ? query.abortSignal(context.signal) : query
   ));
   for (const resultaat of [expNamen, gremNamen, focusNamen]) {
-    bewaakNaIO(context?.signal, "error" in resultaat ? resultaat.error : null);
+    bewaakNaIO(context.signal, "error" in resultaat ? resultaat.error : null);
     if ("error" in resultaat && resultaat.error) throw resultaat.error;
   }
 
@@ -121,7 +122,7 @@ async function haalProfielVoorkeurenProvider(
       ? p.detailniveau.trim()
       : null;
 
-  return {
+  const waarde: ProfielVoorkeuren = {
     bestuurlijkeRol,
     primaireExpertiseNaam,
     secundaireNamen,
@@ -130,20 +131,33 @@ async function haalProfielVoorkeurenProvider(
     antwoordvoorkeur,
     detailniveau,
   };
+  return {
+    waarde,
+    fondsId: p.fonds_id as string,
+    actorId: p.id as string,
+  };
 }
 
 export async function haalProfielVoorkeuren(
   supabase: SupabaseClient,
   userId: string,
-  context?: RetrievalContext
+  context: RetrievalContext
 ): Promise<ProfielVoorkeuren | null> {
-  if (!context) return haalProfielVoorkeurenProvider(supabase, userId);
   const rows = await leesModelcontext({
     context, soort: "profiel", scope: { fondsId: context.fondsId, actorId: userId }, maxItems: 1,
     lees: async () => {
       try {
-        const waarde = await haalProfielVoorkeurenProvider(supabase, userId, context);
-        return { data: waarde ? [{ waarde, actorId: userId }] : [], error: null };
+        const bevestigd = await haalProfielVoorkeurenProvider(supabase, userId, context);
+        return {
+          data: bevestigd ? [actorModelcontextRij(
+            bevestigd.waarde,
+            bevestigd.fondsId,
+            bevestigd.actorId,
+            null,
+            MODELCONTEXT_GEEN_GELDIGHEID
+          )] : [],
+          error: null,
+        };
       } catch (error) {
         if (isAfbreking(error)) throw error;
         return { data: [], error };
@@ -238,7 +252,7 @@ function aspectenVan(v: ProfielVoorkeuren): ProfielsturingAspecten {
 export async function bouwProfielsturing(
   supabase: SupabaseClient,
   userId: string,
-  context?: RetrievalContext
+  context: RetrievalContext
 ): Promise<{ tekst: string; aspecten: ProfielsturingAspecten } | null> {
   const v = await haalProfielVoorkeuren(supabase, userId, context);
   if (!v) return null;

@@ -22,13 +22,14 @@
 // ============================================================================
 
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { cache } from "react";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { haalFondsSessie } from "@/core/lib/fonds-sessie";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import type { RetrievalContext } from "@/core/lib/retrieval/contract";
 import { bewaakNaIO, isAfbreking, TIMEOUT_DEFAULT_MS } from "@/core/lib/retrieval/afbreken";
-import { leesModelcontext } from "@/core/lib/retrieval/modelcontext-reader";
+import { actorModelcontextRij, leesModelcontext, MODELCONTEXT_GEEN_GELDIGHEID } from "@/core/lib/retrieval/modelcontext-reader";
 import {
   telEigenInbreng,
   telZonderGekoppeldStuk,
@@ -77,35 +78,32 @@ export interface PortaalContextInput {
  * via haalFondsSessie() (redirect naar /login bij geen sessie/fonds). De
  * homepage geeft haar reeds-opgehaalde sessie door om een extra query te sparen.
  */
-async function haalPortaalContextProvider(input?: PortaalContextInput): Promise<PortaalContext> {
+async function haalPortaalContextProvider(
+  input: PortaalContextInput,
+  context: RetrievalContext
+): Promise<{ waarde: PortaalContext; fondsId: string; actorId: string }> {
     // Max 1× per server-render is structureel geborgd: precies één call-site per
     // oppervlak (homepage + /ai) en React.cache() hierboven dedupliceert een
     // eventuele herhaalde aanroep binnen dezelfde render.
     const supabase = await createServerSupabase();
-    const signal = input?.retrievalContext?.signal ?? AbortSignal.timeout(TIMEOUT_DEFAULT_MS);
-
-    let userId: string;
-    let fondsId: string;
-    let gebruikerNaam: string | null;
-    let rol: string | null;
-
-    if (input) {
-      ({ userId, fondsId, gebruikerNaam } = input);
-      rol = input.rol ?? null;
-    } else {
-      const sessie = await haalFondsSessie();
-      userId = sessie.userId;
-      fondsId = sessie.fondsId;
-      rol = sessie.rol;
-      const { data: profiel, error } = await supabase
-        .from("profielen")
-        .select("naam")
-        .eq("id", userId)
-        .abortSignal(signal).single();
-      bewaakNaIO(signal, error);
-      if (error) throw error;
-      gebruikerNaam = (profiel?.naam as string | null) ?? null;
-    }
+    const signal = context.signal!;
+    // Bevestig actor én fonds altijd uit de RLS-provider. Ook callers die een
+    // reeds geladen sessie meegeven leveren zo geen vertrouwensclaim aan de
+    // modelcontextgrens.
+    const { data: profiel, error: profielError } = await supabase
+      .from("profielen")
+      .select("id, fonds_id, naam, rol")
+      .eq("id", input.userId)
+      .eq("fonds_id", input.fondsId)
+      .abortSignal(signal)
+      .maybeSingle();
+    bewaakNaIO(signal, profielError);
+    if (profielError) throw profielError;
+    if (!profiel?.id || !profiel.fonds_id) throw new Error("modelcontext_buiten_scope");
+    const userId = profiel.id as string;
+    const fondsId = profiel.fonds_id as string;
+    const gebruikerNaam = (profiel.naam as string | null) ?? input.gebruikerNaam;
+    const rol = (profiel.rol as string | null) ?? input.rol ?? null;
     const isBureau = isBureauRol(rol);
 
     const nu = new Date().toISOString();
@@ -248,18 +246,48 @@ async function haalPortaalContextProvider(input?: PortaalContextInput): Promise<
     if (docError) throw docError;
     const recentDocument = (docRaw?.[0] as DocumentCtx | undefined) ?? null;
 
-    return { volgendeVergadering, agendapunten, openStappen, recentDocument };
+    return {
+      waarde: { volgendeVergadering, agendapunten, openStappen, recentDocument },
+      fondsId,
+      actorId: userId,
+    };
 }
 
 export const getPortaalContext = cache(async (input?: PortaalContextInput): Promise<PortaalContext> => {
-  const context = input?.retrievalContext;
-  if (!context) return haalPortaalContextProvider(input);
+  const effectiefInput: PortaalContextInput = input ?? await (async () => {
+    const sessie = await haalFondsSessie();
+    return {
+      userId: sessie.userId,
+      fondsId: sessie.fondsId,
+      gebruikerNaam: null,
+      rol: sessie.rol,
+    } satisfies PortaalContextInput;
+  })();
+  const context = effectiefInput.retrievalContext ?? {
+    fondsId: effectiefInput.fondsId,
+    actor: { soort: "gebruiker" as const, id: effectiefInput.userId },
+    taaktype: "chat_generatie" as const,
+    bronbeleid: { bronsoorten: ["fonds" as const] },
+    correlationId: randomUUID(),
+    verzoekStartOp: new Date().toISOString(),
+    signal: AbortSignal.timeout(TIMEOUT_DEFAULT_MS),
+  };
   const rows = await leesModelcontext({
-    context, soort: "portaalstand", scope: { fondsId: input.fondsId, actorId: input.userId }, maxItems: 1,
+    context, soort: "portaalstand",
+    scope: { fondsId: effectiefInput.fondsId, actorId: effectiefInput.userId }, maxItems: 1,
     lees: async () => {
       try {
-        const waarde = await haalPortaalContextProvider(input);
-        return { data: [{ waarde, fondsId: input.fondsId, actorId: input.userId }], error: null };
+        const bevestigd = await haalPortaalContextProvider(effectiefInput, context);
+        return {
+          data: [actorModelcontextRij(
+            bevestigd.waarde,
+            bevestigd.fondsId,
+            bevestigd.actorId,
+            null,
+            MODELCONTEXT_GEEN_GELDIGHEID
+          )],
+          error: null,
+        };
       } catch (error) {
         if (isAfbreking(error)) throw error;
         return { data: [], error };
