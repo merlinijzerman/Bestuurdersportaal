@@ -28,7 +28,7 @@ language sql immutable set search_path = public, pg_temp as $$
           )
           and jsonb_typeof(p_meta->'contextbron_resolutie'->'kandidaatcap') = 'number'
           and p_meta->'contextbron_resolutie'->'kandidaatcap' = '2000'::jsonb
-          and (p_meta->'contextbron_resolutie' - 'volledig' - 'reden' - 'kandidaatcap') = '{}'::jsonb
+          and ((p_meta->'contextbron_resolutie') - 'volledig'::text - 'reden'::text - 'kandidaatcap'::text) = '{}'::jsonb
          then jsonb_build_object('contextbron_resolutie', p_meta->'contextbron_resolutie')
          else '{}'::jsonb
        end;
@@ -54,7 +54,7 @@ language sql immutable set search_path = public, pg_temp as $$
           )
           and jsonb_typeof(p_meta->'contextbron_resolutie'->'kandidaatcap') = 'number'
           and p_meta->'contextbron_resolutie'->'kandidaatcap' = '2000'::jsonb
-          and (p_meta->'contextbron_resolutie' - 'volledig' - 'reden' - 'kandidaatcap') = '{}'::jsonb
+          and ((p_meta->'contextbron_resolutie') - 'volledig'::text - 'reden'::text - 'kandidaatcap'::text) = '{}'::jsonb
          then jsonb_build_object('contextbron_resolutie', p_meta->'contextbron_resolutie')
          else '{}'::jsonb
        end;

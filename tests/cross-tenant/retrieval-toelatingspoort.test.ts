@@ -30,6 +30,7 @@ import {
   maakPassageIdentiteit,
   maakVolledigeVersieHash,
 } from "../../core/lib/retrieval/identiteit";
+import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
 
 const GEBRUIKER = "22222222-2222-4222-8222-222222222222";
 const BESTAND_HASH = "a".repeat(64);
@@ -406,6 +407,25 @@ test("#367 — ontbrekende of falende versieherlezing is zichtbaar en fail-close
   assert.equal(categorieVan("versie_hook_fout"), "providerfout");
 });
 
+test("#367 — annulering in versieherlezing stopt vóór de rechtenherlezing", async () => {
+  const afbreking = new RetrievalAfgebroken("annulering");
+  let rechtenHerlezingen = 0;
+  const a = adapter({
+    versieHook: async () => { throw afbreking; },
+    hook: async () => {
+      rechtenHerlezingen++;
+      return new Map();
+    },
+  });
+
+  await assert.rejects(
+    poort(CTX, a, [bron("versie-abort")]),
+    (e: unknown) => e === afbreking,
+    "de oorspronkelijke afbreking moet onveranderd door de poort reizen"
+  );
+  assert.equal(rechtenHerlezingen, 0, "na cancellation mag de volgende I/O-hook niet starten");
+});
+
 // ── V5: de actuele stand van de bronregistratie ─────────────────────────────
 
 test("PR-C — V5: een ONTBREKENDE map-entry weigert; onbekend is niet toegestaan", async () => {
@@ -436,6 +456,43 @@ test("PR-C — V5: een hook die GOOIT weigert, en is te onderscheiden van een on
   // weigering geboekt zou het incident onzichtbaar maken én de gebruiker ten
   // onrechte als "niet bevoegd" registreren. Fail-closed blijft staan.
   assert.equal(categorieVan("v5_hook_fout"), "providerfout");
+});
+
+test("#367 — deadline in rechtenherlezing stopt vóór selectie- en weergave-I/O", async () => {
+  const deadline = new RetrievalAfgebroken("timeout");
+  let selectieverrijkingen = 0;
+  let weergaveverrijkingen = 0;
+  const a = adapter({
+    zoek: async () => ({
+      kandidaten: [bron("rechten-timeout")],
+      methode: "sharepoint_live",
+      provider: "microsoft",
+      latencyMs: 0,
+      opgehaald: 1,
+    }),
+    hook: async () => { throw deadline; },
+  });
+  a.verrijkSelectie = async (_ctx, geselecteerd) => {
+    selectieverrijkingen++;
+    return { resultaten: geselecteerd };
+  };
+  a.verrijkWeergave = async (_ctx, geselecteerd) => {
+    weergaveverrijkingen++;
+    return geselecteerd;
+  };
+  const { voerVolledigeRetrievalUit } = await import("../../core/lib/retrieval/orkestratie");
+
+  await assert.rejects(
+    voerVolledigeRetrievalUit(
+      CTX,
+      { adapter: a, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }] },
+      CITAAT
+    ),
+    (e: unknown) => e === deadline,
+    "de deadline mag niet als v5_hook_fout worden geslikt"
+  );
+  assert.equal(selectieverrijkingen, 0, "selectie-I/O mag na de deadline niet starten");
+  assert.equal(weergaveverrijkingen, 0, "weergave-I/O mag na de deadline niet starten");
 });
 
 test("PR-C — V5 herleest onder de referentie VAN HET RESULTAAT, niet uit het bewijs", async () => {
@@ -706,6 +763,16 @@ test("#367 — uitgebrachte migratie/check blijven bytegelijk; forward en rollba
     );
   }
   assert.match(forward, /jsonb_build_object\('correlation_id'/);
+  assert.doesNotMatch(
+    forward,
+    /p_meta->'contextbron_resolutie'\s*-\s*'volledig'/,
+    "jsonb-aftrek moet de ->-expressie expliciet groeperen; PostgreSQL bindt deze operators anders"
+  );
+  assert.match(
+    forward,
+    /\(p_meta->'contextbron_resolutie'\)\s*-\s*'volledig'::text/,
+    "de clean-replaycorrectie voor PostgreSQL-operatorprecedentie moet behouden blijven"
+  );
   assert.doesNotMatch(rollback, /jsonb_build_object\('correlation_id'/, "rollback moet de correlation-uitbreiding volledig verwijderen");
   assert.doesNotMatch(forward, /\b(drop|alter|truncate|delete|update)\s+(table|function|from)\b/i, "forward is uitsluitend additieve wrappervervanging");
   assert.doesNotMatch(rollback, /\b(drop|alter|truncate|delete|update)\s+(table|function|from)\b/i, "rollback raakt geen data of schema-objecten");

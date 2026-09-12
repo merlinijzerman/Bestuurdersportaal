@@ -36,6 +36,7 @@ import type {
   RetrievalContext,
   RetrievalQuery,
 } from "./contract";
+import { isAfbreking } from "./afbreken";
 
 /** Waarom een kandidaat is geweigerd. Inhoudsvrij; gaat naar het auditspoor. */
 export type Weigergrond =
@@ -319,7 +320,11 @@ export async function verifieerToelating(
     } else {
       try {
         versiestanden = await adapter.verifieerVersies(ctx, refs);
-      } catch {
+      } catch (e) {
+        // Cancellation/deadline is geen providerfout die de poort tot een
+        // weigering mag reduceren: de hele beurt is beëindigd. Doorgooien
+        // voorkomt dat de rechtenherlezing en verdere retrieval-I/O nog start.
+        if (isAfbreking(e)) throw e;
         versiestanden = null;
         versieHookFout = true;
       }
@@ -346,7 +351,10 @@ export async function verifieerToelating(
         // Request-lokaal — nooit gecached tussen verzoeken, want dan is de
         // herlezing weer de momentopname die zij vervangt.
         standen = await adapter.verifieerBronregistratie(ctx, refs);
-      } catch {
+      } catch (e) {
+        // Zelfde ketenregel als bij versieherlezing: alleen echte provider-
+        // fouten worden genormaliseerd; een afbreking stopt onmiddellijk.
+        if (isAfbreking(e)) throw e;
         standen = null;
         hookFout = true;
       }
