@@ -314,7 +314,7 @@
           "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
-          "fonds_id": "<uuid:2>",
+          "fonds_id": "<uuid:1>",
           "passage_identiteit": "<passage-identiteit:1>",
           "versie": {
             "gecontroleerd_op": "<ts>",
@@ -332,7 +332,7 @@
           "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
-          "fonds_id": "<uuid:2>",
+          "fonds_id": "<uuid:1>",
           "passage_identiteit": "<passage-identiteit:2>",
           "versie": {
             "gecontroleerd_op": "<ts>",
@@ -350,7 +350,7 @@
           "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
-          "fonds_id": "<uuid:2>",
+          "fonds_id": "<uuid:1>",
           "passage_identiteit": "<passage-identiteit:3>",
           "versie": {
             "gecontroleerd_op": "<ts>",
@@ -368,7 +368,7 @@
           "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
-          "fonds_id": "<uuid:2>",
+          "fonds_id": "<uuid:1>",
           "passage_identiteit": "<passage-identiteit:4>",
           "versie": {
             "gecontroleerd_op": "<ts>",
@@ -386,7 +386,7 @@
           "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
-          "fonds_id": "<uuid:2>",
+          "fonds_id": "<uuid:1>",
           "passage_identiteit": "<passage-identiteit:5>",
           "versie": {
             "gecontroleerd_op": "<ts>",
@@ -476,15 +476,15 @@
         "intent": "fonds",
         "regime": "alles"
       },
-      "toegepaste_fonds_filter": "<uuid:2>"
+      "toegepaste_fonds_filter": "<uuid:1>"
     },
     "volgorde": {
       "bronversie_audit": [
-        "00 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:1> citation=<citation-identiteit:1> versie=hash:<version-identiteit:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "01 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:2> citation=<citation-identiteit:2> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "02 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:3> citation=<citation-identiteit:3> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "03 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:4> citation=<citation-identiteit:4> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen",
-        "04 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:5> citation=<citation-identiteit:5> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
+        "00 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:1> citation=<citation-identiteit:1> versie=hash:<version-identiteit:1> bib=fonds fonds=<uuid:1> docstatus=concept bronstatus=geen datum=geen",
+        "01 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:2> citation=<citation-identiteit:2> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:1> docstatus=concept bronstatus=geen datum=geen",
+        "02 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:3> citation=<citation-identiteit:3> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:1> docstatus=concept bronstatus=geen datum=geen",
+        "03 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:4> citation=<citation-identiteit:4> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:1> docstatus=concept bronstatus=geen datum=geen",
+        "04 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:5> citation=<citation-identiteit:5> versie=hash:<version-identiteit:2> bib=fonds fonds=<uuid:1> docstatus=concept bronstatus=geen datum=geen"
       ],
       "chunks": [
         "00 chunk=<passage-identiteit:1> doc=<doc-identiteit:1> rang=0.0327869 fts=1 vec=1",
