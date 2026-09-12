@@ -712,6 +712,8 @@ test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in `meta_proje
     .join("\n");
   if (/meta_basisniveau[\s\S]*?jsonb_build_object\('correlation_id'/.test(aanvullingen)) basis.add("correlation_id");
   if (/meta_basisniveau[\s\S]*?jsonb_build_object\('contextbron_resolutie'/.test(aanvullingen)) basis.add("contextbron_resolutie");
+  if (/meta_basisniveau[\s\S]*?jsonb_build_object\('evidence_audit'/.test(aanvullingen)) basis.add("evidence_audit");
+  if (/meta_basisniveau[\s\S]*?jsonb_build_object\('modelcontext_audit'/.test(aanvullingen)) basis.add("modelcontext_audit");
   const { META_BASIS, META_BRON } = await import("../../core/lib/audit-meta");
   const verschil = (a: Iterable<string>, b: Set<string>) => [...a].filter((x) => !b.has(x)).sort();
   assert.deepEqual(verschil(META_BASIS as readonly string[], basis), [], `basis ontbreekt in ${laatste} plus wrappers`);
@@ -779,6 +781,21 @@ test("#367 — uitgebrachte migratie/check blijven bytegelijk; forward en rollba
   // Dit is bewust een hermetische STRUCTUURcontrole, geen claim dat PostgreSQL
   // rollback→forward werkelijk is uitgevoerd. Die runtimecheck vereist
   // TEST_DATABASE_URL en wordt door gates.sh alleen in zo'n omgeving gedraaid.
+});
+
+test("#368 — audit-forward/check/rollback zijn additief en de DB-check draait in de RLS-keten", async () => {
+  const { readFileSync } = await import("node:fs");
+  const forward = readFileSync(new URL("../../supabase/migrations/2026_09_12_368_evidence_auditprojectie.sql", import.meta.url), "utf8");
+  const rollback = readFileSync(new URL("../../supabase/rollbacks/2026_09_12_368_evidence_auditprojectie_ROLLBACK.sql", import.meta.url), "utf8");
+  const check = readFileSync(new URL("../../supabase/checks/2026_09_12_368_evidence_auditprojectie.sql", import.meta.url), "utf8");
+  const keten = readFileSync(new URL("../../scripts/cross-tenant-ci.sh", import.meta.url), "utf8");
+  assert.match(forward, /jsonb_build_object\('evidence_audit'/);
+  assert.match(forward, /jsonb_build_object\('modelcontext_audit'/);
+  assert.match(forward, /onvolledig evidenceobject passeert/);
+  assert.doesNotMatch(rollback, /evidence_audit|modelcontext_audit/);
+  assert.match(check, /vrije inhoud lekt door evidence_audit/);
+  assert.match(keten, /SQL_EVIDENCE_AUDIT="supabase\/checks\/2026_09_12_368_evidence_auditprojectie\.sql"/);
+  assert.match(keten, /psql "\$DB_URL" -v ON_ERROR_STOP=1 -f "\$SQL_EVIDENCE_AUDIT"/);
 });
 
 // ── Providerneutraliteit, statisch afgedwongen ──────────────────────────────

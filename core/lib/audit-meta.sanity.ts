@@ -233,6 +233,12 @@ const VOLLEDIGE_META: Record<string, unknown> = {
     context_kandidaat_vraag: "Breng het wettelijke kader van de solidariteitsreserve in kaart",
   },
   context_geneutraliseerd: 0,
+  evidence_audit: [
+    { correlation_id: "corr-1", soort: "semantische_unit", gevraagd: 1, toegelaten: 1, gerenderde_tekens: 120, limiet: 500, afgekapt: false, pii_gedetecteerd: false },
+  ],
+  modelcontext_audit: [
+    { correlation_id: "corr-1", soort: "portaalstand", pii: "persoonsgebonden", gerenderde_tekens: 80, limiet: 500, afgekapt: false },
+  ],
   terugval: { termen: ["dekkingsgraad"], query: "dekkingsgraad | abtn", versie: "v1" },
   duur_ms: 4200,
   duur_model_ms: 5100,
@@ -316,6 +322,14 @@ test("P5-sleutels overleven de splitsing daadwerkelijk", () => {
   assert.equal(spoor.duur_model_ms, 5100);
   assert.equal(spoor.geselecteerd, 5);
   assert.deepEqual(spoor.tokens, { in: 12000, out: 800 });
+});
+
+test("#368 evidence/modelcontext-audit blijft inhoudsvrij op basisniveau", () => {
+  const { spoor, inhoud } = splitsRetrievalMeta(VOLLEDIGE_META);
+  assert.deepEqual(spoor.evidence_audit, VOLLEDIGE_META.evidence_audit);
+  assert.deepEqual(spoor.modelcontext_audit, VOLLEDIGE_META.modelcontext_audit);
+  assert.equal("evidence_audit" in inhoud, false);
+  assert.equal("modelcontext_audit" in inhoud, false);
 });
 
 // ── 3. Inhoud komt nooit in het spoor ───────────────────────────────────────

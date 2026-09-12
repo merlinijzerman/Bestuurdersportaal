@@ -77,6 +77,10 @@ export const META_BASIS = [
   // #367 — uitsluitend gesloten status/cap van de reflectiebronsetresolutie;
   // geen passage-, document- of providerreferenties.
   "contextbron_resolutie",
+  // #368 — uitsluitend tellingen, caps, gesloten fout/statuscodes en PII-
+  // categorieën; nooit tekst of bronidentiteit.
+  "evidence_audit",
+  "modelcontext_audit",
   // fondsdiscipline (defense-in-depth, increment T4)
   "toegepaste_fonds_filter",
   "namespace_conventie",
