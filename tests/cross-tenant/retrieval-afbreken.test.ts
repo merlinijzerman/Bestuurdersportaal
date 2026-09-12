@@ -35,7 +35,10 @@ const CTX: RetrievalContext = {
   fondsId: "11111111-1111-4111-8111-111111111111",
   actor: { soort: "gebruiker", id: "22222222-2222-4222-8222-222222222222" },
   taaktype: "chat_generatie",
-  bronbeleid: { bronsoorten: ["fonds"] },
+  // De suite gebruikt zowel fonds- als synthetische SharePointbronnen. Sinds
+  // #369 wordt dit beleid werkelijk afgedwongen, dus beide horen expliciet in
+  // de hermetische testcontext.
+  bronbeleid: { bronsoorten: ["fonds", "sharepoint"] },
   correlationId: "corr-b",
   verzoekStartOp: new Date().toISOString(),
 };
@@ -59,7 +62,7 @@ function bron(ref: string, doc: string, passage: string): Bronresultaat {
   const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, ref);
   const resultaat: Bronresultaat = {
     ref: passageIdentiteit, bronsoort: "sharepoint", titel: "T",
-    documentIdentiteit: { id: documentIdentiteit, bibliotheek: "fonds", bron: "SharePoint" },
+    documentIdentiteit: { id: documentIdentiteit, fondsId: CTX.fondsId, bibliotheek: "fonds", bron: "SharePoint" },
     passageIdentiteit: { id: passageIdentiteit },
     versie: { soort: "etag", waarde: maakVolledigeVersieHash(doc, "etag-1", "a".repeat(64)), gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
     locator: {}, passage, status: { actueel: true }, rang: { positie: 1, score: 1 },

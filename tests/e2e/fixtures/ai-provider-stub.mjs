@@ -116,6 +116,46 @@ export function createAiProviderStub({
     const model = typeof body.model === "string" ? body.model : "synthetisch-model";
     if (body.stream !== true) {
       stats.nonStreams += 1;
+      // #369 — succesvolle /vergelijk-golden. Alleen wanneer de aanroeper een
+      // verplichte functietool kiest, levert de stub een geldig tool_use-blok.
+      // Alle bestaande non-stream tests zonder tool_choice houden exact hun
+      // historische tekstrespons.
+      const toolNaam = body?.tool_choice?.type === "tool" ? body.tool_choice.name : null;
+      if (toolNaam === "stel_dimensies_voor") {
+        return json(res, 200, {
+          id: "msg_wp4_vergelijk_dimensies",
+          type: "message",
+          role: "assistant",
+          model,
+          content: [{ type: "tool_use", id: "tool_wp4_dimensies", name: toolNaam, input: { dimensies: [] } }],
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 4 },
+        });
+      }
+      if (toolNaam === "vergelijk_dimensie") {
+        return json(res, 200, {
+          id: "msg_wp4_vergelijk_waarde",
+          type: "message",
+          role: "assistant",
+          model,
+          content: [{
+            type: "tool_use",
+            id: "tool_wp4_waarde",
+            name: toolNaam,
+            input: {
+              bron_value: "7,5%",
+              bron_evidence: "De bovengrens van de solidariteitsreserve bedraagt 7,5 procent.",
+              doel_value: "6,0%",
+              doel_evidence: "De bovengrens van de solidariteitsreserve bedraagt 6,0 procent.",
+              gelijk: false,
+            },
+          }],
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 12 },
+        });
+      }
       return json(res, 200, {
         id: "msg_wp4_nonstream",
         type: "message",

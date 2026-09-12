@@ -33,6 +33,7 @@ import {
 import { ENV, FIX, FONDS_ID } from "./config.mjs";
 import { E2E_AI_PROVIDER_FOUT_MARKER } from "../e2e/fixtures/config.mjs";
 import { zoekVolgorde, metaVolgorde } from "./retrieval-volgorde.mjs";
+import { geldigeUuidVoorQuery } from "./uuid.mjs";
 
 // #349 -- inhoudsvrije telling uit de embeddingstub (model + aantal, nooit tekst).
 async function embedVerzoeken() {
@@ -118,6 +119,74 @@ async function stubVerzoeken() {
 async function wisStubVerzoeken() {
   const res = await fetch(`${ENV.aiStubUrl}/verzoeken`, { method: "DELETE" });
   if (!res.ok) throw new Error(`stub DELETE /verzoeken: ${res.status}`);
+}
+
+/** #369 — minimale, herhaalbare vergelijking met precies éé actieve dimensie.
+ *
+ * De twee documenten bestaan al in de W1-seed. We maken ze hier expliciet
+ * vergelijkbaar en voegen per document éé FTS-treffer toe. Alle overige
+ * concepten gaan op `uitgesteld`, zodat deze golden exact twee retrievals, éé
+ * waardemodelcall en éé append-only run meet. */
+async function zetVergelijkGolden(admin) {
+  await wisLimiet(admin, "vergelijk");
+  await wisStubVerzoeken();
+
+  const { error: conceptenUitError } = await admin
+    .from("concepts")
+    .update({ status: "uitgesteld" })
+    .neq("key", "solidariteitsreserve.bovengrens");
+  if (conceptenUitError) throw new Error(`preseed concepts uitgesteld: ${conceptenUitError.message}`);
+  const { error: conceptActiefError } = await admin
+    .from("concepts")
+    .upsert({
+      id: FIX.vergelijkConcept,
+      key: "solidariteitsreserve.bovengrens",
+      label: "Bovengrens solidariteitsreserve",
+      type: "percentage",
+      status: "actief",
+    }, { onConflict: "key" });
+  if (conceptActiefError) throw new Error(`preseed concept actief: ${conceptActiefError.message}`);
+
+  const documentFixtures = [
+    { id: FIX.document1, bestand_hash: "a".repeat(64) },
+    { id: FIX.documentIntrekken, bestand_hash: "b".repeat(64) },
+  ];
+  for (const fixture of documentFixtures) {
+    const { error } = await admin
+      .from("documenten")
+      .update({ actief: true, status: "vastgesteld", bestand_hash: fixture.bestand_hash })
+      .eq("id", fixture.id)
+      .eq("fonds_id", FONDS_ID);
+    if (error) throw new Error(`preseed vergelijkdocument ${fixture.id}: ${error.message}`);
+  }
+
+  const fixtures = [
+    {
+      id: FIX.vergelijkChunkBron,
+      document_id: FIX.document1,
+      chunk_index: 30,
+      pagina: 7,
+      tekst: "De bovengrens van de solidariteitsreserve bedraagt 7,5 procent.",
+    },
+    {
+      id: FIX.vergelijkChunkDoel,
+      document_id: FIX.documentIntrekken,
+      chunk_index: 31,
+      pagina: 8,
+      tekst: "De bovengrens van de solidariteitsreserve bedraagt 6,0 procent.",
+    },
+  ];
+  const { error: chunksError } = await admin.from("document_chunks").upsert(
+    fixtures.map((fixture) => ({
+      ...fixture,
+      paragraaf: null,
+      structuur_type: "tekst",
+      structuur_label: "W369 vergelijk-golden",
+      indexering_versie: "w369-v1",
+    })),
+    { onConflict: "id" }
+  );
+  if (chunksError) throw new Error(`preseed vergelijkchunks: ${chunksError.message}`);
 }
 
 /** Eigen besluit voor de auditdossier-route, met een LEEG gebeurtenissenspoor.
@@ -1828,6 +1897,55 @@ export const scenarios = [
       return { volgorde: zoekVolgorde(body) };
     },
   })),
+
+  {
+    // #369 — echte HTTP-/DB-golden van het succesvolle vergelijkpad. Dit legt
+    // zowel het publieke resultaat (finding + centrale bronvorm) als de duurzame
+    // runprovenance en de providergrens vast. De vergelijking draait op een
+    // aparte VERGELIJKMODUS=on-server en raakt de bestaande goldens niet.
+    vereist: "vergelijk",
+    slug: "w369.vergelijk.post.bestuurder.200",
+    method: "POST",
+    path: "/api/vergelijk",
+    rol: "bestuurder",
+    body: {
+      mode: "symmetrisch",
+      bron_document_id: FIX.document1,
+      doel_document_id: FIX.documentIntrekken,
+    },
+    verwacht: "json",
+    idempotentie: true,
+    preseed: async ({ admin }) => zetVergelijkGolden(admin),
+    nawerk: async ({ admin }, res) => {
+      let body;
+      try { body = JSON.parse(res.buffer.toString("utf8")); } catch { return { run: null, findings: null, provider_verzoeken: await stubVerzoeken() }; }
+      const runId = body.comparison_run_id;
+      // Laat een onverwachte foutrespons als gewone snapshotdiff rapporteren.
+      // Zonder deze vormgrens stuurde het nawerk letterlijk `undefined` naar
+      // PostgREST als UUID-filter en maskeerde het de echte statusafwijking met
+      // `invalid input syntax for type uuid`.
+      if (!geldigeUuidVoorQuery(runId)) {
+        return { run: null, findings: null, provider_verzoeken: await stubVerzoeken() };
+      }
+      const { data: run, error: runError } = await admin
+        .from("comparison_run")
+        .select("correlation_id, retrieval_meta, bronnen")
+        .eq("id", runId)
+        .maybeSingle();
+      if (runError) throw new Error(`comparison_run(369): ${runError.message}`);
+      const { count, error: findingsError } = await admin
+        .from("comparison_results")
+        .select("id", { count: "exact", head: true })
+        .eq("comparison_run_id", runId);
+      if (findingsError) throw new Error(`comparison_results(369): ${findingsError.message}`);
+      return {
+        run,
+        findings: count,
+        provider_verzoeken: await stubVerzoeken(),
+      };
+    },
+  },
+
   // -- #349 F4-T1b — het HYBRIDE pad (zoek_chunks_hybride + RRF-fusie) --------
   //  De w322-goldens hierboven karakteriseren uitsluitend het FTS-terugvalpad:
   //  zonder embeddingprovider zet rag.ts `embedding_query_success:false` en valt

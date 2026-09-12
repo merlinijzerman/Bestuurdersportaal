@@ -1,10 +1,10 @@
-# Gemeenschappelijk retrievalcontract — fase 4 (#322/#348), tranche T1
+# Gemeenschappelijk retrievalcontract — fase 4 (#322/#348/#369)
 
-> **Status:** T1 afgerond; ontwerp gereviewd en R1–R6 **beslist** (9 september 2026).
-> Geen productiecode, geen migratie en geen databaseobject gewijzigd.
+> **Status:** T1 en T2-1 afgerond; T2-2 (#369) gebouwd op 11 september 2026.
+> T2-2 wijzigt productiecode, maar geen migratie of databaseobject.
 > Fase 3 (#323, #324) en de AI-gateway-cutover (#325) zijn op `preview` gemerged.
 > T1b ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349)) is uitgevoerd: het hybride pad is gekarakteriseerd (§3.6).
-> De ontwerpvragen zijn dicht — zie §6. T2-1 kan starten.
+> De ontwerpvragen zijn dicht — zie §6. T2-3 en T2-4 volgen afzonderlijk.
 > Bron van waarheid voor de huidige keten: `core/lib/rag.ts` en de migraties. Dit
 > document beschrijft wat er **is** (gemeten, met vindplaats) en wat het contract
 > moet dragen.
@@ -27,6 +27,27 @@ daartussen vast.
 T1 verandert niets aan gedrag. Het levert drie dingen: een **volledige, telbare
 inventarisatie**, een **karakterisering die bewijsbaar rood wordt** bij de dingen die
 zij heet te bewaken, en een **contractontwerp** met een geprioriteerde gaplijst.
+
+### Uitvoering T2-2 — 11 september 2026
+
+- C5 (`/api/zoeken`) en C6 (`vergelijk-productie`) roepen
+  `zoekRelevanteChunksMetMeta` niet meer rechtstreeks aan. Alleen de
+  Supabase-adapter is nog productie-ingang van die functie.
+- Beide paden gebruiken `voerVolledigeRetrievalUit`: toelating, bronbeleid,
+  selectie, deduplicatie, contextgrens, citatie, cancellation en deadline zijn
+  daarmee centraal.
+- Fonds, actor en bronbeleid komen uit de routecontext; document- en processcope
+  worden vóór de adapter gevalideerd. Clientsturing van fonds, document,
+  vergadering, provider of adapter wordt geweigerd vóór retrieval-I/O.
+- De zoekterm passeert de PII-poort vóór de adapter. De bestaande zoekweergave
+  blijft, additief aangevuld met providerneutrale `bronnen` en `citation_id`.
+- R2 blijft gelden: het vergelijkpad voegt geen impliciete actualiteits- of
+  statusfilter toe. Retrievalvlaggen, inclusief `regimeWeging`, zijn per fonds
+  geresolveerd.
+- `semantic_units` blijft als gemotiveerde uitzondering rechtstreeks onder de
+  RLS-client: het is getypeerd, reeds geëxtraheerd bewijs voor de deterministische
+  comparator, geen zoekprovider. De lezing draagt nu wel request-cancellation;
+  opname in een typed evidencecontract blijft T2-4.
 
 ---
 
@@ -55,7 +76,7 @@ drempel → selectie (max per document, Jaccard-dedup, representatieconstraints)
 parent-context (vlag) → `RetrievalMeta`. Beide RPC's zijn `security invoker`; RLS
 blijft leidend.
 
-### 2.2 Aantallen
+### 2.2 Aantallen (T1-nulmeting)
 
 | Grootheid | Aantal | Herkomst |
 |---|---|---|
@@ -976,14 +997,14 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 | **G-2** | Geen versie-identiteit per passage | C1–C6 | **hoog** | zonder exacte versie kan een Microsoftresultaat niet worden toegelaten; blokkeert §4.7. R1: volledige hash, `status-datum` alleen als zwakke legacyfallback | T2-3 |
 | **G-3** | Geen cancellation en geen timeout in de keten | alle | **hoog** | een afgebroken verzoek laat retrieval en modelcalls doorlopen (kosten + belasting). R6: meteen in T2-1 | **T2-1** |
 | **G-3b** | `permissionProof` was niet afdwingbaar | contract | **hoog** | capability-boolean zonder bewijs per resultaat; opgelost met `Bronresultaat.toegangscontrole` + toelatingspoort §4.2 punt 7 | T2-1 |
-| **G-4** | C5 zonder fondsvlaggen, zonder PII-gate, zonder citation-id | `zoeken/route.ts:107` | midden | zelfde bronnen, ander gedrag en andere bronvorm dan de chat | T2-2 |
-| **G-5** | C6 met `filters = {}` en hardcoded `parentRetrieval` | `vergelijk-productie.ts:72,142,143` | midden | R2: het **huidige gedrag blijft** — expliciet gekozen historische stukken moeten vergelijkbaar blijven. Alleen de bronvorm wordt gelijkgetrokken | T2-2 |
-| **G-6** | Scopereferentie uit de query-string niet servervalidatie | `zoeken/route.ts` `?procesinstantie=` | midden | vandaag onschadelijk door RLS, maar de validatie hoort in de laag | T2-2 |
+| **G-4** | C5 zonder fondsvlaggen, zonder PII-gate, zonder citation-id | `zoeken/route.ts` | midden | opgelost: fondsvlaggen + PII vóór adapter + centrale `BronVerwijzing` | **T2-2 — OPGELOST** |
+| **G-5** | C6 met directe retrieval, `filters = {}` en hardcoded `parentRetrieval` | `vergelijk-productie.ts` | midden | opgelost via adapter/fondsvlaggen; R2 blijft: expliciet gekozen historische stukken blijven vergelijkbaar | **T2-2 — OPGELOST** |
+| **G-6** | Scopereferentie uit de query-string niet servervalidatie | `zoeken/route.ts` `?procesinstantie=` | midden | opgelost: UUID + fondsgebonden RLS-herlezing vóór adapter | **T2-2 — OPGELOST** |
 | **G-7** | `correlationId` niet in `retrieval_meta` | C1 | midden | R4: toevoegen, inclusief de kleine forwardmigratie | T2-3 |
 | **G-8** | Directe `document_chunks`-toegang buiten `rag.ts` | `chat/route.ts:1036,1063,1298` en **`core/lib/parent-context.ts`** | midden | de laatste kwam pas met de transitieve scan boven water | T2-4 |
-| **G-9** | Drie onverenigbare bronvormen | C1/C7, C5, C6 | midden | alleen `BronVerwijzing` draagt citation-id en sentinel | T2-2 |
+| **G-9** | Drie onverenigbare bronvormen | C1/C7, C5, C6 | midden | C5/C6 gebruiken nu `Bronresultaat`; C5 publiceert centrale `BronVerwijzing` en citation-id. C7 volgt eigen platformscope | **T2-2 — OPGELOST voor C5/C6** |
 | **G-10** | Hybride pad niet gekarakteriseerd | C1 | **hoog** (was: laag) | het is in productie het **primaire** pad; de goldens dekken alleen de FTS-terugval. R3: eigen tranche vóór T2-1 | **T1b** |
-| **G-11** | `regimeWeging` niet per fonds stuurbaar | kern | laag | enige vlag met default aan, buiten `RetrievalVlaggen` | T2-2 |
+| **G-11** | `regimeWeging` niet per fonds stuurbaar | kern | laag | toegevoegd aan `RetrievalVlaggen`, met bestaande env-default als terugval | **T2-2 — OPGELOST** |
 | **G-12** | De hybride fusie kent geen verslapte OR-terugval; die bestaat alleen op het FTS-pad (`rag.ts:1519`). Een lange vraag levert daardoor een vector-only fusie | C1 op het hybride pad | **midden** | asymmetrie tussen de twee paden: dezelfde vraag krijgt op FTS wél een tweede, bredere poging en op hybride niet. Gemeten in T1b, gepind in `w322b.chat…hybride-retrieval-meta` (`fts_rang: null` op elke chunk) | **T2-1/PR-D — OPGELOST** |
 | **G-13** | De **hoofdgeneratiecall** krijgt geen signaal: `gateway.stream()` accepteert `verzoek.signal` (`contract.ts:146`), maar `chat/route.ts:3534` geeft er geen mee. Verbreekt de bestuurder de verbinding tijdens het genereren, dan loopt de modelcall door en betalen we hem alsnog | C1, ná de retrievalketen | midden | PR-B dekt de RETRIEVALketen (D5: 20 s vanaf binnenkomst in de orkestratie); de generatie valt daarbuiten. Bewust niet stilzwijgend meegenomen: afbreken betekent dat er géén `schrijf_ai_interactie`-regel volgt, en dat is een auditkeuze, geen implementatiedetail | **T2-1/PR-B2 — #356, GEBOUWD** |
 
@@ -993,7 +1014,7 @@ zoekvragen met persoonsgegevens, geen tokens of providerresponses in operationel
 |---|---|---|---|
 | **T1b** ✅ ([#349](https://github.com/merlinijzerman/Bestuurdersportaal/issues/349), uitgevoerd) | Embeddingstub naast de Anthropic-stub + geëmbedde fixtures; hybride golden op het `zoek_chunks_hybride`-pad. **Eén expliciet goedgekeurde test-seam** in productiecode (§3.6): `resolveMistralBaseUrl` + één aanroep in `embeddings.ts` | tests, fixtures, 2 regels productiecode | nieuwe hybride golden; bestaande 390 ongewijzigd; seam fail-closed |
 | T2-1 | Contract + orkestratie + Supabase-adapter; C1 erdoorheen. **Inclusief `AbortSignal`, timeout en de toelatingspoort** (R6, G-3, G-3b) | chatroute, `rag.ts` (wrapper) | w311/w322-goldens identiek volgens §3.2; contracttests op cancellation/timeout; **acceptatievoorwaarde: V5 toetst tegen de actuele bronregistratie, met een test die een intrekking *tijdens* het verzoek simuleert en aantoont dat de kandidaat alsnog wordt geweigerd** |
-| T2-2 | C5 en C6 door de orkestratie (vlaggen, bronvorm, scopevalidatie, PII-gate op C5). **C6 behoudt zijn filtergedrag** (R2) | zoeken, vergelijk | nieuwe goldens vóór en ná |
+| **T2-2 ✅ (#369)** | C5 en C6 door de orkestratie (vlaggen, bronvorm, scopevalidatie, PII-gate op C5). **C6 behoudt zijn filtergedrag** (R2) | zoeken, vergelijk | bestaande goldens als nulmeting; hermetische T2-2-contracttests + census |
 | T2-3 | Versie-identiteit (volledige hash, R1) in `bronversie_audit`; `correlationId` in `retrieval_meta` (R4, één forwardmigratie) | `audit-meta.ts`, SQL-projectie, migratie | audit-meta-sanity + karakterisering + R1-gates |
 | T2-4 | Evidencebronnen achter het contract (G-1a); **typed contextcontract + audit voor de 26 modelcontextlezingen** (G-1b); census krimpt tot adapter/orkestratie; chunkpresentie en `parent-context` via de adapter | chatroute, contextmodules | census-gate + contextgate (klassengroottes verschuiven bewust) |
 | T2-5 | Microsoft-stub + contracttests: capabilities, versie- én **rechtenbewijs**, truncatie, alle negen foutcategorieën, cross-tenant met gemanipuleerde refs | tests | xtenant |

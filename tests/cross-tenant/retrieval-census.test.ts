@@ -41,13 +41,10 @@ test("F4-census — de productie-ingangen van zoekRelevanteChunksMetMeta zijn be
   // T2-1/PR-A: C1 loopt door het contract, dus `app/api/chat/route.ts` roept de
   // retrievalkern niet langer rechtstreeks aan — de adapter doet dat. Dit is de
   // krimp die T2-4 voor de hele census beoogt, hier alvast voor het antwoordpad.
-  // C5 (zoeken) en C6 (vergelijk) volgen in T2-2; blijven die staan, dan is de
-  // cutover onvolledig en hoort deze lijst rood te worden.
-  assert.deepEqual(ingangen, [
-    "app/api/zoeken/route.ts",
-    "core/lib/retrieval/supabase-adapter.ts",
-    "core/lib/vergelijk-productie.ts",
-  ]);
+  // T2-2 (#369): ook C5 (zoeken) en C6 (vergelijk) lopen nu via de adapter.
+  // Een tweede productie-ingang betekent dat selectie, citatie of toelating
+  // opnieuw kan divergeren en hoort deze lijst rood te maken.
+  assert.deepEqual(ingangen, ["core/lib/retrieval/supabase-adapter.ts"]);
 });
 
 // ── #348 §1 — het antwoordpadregister (reviewronde 3) ───────────────────────

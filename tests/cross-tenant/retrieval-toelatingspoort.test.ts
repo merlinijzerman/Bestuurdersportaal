@@ -73,7 +73,7 @@ function bron(ref: string, tc?: Toegangsbewijs | null, over: Partial<Bronresulta
     ref: identiteit.passage,
     bronsoort: "sharepoint",
     titel: "T",
-    documentIdentiteit: { id: identiteit.document },
+    documentIdentiteit: { id: identiteit.document, fondsId: CTX.fondsId, bibliotheek: "sharepoint" },
     passageIdentiteit: { id: identiteit.passage },
     versie: { soort: "etag", waarde: VERSIE_V1, gecontroleerdOp: null },
     bronregistratieRef: "bron-A",

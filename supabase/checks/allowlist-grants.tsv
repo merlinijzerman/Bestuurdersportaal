@@ -324,9 +324,12 @@ FUNC	public	fn_schrijf_handeling(p_handeling text, p_methode text, p_pad text, p
 FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	anon	-
 FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	authenticated	-
 FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	service_role	EXECUTE
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb, p_correlation_id text, p_retrieval_meta jsonb, p_bronnen jsonb)	function	anon	-
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb, p_correlation_id text, p_retrieval_meta jsonb, p_bronnen jsonb)	function	authenticated	EXECUTE
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb, p_correlation_id text, p_retrieval_meta jsonb, p_bronnen jsonb)	function	service_role	EXECUTE
 FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	anon	-
-FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	authenticated	EXECUTE
-FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	service_role	EXECUTE
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	authenticated	-
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	service_role	-
 FUNC	public	fn_snapshot_immutable()	function	anon	-
 FUNC	public	fn_snapshot_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_snapshot_immutable()	function	service_role	EXECUTE

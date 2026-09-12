@@ -340,6 +340,37 @@ jobs:
           echo "hybride-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
+      # #369: vijfde Next-proces met uitsluitend de vergelijkvlag aan. De
+      # succesvolle golden controleert HTTP-respons, centrale bronprovenance,
+      # append-only runaudit en providergrens drie keer op herhaalbaarheid.
+      - name: Vergelijkpad karakteriseren (VERGELIJKMODUS aan)
+        env:
+          VERGELIJKMODUS: "on"
+          APP_BASE_URL: "http://127.0.0.1:3004"
+        run: |
+          t0=$(date +%s)
+          VERGELIJKMODUS=on PORT=3004 npm run start &
+          SERVER=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3004/api/healthz/ping >/dev/null && ok=1 && break
+            sleep 1
+          done
+          if [ "${ok:-0}" != "1" ]; then
+            echo "FOUT: next start (vergelijk) kwam niet op binnen 60s." >&2
+            kill "$SERVER" 2>/dev/null || true; exit 1
+          fi
+          code=0
+          for ronde in 1 2 3; do
+            echo "::group::karakterisering --verify --only=w369 ronde $ronde/3 (vergelijk)"
+            if ! node tests/karakterisering/run.mjs --verify --only=w369; then code=1; fi
+            echo "::endgroup::"
+            [ "$code" = "0" ] || break
+          done
+          kill "$SERVER" 2>/dev/null || true
+          wait "$SERVER" 2>/dev/null || true
+          echo "vergelijk-pass: $(( $(date +%s) - t0 ))s"
+          exit $code
+
       - name: Supabase-stack stoppen
         if: always()
         run: supabase stop || true

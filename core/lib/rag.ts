@@ -326,10 +326,8 @@ type VolledigeOpties = {
 /**
  * T2-1 — ÉÉN resolutie van de retrievalvlaggen, gedeeld door de adapter en de
  * orkestratie. Zonder deze gedeelde bron zou de orkestratie `regimeWeging`
- * anders kunnen afleiden dan de adapter: die vlag zit (nog) niet in
- * `RetrievalVlaggen` per fonds — dat is gaplijst G-11 — en valt terug op de
- * env-default. Twee afleidingen die uiteenlopen zouden de selectie stil
- * veranderen.
+ * anders kunnen afleiden dan de adapter. Sinds #369 zit ook `regimeWeging` in
+ * `RetrievalVlaggen`; ontbrekende fondsconfiguratie behoudt de env-default.
  */
 export function resolveerRetrievalVlaggen(o?: RetrievalOpties): VolledigeOpties {
   return volledigeOpties(o);
@@ -584,7 +582,8 @@ export interface RetrievalMeta {
   correlation_id?: string;
   /**
    * PR-C — inhoudsvrije samenvatting van de TOELATINGSPOORT: aantallen per
-   * genormaliseerde categorie (`toestemming_geweigerd` / `configuratiefout`) en
+   * genormaliseerde categorie (`buiten_scope` / `toestemming_geweigerd` /
+   * `configuratiefout` / `providerfout`) en
    * per grond. Geen referenties — dat zijn identifiers van stukken die de
    * gebruiker juist níét mocht zien. Alleen aanwezig als er iets is geweigerd.
    */
@@ -1897,6 +1896,7 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       bibliotheek: d.bibliotheek ?? null,
       bron: d.bron ?? null,
       fondsId: d.fonds_id ?? null,
+      procesId: d.procesinstantie_id ?? null,
     },
     passageIdentiteit: { id: passageId },
     // R1 (T2-3) brengt de volledige hash. Tot dan is de documentdatum de ZWAKKE

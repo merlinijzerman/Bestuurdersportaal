@@ -24,9 +24,15 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
-import { voerVergelijkingUit } from "@/core/lib/vergelijk-kern";
-import { productieDeps, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
+import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
+import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
+import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
+import { foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import type { Bronsoort } from "@/core/lib/retrieval/contract";
+import { bevatClientScopeSturing, geldigeUuid } from "@/core/lib/retrieval/productiepaden-core";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -51,13 +57,16 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
 
     // 2. Body + validatie.
     const body = (await req.json()) as VergelijkBody;
+    if (bevatClientScopeSturing(Object.keys(body as Record<string, unknown>))) {
+      return NextResponse.json({ error: "Ongeldige scope-invoer." }, { status: 400 });
+    }
     const mode = body.mode;
     const bronId = typeof body.bron_document_id === "string" ? body.bron_document_id : "";
     const doelId = typeof body.doel_document_id === "string" ? body.doel_document_id : "";
     if (mode !== "symmetrisch") {
       return NextResponse.json({ error: "Alleen mode 'symmetrisch' wordt ondersteund (coverage = T6)." }, { status: 400 });
     }
-    if (!bronId || !doelId) {
+    if (!bronId || !doelId || !geldigeUuid(bronId) || !geldigeUuid(doelId)) {
       return NextResponse.json({ error: "bron_document_id en doel_document_id zijn verplicht." }, { status: 400 });
     }
     if (bronId === doelId) {
@@ -129,7 +138,24 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
     // 7. Delegeren naar de service (alle logica zit daar).
     let resultaat;
     try {
-      resultaat = await voerVergelijkingUit(
+      const gateway = productieGateway();
+      const gatewayCtx = {
+        supabase,
+        fondsId,
+        actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
+        actieId,
+        correlatieId: ctx.requestId,
+        label: "vergelijk.POST",
+      };
+      // #369 — provider, vlaggen en bronbeleid zijn server-side afgeleid. Eén
+      // adapterinstantie bedient alle document/dimensie-sporen in deze request;
+      // er bestaat geen body- of modelveld waarmee een provider gekozen wordt.
+      const [hybrideAan, retrievalVlaggen] = await Promise.all([
+        hybrideZoekenAan(fondsId),
+        retrievalVlaggenVoorFonds(fondsId),
+      ]);
+      const timeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
+      resultaat = await voerVergelijkingBinnenDeadline(
         {
           mode: "symmetrisch",
           bronDocumentId: bronId,
@@ -137,25 +163,57 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
           extraDimensies,
           versies: VERGELIJK_VERSIES,
         },
-        productieDeps({
-          supabase,
-          fondsId,
-          gateway: productieGateway(),
-          // #311 — fonds/gebruiker uit de sessiecontext, reservering als bewijs.
-          gatewayCtx: {
-            supabase,
-            fondsId,
-            actor: { soort: "gebruiker", id: ctx.gebruikerId },
-            actieId,
-            correlatieId: ctx.requestId,
-            label: "vergelijk.POST",
+        {
+          clientSignal: req.signal,
+          timeoutMs,
+          depsVoorSignal(signal) {
+            const retrieval = maakSupabaseAdapter(retrievalVlaggen, {
+              gateway: { gateway, ctx: gatewayCtx },
+            });
+            const audit = new VergelijkAuditVerzamelaar(ctx.requestId);
+            return productieDeps({
+              supabase,
+              fondsId,
+              gateway,
+              // #311 — fonds/gebruiker uit de sessiecontext, reservering als bewijs.
+              gatewayCtx,
+              retrieval: {
+                adapter: retrieval.adapter,
+                context: {
+                  fondsId,
+                  actor: gatewayCtx.actor,
+                  taaktype: "vergelijk_waarde",
+                  bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+                  scope: { documentIds: [bronId, doelId] },
+                  correlationId: ctx.requestId,
+                  verzoekStartOp: ctx.verzoekStartOp,
+                  // De requestbrede grendel, niet het kale clientsignaal. Deze
+                  // reist naar concept-/semantic-reads, retrieval én modelcalls.
+                  signal,
+                },
+                // Binnenste retrievalgrendels mogen nooit langer leven dan de
+                // buitenste; diens signaal blijft de gezaghebbende bovengrens.
+                timeoutMs,
+                hybrideAan,
+                vlaggen: retrievalVlaggen,
+                audit,
+              },
+            });
           },
-        })
+        }
       );
     } catch (e) {
       // Reservering blijft staan: het verbruik is gemaakt. Alleen de
       // levenscyclus gaat op `mislukt`.
       await rondAf(supabase, actieId, "mislukt");
+      const afbreking = foutcategorieVoor(e);
+      if (afbreking === "annulering") return new Response(null, { status: 499 });
+      if (afbreking === "timeout") {
+        return NextResponse.json(
+          { error: "Het ophalen van vergelijkingsbronnen duurde te lang. Probeer het opnieuw." },
+          { status: 504 }
+        );
+      }
       throw e;
     }
 
