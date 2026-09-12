@@ -2,13 +2,13 @@
 
 **Peildatum:** 11 september 2026
 
-**Bron:** `origin/preview` op `8c7c49f`
+**Releasebron:** `preview` op `4a61b78` na reconciliatie-PR #375
 
-**Doel:** `origin/main` op `55f4da6`
+**Productiecommit:** `main` op **`09d473f`** (merge PR #373)
 
-**Huidige delta:** 110 commits, 359 bestanden (+40.119 / −3.999).
+**Huidige delta na release:** geen inhoudelijke delta; `09d473f` is de productie-mergecommit van de beoordeelde Preview-stand.
 
-**Releaseoordeel:** **CONDITIONELE GO** — de branchreconciliaties zijn gesloten; niet mergen voordat de productieprovisioning uit §1/§5 is uitgevoerd en de opdrachtgever daarna afzonderlijk akkoord geeft.
+**Releaseoordeel:** **UITGEVOERD MET VASTGELEGDE SMOKEBEPERKINGEN** — productieprovisioning, afzonderlijk opdrachtgeverakkoord, merge, deployments en niet-activerende productiesmoke zijn op 11 september 2026 afgerond. Microsoft-login, Outlook en SharePoint zijn niet op Productie geactiveerd.
 
 De release brengt het duale productmodel naar productie: bestaande fondsen blijven op de eigen
 variant werken; Microsoft-onderdelen worden per fonds afzonderlijk en standaard uit aangezet.
@@ -17,7 +17,7 @@ Daarom moeten de gatewayrol, databaseverbinding en migratie vóór de code-deplo
 
 ---
 
-## 1. Blokker vóór het mergen van de promotie-PR
+## 1. Uitvoering en gesloten releasevoorwaarden
 
 ### Gesloten — `main` en `preview` zijn weer gelijkgericht
 
@@ -27,17 +27,19 @@ gereconcilieerd. De Preview-semantiek is behouden en met een regressietest vastg
 fondsdocumenten fondsgebonden. Daarna is de rechtstreeks op `main` uitgebrachte website v0.8
 (#365) via PR #372 zonder conflicten teruggebracht in `preview`.
 
-`origin/main` op `55f4da6` is nu aantoonbaar een voorouder van `origin/preview` op `8c7c49f`.
-De promotie kan daardoor uitsluitend vooruit mergen en draait geen productiehotfix of websitewerk
-terug. PR #371 en #372 waren beide volledig groen, inclusief cross-tenant/DB-laag,
-karakterisering, E2E en Vercel-builds.
+Na een latere wijziging op `main` is ook PR #374 via reconciliatie-PR #375 in Preview opgenomen.
+De promotiebron op `4a61b78` bevatte daardoor de volledige productiehistorie zonder een productiehotfix
+of websitewijziging terug te draaien. PR #371, #372 en #375 waren groen, inclusief de relevante
+cross-tenant/DB-, karakteriserings-, E2E- en Vercelcontroles.
 
-### Open — productie moet vóór de code zijn geprovisioneerd
+### Gesloten — productie is vóór de code geprovisioneerd
 
-De nieuwe code verwacht databasefuncties en minimale loginrollen. Vooral de AI-gateway en de
-Microsoft-loginsessieguard falen gesloten wanneer hun databasecontract ontbreekt. De rollen,
-migraties, checks en noodzakelijke gatewaysecrets moeten daarom vóór de merge naar `main` klaar
-zijn. Zie §5.
+Vóór de merge zijn vijf minimale databaserollen ingericht, elf migratie-/seedstappen met unieke
+database-eindmarkers bevestigd, alle voorgeschreven database-/RLS-/grants-/securitycontroles groen
+bevonden en de vier gatewayverbindingen als Production Secrets in beide Vercel-projecten gezet.
+De beperkte rollen zijn ook daadwerkelijk via Supavisor/TLS getest. De vijf fondsen kregen samen
+exact twintig AI-configuratieregels. Microsoft-login, connector, Outlook en SharePoint stonden voor
+nul fondsen actief. Zie §5 voor de uitgevoerde volgorde.
 
 ---
 
@@ -117,7 +119,7 @@ zijn. Zie §5.
 - Centrale gatewaycall naar Anthropic: `ok`, met provider/model/configversie en tokenaantallen in
   `ai_gateway_private.gateway_log`.
 - Preview-Mistralsleutel geroteerd en uitsluitend op de twee `preview-stable`-projecten gezet;
-  Productie is niet gewijzigd.
+  op dit Preview-meetmoment was Productie nog niet gewijzigd.
 - Ingestworker na rotatie: 2 claims, 2 afgerond, 0 mislukt.
 - Synthetisch document `PGB AI-gateway smoketest`: `beschikbaar`, 1 chunk, 1 embedding, job
   `geslaagd`.
@@ -129,6 +131,23 @@ zijn. Zie §5.
   - geselecteerde chunk: `vec_rang = 1` en `fts_rang = 1`;
   - inhoudelijk spoor bevat `poging_herkomst = verslapt` en de primaire plus verslapte poging;
   - vraag-afgeleide querytekst staat alleen in `governance_log_inhoud`, niet in het vaste spoor.
+
+### Waargenomen op PGB Productie — 11 september 2026
+
+- PR #373 gemerged als `09d473f`; beide Vercel-productiedeployments werden `Ready` en alle
+  workflows op de mergecommit waren groen.
+- Publieke healthcheck: `{"ok":true}`.
+- Bestaande PGB-productiesessie en portaal-UI werkten op de nieuwe deployment.
+- Twee chatgeneraties en één contextprefix-call liepen via Anthropic en eindigden `ok`;
+  `gateway_log_fouten_24u = 0`.
+- Nieuw synthetisch PDF-document: `beschikbaar`, 1 pagina, 1 chunk, 1 embedding en 1
+  contextprefix; de assistent vond `DELTA-0911` en citeerde correct het nieuwe document.
+- Microsoft-login, Outlook en SharePoint bleven uit; op de profielpagina verscheen geen
+  Microsoftbediening.
+- **Niet afzonderlijk uitgevoerd:** een verse wachtwoordlogin, omdat de bestaande sessie geldig
+  was; en afschrift-/besluitconceptgeneratie, omdat PGB geen geschikte synthetische
+  vergadering/notulenfixture had. Deze twee beperkingen zijn geen bewijs van uitvoering en blijven
+  daarom expliciet als niet uitgevoerd geregistreerd.
 
 ---
 
@@ -165,11 +184,11 @@ zijn. Zie §5.
 
 ---
 
-## 5. Productievolgorde — Supabase eerst, daarna code
+## 5. Uitgevoerde productievolgorde — Supabase eerst, daarna code
 
-### 5.1 Rollen vooraf provisionen
+### 5.1 Rollen vooraf geprovisioneerd
 
-Maak als database-eigenaar, met afzonderlijke beheerde wachtwoorden waar van toepassing:
+Als database-eigenaar zijn met afzonderlijke beheerde wachtwoorden waar van toepassing ingericht:
 
 - `ai_gateway` — LOGIN, NOINHERIT, geen elevated privileges, connection limit ≤ 5;
 - `microsoft_vault` — idem;
@@ -180,7 +199,7 @@ Maak als database-eigenaar, met afzonderlijke beheerde wachtwoorden waar van toe
 Gebruik de exacte statements en controles uit de drie runbooks; neem geen wachtwoord op in een
 script, ticket, PR of log.
 
-### 5.2 Migraties afhankelijkheidsgeordend toepassen
+### 5.2 Migraties afhankelijkheidsgeordend toegepast
 
 1. `2026_09_04_ai_gateway_configuratie.sql`
 2. `2026_09_04_microsoft_fase1_connectorfundament.sql`
@@ -197,9 +216,9 @@ script, ticket, PR of log.
 De migraties zetten geen fonds op Microsoft-loginmodus `verplicht`. Laat Microsoft- en
 Outlook/SharePoint-vlaggen bij deze basisrelease uit.
 
-### 5.3 Checks vóór de code-merge
+### 5.3 Checks vóór de code-merge uitgevoerd
 
-Draai ten minste de bijbehorende suites voor AI-gateway, Microsoft fase 1/2A/3, F1B,
+Uitgevoerd zijn de bijbehorende suites voor AI-gateway, Microsoft fase 1/2A/3, F1B,
 startlimiet, beleidsmodus en toelatingsprojectie, plus:
 
 - `2026_07_31_r1_structurele_gates.sql`;
@@ -207,10 +226,12 @@ startlimiet, beleidsmodus en toelatingsprojectie, plus:
 - `2026_08_31_secdef_self_gate.sql`;
 - de gebundelde cross-tenant/DB-suite waar praktisch uitvoerbaar.
 
-Elke fout is NO-GO. Leg rolcontrole, migratieresultaat en suite-uitkomst vast in het
-operationele changebewijs.
+Alle controles waren groen. De V3-grantscontrole gebruikte in de SQL-editor een tijdelijke
+`INSERT` van exact dezelfde repository-allowlist in plaats van de psql-only `\copy`; de
+vergelijkingslogica bleef ongewijzigd. De cross-tenantgedragstest draaide tegen Productie en is
+volledig teruggerold.
 
-### 5.4 Minimale productieconfiguratie vóór deploy
+### 5.4 Minimale productieconfiguratie vóór deploy ingericht
 
 Verplicht voor het bestaande AI-pad:
 
@@ -228,18 +249,16 @@ uit blijven. Voeg ze pas toe bij een afzonderlijk, goedgekeurd fonds-onboardingm
 Supabase Azure-provider en Custom Access Token Hook op Productie niet stilzwijgend in als onderdeel
 van deze codepromotie.
 
-### 5.5 Deploy en smoke
+### 5.5 Deploy en smoke — as-run
 
-1. Reconciliatie-PR's #371 en #372 naar `preview` groen; controleer vlak voor promotie opnieuw dat `main` een voorouder van `preview` is.
-2. Productierollen, migraties, checks en minimale gatewayconfiguratie gereed.
-3. Promotie-PR uitsluitend `preview` → `main`; alle verplichte checks en deployments groen.
-4. Pas na expliciet opdrachtgeverakkoord mergen.
-5. Productiesmoke zonder Microsoft-activering:
-   - wachtwoordlogin en bestaande sessie;
-   - gewone chat met fondsbron en correcte bronvermelding;
-   - synthetische ingest inclusief embedding;
-   - afschrift-/besluitconcept en monitoring `gateway_log_fouten = 0`;
-   - fonds zonder Microsoft-vlag ziet geen Microsoftbediening.
+1. Reconciliatie-PR's #371, #372 en #375 zijn groen naar `preview` gemerged.
+2. Productierollen, migraties, checks en minimale gatewayconfiguratie zijn vóór deploy ingericht.
+3. Promotie-PR #373 liep uitsluitend van `preview` naar `main`; verplichte checks waren groen.
+4. De opdrachtgever gaf daarna expliciet mergeakkoord; PR #373 is gemerged als `09d473f`.
+5. Productiesmoke zonder Microsoft-activering: bestaande sessie, chat met fondsbron,
+   synthetische ingest inclusief embedding, monitoring en verborgen Microsoftbediening groen.
+   Verse wachtwoordlogin en afschrift-/besluitconcept zijn niet afzonderlijk uitgevoerd, zoals in
+   §3 vastgelegd.
 
 ---
 
@@ -253,9 +272,9 @@ van deze codepromotie.
 
 ---
 
-## 7. PR-body voor de latere promotie-PR
+## 7. Werkelijke promotie-PR
 
-> **Titel:** `promo: Microsoft 365-fundament, centrale AI-gateway en retrieval T2-1 → main`
+> **PR #373:** `promo: Microsoft 365-fundament, centrale AI-gateway en retrieval T2-1 → main`
 >
 > Promotie van `preview` naar `main` na waargenomen PGB Preview-smokes. Deze release levert het
 > duale productfundament, Microsoft-loginbeleid, Outlook/SharePoint read-only, de centrale
