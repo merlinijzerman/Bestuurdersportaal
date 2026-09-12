@@ -157,7 +157,7 @@
           "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
-          "fonds_id": "<uuid:2>",
+          "fonds_id": "<uuid:1>",
           "passage_identiteit": "<passage-identiteit:1>",
           "versie": {
             "gecontroleerd_op": "<ts>",
@@ -218,11 +218,11 @@
         "intent": "fonds",
         "regime": "alles"
       },
-      "toegepaste_fonds_filter": "<uuid:2>"
+      "toegepaste_fonds_filter": "<uuid:1>"
     },
     "volgorde": {
       "bronversie_audit": [
-        "00 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:1> citation=<citation-identiteit:1> versie=hash:<version-identiteit:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
+        "00 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:1> citation=<citation-identiteit:1> versie=hash:<version-identiteit:1> bib=fonds fonds=<uuid:1> docstatus=concept bronstatus=geen datum=geen"
       ],
       "chunks": [
         "00 chunk=<passage-identiteit:1> doc=<doc-identiteit:1> rang=0.3 fts=geen vec=geen"
