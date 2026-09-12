@@ -22,8 +22,11 @@ import { bewaakNaIO } from "./retrieval/afbreken";
 //  alleen de fetch-orchestrator raakt Supabase.
 // ============================================================================
 
-import { createServerSupabase } from "./supabase-server";
 import { handhaafFondsdiscipline, type DocumentChunk } from "./rag";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { haalSupabaseSiblings, type SupabaseSiblingRij } from "./retrieval/supabase-parent";
+import type { Versiebewijs } from "./retrieval/contract";
+import { maakVolledigeVersieHash } from "./retrieval/identiteit";
 
 // Caps als constanten (motivatie in commentaar). Per structuur-unit een plafond
 // zodat één zeer lang artikel de context niet opslokt; een totaalplafond zodat de
@@ -54,10 +57,7 @@ const SIBLING_FETCH_MAX = 20000;
 
 // Sibling-vorm: DocumentChunk + de structuurvelden die de RPC niet levert maar de
 // directe select wél (voor sibling-scoping).
-export interface SiblingRij extends DocumentChunk {
-  structuur_type: string | null;
-  structuur_label: string | null;
-}
+export type SiblingRij = SupabaseSiblingRij;
 
 // ── Zuivere kern ─────────────────────────────────────────────────────────────
 
@@ -120,12 +120,14 @@ const LEEG_META = (): ParentMeta => ({
 });
 
 interface ParentOpties {
-  supabase?: Awaited<ReturnType<typeof createServerSupabase>>;
+  supabase?: SupabaseClient;
   perUnitCap?: number;
   totaalCap?: number;
   /** PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt. Zonder dit
    *  liep de sibling-fetch na een annulering gewoon door. */
   signal?: AbortSignal;
+  /** Versie die de centrale poort voor iedere treffer heeft toegelaten. */
+  verwachteVersies?: ReadonlyMap<string, Versiebewijs>;
 }
 
 // Breidt geselecteerde treffer-chunks uit met hun structuur-unit (parent-passage).
@@ -143,37 +145,37 @@ export async function verrijkMetParents(
   if (opties?.totaalCap) meta.totaal_cap = opties.totaalCap;
   if (geselecteerd.length === 0) return { chunks: geselecteerd, meta };
 
-  const supabase = opties?.supabase ?? (await createServerSupabase());
   const docIds = [...new Set(geselecteerd.map((c) => c.document_id))];
 
   // Eén gebatchte fetch van alle chunks van de betrokken documenten (met de velden
   // die de fondsdiscipline-guard én de sibling-scoping nodig hebben). RLS-veilig
   // (anon-client). Plafond tegen extreem grote documenten.
-  const q = supabase
-    .from("document_chunks")
-    .select(
-      `id, document_id, tekst, pagina, paragraaf, chunk_index, structuur_type, structuur_label,
-       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review)`
-    )
-    .in("document_id", docIds)
-    .eq("documenten.actief", true)
-    .order("document_id", { ascending: true })
-    .order("chunk_index", { ascending: true })
-    .limit(
-      Math.min(SIBLING_FETCH_MAX, Math.max(SIBLING_FETCH_MIN, docIds.length * SIBLING_FETCH_PER_DOC))
-    );
-  const { data, error } = await (opties?.signal ? q.abortSignal(opties.signal) : q);
-  bewaakNaIO(opties?.signal, error);
-
-  if (error || !data || data.length === 0) {
+  const limiet = Math.min(SIBLING_FETCH_MAX, Math.max(SIBLING_FETCH_MIN, docIds.length * SIBLING_FETCH_PER_DOC));
+  let data: SiblingRij[];
+  try {
+    data = await haalSupabaseSiblings({
+      privateDocumentRefs: docIds,
+      limiet,
+      signal: opties?.signal,
+      supabase: opties?.supabase,
+    });
+  } catch (error) {
+    bewaakNaIO(opties?.signal, error);
+    // Een cap/mismatch is geen best-effort providerstoring: gedeeltelijke
+    // parentcontext zou een andere versie tonen dan de centraal toegelaten bron.
+    if (error instanceof Error && error.message === "parent_siblings_afgekapt") throw error;
     // Geen siblings ophaalbaar → alles kaal (fail-safe, geen regressie).
+    meta.teruggevallen = geselecteerd.length;
+    return { chunks: geselecteerd, meta };
+  }
+  if (data.length === 0) {
     meta.teruggevallen = geselecteerd.length;
     return { chunks: geselecteerd, meta };
   }
 
   // Fondsdiscipline op de siblings (dragend: de directe route mist de RPC-poort).
   const alleSiblings = handhaafFondsdiscipline(
-    data as unknown as SiblingRij[],
+    data,
     fondsFilter,
     peildatum
   ).chunks as SiblingRij[];
@@ -199,6 +201,19 @@ export async function verrijkMetParents(
       continue;
     }
     const siblings = kiesSiblings(hitMeta, docChunks);
+    const verwacht = opties?.verwachteVersies?.get(treffer.id);
+    if (verwacht) {
+      const zelfdeVersie = siblings.every((s) => {
+        const d = s.documenten;
+        const huidig = s.indexering_versie && d.bestand_hash && /^[a-f0-9]{64}$/.test(d.bestand_hash)
+          ? { soort: "hash" as const, waarde: maakVolledigeVersieHash(s.document_id, s.indexering_versie, d.bestand_hash) }
+          : d.documentdatum
+            ? { soort: "status-datum" as const, waarde: d.documentdatum }
+            : { soort: "onbekend" as const, waarde: null };
+        return huidig.soort === verwacht.soort && huidig.waarde === verwacht.waarde;
+      });
+      if (!zelfdeVersie) throw new Error("parent_siblings_versie_mismatch");
+    }
     const samengevoegd = voegSiblingsSamen(siblings, meta.per_unit_cap);
     // Alleen aanleveren als het écht méér context is dan de kale chunk en het
     // totaalbudget het toelaat. Anders: kale chunk (terugval).

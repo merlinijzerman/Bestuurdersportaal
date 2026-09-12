@@ -590,6 +590,10 @@ export interface RetrievalMeta {
   toelating?: import("./retrieval/toelatingspoort").Toelatingssamenvatting;
   /** Inhoudsvrije uitkomst van de bevroren bronsetresolutie bij reflectie. */
   contextbron_resolutie?: BevrorenChunksResultaat["status"];
+  /** #368 — inhoudsvrije audit van getypeerde niet-zoekende evidencelezingen. */
+  evidence_audit?: import("./retrieval/evidence-contract").EvidenceAudit[];
+  /** #368 — operationele modelcontextaudit, nadrukkelijk geen bron/evidence. */
+  modelcontext_audit?: import("./retrieval/evidence-contract").ModelcontextAudit[];
   methode:
     | "hybride_rrf"
     | "fts_dutch_ranked"

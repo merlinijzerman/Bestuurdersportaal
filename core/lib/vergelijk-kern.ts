@@ -36,6 +36,8 @@ export interface ConceptLite {
 
 export interface SemanticUnitLite {
   concept_id: string;
+  /** Providerneutrale domeinsleutel; productie gebruikt deze i.p.v. DB-id. */
+  concept_key?: string;
   type: string;
   value_num: number | null;
   value_date: string | null; // ISO
@@ -44,6 +46,8 @@ export interface SemanticUnitLite {
   value_unit: string | null;
   page: number | null;
   evidence: string;
+  /** Opaque #367-binding van de deterministische evidence. */
+  passage_ref?: string | null;
 }
 
 export interface PassageLite {
@@ -195,7 +199,8 @@ function indexeerUnits(units: SemanticUnitLite[]): Map<string, SemanticUnitLite>
   for (const u of units) {
     // Eerste unit per concept wint (ontdubbeling gebeurde al bij extractie; een
     // dimensie vergelijkt op één representatieve waarde per document).
-    if (!m.has(u.concept_id)) m.set(u.concept_id, u);
+    const sleutel = u.concept_key ?? u.concept_id;
+    if (!m.has(sleutel)) m.set(sleutel, u);
   }
   return m;
 }
@@ -207,6 +212,7 @@ function zijdeUitUnit(documentId: string, u: SemanticUnitLite, norm: string | nu
     evidence: u.evidence,
     page: u.page,
     document_id: documentId,
+    passage_ref: u.passage_ref ?? null,
   };
 }
 
@@ -252,8 +258,9 @@ export async function voerVergelijkingUit(
       dimensie: dim.key,
     });
 
-    const bu = conceptId ? bronUnits.get(conceptId) : undefined;
-    const du = conceptId ? doelUnits.get(conceptId) : undefined;
+    const unitSleutel = dim.concept_key ?? conceptId;
+    const bu = unitSleutel ? bronUnits.get(unitSleutel) : undefined;
+    const du = unitSleutel ? doelUnits.get(unitSleutel) : undefined;
 
     // Deterministisch pad: alleen als de poort open is ÉN BEIDE zijden een unit
     // hebben (acceptatiecriterium). Anders LLM.

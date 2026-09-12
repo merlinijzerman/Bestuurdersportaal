@@ -18,18 +18,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BronVerwijzing } from "./rag";
 import { bouwBronfragment } from "./bronfragment";
+import type { RetrievalContext, Versiebewijs } from "./retrieval/contract";
+import { leesBesluitEvidence } from "./retrieval/supabase-evidence";
+import type { EvidenceAudit } from "./retrieval/evidence-contract";
+import { neutraliseerBrontekst } from "./bron-afbakening";
 
 type Sb = SupabaseClient;
 
 export interface BesluitBron {
-  decision_id: string;
-  procedure_id: string;
+  document_identiteit: string;
+  passage_identiteit: string;
+  citation_id: string;
+  versie: Versiebewijs;
   besluit_code: string;
   titel: string;
   besluitvraag: string;
   status: string;
   governance_orgaan: string | null;
   datum: string | null;
+  passage: string;
 }
 
 /**
@@ -59,38 +66,28 @@ export function topProcesinstanties(
  */
 export async function haalBesluitBronnen(
   supabase: Sb,
+  context: RetrievalContext,
   procesinstantieIds: string[]
-): Promise<BesluitBron[]> {
-  if (procesinstantieIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from("decision_objects")
-    .select(
-      "id, procedure_id, besluit_code, titel, besluitvraag, status, governance_orgaan, gewenste_besluitdatum, laatst_gewijzigd"
-    )
-    .in("procedure_id", procesinstantieIds)
-    .in("status", [
-      "geagendeerd",
-      "in_bespreking",
-      "besloten",
-      "voorwaardelijk_besloten",
-      "in_uitvoering",
-      "in_evaluatie",
-      "afgesloten",
-    ]);
-  if (error || !data) return [];
-  return data.map((d) => ({
-    decision_id: d.id as string,
-    procedure_id: d.procedure_id as string,
-    besluit_code: (d.besluit_code as string) ?? "",
-    titel: (d.titel as string) ?? "",
-    besluitvraag: (d.besluitvraag as string) ?? "",
-    status: (d.status as string) ?? "",
-    governance_orgaan: (d.governance_orgaan as string | null) ?? null,
-    datum:
-      (d.gewenste_besluitdatum as string | null) ??
-      (d.laatst_gewijzigd as string | null) ??
-      null,
-  }));
+): Promise<{ bronnen: BesluitBron[]; audit: EvidenceAudit }> {
+  const uitkomst = await leesBesluitEvidence(supabase, {
+    context,
+    maxItems: 3,
+    maxGerenderdeTekens: 12_000,
+  }, { privateProcedureRefs: procesinstantieIds, alleenFormeel: true });
+  if (uitkomst.status === "geweigerd") throw new Error(`besluit_evidence_${uitkomst.audit.fout}`);
+  return { audit: uitkomst.audit, bronnen: uitkomst.items.map((item) => ({
+    document_identiteit: item.documentIdentiteit,
+    passage_identiteit: item.passageIdentiteit,
+    citation_id: item.citationId,
+    versie: item.versie,
+    besluit_code: item.waarde.besluitCode,
+    titel: item.waarde.titel,
+    besluitvraag: item.waarde.besluitvraag,
+    status: item.waarde.status,
+    governance_orgaan: item.waarde.governanceOrgaan,
+    datum: item.waarde.datum,
+    passage: item.passage,
+  })) };
 }
 
 /**
@@ -108,11 +105,11 @@ export function opmaakBesluitContext(bronnen: BesluitBron[]): {
   bronnen.forEach((b, i) => {
     const datum = b.datum ? `, ${b.datum}` : "";
     const orgaan = b.governance_orgaan ? ` (${b.governance_orgaan})` : "";
-    delen.push(
-      `[Formele besluitbron ${i + 1}] Besluitregistratie ${b.besluit_code} — ${b.titel}${orgaan} — status: ${b.status}${datum}.\nBesluitvraag: "${b.besluitvraag}"`
-    );
+    const rauw = `[Formele besluitbron ${i + 1}] Besluitregistratie ${b.besluit_code} — ${b.titel}${orgaan} — status: ${b.status}${datum}.\nBesluitvraag: "${b.besluitvraag}"`;
+    delen.push(neutraliseerBrontekst(rauw).tekst);
     verwijzingen.push({
-      document_id: b.decision_id,
+      citation_id: b.citation_id,
+      document_id: b.document_identiteit,
       titel: `Besluitregistratie ${b.besluit_code} — ${b.titel}`,
       bron: "Decision Object",
       pagina: null,
