@@ -327,6 +327,19 @@ test("T2-2 — productieroutes hebben geen directe retrievalcall of service-role
   assert.match(vergelijkRoute, /voerVergelijkingBinnenDeadline/);
 });
 
+test("T2-2 audit — persistentie scheidt het HTTP-ordinaal van opaque citation en bewaart actualiteit", () => {
+  const vergelijk = lees("core/lib/vergelijk-productie.ts");
+  assert.match(vergelijk, /citation_id: b\.verwijzing\.citation_id/);
+  assert.doesNotMatch(vergelijk, /citation_id: b\.citation_id/);
+  assert.match(vergelijk, /actueel: b\.status\.actueel/);
+  assert.match(vergelijk, /opaque_citation_id_ontbreekt/);
+
+  const migratie = lees("supabase/migrations/2026_09_11_369_vergelijk_retrieval_audit.sql");
+  assert.match(migratie, /bestuurdersportaal:citation:v1/);
+  assert.match(migratie, /jsonb_typeof\(b->'actueel'\) = 'boolean'/);
+  assert.match(migratie, /'actueel', b->'actueel'/);
+});
+
 test("T2-2 — directe semantic_units-lezing is één gemotiveerde RLS-uitzondering met cancellation", () => {
   const code = lees("core/lib/vergelijk-productie.ts");
   assert.equal((code.match(/\.from\("semantic_units"\)/g) ?? []).length, 1);

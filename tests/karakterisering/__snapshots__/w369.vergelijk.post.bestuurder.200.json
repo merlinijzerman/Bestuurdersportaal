@@ -185,11 +185,14 @@
     "run": {
       "bronnen": [
         {
+          "actueel": false,
           "bibliotheek": "fonds",
           "bronsoort": "fonds",
-          "citation_id": 1,
+          "bronstatus": null,
+          "citation_id": "<citation-identiteit:1>",
           "document_id": "<doc-identiteit:1>",
           "documentstatus": "vastgesteld",
+          "geldig_tot": null,
           "pagina": 7,
           "passage_ref": "<passage-identiteit:1>",
           "versie": {
@@ -199,11 +202,14 @@
           }
         },
         {
+          "actueel": false,
           "bibliotheek": "fonds",
           "bronsoort": "fonds",
-          "citation_id": 2,
+          "bronstatus": null,
+          "citation_id": "<citation-identiteit:2>",
           "document_id": "<doc-identiteit:2>",
           "documentstatus": "vastgesteld",
+          "geldig_tot": null,
           "pagina": 8,
           "passage_ref": "<passage-identiteit:2>",
           "versie": {

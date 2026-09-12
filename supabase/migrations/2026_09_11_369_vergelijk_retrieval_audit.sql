@@ -140,7 +140,19 @@ begin
                   case when d.fonds_id is null then 'generiek' else 'fonds:' || d.fonds_id::text end || '|' ||
                 octet_length(d.id::text)::text || ':' || d.id::text,
                 'sha256'
-              ), 'hex'));
+              ), 'hex')
+              -- Bind de opaque citation-identiteit ook cryptografisch aan
+              -- precies deze bron, passage en versie. Zo kan een directe
+              -- RPC-aanroeper geen lokaal ordinaal of vrij auditlabel planten.
+              and b->>'citation_id' = 'citation_v1_' || encode(extensions.digest(
+                octet_length('bestuurdersportaal:citation:v1')::text || ':bestuurdersportaal:citation:v1|' ||
+                octet_length(b->>'document_id')::text || ':' || (b->>'document_id') || '|' ||
+                octet_length(b->>'passage_ref')::text || ':' || (b->>'passage_ref') || '|' ||
+                octet_length(b->'versie'->>'soort')::text || ':' || (b->'versie'->>'soort') || '|' ||
+                octet_length(b->'versie'->>'waarde')::text || ':' || (b->'versie'->>'waarde'),
+                'sha256'
+              ), 'hex')
+              and jsonb_typeof(b->'actueel') = 'boolean');
   if v_vreemd > 0 then
     raise exception 'vergelijking_vreemde_bron' using errcode = '42501';
   end if;
@@ -164,7 +176,9 @@ begin
     'toelating', p_retrieval_meta->'toelating'
   ));
 
-  select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+  -- Statusnulls zijn betekenisvol bewijs ("niet gezet"), geen afwezig veld.
+  -- Bewaar daarom voor bronnen de volledige vaste allowlist-vorm.
+  select coalesce(jsonb_agg(jsonb_build_object(
     'citation_id', b->'citation_id',
     'passage_ref', b->'passage_ref',
     'document_id', b->'document_id',
@@ -174,8 +188,9 @@ begin
     'documentstatus', b->'documentstatus',
     'bronstatus', b->'bronstatus',
     'geldig_tot', b->'geldig_tot',
+    'actueel', b->'actueel',
     'versie', b->'versie'
-  ))), '[]'::jsonb)
+  )), '[]'::jsonb)
     into v_bronnen
     from jsonb_array_elements(p_bronnen) as b;
 

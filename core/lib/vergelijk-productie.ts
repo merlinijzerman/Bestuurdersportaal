@@ -428,18 +428,27 @@ async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer, signa
     bron_passage_ref: f.bron.passage_ref ?? null,
     doel_passage_ref: f.doel.passage_ref ?? null,
   }));
-  const p_bronnen = (inv.bronnen ?? []).map((b) => ({
-    citation_id: b.citation_id,
-    passage_ref: b.passage_ref,
-    document_id: b.verwijzing.document_id,
-    pagina: b.verwijzing.pagina,
-    bibliotheek: b.verwijzing.bibliotheek ?? null,
-    bronsoort: b.bronsoort,
-    documentstatus: b.status.documentstatus ?? null,
-    bronstatus: b.status.bronstatus ?? null,
-    geldig_tot: b.status.geldigTot ?? null,
-    versie: b.versie,
-  }));
+  const p_bronnen = (inv.bronnen ?? []).map((b) => {
+    // `b.citation_id` is bewust het lokale, numerieke weergave-ordinaal in de
+    // bestaande HTTP-respons. Het duurzame auditspoor krijgt uitsluitend de
+    // centraal gevormde, providerneutrale citation-identiteit uit #367.
+    if (!b.verwijzing.citation_id) {
+      throw new Error("vergelijking_persisteren: opaque_citation_id_ontbreekt");
+    }
+    return {
+      citation_id: b.verwijzing.citation_id,
+      passage_ref: b.passage_ref,
+      document_id: b.verwijzing.document_id,
+      pagina: b.verwijzing.pagina,
+      bibliotheek: b.verwijzing.bibliotheek ?? null,
+      bronsoort: b.bronsoort,
+      documentstatus: b.status.documentstatus ?? null,
+      bronstatus: b.status.bronstatus ?? null,
+      geldig_tot: b.status.geldigTot ?? null,
+      actueel: b.status.actueel,
+      versie: b.versie,
+    };
+  });
   let query = supabase.rpc("fn_schrijf_vergelijking", {
     p_mode: inv.mode,
     p_model: inv.model,
