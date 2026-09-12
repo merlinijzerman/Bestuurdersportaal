@@ -33,6 +33,7 @@ import {
 import { ENV, FIX, FONDS_ID } from "./config.mjs";
 import { E2E_AI_PROVIDER_FOUT_MARKER } from "../e2e/fixtures/config.mjs";
 import { zoekVolgorde, metaVolgorde } from "./retrieval-volgorde.mjs";
+import { geldigeUuidVoorQuery } from "./uuid.mjs";
 
 // #349 -- inhoudsvrije telling uit de embeddingstub (model + aantal, nooit tekst).
 async function embedVerzoeken() {
@@ -1919,6 +1920,13 @@ export const scenarios = [
       let body;
       try { body = JSON.parse(res.buffer.toString("utf8")); } catch { return { run: null, findings: null, provider_verzoeken: await stubVerzoeken() }; }
       const runId = body.comparison_run_id;
+      // Laat een onverwachte foutrespons als gewone snapshotdiff rapporteren.
+      // Zonder deze vormgrens stuurde het nawerk letterlijk `undefined` naar
+      // PostgREST als UUID-filter en maskeerde het de echte statusafwijking met
+      // `invalid input syntax for type uuid`.
+      if (!geldigeUuidVoorQuery(runId)) {
+        return { run: null, findings: null, provider_verzoeken: await stubVerzoeken() };
+      }
       const { data: run, error: runError } = await admin
         .from("comparison_run")
         .select("correlation_id, retrieval_meta, bronnen")

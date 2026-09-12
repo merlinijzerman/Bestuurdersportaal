@@ -16,6 +16,7 @@ import { binnenServerScope, voerVolledigeRetrievalUit } from "../../core/lib/ret
 import { voerVergelijkingBinnenDeadline } from "../../core/lib/vergelijk-deadline";
 import type { VergelijkDeps } from "../../core/lib/vergelijk-kern";
 import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
+import { geldigeUuidVoorQuery } from "../karakterisering/uuid.mjs";
 import type {
   Bronresultaat,
   RetrievalAdapter,
@@ -338,6 +339,32 @@ test("T2-2 audit — persistentie scheidt het HTTP-ordinaal van opaque citation 
   assert.match(migratie, /bestuurdersportaal:citation:v1/);
   assert.match(migratie, /jsonb_typeof\(b->'actueel'\) = 'boolean'/);
   assert.match(migratie, /'actueel', b->'actueel'/);
+});
+
+test("T2-2 karakterisering — UUID-vormgrens weigert ontbrekende en malformed querywaarden", () => {
+  assert.equal(geldigeUuidVoorQuery(undefined), false);
+  assert.equal(geldigeUuidVoorQuery(""), false);
+  assert.equal(geldigeUuidVoorQuery("geen-uuid"), false);
+  assert.equal(geldigeUuidVoorQuery(UUID_A), true);
+});
+
+test("T2-2 karakterisering — schema-run slaat runtimevarianten over en queryt nooit een ongeldige uuid", () => {
+  const runner = lees("tests/karakterisering/run.mjs");
+  const schemaBlok = runner.slice(
+    runner.indexOf('if (modus === "schema")'),
+    runner.indexOf("const teDraaien =", runner.indexOf('if (modus === "schema")')),
+  );
+  assert.match(schemaBlok, /const teDoen = kandidaten\.filter\(\(s\) => \{/);
+  assert.match(schemaBlok, /const aanwezig = vereisteAanwezig\(s\)/);
+  assert.match(schemaBlok, /const overgeslagen = kandidaten\.length - teDoen\.length/);
+  assert.match(schemaBlok, /runtimevariant\(en\) zichtbaar overgeslagen/);
+
+  const scenarios = lees("tests/karakterisering/scenarios.mjs");
+  assert.match(scenarios, /if \(!geldigeUuidVoorQuery\(runId\)\)/);
+  assert.ok(
+    scenarios.indexOf("!geldigeUuidVoorQuery(runId)") < scenarios.indexOf('.from("comparison_run")', scenarios.indexOf('slug: "w369.')),
+    "de vormgrens moet voor de comparison_run-query staan"
+  );
 });
 
 test("T2-2 — directe semantic_units-lezing is één gemotiveerde RLS-uitzondering met cancellation", () => {
