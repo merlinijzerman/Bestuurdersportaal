@@ -36,16 +36,18 @@ worden daar niet met terugwerkende kracht in verstopt.
   goedgekeurde downstreamconsumer voor bestaande `DocumentChunk`-logica. De providerprivate
   brug staat niet in het publieke retrievalcontract.
 
-Geen live Microsoft-/Graph-wiring en geen database-migratie zijn toegevoegd.
+Geen live Microsoft-/Graph-wiring en geen schema- of datamigratie zijn toegevoegd. Wel is een
+additieve forward/rollback-wrapper toegevoegd die uitsluitend de gesloten, inhoudsvrije
+`evidence_audit`- en `modelcontext_audit`-vormen aan de bestaande leesprojectie toevoegt.
 
-## 1. Huidige census
+## 1. Inventarisatiecensus vóór implementatie
 
-De actuele transitieve antwoordpadscan bereikt 132 bestanden en 46 unieke geclassificeerde
+De transitieve antwoordpadscan op de inventarisatiebasis bereikte 132 bestanden en 46 unieke geclassificeerde
 `bestand::tabel`-lezingen: 8 evidence, 26 modelcontext, 11 configuratie en 3 audit (48
 klassetoewijzingen, doordat twee lezingen in meer dan één klasse vallen). Drie evidencelezingen
-zitten in de centrale retrievalimplementatie: twee in `core/lib/rag.ts` en de door #367
+zaten in de centrale retrievalimplementatie: twee in `core/lib/rag.ts` en de door #367
 toegevoegde versieherlezing in `core/lib/retrieval/supabase-versie.ts`. De overige **vijf**
-omzeilen de volledige centrale retrievalketen. Die vijf logische lezingen bestaan samen uit
+omzeilden toen de volledige centrale retrievalketen. Die vijf logische lezingen bestonden samen uit
 zeven fysieke query-expressies, omdat `app/api/chat/route.ts::document_chunks` op drie plekken
 chunkpresentie controleert.
 
@@ -69,7 +71,7 @@ onderdeel van de handmatige planreview; de gate pretendeert die niet volledig se
 
 ## 2. Planreview
 
-### Tranche A — deze branch
+### Tranche A — historische inventarisatiecommit
 
 1. Bevries exact de vijf evidencelezingen buiten `rag.ts`/`core/lib/retrieval/` en de drie
    chunkpresentie-call-sites.
@@ -77,7 +79,7 @@ onderdeel van de handmatige planreview; de gate pretendeert die niet volledig se
 3. Pin het overige modelcontextoppervlak op 26 lezingen.
 4. Wijzig geen productiecode en geen bestaande golden.
 
-### Tranche B — afzonderlijke productie-implementatie
+### Tranche B — productie-implementatie op deze implementatiebranch
 
 1. Hergebruik de gemergde versie-/correlatie-identiteit uit #367 en de route-orkestratie uit #369;
    introduceer geen parallel contract.

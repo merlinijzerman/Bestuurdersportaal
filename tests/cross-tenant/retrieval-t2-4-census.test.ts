@@ -34,31 +34,105 @@ function telFysiekeQueries(bron: string, tabel: string): number {
   return aantal;
 }
 
-function modelcontextQueriesBuitenReader(bron: string): string[] {
-  const tabellen = new Set([
-    "agendapunten", "risicos", "risico_log", "risico_maatregelen", "procedures",
-    "procedure_stappen", "procedure_requirements", "procedure_bewijs", "documenten",
-    "governance_log_inhoud",
-  ]);
-  const bestand = ts.createSourceFile("route.tsx", bron, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const buiten: string[] = [];
-  const bezoek = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
-      && node.expression.name.text === "from" && ts.isStringLiteralLike(node.arguments[0])
-      && tabellen.has(node.arguments[0].text)) {
-      let ouder: ts.Node | undefined = node;
-      let begrensd = false;
-      while (ouder) {
-        if (ts.isCallExpression(ouder) && ts.isIdentifier(ouder.expression)
-          && ouder.expression.text === "leesModelcontext") { begrensd = true; break; }
-        ouder = ouder.parent;
-      }
-      if (!begrensd) buiten.push(node.arguments[0].text);
+function binnenReader(node: ts.Node): boolean {
+  let ouder: ts.Node | undefined = node;
+  while (ouder) {
+    if (ts.isCallExpression(ouder) && ts.isIdentifier(ouder.expression)
+      && ouder.expression.text === "leesModelcontext") return true;
+    ouder = ouder.parent;
+  }
+  return false;
+}
+
+function heeftVoorouderAanroep(node: ts.Node, naam: string): boolean {
+  let ouder: ts.Node | undefined = node.parent;
+  while (ouder) {
+    if (ts.isCallExpression(ouder) && ts.isIdentifier(ouder.expression)
+      && ouder.expression.text === naam) return true;
+    ouder = ouder.parent;
+  }
+  return false;
+}
+
+function heeftVoorouderMethodeAanroep(node: ts.Node, naam: string, argument: string): boolean {
+  let ouder: ts.Node | undefined = node.parent;
+  while (ouder) {
+    if (ts.isCallExpression(ouder) && ts.isPropertyAccessExpression(ouder.expression)
+      && ouder.expression.name.text === naam && ouder.arguments.length === 1
+      && ts.isIdentifier(ouder.arguments[0]) && ouder.arguments[0].text === argument) return true;
+    ouder = ouder.parent;
+  }
+  return false;
+}
+
+function functienaam(node: ts.Node): string | null {
+  let ouder: ts.Node | undefined = node;
+  while (ouder) {
+    if (ts.isFunctionDeclaration(ouder) && ouder.name) return ouder.name.text;
+    if ((ts.isArrowFunction(ouder) || ts.isFunctionExpression(ouder))
+      && ts.isVariableDeclaration(ouder.parent) && ts.isIdentifier(ouder.parent.name)) {
+      return ouder.parent.name.text;
     }
-    ts.forEachChild(node, bezoek);
+    ouder = ouder.parent;
+  }
+  return null;
+}
+
+/** AST + lokale callgraph: een query is begrensd als zij lexicaal in de reader
+ * staat, of in een helper die uitsluitend vanuit een readercallback wordt
+ * aangeroepen. Comments, strings en functienamen tellen niet als bewijs. */
+function analyseerModelcontextQueries(bron: string): Map<string, { begrensd: number; buiten: number }> {
+  const bestand = ts.createSourceFile("modelcontext.tsx", bron, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const functies = new Map<string, ts.Node>();
+  const helperCallsBinnenReader = new Set<string>();
+  const registreer = (node: ts.Node) => {
+    if (ts.isFunctionDeclaration(node) && node.name) functies.set(node.name.text, node);
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
+      && node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
+      functies.set(node.name.text, node.initializer);
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && binnenReader(node)) {
+      helperCallsBinnenReader.add(node.expression.text);
+    }
+    ts.forEachChild(node, registreer);
   };
-  bezoek(bestand);
-  return buiten;
+  registreer(bestand);
+
+  // Ondersteun een kleine lokale helperketen zonder op naamconventies te
+  // vertrouwen: alleen echte calls vanuit reeds bewezen begrensde functies.
+  let gewijzigd = true;
+  while (gewijzigd) {
+    gewijzigd = false;
+    for (const [naam, functie] of functies) {
+      if (!helperCallsBinnenReader.has(naam)) continue;
+      const bezoek = (node: ts.Node) => {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+          && functies.has(node.expression.text) && !helperCallsBinnenReader.has(node.expression.text)) {
+          helperCallsBinnenReader.add(node.expression.text);
+          gewijzigd = true;
+        }
+        ts.forEachChild(node, bezoek);
+      };
+      bezoek(functie);
+    }
+  }
+
+  const uit = new Map<string, { begrensd: number; buiten: number }>();
+  const bezoekQuery = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.name.text === "from" && node.arguments.length === 1
+      && ts.isStringLiteralLike(node.arguments[0])) {
+      const tabel = node.arguments[0].text;
+      const huidig = uit.get(tabel) ?? { begrensd: 0, buiten: 0 };
+      const helper = functienaam(node);
+      if (binnenReader(node) || (helper !== null && helperCallsBinnenReader.has(helper))) huidig.begrensd++;
+      else huidig.buiten++;
+      uit.set(tabel, huidig);
+    }
+    ts.forEachChild(node, bezoekQuery);
+  };
+  bezoekQuery(bestand);
+  return uit;
 }
 
 test("#368 — nul evidencelezingen buiten de retrievalkern", () => {
@@ -124,14 +198,68 @@ test("#368 — alle 26 modelcontextlezingen blijven apart van evidence", () => {
   assert.match(lees("app/api/chat/route.ts"), /modelcontext_audit/);
 });
 
-test("#368 modelcontextboundary — chatcontextqueries staan uitvoerend binnen de typed reader", () => {
-  const route = lees("app/api/chat/route.ts");
-  assert.deepEqual(modelcontextQueriesBuitenReader(route), []);
-  const mutatie = `${route}\nconst bypass = supabase.from("risicos").select("titel");\n`;
-  assert.deepEqual(modelcontextQueriesBuitenReader(mutatie), ["risicos"]);
-  for (const helper of ["core/lib/profielsturing.ts", "core/lib/organisatieprofiel.ts", "core/lib/portaalcontext.ts"]) {
-    assert.match(lees(helper), /leesModelcontext\(/, `${helper} mist de uitvoerende readergrens`);
+test("#368 modelcontextboundary — alle 26 lezingen lopen uitvoerend door de typed grens", () => {
+  const entries = context.lezingen_per_klasse.modelcontext.map((lezing) => {
+    const [bestand, tabel] = lezing.split("::");
+    return { bestand, tabel };
+  });
+  assert.equal(entries.length, 26);
+  const perBestand = new Map<string, Map<string, { begrensd: number; buiten: number }>>();
+  for (const { bestand } of entries) {
+    if (!perBestand.has(bestand)) perBestand.set(bestand, analyseerModelcontextQueries(lees(bestand)));
   }
+  for (const { bestand, tabel } of entries) {
+    const resultaat = perBestand.get(bestand)?.get(tabel) ?? { begrensd: 0, buiten: 0 };
+    assert.ok(resultaat.begrensd > 0, `${bestand}::${tabel} mist een uitvoerende readergrens`);
+    const toegestaneConfiglezingen = bestand === "app/api/chat/route.ts" && tabel === "profielen" ? 1 : 0;
+    assert.equal(resultaat.buiten, toegestaneConfiglezingen, `${bestand}::${tabel} heeft een modelcontextbypass`);
+  }
+});
+
+test("#368 modelcontextboundary — tabelgedreven mutaties van ieder brontype worden gedetecteerd", () => {
+  for (const lezing of context.lezingen_per_klasse.modelcontext) {
+    const [bestand, tabel] = lezing.split("::");
+    const bron = lees(bestand);
+    const voor = analyseerModelcontextQueries(bron).get(tabel)?.buiten ?? 0;
+    const mutatie = `${bron}\nconst directeBypass = supabase.from(${JSON.stringify(tabel)}).select("*");\n`;
+    const na = analyseerModelcontextQueries(mutatie).get(tabel)?.buiten ?? 0;
+    assert.equal(na, voor + 1, `${bestand}::${tabel} mutatie moet de boundaryassertie raken`);
+  }
+});
+
+test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en writes starten niet na abort", () => {
+  const route = ts.createSourceFile(
+    "route.tsx", lees("app/api/chat/route.ts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX
+  );
+  let toelichtingCalls = 0;
+  let duurzameWrites = 0;
+  const bezoek = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+      && node.expression.text === "bouwToelichtingBlok") {
+      toelichtingCalls++;
+      assert.equal(heeftVoorouderAanroep(node, "bouwModelcontextBlok"), true);
+    }
+    const isRpcWrite = ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.name.text === "rpc" && ts.isStringLiteralLike(node.arguments[0])
+      && node.arguments[0].text === "schrijf_ai_interactie";
+    const isUpsert = ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.name.text === "upsert";
+    if (isRpcWrite || isUpsert) {
+      duurzameWrites++;
+      assert.equal(
+        heeftVoorouderAanroep(node, "voerDuurzameSchrijfBinnenDeadlineUit"), true,
+        "inhoudsschrijf staat buiten de samengestelde requestdeadline"
+      );
+      assert.equal(
+        heeftVoorouderMethodeAanroep(node, "abortSignal", "contextSignal"), true,
+        "inhoudsschrijf draagt het samengestelde requestsignaal niet tot in provider-I/O"
+      );
+    }
+    ts.forEachChild(node, bezoek);
+  };
+  bezoek(route);
+  assert.equal(toelichtingCalls, 1);
+  assert.equal(duurzameWrites, 5);
 });
 
 test("#368 — typed evidence hergebruikt centrale poort en lekt geen opslag-idvelden", () => {

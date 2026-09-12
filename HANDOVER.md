@@ -10,7 +10,9 @@
 > status/geldigheid, providerfout, samengestelde requestdeadline/cancellation en rijcaps worden
 > vóór vrijgave gecontroleerd; werkelijk gerenderde tekst wordt geneutraliseerd, begrensd en op
 > PII geaudit. `chunksVoor()` blijft als één providerprivate migratiebrug bestaan omdat de
-> chatroute nog één goedgekeurde downstreamconsumer heeft. Geen Graph-wiring of migratie; branch
+> chatroute nog één goedgekeurde downstreamconsumer heeft. Geen Graph-wiring en geen schema- of
+> datamigratie; alleen een additieve forward/rollback-wrapper sluit de nieuwe inhoudsvrije
+> auditprojecties. Branch
 > `codex/368-evidencelezingen-implementatie` is nog niet gepusht/gemerged. Zie
 > `RETRIEVAL-T2-4-PLANREVIEW.md`.
 
