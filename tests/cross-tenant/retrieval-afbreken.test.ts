@@ -29,6 +29,7 @@ import type {
   RetrievalContext,
   RetrievalQuery,
 } from "../../core/lib/retrieval/contract";
+import { maakDocumentIdentiteit, maakPassageIdentiteit, maakVolledigeVersieHash } from "../../core/lib/retrieval/identiteit";
 
 const CTX: RetrievalContext = {
   fondsId: "11111111-1111-4111-8111-111111111111",
@@ -51,14 +52,31 @@ const QUERY = (over: Partial<RetrievalQuery> = {}): RetrievalQuery => ({
 });
 
 /** Minimale chunkloze bron voor de gedragstests. */
+const bronPerRef = new Map<string, Bronresultaat>();
+
 function bron(ref: string, doc: string, passage: string): Bronresultaat {
-  return {
-    ref, bronsoort: "sharepoint", titel: "T",
-    documentIdentiteit: { documentId: doc, bibliotheek: "fonds", bron: "SharePoint" },
-    versie: { soort: "etag", waarde: "e", gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
+  const documentIdentiteit = maakDocumentIdentiteit("afbreektest", doc);
+  const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, ref);
+  const resultaat: Bronresultaat = {
+    ref: passageIdentiteit, bronsoort: "sharepoint", titel: "T",
+    documentIdentiteit: { id: documentIdentiteit, bibliotheek: "fonds", bron: "SharePoint" },
+    passageIdentiteit: { id: passageIdentiteit },
+    versie: { soort: "etag", waarde: maakVolledigeVersieHash(doc, "etag-1", "a".repeat(64)), gecontroleerdOp: "2026-09-10T10:00:00.000Z" },
     locator: {}, passage, status: { actueel: true }, rang: { positie: 1, score: 1 },
   };
+  bronPerRef.set(resultaat.ref, resultaat);
+  return resultaat;
 }
+
+const verifieerVersies: RetrievalAdapter["verifieerVersies"] = async (_ctx, refs) => new Map(refs.map((ref) => {
+  const kandidaat = bronPerRef.get(ref);
+  return [ref, {
+    beschikbaar: !!kandidaat,
+    documentIdentiteit: kandidaat?.documentIdentiteit.id ?? null,
+    passageIdentiteit: kandidaat?.passageIdentiteit.id ?? null,
+    versie: { soort: kandidaat?.versie.soort ?? "onbekend", waarde: kandidaat?.versie.waarde ?? null },
+  }];
+}));
 
 const GRENZEN = {
   maxPerDoc: 5,
@@ -75,7 +93,7 @@ function traagAdapter(msPerCall: number, gezien: { signal?: AbortSignal }): Retr
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: true, versiebeleid: { sterk: ["etag"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(ctx): Promise<AdapterUitkomst> {
       gezien.signal = ctx.signal;
@@ -187,7 +205,7 @@ test("PR-B — na een afbreking draait er geen enkele vervolgstap meer", async (
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: true, versiebeleid: { sterk: ["etag"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -273,7 +291,7 @@ test("PR-B — een timeout tijdens verrijkSelectie stopt de keten", async () => 
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: true, versiebeleid: { sterk: ["etag"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -282,6 +300,7 @@ test("PR-B — een timeout tijdens verrijkSelectie stopt de keten", async () => 
         methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
       };
     },
+    verifieerVersies,
     async verrijkSelectie(ctx, g) {
       stappen.push("verrijkSelectie");
       await slaapMetSignaal(5_000, ctx.signal); // trage sibling-fetch
@@ -312,7 +331,7 @@ test("PR-B — de deadline loopt DOOR tot en met citeer(); verrijkWeergave valt 
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: true, versiebeleid: { sterk: ["etag"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       stappen.push("zoek");
@@ -321,6 +340,7 @@ test("PR-B — de deadline loopt DOOR tot en met citeer(); verrijkWeergave valt 
         methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
       };
     },
+    verifieerVersies,
     async verrijkWeergave(ctx, g) {
       stappen.push("verrijkWeergave");
       assert.ok(ctx.signal, "de weergaveverrijking hoort het beurtsignaal te krijgen");
@@ -436,7 +456,7 @@ test("PR-B — `citeer()` laat de grendel niet achter in het eindresultaat", asy
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: true, versiebeleid: { sterk: ["etag"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       return {
@@ -444,6 +464,7 @@ test("PR-B — `citeer()` laat de grendel niet achter in het eindresultaat", asy
         methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
       };
     },
+    verifieerVersies,
   };
   const tussen = await voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY(), grenzen: GRENZEN }] });
   assert.ok(tussen.grendel, "fase 1 draagt de grendel wél");
@@ -469,7 +490,7 @@ test("PR-B — tweemaal citeren draait de tweede keer niet ZONDER deadline", asy
       bronsoorten: ["sharepoint"], strategieen: ["gericht"], ondersteundeFilters: [],
       // Deze suite toetst ANNULERING, geen rechten: deze adapters beloven geen
       // bewijs, dus de toelatingspoort eist er ook geen.
-      versiebewijs: true, permissionProof: false, preview: false, cancellation: true, timeout: true,
+      versiebewijs: true, versiebeleid: { sterk: ["etag"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
     }),
     async zoek(): Promise<AdapterUitkomst> {
       return {
@@ -477,6 +498,7 @@ test("PR-B — tweemaal citeren draait de tweede keer niet ZONDER deadline", asy
         methode: "sharepoint_live", provider: "microsoft", latencyMs: 0, opgehaald: 1,
       };
     },
+    verifieerVersies,
   };
   const tussen = await voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY(), grenzen: GRENZEN }] });
   const opdracht = {

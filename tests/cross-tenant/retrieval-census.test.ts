@@ -126,12 +126,12 @@ test("F4-context — elke bereikte lezing is geclassificeerd", () => {
 
 test("F4-context — de klassenverdeling per lezing is hard gepind", () => {
   const k = lezingenPerKlasse() as Record<string, string[]>;
-  assert.equal(lezingen().length, 45, "het aantal lezingen op het antwoordpad is gewijzigd");
-  assert.equal(k.evidence.length, 7, `evidence: ${k.evidence.join(", ")}`);
+  assert.equal(lezingen().length, 46, "het aantal lezingen op het antwoordpad is gewijzigd");
+  assert.equal(k.evidence.length, 8, `evidence: ${k.evidence.join(", ")}`);
   assert.equal(k.modelcontext.length, 26, `modelcontext: ${k.modelcontext.join(", ")}`);
   assert.equal(k.configuratie.length, 11, `configuratie: ${k.configuratie.join(", ")}`);
   assert.equal(k.audit.length, 3, `audit: ${k.audit.join(", ")}`);
-  assert.equal(Object.keys(LEZINGKLASSE).length, 45, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
+  assert.equal(Object.keys(LEZINGKLASSE).length, 46, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
 });
 
 test("F4-context — één tabel kan meerdere hoedanigheden hebben", () => {
@@ -161,10 +161,14 @@ test("F4-context — evidence is documentgebonden bewijs, en drie van de vier lo
   // `concepts` staat hier bewust NIET meer: dat is een begrippencatalogus
   // (id/key/label/type/status), geen documentgebonden bewijs.
   assert.deepEqual(evidenceTabellen, ["decision_objects", "document_chunks", "documenten", "semantic_units"]);
-  const viaKern = k.evidence.filter((s) => s.startsWith("core/lib/rag.ts::")).sort();
-  assert.deepEqual(viaKern, ["core/lib/rag.ts::document_chunks", "core/lib/rag.ts::documenten"]);
+  const viaKern = k.evidence.filter((s) => s.startsWith("core/lib/rag.ts::") || s.startsWith("core/lib/retrieval/")).sort();
+  assert.deepEqual(viaKern, [
+    "core/lib/rag.ts::document_chunks",
+    "core/lib/rag.ts::documenten",
+    "core/lib/retrieval/supabase-versie.ts::document_chunks",
+  ]);
   // De overige vijf evidencelezingen lopen buiten rag.ts om — gaplijst G-1a/G-8.
-  const buitenKern = k.evidence.filter((s) => !s.startsWith("core/lib/rag.ts::")).sort();
+  const buitenKern = k.evidence.filter((s) => !viaKern.includes(s)).sort();
   assert.deepEqual(buitenKern, [
     "app/api/chat/route.ts::decision_objects",
     "app/api/chat/route.ts::document_chunks",

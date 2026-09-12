@@ -123,6 +123,23 @@ export interface Versiebewijs {
   gecontroleerdOp: string | null;
 }
 
+/** De toestand die de capability voor ontbrekend sterk bewijs voorschrijft. */
+export interface Versiebeleid {
+  /** Sterke soorten die zonder degradatie mogen worden toegelaten. */
+  sterk: Versiebewijs["soort"][];
+  /** Expliciet toegestane zwakke fallback; leeg betekent fail-closed. */
+  gedegradeerd: Versiebewijs["soort"][];
+}
+
+/** Actuele versie, herlezen na adapterresultaat en vóór ranking/selectie. */
+export interface ActueleVersiestand {
+  beschikbaar: boolean;
+  /** Ontbrekend is een onvolledige stand en wordt door de poort geweigerd. */
+  documentIdentiteit?: string | null;
+  passageIdentiteit?: string | null;
+  versie: Pick<Versiebewijs, "soort" | "waarde">;
+}
+
 /**
  * Rechtenbewijs, gebonden aan actor én verzoek. Zonder `gebruikerId` en
  * `correlationId` zou een verse, op zichzelf geldige proof van een andere
@@ -153,11 +170,18 @@ export interface Toegangsbewijs {
 }
 
 export interface Bronresultaat {
-  /** Lokale, fondsgebonden referentie (chunk-id of sharepoint_documenten.id). */
+  /** Providerneutrale passage-identiteit; nooit een Graph-, Drive- of DB-id. */
   ref: string;
   bronsoort: Bronsoort;
   titel: string;
-  documentIdentiteit: { documentId: string; bibliotheek?: string | null; bron?: string | null; fondsId?: string | null };
+  documentIdentiteit: {
+    /** Providerneutrale, opaque identiteit; geen Graph/Drive/DB-id. */
+    id: string;
+    bibliotheek?: string | null;
+    bron?: string | null;
+    fondsId?: string | null;
+  };
+  passageIdentiteit: { id: string };
   versie: Versiebewijs;
   /**
    * PR-C — de opaque BRONREGISTRATIEreferentie van dit resultaat, gezet door de
@@ -232,6 +256,8 @@ export interface AdapterCapabilities {
   /** Een filter dat hier niet in staat is een FOUT, nooit een stille no-op. */
   ondersteundeFilters: (keyof RetrievalFilters)[];
   versiebewijs: boolean;
+  /** Altijd verplicht; bepaalt expliciet fail-closed versus degradatie. */
+  versiebeleid: Versiebeleid;
   permissionProof: boolean;
   preview: boolean;
   cancellation: boolean;
@@ -314,6 +340,7 @@ export interface RetrievalTussenresultaat {
     extra: Partial<RetrievalMeta>;
     primaireRefs: ReadonlySet<string>;
     meerdereSporen: boolean;
+    correlationId: string;
   };
 }
 
@@ -354,6 +381,15 @@ export interface RetrievalAdapter {
   readonly naam: "supabase-rag" | "microsoft-sharepoint";
   capabilities(): AdapterCapabilities;
   zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst>;
+  /**
+   * Herleest de actuele versie onder providerprivate registersleutels die de
+   * adapter intern aan de opaque resultaatrefs koppelt. Eén batch per verzoek,
+   * nooit gecached tussen verzoeken.
+   */
+  verifieerVersies?(
+    ctx: RetrievalContext,
+    resultaatRefs: readonly string[]
+  ): Promise<Map<string, ActueleVersiestand>>;
   /**
    * V5 — de ACTUELE stand van de bronregistratie, één aanroep per verzoek met
    * alle unieke `bronregistratieRef`s. Verplicht zodra de adapter

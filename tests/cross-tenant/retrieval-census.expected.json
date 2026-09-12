@@ -17,6 +17,7 @@
           "RetrievalFilters",
           "RetrievalMeta",
           "VOLLEDIGE_DOCUMENT_CHUNK_CAP",
+          "chunkAlsBronresultaat",
           "haalBevrorenChunks",
           "haalDocumentChunksMetDekking",
           "maakBronSentinel",
@@ -29,7 +30,10 @@
           "verrijkNotulenChunks"
         ],
         "bronset": [
-          "bepaalBronset"
+          "BevrorenBronbinding",
+          "bepaalBronset",
+          "leesBevrorenBronbindingen",
+          "leesLokaleDocumentRefs"
         ],
         "query-reformulatie": [
           "heeftReformulatieNodig",
@@ -236,6 +240,17 @@
       },
       "rpcs": [],
       "tabellen": []
+    },
+    "core/lib/retrieval/supabase-versie.ts": {
+      "modules": {
+        "rag": [
+          "DocumentChunk"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
     },
     "core/lib/vergelijk-productie.ts": {
       "modules": {

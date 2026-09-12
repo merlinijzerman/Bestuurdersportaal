@@ -29,19 +29,28 @@
 // ============================================================================
 import type {
   AdapterCapabilities,
+  ActueleVersiestand,
   Bronregistratiestand,
   Bronresultaat,
   RetrievalAdapter,
   RetrievalContext,
   RetrievalQuery,
 } from "./contract";
+import { isAfbreking } from "./afbreken";
 
 /** Waarom een kandidaat is geweigerd. Inhoudsvrij; gaat naar het auditspoor. */
 export type Weigergrond =
   | "filter_niet_ondersteund"
+  | "identiteit_ontbreekt"
   | "geen_bewijs"
   | "bewijs_niet_beloofd"
   | "versiebewijs_ontbreekt"
+  | "versiebeleid_ontbreekt"
+  | "versiesoort_niet_toegestaan"
+  | "versie_hook_ontbreekt"
+  | "versie_hook_fout"
+  | "versiestand_ontbreekt"
+  | "versie_gewijzigd"
   | "binding_ander_resultaat"
   | "binding_andere_bron"
   | "v1_niet_toegestaan"
@@ -68,6 +77,7 @@ export type Weigergrond =
 export type Weigercategorie = "toestemming_geweigerd" | "configuratiefout" | "providerfout";
 
 const CATEGORIE: Record<Weigergrond, Weigercategorie> = {
+  identiteit_ontbreekt: "configuratiefout",
   geen_bewijs: "toestemming_geweigerd",
   binding_ander_resultaat: "toestemming_geweigerd",
   binding_andere_bron: "toestemming_geweigerd",
@@ -80,10 +90,16 @@ const CATEGORIE: Record<Weigergrond, Weigercategorie> = {
   // Een hook die GOOIT: de provider faalde. Fail-closed blijft staan, maar het
   // is een storing — geen uitspraak over wat deze gebruiker mag.
   v5_hook_fout: "providerfout",
+  versie_hook_fout: "providerfout",
   // De adapter belooft iets wat hij niet waarmaakt.
   filter_niet_ondersteund: "configuratiefout",
   bewijs_niet_beloofd: "configuratiefout",
   versiebewijs_ontbreekt: "configuratiefout",
+  versiebeleid_ontbreekt: "configuratiefout",
+  versiesoort_niet_toegestaan: "configuratiefout",
+  versie_hook_ontbreekt: "configuratiefout",
+  versiestand_ontbreekt: "toestemming_geweigerd",
+  versie_gewijzigd: "toestemming_geweigerd",
   v5_hook_ontbreekt: "configuratiefout",
 };
 
@@ -138,6 +154,12 @@ function tijdstip(waarde: string | null | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function geldigeKalenderdatum(waarde: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(waarde)) return false;
+  const datum = new Date(`${waarde}T00:00:00.000Z`);
+  return Number.isFinite(datum.getTime()) && datum.toISOString().slice(0, 10) === waarde;
+}
+
 interface Oordeelcontext {
   ctx: RetrievalContext;
   caps: AdapterCapabilities;
@@ -145,15 +167,62 @@ interface Oordeelcontext {
   verzoekStart: number | null;
   standen: Map<string, Bronregistratiestand> | null;
   hookFout: boolean;
+  versiestanden: Map<string, ActueleVersiestand> | null;
+  versieHookFout: boolean;
 }
 
 function beoordeel(bron: Bronresultaat, o: Oordeelcontext): Weigergrond | null {
+  // IDENTITEIT — controleer ook runtime-invoer. Een adapter kan uit JavaScript,
+  // een fixture of een externe provider komen en het TypeScriptcontract dus
+  // omzeilen. Alleen onze versiegebonden opaque sleutels mogen ranking bereiken.
+  if (
+    typeof bron.ref !== "string" ||
+    !/^passage_v1_[a-f0-9]{64}$/.test(bron.ref) ||
+    typeof bron.documentIdentiteit?.id !== "string" ||
+    !/^doc_v1_[a-f0-9]{64}$/.test(bron.documentIdentiteit.id) ||
+    typeof bron.passageIdentiteit?.id !== "string" ||
+    !/^passage_v1_[a-f0-9]{64}$/.test(bron.passageIdentiteit.id) ||
+    bron.ref !== bron.passageIdentiteit.id
+  ) {
+    return "identiteit_ontbreekt";
+  }
+
   // VERSIEBEWIJS — los van rechten. Een adapter die versiebewijs belooft maar
   // het niet levert, laat een resultaat door dat later niet meer is terug te
   // voeren op de versie die het model zag.
-  if (o.caps.versiebewijs === true) {
-    const w = bron.versie?.waarde;
-    if (typeof w !== "string" || w.length === 0) return "versiebewijs_ontbreekt";
+  const w = bron.versie?.waarde;
+  if (typeof w !== "string" || w.length === 0 || bron.versie.soort === "onbekend") {
+    return "versiebewijs_ontbreekt";
+  }
+  const beleid = o.caps.versiebeleid;
+  if (!beleid) return "versiebeleid_ontbreekt";
+  // De twee beleidslijsten zijn geen vrije labels. Een adapter mag een zwakke
+  // status-datum niet onder `sterk` schuiven (of een sterke hash als
+  // `gedegradeerd` declareren) om de bedoelde semantiek te omzeilen.
+  const sterkeSoort = /^(etag|ctag|hash)$/.test(bron.versie.soort);
+  const gedegradeerdeSoort = bron.versie.soort === "status-datum";
+  const semantischToegestaan =
+    (sterkeSoort && beleid.sterk.includes(bron.versie.soort)) ||
+    (gedegradeerdeSoort && beleid.gedegradeerd.includes(bron.versie.soort));
+  if (!semantischToegestaan) {
+    return "versiesoort_niet_toegestaan";
+  }
+  const sterkeVorm = sterkeSoort
+    && /^version_v1_[a-f0-9]{64}$/.test(w);
+  const gedegradeerdeVorm = gedegradeerdeSoort
+    && geldigeKalenderdatum(w);
+  if (!sterkeVorm && !gedegradeerdeVorm) return "versiebewijs_ontbreekt";
+  if (o.versieHookFout) return "versie_hook_fout";
+  if (o.versiestanden === null) return "versie_hook_ontbreekt";
+  const actuele = o.versiestanden.get(bron.ref);
+  if (!actuele?.beschikbaar) return "versiestand_ontbreekt";
+  if (
+    actuele.documentIdentiteit !== bron.documentIdentiteit.id ||
+    actuele.passageIdentiteit !== bron.passageIdentiteit.id ||
+    actuele.versie.soort !== bron.versie.soort ||
+    actuele.versie.waarde !== w
+  ) {
+    return "versie_gewijzigd";
   }
 
   const bewijs = bron.toegangscontrole;
@@ -232,6 +301,35 @@ export async function verifieerToelating(
   // waarmaakt. Beide weigeren gesloten, maar het auditspoor moet ze kunnen
   // onderscheiden — anders lijkt een storing op een ontwerpfout.
   let hookFout = false;
+  let versiestanden: Map<string, ActueleVersiestand> | null = null;
+  let versieHookFout = false;
+
+  {
+    const refs = [
+      ...new Set(
+        kandidatenPerSpoor
+          .flat()
+          .map((k) => k.ref)
+          .filter((r): r is string => typeof r === "string" && r.length > 0)
+      ),
+    ];
+    if (!adapter.verifieerVersies) {
+      versiestanden = null;
+    } else if (refs.length === 0) {
+      versiestanden = new Map();
+    } else {
+      try {
+        versiestanden = await adapter.verifieerVersies(ctx, refs);
+      } catch (e) {
+        // Cancellation/deadline is geen providerfout die de poort tot een
+        // weigering mag reduceren: de hele beurt is beëindigd. Doorgooien
+        // voorkomt dat de rechtenherlezing en verdere retrieval-I/O nog start.
+        if (isAfbreking(e)) throw e;
+        versiestanden = null;
+        versieHookFout = true;
+      }
+    }
+  }
 
   if (caps.permissionProof === true) {
     // Referenties VAN DE RESULTATEN, niet uit de bewijzen: de herlezing hoort te
@@ -253,14 +351,19 @@ export async function verifieerToelating(
         // Request-lokaal — nooit gecached tussen verzoeken, want dan is de
         // herlezing weer de momentopname die zij vervangt.
         standen = await adapter.verifieerBronregistratie(ctx, refs);
-      } catch {
+      } catch (e) {
+        // Zelfde ketenregel als bij versieherlezing: alleen echte provider-
+        // fouten worden genormaliseerd; een afbreking stopt onmiddellijk.
+        if (isAfbreking(e)) throw e;
         standen = null;
         hookFout = true;
       }
     }
   }
 
-  const o: Oordeelcontext = { ctx, caps, poortNu, verzoekStart, standen, hookFout };
+  const o: Oordeelcontext = {
+    ctx, caps, poortNu, verzoekStart, standen, hookFout, versiestanden, versieHookFout,
+  };
   const toegelatenPerSpoor: Bronresultaat[][] = [];
   const geweigerd: Weigering[] = [];
   kandidatenPerSpoor.forEach((kandidaten, spoor) => {

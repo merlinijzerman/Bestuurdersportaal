@@ -40,6 +40,10 @@ const DOC_B = "22222222-2222-4222-8222-222222222222";
 const CHUNK_A = "33333333-3333-4333-8333-333333333333";
 const CHUNK_B = "44444444-4444-4444-8444-444444444444";
 const FONDS = "55555555-5555-4555-8555-555555555555";
+const OPAQUE_DOC_A = `doc_v1_${"a".repeat(64)}`;
+const OPAQUE_DOC_B = `doc_v1_${"b".repeat(64)}`;
+const OPAQUE_PASSAGE_A = `passage_v1_${"1".repeat(64)}`;
+const OPAQUE_PASSAGE_B = `passage_v1_${"2".repeat(64)}`;
 
 const ZOEKBODY = {
   resultaten: [
@@ -173,6 +177,48 @@ test("F4-golden — negatieve controle: een citaat dat naar een ander document w
   const m = kloon(RETRIEVAL_META);
   m.chunks[0].document_id = DOC_B;
   assert.notEqual(vorm(metaWaarneming(RETRIEVAL_META)), vorm(metaWaarneming(m)));
+});
+
+test("#367-golden — opaque identiteiten worden per unieke waarde relationeel gepseudonimiseerd", () => {
+  const genormaliseerd = normaliseerJson({
+    document_a: OPAQUE_DOC_A,
+    document_a_opnieuw: OPAQUE_DOC_A,
+    document_b: OPAQUE_DOC_B,
+    passages: [OPAQUE_PASSAGE_A, OPAQUE_PASSAGE_B, OPAQUE_PASSAGE_A],
+    poging_herkomst: { [OPAQUE_PASSAGE_B]: "secundair" },
+  }) as Record<string, unknown>;
+  assert.equal(genormaliseerd.document_a, "<doc-identiteit:1>");
+  assert.equal(genormaliseerd.document_a_opnieuw, "<doc-identiteit:1>");
+  assert.equal(genormaliseerd.document_b, "<doc-identiteit:2>");
+  assert.deepEqual(genormaliseerd.passages, [
+    "<passage-identiteit:1>",
+    "<passage-identiteit:2>",
+    "<passage-identiteit:1>",
+  ]);
+  assert.deepEqual(genormaliseerd.poging_herkomst, {
+    "<passage-identiteit:2>": "secundair",
+  });
+});
+
+test("#367-golden — duplicatie of verwisseling van een opaque passagebinding maakt de golden rood", () => {
+  const correct = {
+    chunks: [
+      { id: OPAQUE_PASSAGE_A, document_id: OPAQUE_DOC_A },
+      { id: OPAQUE_PASSAGE_B, document_id: OPAQUE_DOC_B },
+    ],
+    citaties: [
+      { passage_id: OPAQUE_PASSAGE_A, document_id: OPAQUE_DOC_A },
+      { passage_id: OPAQUE_PASSAGE_B, document_id: OPAQUE_DOC_B },
+    ],
+  };
+  const dubbelGebonden = kloon(correct);
+  dubbelGebonden.citaties[1].passage_id = OPAQUE_PASSAGE_A;
+  assert.notEqual(vorm(correct), vorm(dubbelGebonden));
+
+  const verwisseld = kloon(correct);
+  [verwisseld.citaties[0].passage_id, verwisseld.citaties[1].passage_id] =
+    [verwisseld.citaties[1].passage_id, verwisseld.citaties[0].passage_id];
+  assert.notEqual(vorm(correct), vorm(verwisseld));
 });
 
 test("F4-golden — negatieve controle: een gewijzigde citatietelling maakt de golden rood", () => {

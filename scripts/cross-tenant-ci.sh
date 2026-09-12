@@ -194,6 +194,9 @@ SQL_AIGW="supabase/checks/2026_09_04_ai_gateway.sql"
 # #322 PR-C — de toelatingssamenvatting (en `gateway`) overleven beide
 # leesniveaus van het auditspoor, met de tellingen intact.
 SQL_TOELATING="supabase/checks/2026_09_11_toelating_auditprojectie.sql"
+# #367 — correlation op basisniveau en bron-/versie-identiteit uitsluitend op
+# bronniveau; aparte additieve check, zonder de uitgebrachte PR-C-check te wijzigen.
+SQL_RETRIEVAL_IDENTITEIT="supabase/checks/2026_09_11_retrieval_identiteit_auditprojectie.sql"
 # Microsoft 365 fase 2A — delta/cursor/run-integriteit en private Outlook-ACL.
 SQL_M365F2A="supabase/checks/2026_09_04_microsoft_outlook_fase2a.sql"
 # Microsoft 365 fase 3A (#321) — fondsgebonden SharePoint-bron, private ACL,
@@ -440,6 +443,7 @@ echo
 
 echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van het auditspoor --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_TOELATING"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_RETRIEVAL_IDENTITEIT"
 echo
 
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
