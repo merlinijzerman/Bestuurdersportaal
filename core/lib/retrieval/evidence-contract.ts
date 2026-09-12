@@ -42,11 +42,14 @@ export interface EvidenceItem<T> {
   status: {
     documentstatus?: string | null;
     bronstatus?: string | null;
+    geldigTot?: string | null;
     actueel: boolean;
   };
   locator: { pagina?: number | null; paragraaf?: string | null };
   /** Exact de tekst die als evidence naar model of deterministische kern mag. */
   passage: string;
+  /** Omvang van het volledige downstreamblok (labels en scheidingen inbegrepen). */
+  gerenderdeTekens?: number;
   waarde: T;
 }
 

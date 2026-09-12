@@ -18,8 +18,10 @@ import { maakCitationId, maakDocumentIdentiteit, maakPassageIdentiteit, maakVoll
 import type { Versiebewijs } from "./contract";
 import type { ActueleVersiestand, Bronresultaat, RetrievalAdapter, RetrievalContext } from "./contract";
 import { verifieerToelating } from "./toelatingspoort";
+import { binnenCentraleServergrens } from "./orkestratie";
 import { neutraliseerBrontekst } from "../bron-afbakening";
 import { bevatPersoonsgegevens } from "../pii-gate";
+import { isActueleGeneriekeBron, isReviewVerlopen } from "../generiek-status";
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 export const MAX_PRESENTIE_DOCUMENTEN = 2000;
@@ -29,6 +31,27 @@ export const MAX_SEMANTISCHE_UNITS = 500;
 
 function hash(waarde: unknown): string {
   return createHash("sha256").update(JSON.stringify(waarde)).digest("hex");
+}
+
+function peildatum(opdracht: EvidenceOpdracht): string {
+  return opdracht.context.verzoekStartOp.slice(0, 10);
+}
+
+function isGeneriekDocument(document: Pick<DocumentVersieRij, "fonds_id" | "bibliotheek">): boolean {
+  return document.fonds_id == null && document.bibliotheek === "generiek";
+}
+
+function documentIsActueel(document: DocumentVersieRij, opdracht: EvidenceOpdracht): boolean {
+  const peil = peildatum(opdracht);
+  if (document.actief === false) return false;
+  if (document.geldig_vanaf && document.geldig_vanaf > peil) return false;
+  if (document.geldig_tot && document.geldig_tot < peil) return false;
+  if (isGeneriekDocument(document)) {
+    return isActueleGeneriekeBron(document) && !isReviewVerlopen(document.volgende_review, peil);
+  }
+  return document.fonds_id === opdracht.context.fondsId
+    && ["vastgesteld", "van_kracht"].includes(document.status ?? "")
+    && (document.bronstatus ?? "actief") === "actief";
 }
 
 function piiAudit(teksten: readonly string[]): { pii_gedetecteerd: boolean; pii_soorten?: string[] } {
@@ -90,8 +113,8 @@ async function toetsMetCentralePoort<T>(
     titel: item.titel,
     documentIdentiteit: {
       id: item.documentIdentiteit,
-      fondsId: context.fondsId,
-      bibliotheek: "fonds",
+      fondsId: item.bronsoort === "generiek" ? null : context.fondsId,
+      bibliotheek: item.bronsoort === "generiek" ? "generiek" : "fonds",
       bron: item.soort === "besluitregistratie" ? "Decision Object" : "Semantische evidence",
       procesId: procesPerRef.get(item.ref) ?? null,
     },
@@ -105,7 +128,7 @@ async function toetsMetCentralePoort<T>(
   const adapter: RetrievalAdapter = {
     naam: "supabase-rag",
     capabilities: () => ({
-      bronsoorten: ["fonds"],
+      bronsoorten: ["fonds", "generiek"],
       strategieen: ["bevroren"],
       ondersteundeFilters: [],
       versiebewijs: true,
@@ -118,6 +141,8 @@ async function toetsMetCentralePoort<T>(
     zoek: async () => ({ kandidaten: [], methode: "geen", provider: "supabase", latencyMs: 0, opgehaald: 0 }),
     verifieerVersies: async () => new Map(actueleVersies),
   };
+  const capabilities = adapter.capabilities();
+  if (bronnen.some((bron) => !binnenCentraleServergrens(context, capabilities, bron))) return false;
   const uitkomst = await verifieerToelating(context, adapter, [bronnen]);
   return uitkomst.geweigerd.length === 0 && uitkomst.toegelatenPerSpoor[0].length === bronnen.length;
 }
@@ -149,7 +174,7 @@ export async function controleerChunkPresentie(
   try {
     let query = supabase
       .from("document_chunks")
-      .select("document_id, documenten!inner(fonds_id, bibliotheek)")
+      .select("document_id, documenten!inner(id, fonds_id, bibliotheek, status, bronstatus, actief, geldig_vanaf, geldig_tot, volgende_review)")
       .in("document_id", refs)
       .limit(MAX_PRESENTIE_RIJEN + 1);
     if (opdracht.context.signal) query = query.abortSignal(opdracht.context.signal);
@@ -158,9 +183,20 @@ export async function controleerChunkPresentie(
     if (error) {
       return { status: "geweigerd", documentIdentiteiten: new Set(), audit: { ...basis, fout: "providerfout" } };
     }
+    // De capstatus gaat vóór rij-inhoudvalidatie: zodra de provider meer dan de
+    // contractgrens teruggeeft, weten we principieel niet of alle gevraagde
+    // documenten zijn opgelost. Geen enkele gedeeltelijke rij mag dan vrij.
+    if ((data?.length ?? 0) > MAX_PRESENTIE_RIJEN) {
+      return { status: "geweigerd", documentIdentiteiten: new Set(), audit: { ...basis, afgekapt: true, fout: "afgekapt" } };
+    }
+    const documentenPerRef = new Map<string, DocumentVersieRij>();
     const buitenScope = (data ?? []).some((r) => {
-      const documenten = (r as { documenten?: { fonds_id?: string | null; bibliotheek?: string | null } | null }).documenten;
-      return documenten?.fonds_id !== opdracht.context.fondsId || !refs.includes(r.document_id as string);
+      const gekoppeld = (r as unknown as { documenten?: DocumentVersieRij | DocumentVersieRij[] | null }).documenten;
+      const document = Array.isArray(gekoppeld) ? gekoppeld[0] : gekoppeld;
+      if (!document || !refs.includes(r.document_id as string) || !documentIsActueel(document, opdracht)) return true;
+      if (!isGeneriekDocument(document) && document.fonds_id !== opdracht.context.fondsId) return true;
+      documentenPerRef.set(r.document_id as string, document);
+      return false;
     });
     if (buitenScope) {
       return { status: "geweigerd", documentIdentiteiten: new Set(), audit: { ...basis, fout: "buiten_scope" } };
@@ -168,10 +204,13 @@ export async function controleerChunkPresentie(
     const gevonden = new Set((data ?? []).map((r) => r.document_id as string));
     // Als de rijen-cap is bereikt terwijl nog niet ieder document is opgelost,
     // is de afwezigheid niet bewezen. Geef dan geen gedeeltelijke set vrij.
-    if ((data?.length ?? 0) > MAX_PRESENTIE_RIJEN && gevonden.size < refs.length) {
-      return { status: "geweigerd", documentIdentiteiten: new Set(), audit: { ...basis, afgekapt: true, fout: "afgekapt" } };
-    }
-    const opaque = new Set([...gevonden].map((id) => maakDocumentIdentiteit(`fonds:${opdracht.context.fondsId}`, id)));
+    if (gevonden.size < refs.length) return {
+      status: "geweigerd", documentIdentiteiten: new Set(), audit: { ...basis, fout: "onvolledig" },
+    };
+    const opaque = new Set([...gevonden].map((id) => {
+      const document = documentenPerRef.get(id)!;
+      return maakDocumentIdentiteit(isGeneriekDocument(document) ? "generiek" : `fonds:${opdracht.context.fondsId}`, id);
+    }));
     return {
       status: "compleet",
       documentIdentiteiten: opaque,
@@ -242,6 +281,44 @@ function besluitWaarde(r: BesluitRij): BesluitEvidenceWaarde {
   };
 }
 
+function neutraliseerVeld(waarde: string | null): string | null {
+  return waarde == null ? null : neutraliseerBrontekst(waarde).tekst;
+}
+
+function neutraliseerBesluitWaarde(waarde: BesluitEvidenceWaarde): BesluitEvidenceWaarde {
+  return {
+    ...waarde,
+    besluitCode: neutraliseerBrontekst(waarde.besluitCode).tekst,
+    titel: neutraliseerBrontekst(waarde.titel).tekst,
+    besluitvraag: neutraliseerBrontekst(waarde.besluitvraag).tekst,
+    aanleiding: neutraliseerVeld(waarde.aanleiding),
+    reikwijdte: neutraliseerVeld(waarde.reikwijdte),
+    governanceOrgaan: neutraliseerVeld(waarde.governanceOrgaan),
+    complexiteit: neutraliseerVeld(waarde.complexiteit),
+    risiconiveau: neutraliseerVeld(waarde.risiconiveau),
+    aiRisicoklasse: neutraliseerVeld(waarde.aiRisicoklasse),
+    status: neutraliseerBrontekst(waarde.status).tekst,
+  };
+}
+
+function renderBesluitWaarde(waarde: BesluitEvidenceWaarde): string {
+  return [
+    `Besluitregistratie: ${waarde.besluitCode} — ${waarde.titel}`,
+    `Status: ${waarde.status}`,
+    `Besluitvraag: ${waarde.besluitvraag}`,
+    `Aanleiding: ${waarde.aanleiding ?? "—"}`,
+    `Reikwijdte: ${waarde.reikwijdte ?? "—"}`,
+    `Governance-orgaan: ${waarde.governanceOrgaan ?? "—"}`,
+    `Complexiteit: ${waarde.complexiteit ?? "—"}`,
+    `Risiconiveau: ${waarde.risiconiveau ?? "—"}`,
+    `Mandaatgevoelig: ${waarde.mandaatgevoelig ? "ja" : "nee"}`,
+    `Toezichtgevoelig: ${waarde.toezichtgevoelig ? "ja" : "nee"}`,
+    `Beleidsafwijking: ${waarde.beleidsafwijking ? "ja" : "nee"}`,
+    `AI-risicoklasse: ${waarde.aiRisicoklasse ?? "—"}`,
+    `Datum: ${waarde.datum ?? "—"}`,
+  ].join("\n");
+}
+
 const FORMELE_STATUSSEN = [
   "geagendeerd", "in_bespreking", "besloten", "voorwaardelijk_besloten",
   "in_uitvoering", "in_evaluatie", "afgesloten",
@@ -261,6 +338,19 @@ export async function leesBesluitEvidence(
   const procedures = [...new Set(selectie.privateProcedureRefs ?? [])];
   const gevraagd = selectie.privateDecisionRef ? 1 : procedures.length;
   const max = Math.min(opdracht.maxItems, MAX_BESLUITEN);
+  // Een Decision Object mag uitsluitend onder een expliciete, server-afgeleide
+  // processcope worden gelezen. Bij een id-selectie bindt documentIds tevens de
+  // concrete registratie; een afwijking faalt vóór de providerquery.
+  if (!opdracht.context.scope?.procesId) {
+    return geweigerd(opdracht, "besluitregistratie", gevraagd, "buiten_scope");
+  }
+  if (procedures.length > 0 && (procedures.length !== 1 || procedures[0] !== opdracht.context.scope.procesId)) {
+    return geweigerd(opdracht, "besluitregistratie", gevraagd, "buiten_scope");
+  }
+  if (selectie.privateDecisionRef
+    && !opdracht.context.scope.documentIds?.includes(selectie.privateDecisionRef)) {
+    return geweigerd(opdracht, "besluitregistratie", gevraagd, "buiten_scope");
+  }
   if (gevraagd === 0 || gevraagd > max) return gevraagd === 0
     ? { status: "compleet", items: [], audit: { correlation_id: opdracht.context.correlationId, soort: "besluitregistratie", gevraagd: 0, toegelaten: 0, gerenderde_tekens: 0, limiet: opdracht.maxGerenderdeTekens, afgekapt: false } }
     : geweigerd(opdracht, "besluitregistratie", gevraagd, "afgekapt");
@@ -305,19 +395,20 @@ export async function leesBesluitEvidence(
     const items: EvidenceItem<BesluitEvidenceWaarde>[] = [];
     let tekens = 0;
     for (const r of rows) {
-      const waarde = besluitWaarde(r);
-      const passage = neutraliseerBrontekst(
-        `Besluitregistratie ${waarde.besluitCode} — ${waarde.titel}. Status: ${waarde.status}. Besluitvraag: ${waarde.besluitvraag}`
-      ).tekst;
-      // Alle domeinvelden kunnen door een caller worden gerenderd; budgetteer
-      // daarom de volledige, canonieke projectie en niet slechts de samenvatting.
-      tekens += JSON.stringify(waarde).length;
+      if (r.procedure_id !== opdracht.context.scope.procesId) {
+        return geweigerd(opdracht, "besluitregistratie", gevraagd, "buiten_scope");
+      }
+      const ruweWaarde = besluitWaarde(r);
+      const waarde = neutraliseerBesluitWaarde(ruweWaarde);
+      const passage = renderBesluitWaarde(waarde);
+      // Exact het gerenderde blok plus de scheiding tussen meerdere records.
+      tekens += passage.length + (items.length > 0 ? 2 : 0);
       const documentIdentiteit = maakDocumentIdentiteit(`fonds:${opdracht.context.fondsId}:decision`, r.id);
       const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, "besluitregistratie");
       const versie: Versiebewijs = r.laatst_gewijzigd
         ? {
             soort: "hash",
-            waarde: maakVolledigeVersieHash(r.id, r.laatst_gewijzigd, hash(waarde)),
+            waarde: maakVolledigeVersieHash(r.id, r.laatst_gewijzigd, hash(ruweWaarde)),
             gecontroleerdOp,
           }
         : { soort: "onbekend", waarde: null, gecontroleerdOp };
@@ -329,11 +420,12 @@ export async function leesBesluitEvidence(
         passageIdentiteit,
         citationId: maakCitationId(documentIdentiteit, passageIdentiteit, versie.soort, versie.waarde),
         bronsoort: "fonds",
-        titel: `Besluitregistratie ${waarde.besluitCode} — ${waarde.titel}`,
+        titel: neutraliseerBrontekst(`Besluitregistratie ${waarde.besluitCode} — ${waarde.titel}`).tekst,
         versie,
         status: { documentstatus: waarde.status, bronstatus: "actief", actueel: !["geannuleerd", "heropend"].includes(waarde.status) },
         locator: {},
         passage,
+        gerenderdeTekens: passage.length + (items.length > 0 ? 2 : 0),
         waarde,
       });
     }
@@ -351,7 +443,13 @@ export async function leesBesluitEvidence(
       actueleVersies.set(ref, { beschikbaar: Boolean(actueel && versie.waarde), documentIdentiteit, passageIdentiteit, versie });
     }
     const procesPerRef = new Map(rows.map((r, i) => [items[i].ref, r.procedure_id ?? null]));
-    if (!await toetsMetCentralePoort(opdracht.context, items, actueleVersies, procesPerRef)) {
+    const toelatingsContext: RetrievalContext = {
+      ...opdracht.context,
+      // Procedureselectie kent de concrete Decision Object-refs pas na de
+      // server/RLS-query. Bind de centrale poort alsnog aan exact die set.
+      scope: { ...opdracht.context.scope, documentIds: rows.map((r) => r.id) },
+    };
+    if (!await toetsMetCentralePoort(toelatingsContext, items, actueleVersies, procesPerRef)) {
       return geweigerd(opdracht, "besluitregistratie", gevraagd, "onvolledig");
     }
     return {
@@ -361,7 +459,7 @@ export async function leesBesluitEvidence(
         correlation_id: opdracht.context.correlationId, soort: "besluitregistratie", gevraagd,
         toegelaten: items.length, gerenderde_tekens: tekens,
         limiet: opdracht.maxGerenderdeTekens, afgekapt: false,
-        ...piiAudit(items.map((item) => item.passage)),
+        ...piiAudit(items.flatMap((item) => [item.titel, item.passage])),
         versies: {
           sterk: items.filter((item) => item.versie.soort === "hash").length,
           gedegradeerd: items.filter((item) => item.versie.soort === "status-datum").length,
@@ -388,7 +486,7 @@ export interface SemantischeEvidenceWaarde {
 
 interface SemanticRij {
   id: string;
-  fonds_id: string;
+  fonds_id: string | null;
   document_id: string;
   extraction_run_id: string;
   type: string;
@@ -412,9 +510,75 @@ interface DocumentVersieRij {
   bronstatus: string | null;
   actief: boolean | null;
   titel: string | null;
+  geldig_vanaf: string | null;
+  geldig_tot: string | null;
+  volgende_review: string | null;
 }
 
 const SEMANTIC_SELECT = "id, fonds_id, document_id, extraction_run_id, type, value_num, value_date, value_text, value_raw, value_unit, page, evidence, concepts!inner(key)";
+const DOCUMENT_VERSIE_SELECT = "id, fonds_id, bibliotheek, bestand_hash, documentdatum, status, bronstatus, actief, titel, geldig_vanaf, geldig_tot, volgende_review";
+
+function ruweSemantischeWaarde(r: SemanticRij): SemantischeEvidenceWaarde | null {
+  if (!r.concepts?.key) return null;
+  return {
+    conceptSleutel: r.concepts.key,
+    type: r.type,
+    valueNum: r.value_num,
+    valueDate: r.value_date,
+    valueText: r.value_text,
+    valueRaw: r.value_raw,
+    valueUnit: r.value_unit,
+    page: r.page,
+    evidence: r.evidence,
+  };
+}
+
+function neutraliseerSemantischeWaarde(waarde: SemantischeEvidenceWaarde): SemantischeEvidenceWaarde {
+  return {
+    ...waarde,
+    conceptSleutel: neutraliseerBrontekst(waarde.conceptSleutel).tekst,
+    type: neutraliseerBrontekst(waarde.type).tekst,
+    valueText: neutraliseerVeld(waarde.valueText),
+    valueRaw: neutraliseerBrontekst(waarde.valueRaw).tekst,
+    valueUnit: neutraliseerVeld(waarde.valueUnit),
+    evidence: neutraliseerBrontekst(waarde.evidence).tekst,
+  };
+}
+
+function normaliseerSemantischeSet(rows: SemanticRij[]): {
+  rows: SemanticRij[];
+  runId: string;
+  ruweWaarden: SemantischeEvidenceWaarde[];
+} | null {
+  if (rows.length === 0) return { rows: [], runId: "", ruweWaarden: [] };
+  const runIds = new Set(rows.map((r) => r.extraction_run_id));
+  if (runIds.size !== 1 || [...runIds][0].length === 0) return null;
+  const gesorteerd = [...rows].sort((a, b) => {
+    const ak = a.concepts?.key ?? "";
+    const bk = b.concepts?.key ?? "";
+    return ak.localeCompare(bk) || a.type.localeCompare(b.type);
+  });
+  const sleutels = gesorteerd.map((r) => r.concepts?.key ?? "");
+  if (sleutels.some((k) => k.length === 0) || new Set(sleutels).size !== sleutels.length) return null;
+  const ruweWaarden = gesorteerd.map(ruweSemantischeWaarde);
+  if (ruweWaarden.some((v) => v === null)) return null;
+  return { rows: gesorteerd, runId: [...runIds][0], ruweWaarden: ruweWaarden as SemantischeEvidenceWaarde[] };
+}
+
+function renderSemantischeWaarde(titel: string, waarde: SemantischeEvidenceWaarde): string {
+  return [
+    `Semantische evidence — ${titel}`,
+    `Concept: ${waarde.conceptSleutel}`,
+    `Type: ${waarde.type}`,
+    `Waarde: ${waarde.valueRaw}`,
+    `Tekstwaarde: ${waarde.valueText ?? "—"}`,
+    `Getal: ${waarde.valueNum ?? "—"}`,
+    `Datum: ${waarde.valueDate ?? "—"}`,
+    `Eenheid: ${waarde.valueUnit ?? "—"}`,
+    `Pagina: ${waarde.page ?? "—"}`,
+    `Onderbouwing: ${waarde.evidence}`,
+  ].join("\n");
+}
 
 export async function leesSemantischeEvidence(
   supabase: SupabaseClient,
@@ -422,16 +586,29 @@ export async function leesSemantischeEvidence(
   privateDocumentRef: string
 ): Promise<EvidenceUitkomst<SemantischeEvidenceWaarde>> {
   const max = Math.min(opdracht.maxItems, MAX_SEMANTISCHE_UNITS);
+  const legeAudit = (): EvidenceUitkomst<SemantischeEvidenceWaarde> => ({
+    status: "compleet",
+    items: [],
+    audit: {
+      correlation_id: opdracht.context.correlationId,
+      soort: "semantische_unit",
+      gevraagd: 1,
+      toegelaten: 0,
+      gerenderde_tekens: 0,
+      limiet: opdracht.maxGerenderdeTekens,
+      afgekapt: false,
+      pii_gedetecteerd: false,
+      versies: { sterk: 0, gedegradeerd: 0 },
+    },
+  });
   try {
     let documentQuery = supabase
       .from("documenten")
-      .select("id, fonds_id, bibliotheek, bestand_hash, documentdatum, status, bronstatus, actief, titel")
-      .eq("id", privateDocumentRef)
-      .eq("fonds_id", opdracht.context.fondsId);
+      .select(DOCUMENT_VERSIE_SELECT)
+      .eq("id", privateDocumentRef);
     let unitsQuery = supabase
       .from("semantic_units")
       .select(SEMANTIC_SELECT)
-      .eq("fonds_id", opdracht.context.fondsId)
       .eq("document_id", privateDocumentRef)
       .order("concept_id", { ascending: true })
       .order("id", { ascending: true })
@@ -444,50 +621,71 @@ export async function leesSemantischeEvidence(
     bewaakNaIO(opdracht.context.signal, documentResult.error ?? unitsResult.error);
     if (documentResult.error || unitsResult.error) return geweigerd(opdracht, "semantische_unit", 1, "providerfout");
     const document = documentResult.data as unknown as DocumentVersieRij | null;
-    const rows = (unitsResult.data ?? []) as unknown as SemanticRij[];
-    if (!document || document.fonds_id !== opdracht.context.fondsId || rows.some((r) => r.fonds_id !== opdracht.context.fondsId || r.document_id !== privateDocumentRef)) {
+    const gelezenRows = (unitsResult.data ?? []) as unknown as SemanticRij[];
+    if (!document || (!isGeneriekDocument(document) && document.fonds_id !== opdracht.context.fondsId)) {
       return geweigerd(opdracht, "semantische_unit", 1, "buiten_scope");
     }
-    if (rows.length > max) return geweigerd(opdracht, "semantische_unit", 1, "afgekapt");
+    const namespace = isGeneriekDocument(document) ? "generiek" : `fonds:${opdracht.context.fondsId}`;
+    const documentIdentiteit = maakDocumentIdentiteit(namespace, privateDocumentRef);
+    const documentScope = opdracht.context.scope?.documentIds;
+    if (!documentScope?.some((ref) => ref === privateDocumentRef || ref === documentIdentiteit)) {
+      return geweigerd(opdracht, "semantische_unit", 1, "buiten_scope");
+    }
+    if (!documentIsActueel(document, opdracht)) return geweigerd(opdracht, "semantische_unit", 1, "onvolledig");
+    if (gelezenRows.length > max) return geweigerd(opdracht, "semantische_unit", 1, "afgekapt");
+    if (isGeneriekDocument(document) && gelezenRows.length === 0) {
+      // semantic_units is tenantgebonden. Een geldige generieke vergelijkbron
+      // valt daarom gecontroleerd door naar het gewone retrieval/LLM-pad.
+      return legeAudit();
+    }
+    if (gelezenRows.some((r) => r.fonds_id !== document.fonds_id || r.document_id !== privateDocumentRef)) {
+      return geweigerd(opdracht, "semantische_unit", 1, "buiten_scope");
+    }
+    const set = normaliseerSemantischeSet(gelezenRows);
+    if (!set) return geweigerd(opdracht, "semantische_unit", 1, "onvolledig");
+    const rows = set.rows;
     const gecontroleerdOp = new Date().toISOString();
-    const documentIdentiteit = maakDocumentIdentiteit(`fonds:${opdracht.context.fondsId}`, privateDocumentRef);
+    const setHash = hash(set.ruweWaarden);
+    const setVersie = versieVoor(
+      privateDocumentRef,
+      `${set.runId}:${setHash}`,
+      document.bestand_hash,
+      document.documentdatum,
+      gecontroleerdOp
+    );
+    if (!setVersie.waarde || setVersie.soort !== "hash") {
+      return geweigerd(opdracht, "semantische_unit", 1, "onvolledig");
+    }
     const items: EvidenceItem<SemantischeEvidenceWaarde>[] = [];
+    const gerenderdeBlokken: string[] = [];
     let tekens = 0;
-    for (const r of rows) {
-      if (!r.concepts?.key) return geweigerd(opdracht, "semantische_unit", 1, "onvolledig");
-      const waarde: SemantischeEvidenceWaarde = {
-        conceptSleutel: r.concepts.key,
-        type: r.type,
-        valueNum: r.value_num,
-        valueDate: r.value_date,
-        valueText: r.value_text,
-        valueRaw: r.value_raw,
-        valueUnit: r.value_unit,
-        page: r.page,
-        evidence: r.evidence,
-      };
-      const versie = versieVoor(
-        privateDocumentRef,
-        `${r.extraction_run_id}:${hash(waarde)}`,
-        document.bestand_hash,
-        document.documentdatum,
-        gecontroleerdOp
-      );
-      if (!versie.waarde || versie.soort !== "hash") return geweigerd(opdracht, "semantische_unit", 1, "onvolledig");
-      const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, `semantic-unit:${r.id}`);
-      tekens += r.evidence.length;
+    for (const [index, r] of rows.entries()) {
+      const waarde = neutraliseerSemantischeWaarde(set.ruweWaarden[index]);
+      const titel = neutraliseerBrontekst(document.titel ?? "Document").tekst;
+      const gerenderd = renderSemantischeWaarde(titel, waarde);
+      tekens += gerenderd.length + (items.length > 0 ? 2 : 0);
+      gerenderdeBlokken.push(gerenderd);
+      // De passage-identiteit is domeingedefinieerd op conceptsleutel; de
+      // willekeurige semantic_units.id is uitsluitend een opslagdetail.
+      const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, `semantic-unit:${waarde.conceptSleutel}`);
       items.push({
         soort: "semantische_unit",
         ref: passageIdentiteit,
         documentIdentiteit,
         passageIdentiteit,
-        citationId: maakCitationId(documentIdentiteit, passageIdentiteit, versie.soort, versie.waarde),
-        bronsoort: "fonds",
-        titel: document.titel ?? "Document",
-        versie,
-        status: { documentstatus: document.status, bronstatus: document.bronstatus, actueel: document.actief !== false },
+        citationId: maakCitationId(documentIdentiteit, passageIdentiteit, setVersie.soort, setVersie.waarde),
+        bronsoort: isGeneriekDocument(document) ? "generiek" : "fonds",
+        titel,
+        versie: setVersie,
+        status: {
+          documentstatus: document.status,
+          bronstatus: document.bronstatus,
+          geldigTot: document.geldig_tot,
+          actueel: true,
+        },
         locator: { pagina: r.page },
         passage: r.evidence,
+        gerenderdeTekens: gerenderd.length + (items.length > 0 ? 2 : 0),
         waarde,
       });
     }
@@ -497,17 +695,15 @@ export async function leesSemantischeEvidence(
     // kan daardoor nooit met de oude evidence doorlopen.
     let v5DocumentQuery = supabase
       .from("documenten")
-      .select("id, fonds_id, bibliotheek, bestand_hash, documentdatum, status, bronstatus, actief, titel")
-      .eq("id", privateDocumentRef)
-      .eq("fonds_id", opdracht.context.fondsId);
+      .select(DOCUMENT_VERSIE_SELECT)
+      .eq("id", privateDocumentRef);
     let v5UnitsQuery = supabase
       .from("semantic_units")
       .select(SEMANTIC_SELECT)
-      .eq("fonds_id", opdracht.context.fondsId)
       .eq("document_id", privateDocumentRef)
-      .in("id", rows.map((r) => r.id))
       .order("concept_id", { ascending: true })
-      .order("id", { ascending: true });
+      .order("id", { ascending: true })
+      .limit(max + 1);
     if (opdracht.context.signal) {
       v5DocumentQuery = v5DocumentQuery.abortSignal(opdracht.context.signal);
       v5UnitsQuery = v5UnitsQuery.abortSignal(opdracht.context.signal);
@@ -516,38 +712,36 @@ export async function leesSemantischeEvidence(
     bewaakNaIO(opdracht.context.signal, v5DocumentResult.error ?? v5UnitsResult.error);
     if (v5DocumentResult.error || v5UnitsResult.error) return geweigerd(opdracht, "semantische_unit", 1, "providerfout");
     const v5Document = v5DocumentResult.data as unknown as DocumentVersieRij | null;
-    const v5PerId = new Map(((v5UnitsResult.data ?? []) as unknown as SemanticRij[]).map((r) => [r.id, r]));
+    const v5Rows = (v5UnitsResult.data ?? []) as unknown as SemanticRij[];
+    const v5Set = normaliseerSemantischeSet(v5Rows);
+    const v5DocumentIdentiteit = v5Document
+      ? maakDocumentIdentiteit(isGeneriekDocument(v5Document) ? "generiek" : `fonds:${opdracht.context.fondsId}`, privateDocumentRef)
+      : null;
+    const v5Geldig = Boolean(
+      v5Document
+      && v5Set
+      && v5Rows.length <= max
+      && documentIsActueel(v5Document, opdracht)
+      && v5DocumentIdentiteit === documentIdentiteit
+      && v5Set.runId === set.runId
+      && hash(v5Set.ruweWaarden) === setHash
+    );
+    const v5Versie = v5Geldig && v5Document && v5Set
+      ? versieVoor(
+          privateDocumentRef,
+          `${v5Set.runId}:${hash(v5Set.ruweWaarden)}`,
+          v5Document.bestand_hash,
+          v5Document.documentdatum,
+          gecontroleerdOp
+        )
+      : { soort: "onbekend" as const, waarde: null, gecontroleerdOp };
     const actueleVersies = new Map<string, ActueleVersiestand>();
-    for (const [index, r] of rows.entries()) {
-      const actueel = v5PerId.get(r.id);
-      const ref = items[index].ref;
-      if (!actueel?.concepts?.key || !v5Document) {
-        actueleVersies.set(ref, { beschikbaar: false, versie: { soort: "onbekend", waarde: null } });
-        continue;
-      }
-      const actueleWaarde: SemantischeEvidenceWaarde = {
-        conceptSleutel: actueel.concepts.key,
-        type: actueel.type,
-        valueNum: actueel.value_num,
-        valueDate: actueel.value_date,
-        valueText: actueel.value_text,
-        valueRaw: actueel.value_raw,
-        valueUnit: actueel.value_unit,
-        page: actueel.page,
-        evidence: actueel.evidence,
-      };
-      const versie = versieVoor(
-        privateDocumentRef,
-        `${actueel.extraction_run_id}:${hash(actueleWaarde)}`,
-        v5Document.bestand_hash,
-        v5Document.documentdatum,
-        gecontroleerdOp
-      );
-      actueleVersies.set(ref, {
-        beschikbaar: versie.soort === "hash" && Boolean(versie.waarde),
+    for (const item of items) {
+      actueleVersies.set(item.ref, {
+        beschikbaar: v5Versie.soort === "hash" && v5Versie.waarde === setVersie.waarde,
         documentIdentiteit,
-        passageIdentiteit: ref,
-        versie: { soort: versie.soort, waarde: versie.waarde },
+        passageIdentiteit: item.passageIdentiteit,
+        versie: { soort: v5Versie.soort, waarde: v5Versie.waarde },
       });
     }
     if (!await toetsMetCentralePoort(opdracht.context, items, actueleVersies)) {
@@ -560,7 +754,7 @@ export async function leesSemantischeEvidence(
         correlation_id: opdracht.context.correlationId, soort: "semantische_unit", gevraagd: 1,
         toegelaten: items.length, gerenderde_tekens: tekens,
         limiet: opdracht.maxGerenderdeTekens, afgekapt: false,
-        ...piiAudit(items.map((item) => item.passage)),
+        ...piiAudit(gerenderdeBlokken),
         versies: { sterk: items.length, gedegradeerd: 0 },
       },
     };

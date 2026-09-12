@@ -15,6 +15,10 @@
 
 import type { createServerSupabase } from "@/core/lib/supabase-server";
 import type { RetrievalMeta } from "@/core/lib/rag";
+import type { RetrievalContext } from "@/core/lib/retrieval/contract";
+import { bewaakNaIO } from "@/core/lib/retrieval/afbreken";
+import { isAfbreking } from "@/core/lib/retrieval/afbreken";
+import { leesModelcontext } from "@/core/lib/retrieval/modelcontext-reader";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerSupabase>>;
 
@@ -47,17 +51,21 @@ function tekstOfNull(v: unknown): string | null {
 // Haalt het profiel voor één organisatie op via fonds_id (1-op-1). Retourneert
 // null als er geen rij is. "Leeg profiel" (rij bestaat, alles null) bepaalt de
 // blokbouw via bouwOrganisatieprofielBlok().
-export async function haalOrganisatieprofiel(
+async function haalOrganisatieprofielProvider(
   supabase: SupabaseClient,
-  fondsId: string
+  fondsId: string,
+  context?: RetrievalContext
 ): Promise<Organisatieprofiel | null> {
-  const { data: p } = await supabase
+  let query = supabase
     .from("organisatie_profielen")
     .select(
       "organisatietype, uitvoerende_partijen, omvang, kernfeiten, missie, visie, strategische_speerpunten, risicohouding, peildatum"
     )
-    .eq("fonds_id", fondsId)
-    .single();
+    .eq("fonds_id", fondsId);
+  if (context?.signal) query = query.abortSignal(context.signal);
+  const { data: p, error } = await query.single();
+  bewaakNaIO(context?.signal, error);
+  if (error) throw error;
   if (!p) return null;
 
   return {
@@ -71,6 +79,27 @@ export async function haalOrganisatieprofiel(
     risicohouding: tekstOfNull(p.risicohouding),
     peildatum: tekstOfNull(p.peildatum),
   };
+}
+
+export async function haalOrganisatieprofiel(
+  supabase: SupabaseClient,
+  fondsId: string,
+  context?: RetrievalContext
+): Promise<Organisatieprofiel | null> {
+  if (!context) return haalOrganisatieprofielProvider(supabase, fondsId);
+  const rows = await leesModelcontext({
+    context, soort: "organisatie", scope: { fondsId }, maxItems: 1,
+    lees: async () => {
+      try {
+        const waarde = await haalOrganisatieprofielProvider(supabase, fondsId, context);
+        return { data: waarde ? [{ waarde, fondsId }] : [], error: null };
+      } catch (error) {
+        if (isAfbreking(error)) throw error;
+        return { data: [], error };
+      }
+    },
+  });
+  return rows[0] ?? null;
 }
 
 // ── Hulpfuncties ─────────────────────────────────────────────────────────────
@@ -174,9 +203,10 @@ GEBRUIK:
 // 'actief' (blok !== null) of 'geen-profiel' (null).
 export async function bouwOrganisatieprofiel(
   supabase: SupabaseClient,
-  fondsId: string
+  fondsId: string,
+  context?: RetrievalContext
 ): Promise<{ tekst: string; aspecten: OrganisatieprofielAspecten } | null> {
-  const p = await haalOrganisatieprofiel(supabase, fondsId);
+  const p = await haalOrganisatieprofiel(supabase, fondsId, context);
   if (!p) return null;
   return bouwOrganisatieprofielBlok(p);
 }

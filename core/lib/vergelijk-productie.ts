@@ -25,6 +25,7 @@ import { maakDocumentIdentiteit } from "./retrieval/identiteit";
 import { leesSemantischeEvidence, type SemantischeEvidenceWaarde } from "./retrieval/supabase-evidence";
 import type { EvidenceAudit, EvidenceItem } from "./retrieval/evidence-contract";
 import { bouwBronfragment } from "./bronfragment";
+import { selecteerGebruikteEvidence } from "./vergelijk-audit-core";
 import { citaatOpdracht, maakVergelijkSpoor } from "./retrieval/productiepaden-core";
 import type {
   ConceptLite,
@@ -59,6 +60,7 @@ export const VERGELIJK_MODEL = AI_MODEL;
 
 const MAX_PASSAGES_PER_ZIJDE = 4;
 const MAX_EXTRA_DIMENSIES = 6;
+const MAX_VERGELIJK_AUDITBRONNEN = 1000;
 
 interface VergelijkRetrieval {
   adapter: RetrievalAdapter;
@@ -83,7 +85,8 @@ interface GeregistreerdePoging {
 export class VergelijkAuditVerzamelaar {
   private readonly pogingen = new Map<string, GeregistreerdePoging>();
   private readonly gestructureerdeEvidence = new Map<string, EvidenceItem<SemantischeEvidenceWaarde>>();
-  private readonly evidenceAudits: EvidenceAudit[] = [];
+  private readonly evidenceAuditPerRef = new Map<string, EvidenceAudit>();
+  private readonly gebruikteEvidenceRefs = new Set<string>();
 
   constructor(private readonly correlationId: string) {}
 
@@ -127,8 +130,14 @@ export class VergelijkAuditVerzamelaar {
     items: readonly EvidenceItem<SemantischeEvidenceWaarde>[],
     audit: EvidenceAudit
   ): void {
-    for (const item of items) this.gestructureerdeEvidence.set(item.ref, item);
-    this.evidenceAudits.push(audit);
+    for (const item of items) {
+      this.gestructureerdeEvidence.set(item.ref, item);
+      this.evidenceAuditPerRef.set(item.ref, audit);
+    }
+  }
+
+  markeerGebruikteEvidence(refs: readonly string[]): void {
+    for (const ref of refs) if (this.gestructureerdeEvidence.has(ref)) this.gebruikteEvidenceRefs.add(ref);
   }
 
   snapshot(): { bronnen: VergelijkBron[]; meta: VergelijkRetrievalMeta } {
@@ -157,7 +166,10 @@ export class VergelijkAuditVerzamelaar {
       }
     }
 
-    for (const item of [...this.gestructureerdeEvidence.values()].sort((a, b) => a.ref.localeCompare(b.ref))) {
+    const gebruikteEvidence = selecteerGebruikteEvidence(
+      [...this.gestructureerdeEvidence.values()], this.gebruikteEvidenceRefs, MAX_VERGELIJK_AUDITBRONNEN
+    );
+    for (const item of gebruikteEvidence) {
       if (uniek.has(item.ref)) continue;
       uniek.set(item.ref, {
         passage_ref: item.ref,
@@ -179,13 +191,25 @@ export class VergelijkAuditVerzamelaar {
       });
     }
 
+    if (uniek.size > MAX_VERGELIJK_AUDITBRONNEN) throw new Error("vergelijk_bronnen_afgekapt");
     return {
       bronnen: [...uniek.values()].map((bron, index) => ({ citation_id: index + 1, ...bron })),
       meta: {
         correlation_id: this.correlationId,
         pogingen: geordend.map((p) => p.poging),
         ...(geweigerd > 0 ? { toelating: { geweigerd, categorieen, gronden } } : {}),
-        ...(this.evidenceAudits.length > 0 ? { evidence: [...this.evidenceAudits] } : {}),
+        ...(gebruikteEvidence.length > 0 ? {
+          evidence: gebruikteEvidence.map((item) => {
+            const basis = this.evidenceAuditPerRef.get(item.ref)!;
+            return {
+              ...basis,
+              gevraagd: 1,
+              toegelaten: 1,
+              gerenderde_tekens: item.gerenderdeTekens ?? item.passage.length,
+              versies: { sterk: item.versie.soort === "hash" ? 1 : 0, gedegradeerd: item.versie.soort === "status-datum" ? 1 : 0 },
+            };
+          }),
+        } : {}),
       },
     };
   }
@@ -544,6 +568,7 @@ export function productieDeps(ctx: {
     vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(gw, { ...input, signal: ctx.retrieval.context.signal }),
     persisteer: (inv) => persisteer(supabase, inv, ctx.retrieval.context.signal),
     retrievalAudit: () => audit.snapshot(),
+    markeerGebruikteEvidence: (refs) => audit.markeerGebruikteEvidence(refs),
     deterministischVertrouwd: deterministischVertrouwd(),
   };
 }

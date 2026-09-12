@@ -5,6 +5,7 @@
 import type { RetrievalContext } from "./contract";
 import type { ModelcontextAudit, ModelcontextBlok } from "./evidence-contract";
 import { neutraliseerBrontekst } from "../bron-afbakening";
+import { bevatPersoonsgegevens } from "../pii-gate";
 
 export interface ModelcontextOpdracht {
   context: RetrievalContext;
@@ -19,12 +20,16 @@ export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): Modelconte
   const neutraal = neutraliseerBrontekst(opdracht.tekst);
   const afgekapt = neutraal.tekst.length > limiet;
   const tekst = afgekapt ? neutraal.tekst.slice(0, limiet) : neutraal.tekst;
+  const piiAnalyse = bevatPersoonsgegevens(tekst);
+  const pii = piiAnalyse.bevatPii
+    ? (piiAnalyse.soorten.some((soort) => /bsn|medisch|gezondheid/i.test(soort)) ? "bijzonder" : "persoonsgebonden")
+    : opdracht.pii;
   return {
     tekst,
     audit: {
       correlation_id: opdracht.context.correlationId,
       soort: opdracht.soort,
-      pii: opdracht.pii,
+      pii,
       gerenderde_tekens: tekst.length,
       limiet,
       afgekapt,

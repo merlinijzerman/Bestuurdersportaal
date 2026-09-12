@@ -9,6 +9,10 @@ nog niet gepusht, gemerged of uitgerold. De contracten uit #367, #369 en #370 zi
 
 ## 0. Implementatie-uitkomst
 
+De eerste implementatieronde wijzigde ten opzichte van implementatiebasis `50c54ed7093`
+exact **23 bestanden**. Dat is de gecontroleerde pre-reviewtelling; latere reviewfixes
+worden daar niet met terugwerkende kracht in verstopt.
+
 - De vijf evidencelezingen buiten de retrievalkern zijn gemigreerd. De transitieve census meldt
   nul evidencelezingen buiten `core/lib/rag.ts` en `core/lib/retrieval/`.
 - Chunkpresentie is contentvrij, server-scoped en fail-closed. Maximaal 2.000 documentrefs en
@@ -23,9 +27,11 @@ nog niet gepusht, gemerged of uitgerold. De contracten uit #367, #369 en #370 zi
 - `semantic_units` worden deterministisch geordend, maximaal 500 per document en maximaal
   60.000 werkelijk gebruikte evidence-tekens. Extractierun, canonieke unitinhoud en documenthash
   vormen de sterke versie; findings, bronaudit en persistentie behouden de opaque passagebinding.
-- De 26 overige modelcontextlezingen blijven expliciet **modelcontext**, geen evidence. Hun
-  gerenderde blokken lopen via één typed servercontextcontract met PII-klasse, neutralisatie,
-  blok- en combinatiecaps en een afzonderlijk inhoudsvrij auditspoor.
+- De 26 overige modelcontextlezingen blijven expliciet **modelcontext**, geen evidence. De
+  chatlezingen en de typed profiel-, organisatie- en portaalreaders lopen uitvoerend door één
+  server-scoped readergrens met samengestelde cancellation/deadline, providerfout, status- en
+  geldigheidscontrole, rijcaps, PII over werkelijk gerenderde tekst, neutralisatie, blok- en
+  combinatiecaps en een afzonderlijk inhoudsvrij auditspoor.
 - `chunksVoor()` is bewust nog niet verwijderd: de chatroute heeft aantoonbaar nog precies één
   goedgekeurde downstreamconsumer voor bestaande `DocumentChunk`-logica. De providerprivate
   brug staat niet in het publieke retrievalcontract.
@@ -34,7 +40,7 @@ Geen live Microsoft-/Graph-wiring en geen database-migratie zijn toegevoegd.
 
 ## 1. Huidige census
 
-De bestaande transitieve antwoordpadscan bereikt 126 bestanden en 46 unieke geclassificeerde
+De actuele transitieve antwoordpadscan bereikt 132 bestanden en 46 unieke geclassificeerde
 `bestand::tabel`-lezingen: 8 evidence, 26 modelcontext, 11 configuratie en 3 audit (48
 klassetoewijzingen, doordat twee lezingen in meer dan één klasse vallen). Drie evidencelezingen
 zitten in de centrale retrievalimplementatie: twee in `core/lib/rag.ts` en de door #367

@@ -6,8 +6,10 @@
 > preflight of adapterhook gebracht. Opaque document-/passage-/citation-identiteiten, centrale
 > toelating en V5, harde caps zonder gedeeltelijke context, cancellation, cross-tenantchecks en
 > inhoudsvrije evidence-audit zijn geborgd. De 26 overige modelcontextlezingen blijven apart van
-> evidence en worden via één server-scoped contract geneutraliseerd, werkelijk begrensd en met
-> PII-klasse geaudit. `chunksVoor()` blijft als één providerprivate migratiebrug bestaan omdat de
+> evidence en lopen via één uitvoerende typed readergrens: serverfonds/-actor/-objectscope,
+> status/geldigheid, providerfout, samengestelde requestdeadline/cancellation en rijcaps worden
+> vóór vrijgave gecontroleerd; werkelijk gerenderde tekst wordt geneutraliseerd, begrensd en op
+> PII geaudit. `chunksVoor()` blijft als één providerprivate migratiebrug bestaan omdat de
 > chatroute nog één goedgekeurde downstreamconsumer heeft. Geen Graph-wiring of migratie; branch
 > `codex/368-evidencelezingen-implementatie` is nog niet gepusht/gemerged. Zie
 > `RETRIEVAL-T2-4-PLANREVIEW.md`.

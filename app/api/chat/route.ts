@@ -15,12 +15,13 @@ import {
 import { rondAfStrikt } from "@/core/lib/ai-actie-afronding";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
-import { timeoutUitConfig, maakAfbreekgrendel, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
+import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, bewaakNaIO, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import { controleerChunkPresentie, leesBesluitEvidence } from "@/core/lib/retrieval/supabase-evidence";
 import { bouwModelcontextBlok, combineerModelcontext } from "@/core/lib/retrieval/modelcontext";
+import { leesModelcontext } from "@/core/lib/retrieval/modelcontext-reader";
 import type { EvidenceAudit, ModelcontextAudit } from "@/core/lib/retrieval/evidence-contract";
 import { maakCitationId, maakDocumentIdentiteit } from "@/core/lib/retrieval/identiteit";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
@@ -548,7 +549,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       .from("profielen")
       // T4 — het geldende wettelijk regime van het fonds meelezen (fonds-niveau,
       // geen PII). Stuurt de regime-demotie in de retrieval (RetrievalFilters).
-      .select("naam, rol, fonds_id, fondsen(naam, primair_wettelijk_regime)")
+      .select("rol, fonds_id, fondsen(primair_wettelijk_regime)")
       .eq("id", ctx.gebruikerId)
       .single();
 
@@ -585,6 +586,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // nooit. fondsId is server-side afgeleid (profiel), nooit uit de body.
     const moduleWeigering = await weigerAlsModuleUit(fondsId, "ai");
     if (moduleWeigering) return moduleWeigering;
+
+    // Requestbrede grens voor alle evidence én modelcontext, ook lezingen die
+    // vóór quotumreservering nodig zijn om een vervolgactie te valideren.
+    const contextSignal = AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_DEFAULT_MS)]);
+    const evidenceContext = {
+      fondsId,
+      actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
+      taaktype: "chat_generatie" as const,
+      bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+      correlationId: ctx.requestId,
+      verzoekStartOp: ctx.verzoekStartOp,
+      signal: contextSignal,
+    };
 
     // M9 — per-fonds rollout. Alle drie default uit; afhankelijke functies
     // kunnen nooit buiten de hoofdrouter om activeren.
@@ -623,20 +637,27 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           { status: 400 }
         );
       }
-      const [{ data: vorigSpoor }, { data: vorigeInhoud }] = await Promise.all([
+      const [{ data: vorigSpoor, error: vorigSpoorError }, vorigeInhoudRijen] = await Promise.all([
         supabase
           .from("governance_log")
           .select("id, gebruiker_id, fonds_id, retrieval_meta")
           .eq("id", vorigId)
           .eq("gebruiker_id", ctx.gebruikerId)
           .eq("fonds_id", fondsId)
+          .abortSignal(contextSignal)
           .maybeSingle(),
-        supabase
-          .from("governance_log_inhoud")
-          .select("log_id, vraag")
-          .eq("log_id", vorigId)
-          .maybeSingle(),
+        leesModelcontext({
+          context: evidenceContext, soort: "gespreksdraad", scope: { fondsId, actorId: ctx.gebruikerId, privateRefs: [vorigId] }, maxItems: 1,
+          lees: async (signal) => {
+            const { data, error } = await supabase.from("governance_log_inhoud")
+              .select("log_id, vraag").eq("log_id", vorigId).abortSignal(signal).maybeSingle();
+            return { data: data ? [{ waarde: data, privateRef: data.log_id as string, actorId: ctx.gebruikerId }] : [], error };
+          },
+        }),
       ]);
+      bewaakNaIO(contextSignal, vorigSpoorError);
+      if (vorigSpoorError) throw vorigSpoorError;
+      const vorigeInhoud = vorigeInhoudRijen[0] ?? null;
       const vorigMeta =
         vorigSpoor?.retrieval_meta && typeof vorigSpoor.retrieval_meta === "object"
           ? (vorigSpoor.retrieval_meta as Record<string, unknown>)
@@ -717,15 +738,18 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       correlatieId: ctx.requestId,
       label: "chat.POST",
     };
-    const evidenceContext = {
-      fondsId,
-      actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
-      taaktype: "chat_generatie" as const,
-      bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
-      correlationId: ctx.requestId,
-      verzoekStartOp: ctx.verzoekStartOp,
-      signal: req.signal,
-    };
+    // De eerste profielquery hierboven is autorisatie/configuratie. Naam en
+    // fondsnaam die werkelijk promptcontext worden, worden onder de uitvoerende
+    // modelcontextgrens opnieuw server-scoped gelezen.
+    const [contextProfiel] = await leesModelcontext({
+      context: evidenceContext, soort: "profiel", scope: { fondsId, actorId: ctx.gebruikerId, privateRefs: [ctx.gebruikerId] }, maxItems: 1,
+      lees: async (signal) => {
+        const { data, error } = await supabase.from("profielen")
+          .select("id, naam, fonds_id, fondsen(naam)")
+          .eq("id", ctx.gebruikerId).eq("fonds_id", fondsId).abortSignal(signal).maybeSingle();
+        return { data: data ? [{ waarde: data, fondsId: data.fonds_id as string, actorId: data.id as string, privateRef: data.id as string }] : [], error };
+      },
+    });
     const evidenceAudits: EvidenceAudit[] = [];
     const modelcontextAudits: ModelcontextAudit[] = [];
     const begrensModelcontext = (
@@ -774,11 +798,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         | RetrievalFilters["primairRegime"]
         | undefined;
 
-    const volledigeNaam = profiel?.naam || ctx.email || "een bestuurslid";
+    const volledigeNaam = contextProfiel?.naam || ctx.email || "een bestuurslid";
     const voornaam = volledigeNaam.split(" ")[0] || volledigeNaam;
     const rolLabel = ROL_LABEL[profiel?.rol || "bestuurder"] || "bestuurslid";
-    const fondsnaam =
-      fondsenObj?.naam || process.env.NEXT_PUBLIC_FONDS_NAAM || "het pensioenfonds";
+    const contextFondsenRel = contextProfiel?.fondsen as { naam?: string | null } | { naam?: string | null }[] | null | undefined;
+    const contextFonds = Array.isArray(contextFondsenRel) ? contextFondsenRel[0] : contextFondsenRel;
+    const fondsnaam = contextFonds?.naam || process.env.NEXT_PUBLIC_FONDS_NAAM || "het pensioenfonds";
 
     const ctxBestuurder: BestuurderContext = {
       voornaam,
@@ -798,7 +823,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     if (algemeenPerspectief) {
       profielsturingStatus = "uitgeschakeld";
     } else {
-      const sturing = await bouwProfielsturing(supabase, ctx.gebruikerId);
+      const sturing = await bouwProfielsturing(supabase, ctx.gebruikerId, evidenceContext);
       if (sturing) {
         ctxBestuurder.profielsturing = begrensModelcontext(
           "profielsturing", sturing.tekst, 4_000, "persoonsgebonden"
@@ -821,7 +846,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       | NonNullable<RetrievalMeta["organisatieprofiel_aspecten"]>
       | undefined;
     if (profiel?.fonds_id) {
-      const orgProfiel = await bouwOrganisatieprofiel(supabase, profiel.fonds_id);
+      const orgProfiel = await bouwOrganisatieprofiel(supabase, profiel.fonds_id, evidenceContext);
       if (orgProfiel) {
         ctxBestuurder.organisatieprofiel = begrensModelcontext(
           "organisatieprofiel", orgProfiel.tekst, 6_000, "geen"
@@ -846,11 +871,24 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       typeof body.agendapunt_context?.id === "string" ? body.agendapunt_context.id : "";
     let agendapuntSeed: AgendapuntSeed | null = null;
     if (agendapuntIdRaw) {
-      const { data: apRow } = await supabase
-        .from("agendapunten")
-        .select("id, titel, beschrijving")
-        .eq("id", agendapuntIdRaw)
-        .maybeSingle();
+      const [apRow] = await leesModelcontext({
+        context: evidenceContext,
+        soort: "agendapunt",
+        scope: { fondsId, actorId: ctx.gebruikerId, privateRefs: [agendapuntIdRaw] },
+        maxItems: 1,
+        lees: async (signal) => {
+          const { data, error } = await supabase
+            .from("agendapunten")
+            .select("id, titel, beschrijving")
+            .eq("id", agendapuntIdRaw)
+            .abortSignal(signal)
+            .maybeSingle();
+          return {
+            data: data ? [{ waarde: data, privateRef: data.id as string }] : [],
+            error,
+          };
+        },
+      });
       if (apRow?.id) {
         agendapuntSeed = {
           id: apRow.id as string,
@@ -869,27 +907,41 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // contextbesef (besluit 0090) — bij een persoonlijke/statusgerichte vraag; bij
     // een zuiver algemene vraag gaat er niets extra's mee (kosten/ruis-afweging).
     const haalModuleContextBlok = async (fid: string): Promise<string> => {
-      const [{ data: risicoRows }, { data: procedureRows }] = await Promise.all([
-        supabase
-          .from("risicos")
-          .select("titel, toelichting, niveau, type_risico, categorie")
-          .eq("fonds_id", fid)
-          .eq("status", "actief")
-          .order("niveau", { ascending: false })
-          .limit(15),
-        supabase
-          .from("procedures")
-          .select("titel, beschrijving, status, template_code")
-          .eq("fonds_id", fid)
-          .neq("status", "afgerond")
-          .order("gestart_op", { ascending: false })
-          .limit(10),
+      const [risicoRows, procedureRows] = await Promise.all([
+        leesModelcontext({
+          context: evidenceContext, soort: "fondsmodules", scope: { fondsId: fid }, maxItems: 15,
+          lees: async (signal) => {
+            const { data, error } = await supabase
+              .from("risicos")
+              .select("fonds_id, titel, toelichting, niveau, type_risico, categorie, status")
+              .eq("fonds_id", fid)
+              .eq("status", "actief")
+              .order("niveau", { ascending: false })
+              .limit(16)
+              .abortSignal(signal);
+            return { data: (data ?? []).map((rij) => ({ waarde: rij, fondsId: rij.fonds_id as string, status: rij.status as string })), error };
+          },
+        }),
+        leesModelcontext({
+          context: evidenceContext, soort: "fondsmodules", scope: { fondsId: fid }, maxItems: 10,
+          lees: async (signal) => {
+            const { data, error } = await supabase
+              .from("procedures")
+              .select("fonds_id, titel, beschrijving, status, template_code")
+              .eq("fonds_id", fid)
+              .neq("status", "afgerond")
+              .order("gestart_op", { ascending: false })
+              .limit(11)
+              .abortSignal(signal);
+            return { data: (data ?? []).map((rij) => ({ waarde: rij, fondsId: rij.fonds_id as string, status: rij.status as string })), error };
+          },
+        }),
       ]);
       const delen: string[] = [];
-      if ((risicoRows?.length ?? 0) > 0) {
+      if (risicoRows.length > 0) {
         delen.push(
           `=== ACTIEVE RISICO'S VAN HET FONDS (context — geen genummerde bron; verwijs bij naam) ===\n` +
-            risicoRows!
+            risicoRows
               .map(
                 (r) =>
                   `- [${String(r.niveau).toUpperCase()}] ${r.titel} (${r.categorie}, ${r.type_risico})${r.toelichting ? ` — ${String(r.toelichting).slice(0, 200)}` : ""}`
@@ -897,10 +949,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               .join("\n")
         );
       }
-      if ((procedureRows?.length ?? 0) > 0) {
+      if (procedureRows.length > 0) {
         delen.push(
           `=== LOPENDE PROCEDURES (context — geen genummerde bron; verwijs bij naam) ===\n` +
-            procedureRows!
+            procedureRows
               .map(
                 (p) =>
                   `- ${p.titel} (${p.template_code}, ${p.status})${p.beschrijving ? ` — ${String(p.beschrijving).slice(0, 200)}` : ""}`
@@ -1059,24 +1111,34 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const titelCap = 5000;
       let titelsetCompleet = true;
       for (let vanaf = 0; vanaf < titelCap; vanaf += titelPagina) {
-        const { data: pagina, error: titelFout } = await supabase
-          .from("documenten")
-          .select("id, titel")
-          .not("actief", "is", false)
-          .eq("geindexeerd", true)
-          .order("id", { ascending: true })
-          .range(vanaf, vanaf + titelPagina - 1);
-        if (titelFout) {
+        let pagina;
+        try {
+          pagina = await leesModelcontext({
+            context: evidenceContext, soort: "documentlabels", scope: { fondsId }, maxItems: titelPagina,
+            lees: async (signal) => {
+              const { data, error } = await supabase.from("documenten")
+                .select("id, titel, fonds_id, status, actief, geldig_vanaf, geldig_tot")
+                .not("actief", "is", false).eq("geindexeerd", true)
+                .order("id", { ascending: true }).range(vanaf, vanaf + titelPagina - 1).abortSignal(signal);
+              return { data: (data ?? []).map((rij) => ({
+                waarde: rij, fondsId: rij.fonds_id as string | null, status: rij.status as string,
+                actief: rij.actief as boolean, geldigVanaf: rij.geldig_vanaf as string | null,
+                geldigTot: rij.geldig_tot as string | null,
+              })), error };
+            },
+          });
+        } catch (error) {
+          if (isAfbreking(error)) throw error;
           titelsetCompleet = false;
           break;
         }
         benoembareRijen.push(
-          ...(pagina ?? []).map((d) => ({
+          ...pagina.map((d) => ({
             id: d.id as string,
             titel: (d.titel as string) || "(zonder titel)",
           }))
         );
-        if ((pagina?.length ?? 0) < titelPagina) break;
+        if (pagina.length < titelPagina) break;
         if (vanaf + titelPagina >= titelCap) titelsetCompleet = false;
       }
       const naamResultaat = resolveerGenoemdDocument(
@@ -1118,10 +1180,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     if (gevraagdeScopeIds.length > 0) {
       // Documentrijen ophalen — RLS beperkt tot eigen fonds (+ generiek). Een
       // vreemd-fonds-id valt buiten deze set en wordt door valideerScope afgewezen.
-      const { data: docRows } = await supabase
-        .from("documenten")
-        .select("id, titel, bron, actief, geindexeerd, gepubliceerd, aangemaakt")
-        .in("id", gevraagdeScopeIds);
+      const docRows = await leesModelcontext({
+        context: evidenceContext, soort: "documentlabels", scope: { fondsId, privateRefs: gevraagdeScopeIds }, maxItems: gevraagdeScopeIds.length,
+        lees: async (signal) => {
+          const { data, error } = await supabase.from("documenten")
+            .select("id, fonds_id, titel, bron, actief, geindexeerd, gepubliceerd, aangemaakt, status, geldig_vanaf, geldig_tot")
+            .in("id", gevraagdeScopeIds).limit(gevraagdeScopeIds.length + 1).abortSignal(signal);
+          return { data: (data ?? []).map((rij) => ({
+            waarde: rij, fondsId: rij.fonds_id as string | null, privateRef: rij.id as string,
+            status: rij.status as string, actief: rij.actief as boolean,
+            geldigVanaf: rij.geldig_vanaf as string | null, geldigTot: rij.geldig_tot as string | null,
+          })), error };
+        },
+      });
 
       // Chunk-presentie per document (is het doorzoekbaar gemaakt?).
       const presentie = await controleerChunkPresentie(supabase, {
@@ -1132,7 +1203,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       evidenceAudits.push(presentie.audit);
       if (presentie.status === "geweigerd") throw new Error("chunk_presentie_onvolledig");
 
-      const gevonden: ScopeDocumentRij[] = (docRows ?? []).map((d) => ({
+      const gevonden: ScopeDocumentRij[] = docRows.map((d) => ({
         id: d.id as string,
         titel: (d.titel as string) ?? "(zonder titel)",
         bron: (d.bron as string) ?? "",
@@ -1191,24 +1262,37 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
 
       if (moduleScope.soort === "risicomatrix") {
         // Fondsbreed: alle risico's (RLS) + de recentste weging-/sluitregels.
-        const { data: risicoRows } = await supabase
-          .from("risicos")
-          .select(
-            "id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering"
-          )
-          .eq("fonds_id", fondsId)
-          .order("niveau", { ascending: false });
-        const risicos = (risicoRows ?? []) as RisicoRij[];
+        const risicos = await leesModelcontext<RisicoRij>({
+          context: evidenceContext, soort: "risicomatrix", scope: { fondsId }, maxItems: 500,
+          lees: async (signal) => {
+            const { data, error } = await supabase
+              .from("risicos")
+              .select("id, fonds_id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering")
+              .eq("fonds_id", fondsId)
+              .order("niveau", { ascending: false })
+              .limit(501)
+              .abortSignal(signal);
+            return { data: (data ?? []).map((rij) => ({ waarde: rij as RisicoRij, fondsId: rij.fonds_id as string })), error };
+          },
+        });
         const titelPerId = new Map(risicos.map((r) => [r.id, r.titel]));
         let logs: RisicoLogRij[] = [];
         if (risicos.length > 0) {
-          const { data: logRows } = await supabase
-            .from("risico_log")
-            .select("risico_id, event_type, payload, actor_naam, tijdstip")
-            .in("risico_id", Array.from(titelPerId.keys()))
-            .order("tijdstip", { ascending: false })
-            .limit(80);
-          logs = (logRows ?? []).map((l) => ({
+          const ids = Array.from(titelPerId.keys());
+          const logRows = await leesModelcontext({
+            context: evidenceContext, soort: "risicomatrix", scope: { fondsId, privateRefs: ids }, maxItems: 80,
+            lees: async (signal) => {
+              const { data, error } = await supabase
+                .from("risico_log")
+                .select("risico_id, event_type, payload, actor_naam, tijdstip")
+                .in("risico_id", ids)
+                .order("tijdstip", { ascending: false })
+                .limit(81)
+                .abortSignal(signal);
+              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.risico_id as string })), error };
+            },
+          });
+          logs = logRows.map((l) => ({
             risico_id: l.risico_id as string,
             risico_titel: titelPerId.get(l.risico_id as string) ?? "risico",
             event_type: l.event_type as string,
@@ -1220,13 +1304,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         moduleScopeBlok = bouwRisicomatrixBlok(risicos, logs);
       } else if (moduleScope.soort === "risico") {
         // Verdieping op één risico. RLS-weigering bij een vreemd-fonds-id.
-        const { data: r } = await supabase
-          .from("risicos")
-          .select(
-            "id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering"
-          )
-          .eq("id", moduleScope.risico_id)
-          .maybeSingle();
+        const [r] = await leesModelcontext({
+          context: evidenceContext, soort: "risico", scope: { fondsId, privateRefs: [moduleScope.risico_id] }, maxItems: 1,
+          lees: async (signal) => {
+            const { data, error } = await supabase
+              .from("risicos")
+              .select("id, fonds_id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering")
+              .eq("id", moduleScope.risico_id)
+              .eq("fonds_id", fondsId)
+              .abortSignal(signal)
+              .maybeSingle();
+            return { data: data ? [{ waarde: data, fondsId: data.fonds_id as string, privateRef: data.id as string }] : [], error };
+          },
+        });
         if (!r?.id) {
           // Manipulatiesignaal (vgl. de body.fonds_id-lijn): een risico-id dat onder
           // RLS niets teruggeeft is ofwel verwijderd ofwel van een ander fonds.
@@ -1239,19 +1329,27 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           );
         }
         const risico = r as RisicoRij;
-        const [{ data: logRows }, { data: maatregelRows }] = await Promise.all([
-          supabase
-            .from("risico_log")
-            .select("risico_id, event_type, payload, actor_naam, tijdstip")
-            .eq("risico_id", risico.id)
-            .order("tijdstip", { ascending: false }),
-          supabase
-            .from("risico_maatregelen")
-            .select("beschrijving, status, verantwoordelijke, volgorde")
-            .eq("risico_id", risico.id)
-            .order("volgorde", { ascending: true }),
+        const [logRows, maatregelRows] = await Promise.all([
+          leesModelcontext({
+            context: evidenceContext, soort: "risico", scope: { fondsId, privateRefs: [risico.id] }, maxItems: 200,
+            lees: async (signal) => {
+              const { data, error } = await supabase.from("risico_log")
+                .select("risico_id, event_type, payload, actor_naam, tijdstip")
+                .eq("risico_id", risico.id).order("tijdstip", { ascending: false }).limit(201).abortSignal(signal);
+              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.risico_id as string })), error };
+            },
+          }),
+          leesModelcontext({
+            context: evidenceContext, soort: "risico", scope: { fondsId, privateRefs: [risico.id] }, maxItems: 200,
+            lees: async (signal) => {
+              const { data, error } = await supabase.from("risico_maatregelen")
+                .select("risico_id, beschrijving, status, verantwoordelijke, volgorde")
+                .eq("risico_id", risico.id).order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
+              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.risico_id as string })), error };
+            },
+          }),
         ]);
-        const logs: RisicoLogRij[] = (logRows ?? []).map((l) => ({
+        const logs: RisicoLogRij[] = logRows.map((l) => ({
           risico_id: l.risico_id as string,
           risico_titel: risico.titel,
           event_type: l.event_type as string,
@@ -1259,18 +1357,24 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           actor_naam: (l.actor_naam as string | null) ?? null,
           tijdstip: (l.tijdstip as string | null) ?? null,
         }));
-        const maatregelen = (maatregelRows ?? []) as MaatregelRij[];
+        const maatregelen = maatregelRows as MaatregelRij[];
         moduleScopeBlok = bouwRisicoBlok(risico, logs, maatregelen);
         moduleScopeSleutel = { risico_id: risico.id };
       } else if (moduleScope.soort === "proces") {
         // Reikwijdte/fase uit het Decision Object + de gekoppelde bewijsstukken.
-        const { data: proc } = await supabase
-          .from("procedures")
-          .select(
-            "id, titel, status, template_code, template_versie, beschrijving, decision_id"
-          )
-          .eq("id", moduleScope.procedure_id)
-          .maybeSingle();
+        const [proc] = await leesModelcontext({
+          context: evidenceContext, soort: "proces", scope: { fondsId, privateRefs: [moduleScope.procedure_id] }, maxItems: 1,
+          lees: async (signal) => {
+            const { data, error } = await supabase
+              .from("procedures")
+              .select("id, fonds_id, titel, status, template_code, template_versie, beschrijving, decision_id")
+              .eq("id", moduleScope.procedure_id)
+              .eq("fonds_id", fondsId)
+              .abortSignal(signal)
+              .maybeSingle();
+            return { data: data ? [{ waarde: data, fondsId: data.fonds_id as string, privateRef: data.id as string, status: data.status as string }] : [], error };
+          },
+        });
         if (!proc?.id) {
           console.warn(
             `[0151] module_scope procedure_id (${moduleScope.procedure_id}) niet gevonden onder RLS — geweigerd (gebruiker ${ctx.gebruikerId}, fonds ${fondsId}).`
@@ -1284,7 +1388,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // selector blijft in de Supabase-adapter; alleen domeinvelden komen terug.
         let decisionRij: DecisionRij | null = null;
         const decisionEvidence = await leesBesluitEvidence(supabase, {
-          context: { ...evidenceContext, scope: { procesId: proc.id as string } },
+          context: {
+            ...evidenceContext,
+            scope: {
+              procesId: proc.id as string,
+              ...(proc.decision_id ? { documentIds: [proc.decision_id as string] } : {}),
+            },
+          },
           maxItems: 1,
           maxGerenderdeTekens: 6000,
         }, proc.decision_id
@@ -1308,18 +1418,21 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         };
 
         // Stappen → huidige stap + stap-ids voor de bewijsstukken.
-        const { data: stapRows } = await supabase
-          .from("procedure_stappen")
-          .select("id, volgorde, naam, beschrijving, status")
-          .eq("procedure_id", proc.id)
-          .order("volgorde", { ascending: true });
-        const stappen = (stapRows ?? []) as {
+        const stappen = await leesModelcontext<{
           id: string;
           volgorde: number;
           naam: string;
           beschrijving: string | null;
           status: string;
-        }[];
+        }>({
+          context: evidenceContext, soort: "proces", scope: { fondsId, privateRefs: [proc.id as string] }, maxItems: 200,
+          lees: async (signal) => {
+            const { data, error } = await supabase.from("procedure_stappen")
+              .select("id, procedure_id, volgorde, naam, beschrijving, status")
+              .eq("procedure_id", proc.id).order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
+            return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.procedure_id as string })), error };
+          },
+        });
         const huidigeStapRij =
           stappen.find((s) => s.status === "actief") ??
           stappen.find((s) => s.status !== "afgerond") ??
@@ -1339,30 +1452,34 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         if (proc.template_code && huidigeStap) {
           // P1b (#166): versie-gefilterd op de gepinde versie; fallback naar
           // code-only als die (kortstondig) null is.
-          let reqQuery = supabase
-            .from("procedure_requirements")
-            .select("label, requirement_type, verplicht, blokkerend")
-            .eq("template_code", proc.template_code as string)
-            .eq("stap_volgorde", huidigeStap.volgorde);
-          if (proc.template_versie) {
-            reqQuery = reqQuery.eq(
-              "template_versie",
-              proc.template_versie as string
-            );
-          }
-          const { data: reqRows } = await reqQuery;
-          requirements = (reqRows ?? []) as RequirementRij[];
+          requirements = await leesModelcontext<RequirementRij>({
+            context: evidenceContext, soort: "proces", scope: { fondsId, privateRefs: [proc.template_code as string] }, maxItems: 200,
+            lees: async (signal) => {
+              let reqQuery = supabase
+                .from("procedure_requirements")
+                .select("template_code, label, requirement_type, verplicht, blokkerend")
+                .eq("template_code", proc.template_code as string)
+                .eq("stap_volgorde", huidigeStap.volgorde);
+              if (proc.template_versie) reqQuery = reqQuery.eq("template_versie", proc.template_versie as string);
+              const { data, error } = await reqQuery.limit(201).abortSignal(signal);
+              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.template_code as string })), error };
+            },
+          });
         }
 
         // Bewijsstukken per stap → document-scope voor de retrieval ([Bron N]).
         const stapIds = stappen.map((s) => s.id);
         let bewijs: BewijsRij[] = [];
         if (stapIds.length > 0) {
-          const { data: bewijsRows } = await supabase
-            .from("procedure_bewijs")
-            .select("document_id, titel, documenttype")
-            .in("stap_id", stapIds);
-          bewijs = (bewijsRows ?? []) as BewijsRij[];
+          bewijs = await leesModelcontext<BewijsRij>({
+            context: evidenceContext, soort: "proces", scope: { fondsId, privateRefs: stapIds }, maxItems: 500,
+            lees: async (signal) => {
+              const { data, error } = await supabase.from("procedure_bewijs")
+                .select("stap_id, document_id, titel, documenttype")
+                .in("stap_id", stapIds).limit(501).abortSignal(signal);
+              return { data: (data ?? []).map((rij) => ({ waarde: rij, privateRef: rij.stap_id as string })), error };
+            },
+          });
         }
         // Alleen de geïndexeerde, actieve stukken zijn doorzoekbaar; alleen die
         // vullen de retrieval-scope (geen stille terugval naar de bibliotheek).
@@ -1371,11 +1488,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         );
         let bewijsVoorBlok: BewijsRij[] = [];
         if (bewijsDocIds.length > 0) {
-          const [{ data: docRows }, presentie] = await Promise.all([
-            supabase
-              .from("documenten")
-              .select("id, titel, actief, geindexeerd")
-              .in("id", bewijsDocIds),
+          const [docRows, presentie] = await Promise.all([
+            leesModelcontext({
+              context: evidenceContext, soort: "documentlabels", scope: { fondsId, privateRefs: bewijsDocIds }, maxItems: bewijsDocIds.length,
+              lees: async (signal) => {
+                const { data, error } = await supabase.from("documenten")
+                  .select("id, fonds_id, titel, actief, geindexeerd, status, bronstatus, geldig_vanaf, geldig_tot")
+                  .in("id", bewijsDocIds).limit(bewijsDocIds.length + 1).abortSignal(signal);
+                return { data: (data ?? []).map((rij) => ({
+                  waarde: rij, fondsId: rij.fonds_id as string | null, privateRef: rij.id as string,
+                  status: rij.status as string, actief: rij.actief as boolean,
+                  geldigVanaf: rij.geldig_vanaf as string | null, geldigTot: rij.geldig_tot as string | null,
+                })), error };
+              },
+            }),
             controleerChunkPresentie(supabase, {
               context: evidenceContext,
               maxItems: 2000,
@@ -1384,7 +1510,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ]);
           evidenceAudits.push(presentie.audit);
           if (presentie.status === "geweigerd") throw new Error("chunk_presentie_onvolledig");
-          const geldigeDocs = (docRows ?? []).filter(
+          const geldigeDocs = docRows.filter(
             (d) => d.actief !== false && d.geindexeerd === true && presentie.documentIdentiteiten.has(
               maakDocumentIdentiteit(`fonds:${fondsId}`, d.id as string)
             )
@@ -1687,23 +1813,31 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // reflecteert dan uitsluitend op het antwoord en de woorden van de
         // gebruiker (FR-55).
         if (isReflectieActief(reflectieStatus) && rij.bronset_log_id) {
-          const [{ data: logRij }, { data: inhoudRij }] = await Promise.all([
+          const [{ data: logRij, error: logError }, inhoudRijen] = await Promise.all([
             supabase
               .from("governance_log")
               .select("retrieval_meta")
               .eq("id", rij.bronset_log_id)
+              .abortSignal(contextSignal)
               .maybeSingle(),
             // #367: de append-only meta bevat alleen opaque identiteiten. De
             // lokale document-route-id bestaat al in de verwijderbare, auteur-
             // begrensde antwoordinhoud en begrenst server-side de kandidaten
             // waartegen we die passage-identiteiten opnieuw berekenen. De raw
             // chunk-id wordt nergens aan publiek contract of audit toegevoegd.
-            supabase
-              .from("governance_log_inhoud")
-              .select("bronnen")
-              .eq("log_id", rij.bronset_log_id)
-              .maybeSingle(),
+            leesModelcontext({
+              context: evidenceContext, soort: "gespreksdraad",
+              scope: { fondsId, actorId: ctx.gebruikerId, privateRefs: [rij.bronset_log_id] }, maxItems: 1,
+              lees: async (signal) => {
+                const { data, error } = await supabase.from("governance_log_inhoud")
+                  .select("log_id, bronnen").eq("log_id", rij.bronset_log_id).abortSignal(signal).maybeSingle();
+                return { data: data ? [{ waarde: data, privateRef: data.log_id as string, actorId: ctx.gebruikerId }] : [], error };
+              },
+            }),
           ]);
+          bewaakNaIO(contextSignal, logError);
+          if (logError) throw logError;
+          const inhoudRij = inhoudRijen[0] ?? null;
           const meta = (logRij as { retrieval_meta?: unknown } | null)?.retrieval_meta;
           reflectieBronsetChunkIds = bepaalBronset(meta).chunkIds;
           reflectieBronbindingen = leesBevrorenBronbindingen(meta);
@@ -1901,13 +2035,21 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       };
 
       // Kandidaat-documenten binnen het eigen fonds (RLS scoping).
-      const { data: docRijen } = await supabase
-        .from("documenten")
-        .select("id, titel")
-        // "niet expliciet inactief" — NULL ≡ actief (spiegelt de ingest/extractie-job,
-        // die alleen op actief===false overslaat). `.eq(true)` zou NULL-docs droppen.
-        .not("actief", "is", false);
-      const documenten: DocumentRef[] = (docRijen ?? []).map((d) => ({ id: d.id, titel: d.titel }));
+      const docRijen = await leesModelcontext({
+        context: evidenceContext, soort: "documentlabels", scope: { fondsId }, maxItems: 5000,
+        lees: async (signal) => {
+          const { data, error } = await supabase.from("documenten")
+            .select("id, fonds_id, titel, status, actief, geldig_vanaf, geldig_tot")
+            // "niet expliciet inactief" — NULL ≡ actief (spiegelt ingest).
+            .not("actief", "is", false).limit(5001).abortSignal(signal);
+          return { data: (data ?? []).map((rij) => ({
+            waarde: rij, fondsId: rij.fonds_id as string | null, status: rij.status as string,
+            actief: rij.actief as boolean, geldigVanaf: rij.geldig_vanaf as string | null,
+            geldigTot: rij.geldig_tot as string | null,
+          })), error };
+        },
+      });
+      const documenten: DocumentRef[] = docRijen.map((d) => ({ id: d.id, titel: d.titel }));
       const koppeling = koppelDocumenten(vergelijkIntent.bronHint, vergelijkIntent.doelHint, documenten);
 
       if (koppeling.eenduidig && koppeling.bron && koppeling.doel) {
@@ -2918,20 +3060,37 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           chunks.map((c) => c.documenten.procesinstantie_id)
         );
         const besluitUitkomst = await haalBesluitBronnen(supabase, evidenceContext, procesIds);
-        evidenceAudits.push(besluitUitkomst.audit);
         const besluitBronnen = besluitUitkomst.bronnen;
         if (besluitBronnen.length > 0) {
-          const fb = opmaakBesluitContext(besluitBronnen);
+          const resterendBudget = Math.max(0, MAX_CONTEXT_TEKENS - contextTekst.length - 2);
+          const fb = opmaakBesluitContext(besluitBronnen, {
+            maxContextTekens: resterendBudget,
+            startIndex: bronnen.length,
+            sentinel: bronSentinel,
+            peildatum: vandaag,
+          });
+          const opgenomenBesluiten = besluitBronnen.filter((bron) =>
+            fb.opgenomenCitationIds.includes(bron.citation_id)
+          );
+          evidenceAudits.push({
+            ...besluitUitkomst.audit,
+            toegelaten: opgenomenBesluiten.length,
+            gerenderde_tekens: fb.contextTekst.length,
+            afgekapt: fb.afgekapt,
+            ...(fb.afgekapt ? { fout: "afgekapt" as const } : {}),
+          });
           // Formele bron leidend: vóór de document-context en vóór de bronkaarten.
-          contextTekst = `${fb.contextTekst}\n\n---\n\n${contextTekst}`;
-          bronnen = [...fb.bronnen, ...bronnen];
-          if (retrievalMeta) {
+          if (fb.contextTekst) contextTekst = `${fb.contextTekst}\n\n${contextTekst}`;
+          // De centrale nummering start ná de reeds opgebouwde documentbronnen;
+          // dezelfde volgorde moet de UI-lijst behouden.
+          bronnen = [...bronnen, ...fb.bronnen];
+          if (retrievalMeta && opgenomenBesluiten.length > 0) {
             retrievalMeta = {
               ...retrievalMeta,
-              besluitbronnen: besluitBronnen.length,
+              besluitbronnen: opgenomenBesluiten.length,
               bronversie_audit: [
                 ...(retrievalMeta.bronversie_audit ?? []),
-                ...besluitBronnen.map((bron) => ({
+                ...opgenomenBesluiten.map((bron) => ({
                   document_id: bron.document_identiteit,
                   bron: "Decision Object",
                   bibliotheek: "fonds",
@@ -2956,6 +3115,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               ],
             };
           }
+        } else {
+          evidenceAudits.push(besluitUitkomst.audit);
         }
       }
     }
@@ -3071,13 +3232,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const stand = await getPortaalContext({
         userId: ctx.gebruikerId,
         fondsId,
-        gebruikerNaam: profiel?.naam ?? null,
+        gebruikerNaam: contextProfiel?.naam ?? null,
         // T1 bureau-rol (§6.6): zonder de rol valt de afleiding terug op de
         // bestuurdersmaatstaf, en die telt agendapunten zonder EIGEN inbreng.
         // Voor `bestuursbureau` levert die query sinds migratie 2026_08_05 nul
         // rijen, dus de promptregel zou "zonder uw eigen inbreng: N van N"
         // melden — precies de misleiding die de maatstaf moest wegnemen.
         rol: (profiel as { rol?: string | null } | null)?.rol ?? null,
+        retrievalContext: evidenceContext,
       });
       portaalstandBlok = begrensModelcontext(
         "portaalstand", bouwPortaalstandBlok(stand), 8_000, "persoonsgebonden"

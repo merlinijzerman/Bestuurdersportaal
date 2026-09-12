@@ -107,12 +107,6 @@
       "modules": {
         "rag": [
           "BronVerwijzing"
-        ],
-        "bronfragment": [
-          "bouwBronfragment"
-        ],
-        "bron-afbakening": [
-          "neutraliseerBrontekst"
         ]
       },
       "rpcs": [],

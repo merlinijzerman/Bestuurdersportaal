@@ -169,6 +169,7 @@ export async function verrijkMetParents(
     return { chunks: geselecteerd, meta };
   }
   if (data.length === 0) {
+    if (opties?.verwachteVersies?.size) throw new Error("parent_siblings_versie_mismatch");
     meta.teruggevallen = geselecteerd.length;
     return { chunks: geselecteerd, meta };
   }
@@ -197,6 +198,11 @@ export async function verrijkMetParents(
     const hitMeta = perId.get(treffer.id);
     const docChunks = perDoc.get(treffer.document_id);
     if (!hitMeta || !docChunks) {
+      if (opties?.verwachteVersies?.has(treffer.id)) {
+        // De centraal toegelaten treffer is na V5 verdwenen of opnieuw
+        // geïndexeerd. De oude passage tonen zou twee versies mengen.
+        throw new Error("parent_siblings_versie_mismatch");
+      }
       meta.teruggevallen++;
       continue;
     }

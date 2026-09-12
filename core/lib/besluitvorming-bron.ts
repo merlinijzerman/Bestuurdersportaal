@@ -17,11 +17,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BronVerwijzing } from "./rag";
-import { bouwBronfragment } from "./bronfragment";
 import type { RetrievalContext, Versiebewijs } from "./retrieval/contract";
+import type { Bronresultaat } from "./retrieval/contract";
 import { leesBesluitEvidence } from "./retrieval/supabase-evidence";
 import type { EvidenceAudit } from "./retrieval/evidence-contract";
-import { neutraliseerBrontekst } from "./bron-afbakening";
+import { bouwCitaties } from "./retrieval/citatie";
 
 type Sb = SupabaseClient;
 
@@ -69,13 +69,30 @@ export async function haalBesluitBronnen(
   context: RetrievalContext,
   procesinstantieIds: string[]
 ): Promise<{ bronnen: BesluitBron[]; audit: EvidenceAudit }> {
-  const uitkomst = await leesBesluitEvidence(supabase, {
-    context,
-    maxItems: 3,
-    maxGerenderdeTekens: 12_000,
-  }, { privateProcedureRefs: procesinstantieIds, alleenFormeel: true });
-  if (uitkomst.status === "geweigerd") throw new Error(`besluit_evidence_${uitkomst.audit.fout}`);
-  return { audit: uitkomst.audit, bronnen: uitkomst.items.map((item) => ({
+  const uniekeProcessen = [...new Set(procesinstantieIds)].slice(0, 3);
+  const uitkomsten = await Promise.all(uniekeProcessen.map((procesId) =>
+    leesBesluitEvidence(supabase, {
+      context: { ...context, scope: { ...context.scope, procesId } },
+      maxItems: 1,
+      maxGerenderdeTekens: 12_000,
+    }, { privateProcedureRefs: [procesId], alleenFormeel: true })
+  ));
+  const geweigerd = uitkomsten.find((uitkomst) => uitkomst.status === "geweigerd");
+  if (geweigerd?.status === "geweigerd") throw new Error(`besluit_evidence_${geweigerd.audit.fout}`);
+  const items = uitkomsten.flatMap((uitkomst) => uitkomst.items);
+  const audit: EvidenceAudit = {
+    correlation_id: context.correlationId,
+    soort: "besluitregistratie",
+    gevraagd: uniekeProcessen.length,
+    toegelaten: items.length,
+    gerenderde_tekens: uitkomsten.reduce((som, uitkomst) => som + uitkomst.audit.gerenderde_tekens, 0),
+    limiet: 12_000,
+    afgekapt: false,
+    pii_gedetecteerd: uitkomsten.some((uitkomst) => uitkomst.audit.pii_gedetecteerd),
+    pii_soorten: [...new Set(uitkomsten.flatMap((uitkomst) => uitkomst.audit.pii_soorten ?? []))],
+    versies: { sterk: items.length, gedegradeerd: 0 },
+  };
+  return { audit, bronnen: items.map((item) => ({
     document_identiteit: item.documentIdentiteit,
     passage_identiteit: item.passageIdentiteit,
     citation_id: item.citationId,
@@ -95,39 +112,46 @@ export async function haalBesluitBronnen(
  * vóór de document-context geplaatst (leidend). De bronnen krijgen een eigen
  * label zodat de UI ze als formele besluitbron toont, niet als gewoon document.
  */
-export function opmaakBesluitContext(bronnen: BesluitBron[]): {
+export function opmaakBesluitContext(
+  bronnen: BesluitBron[],
+  opties: { maxContextTekens?: number; startIndex?: number; sentinel?: string; peildatum?: string } = {}
+): {
   contextTekst: string;
   bronnen: BronVerwijzing[];
+  opgenomenCitationIds: string[];
+  geneutraliseerd: number;
+  afgekapt: boolean;
 } {
-  if (bronnen.length === 0) return { contextTekst: "", bronnen: [] };
-  const delen: string[] = [];
-  const verwijzingen: BronVerwijzing[] = [];
-  bronnen.forEach((b, i) => {
-    const datum = b.datum ? `, ${b.datum}` : "";
-    const orgaan = b.governance_orgaan ? ` (${b.governance_orgaan})` : "";
-    const rauw = `[Formele besluitbron ${i + 1}] Besluitregistratie ${b.besluit_code} — ${b.titel}${orgaan} — status: ${b.status}${datum}.\nBesluitvraag: "${b.besluitvraag}"`;
-    delen.push(neutraliseerBrontekst(rauw).tekst);
-    verwijzingen.push({
-      citation_id: b.citation_id,
-      document_id: b.document_identiteit,
-      titel: `Besluitregistratie ${b.besluit_code} — ${b.titel}`,
-      bron: "Decision Object",
-      pagina: null,
-      paragraaf: null,
-      // Dezelfde citaatregel als de documentbronnen (besluit 0100): deze
-      // verwijzing landt in dezelfde bronkaart en dezelfde hover-preview, dus
-      // een afwijkende afkapping zou hier stil een voorbehoud wegsnijden.
-      fragment: bouwBronfragment(b.besluitvraag),
-      heeft_origineel: false,
-      documentstatus: b.status,
-      bronstatus: "actief",
-      documentdatum: b.datum,
-    });
+  if (bronnen.length === 0) return { contextTekst: "", bronnen: [], opgenomenCitationIds: [], geneutraliseerd: 0, afgekapt: false };
+  const kop = "FORMELE BESLUITBRONNEN (leidend boven losse documenten — Decision Object-besluitregistratie):\n\n";
+  const max = opties.maxContextTekens ?? 12_000;
+  if (kop.length >= max) return { contextTekst: "", bronnen: [], opgenomenCitationIds: [], geneutraliseerd: 0, afgekapt: true };
+  const contractBronnen: Bronresultaat[] = bronnen.map((b, index) => ({
+    ref: b.passage_identiteit,
+    bronsoort: "fonds",
+    titel: b.titel,
+    documentIdentiteit: { id: b.document_identiteit, fondsId: null, bibliotheek: "fonds", bron: "Decision Object" },
+    passageIdentiteit: { id: b.passage_identiteit },
+    versie: b.versie,
+    locator: {},
+    passage: b.passage,
+    status: { documentstatus: b.status, bronstatus: "actief", actueel: true },
+    rang: { positie: index },
+    weergave: { documentdatum: b.datum },
+  }));
+  const citaat = bouwCitaties(contractBronnen, {
+    maxContextTekens: max - kop.length,
+    primaireDocumentIds: new Set(),
+    hoofddocumentLabel: "Decision Object",
+    startIndex: opties.startIndex,
+    sentinel: opties.sentinel,
+    peildatum: opties.peildatum ?? new Date().toISOString().slice(0, 10),
   });
   return {
-    contextTekst:
-      "FORMELE BESLUITBRONNEN (leidend boven losse documenten — Decision Object-besluitregistratie):\n\n" +
-      delen.join("\n\n"),
-    bronnen: verwijzingen,
+    contextTekst: citaat.contextTekst ? `${kop}${citaat.contextTekst}` : "",
+    bronnen: citaat.bronnen,
+    opgenomenCitationIds: citaat.bronnen.flatMap((bron) => bron.citation_id ? [bron.citation_id] : []),
+    geneutraliseerd: citaat.geneutraliseerd,
+    afgekapt: citaat.afgekapt,
   };
 }

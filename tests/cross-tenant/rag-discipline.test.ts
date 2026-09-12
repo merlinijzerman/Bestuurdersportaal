@@ -216,3 +216,25 @@ test("#368 — parent-sibling met andere indexversie wordt terminaal geweigerd",
     /parent_siblings_versie_mismatch/
   );
 });
+
+test("#368 — verdwenen v1-hit met uitsluitend nieuwe v2-hit valt nooit terug op oude passage", async () => {
+  const bestandHash = "b".repeat(64);
+  const oudeHit = sibling("hit-v1", "Oude passage.", {
+    bibliotheek: "fonds", fonds_id: FONDS_A, bestand_hash: bestandHash,
+  }, 0);
+  oudeHit.indexering_versie = "index-v1";
+  const nieuweHit = sibling("hit-v2", "Nieuwe passage.", {
+    bibliotheek: "fonds", fonds_id: FONDS_A, bestand_hash: bestandHash,
+  }, 0);
+  nieuweHit.indexering_versie = "index-v2";
+  const opties = fakeOpties([nieuweHit]);
+  opties!.verwachteVersies = new Map([["hit-v1", {
+    soort: "hash",
+    waarde: maakVolledigeVersieHash("d1", "index-v1", bestandHash),
+    gecontroleerdOp: new Date().toISOString(),
+  }]]);
+  await assert.rejects(
+    verrijkMetParents([{ ...oudeHit, documenten: { ...oudeHit.documenten } }], FONDS_A, "2026-07-15", opties),
+    /parent_siblings_versie_mismatch/
+  );
+});

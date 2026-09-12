@@ -103,6 +103,8 @@ export interface VergelijkDeps {
   persisteer(input: PersisteerInvoer): Promise<string | null>;
   /** Productie levert na alle retrievals één deterministische auditprojectie. */
   retrievalAudit?(): { bronnen: VergelijkBron[]; meta: VergelijkRetrievalMeta };
+  /** Markeer alleen semantic evidence die werkelijk een finding heeft gevoed. */
+  markeerGebruikteEvidence?(refs: readonly string[]): void;
   // De contingentie-poort: alleen als dit true is mag het deterministische pad vuren.
   deterministischVertrouwd: boolean;
 }
@@ -270,6 +272,9 @@ export async function voerVergelijkingUit(
     // hebben (acceptatiecriterium). Anders LLM.
     if (deps.deterministischVertrouwd && bu && du) {
       const cmp = deterministischeVergelijking(bu, du, dim.type);
+      deps.markeerGebruikteEvidence?.(
+        [bu.passage_ref, du.passage_ref].filter((ref): ref is string => Boolean(ref))
+      );
       findings.push({
         finding_key,
         dimensie: dim.key,

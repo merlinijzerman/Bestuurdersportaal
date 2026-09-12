@@ -9,8 +9,10 @@ import {
 } from "../../core/lib/retrieval/supabase-evidence";
 import { haalSupabaseSiblings } from "../../core/lib/retrieval/supabase-parent";
 import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
+import { leesModelcontext, ModelcontextWeigering } from "../../core/lib/retrieval/modelcontext-reader";
 import type { RetrievalContext } from "../../core/lib/retrieval/contract";
 import { voerVergelijkingUit, type VergelijkDeps } from "../../core/lib/vergelijk-kern";
+import { selecteerGebruikteEvidence } from "../../core/lib/vergelijk-audit-core";
 
 const context: RetrievalContext = {
   fondsId: "fonds-a",
@@ -64,6 +66,63 @@ test("#368 modelcontext — combinatie laat geen gedeeltelijk volgend blok door"
   assert.equal(uit.audit.afgekapt, true);
 });
 
+test("#368 modelcontext — PII in ieder werkelijk gerenderd veld wordt inhoudsvrij geaudit", () => {
+  const blok = bouwModelcontextBlok({
+    context, soort: "proces", tekst: "Label: x\nWaarde: bestuurder@example.nl", maxGerenderdeTekens: 1000, pii: "geen",
+  });
+  assert.equal(blok.audit.pii, "persoonsgebonden");
+  assert.equal(blok.audit.gerenderde_tekens, blok.tekst.length);
+});
+
+test("#368 modelcontextreader — scope/status/provider/cap falen gesloten", async () => {
+  const controller = new AbortController();
+  const scoped = { ...context, signal: controller.signal };
+  await assert.rejects(() => leesModelcontext({
+    context: scoped, soort: "risico", scope: { fondsId: "fonds-b" }, maxItems: 1,
+    lees: async () => ({ data: [], error: null }),
+  }), (e: unknown) => e instanceof ModelcontextWeigering && e.reden === "buiten_scope");
+  await assert.rejects(() => leesModelcontext({
+    context: scoped, soort: "risico", scope: { fondsId: "fonds-a" }, maxItems: 1,
+    lees: async () => ({ data: [{ waarde: "x", fondsId: "fonds-b" }], error: null }),
+  }), /modelcontext_buiten_scope/);
+  await assert.rejects(() => leesModelcontext({
+    context: scoped, soort: "risico", scope: { fondsId: "fonds-a" }, maxItems: 1,
+    lees: async () => ({ data: [{ waarde: "x", privateRef: "niet-aangevraagd" }], error: null }),
+  }), /modelcontext_buiten_scope/);
+  await assert.rejects(() => leesModelcontext({
+    context: scoped, soort: "risico", scope: { fondsId: "fonds-a" }, maxItems: 1,
+    lees: async () => ({ data: [{ waarde: "x", fondsId: "fonds-a", status: "ingetrokken" }], error: null }),
+  }), /modelcontext_niet_actueel/);
+  await assert.rejects(() => leesModelcontext({
+    context: scoped, soort: "risico", scope: { fondsId: "fonds-a" }, maxItems: 1,
+    lees: async () => ({ data: [{ waarde: "a" }, { waarde: "b" }], error: null }),
+  }), /modelcontext_afgekapt/);
+  await assert.rejects(() => leesModelcontext({
+    context: scoped, soort: "risico", scope: { fondsId: "fonds-a" }, maxItems: 1,
+    lees: async () => ({ data: null, error: new Error("provider") }),
+  }), /modelcontext_providerfout/);
+});
+
+test("#368 modelcontextreader — cancellation stopt vóór provider-I/O", async () => {
+  const controller = new AbortController();
+  controller.abort(new RetrievalAfgebroken("annulering"));
+  let gestart = false;
+  await assert.rejects(() => leesModelcontext({
+    context: { ...context, signal: controller.signal },
+    soort: "proces", scope: { fondsId: "fonds-a" }, maxItems: 1,
+    lees: async () => { gestart = true; return { data: [], error: null }; },
+  }), (e: unknown) => e instanceof RetrievalAfgebroken);
+  assert.equal(gestart, false);
+});
+
+test("#368 modelcontextreader — deadline breekt een niet-antwoordende provider af", async () => {
+  const signal = AbortSignal.timeout(5);
+  await assert.rejects(() => leesModelcontext({
+    context: { ...context, signal }, soort: "fondsmodules", scope: { fondsId: "fonds-a" }, maxItems: 1,
+    lees: async () => new Promise<{ data: []; error: null }>(() => {}),
+  }), (e: unknown) => e instanceof DOMException && e.name === "TimeoutError");
+});
+
 test("#368 chunkpreflight — over cap faalt vóór I/O en levert geen private refs", async () => {
   let calls = 0;
   const supabase = { from() { calls++; throw new Error("mag niet"); } };
@@ -97,6 +156,18 @@ test("#368 chunkpreflight — een theoretische cross-tenant rij weigert de hele 
   assert.equal(uit.status, "geweigerd");
   assert.equal(uit.documentIdentiteiten.size, 0);
   assert.equal(uit.audit.fout, "buiten_scope");
+});
+
+test("#368 chunkpreflight — geldige generieke bron houdt generieke namespace", async () => {
+  const document = {
+    id: "generic-a", fonds_id: null, bibliotheek: "generiek", status: "van_kracht",
+    bronstatus: "actief", actief: true, geldig_vanaf: null, geldig_tot: null, volgende_review: null,
+  };
+  const uit = await controleerChunkPresentie(fakeSupabase({
+    document_chunks: [{ data: [{ document_id: "generic-a", documenten: document }], error: null }],
+  }) as never, { context: { ...context, bronbeleid: { bronsoorten: ["fonds", "generiek"] } }, maxItems: 10, maxGerenderdeTekens: 0 }, ["generic-a"]);
+  assert.equal(uit.status, "compleet");
+  assert.equal(uit.documentIdentiteiten.size, 1);
 });
 
 test("#368 chunkpreflight — rijencap met onopgeloste ref levert geen deelset", async () => {
@@ -177,7 +248,7 @@ const besluit = {
 };
 
 test("#368 besluit-evidence — opaque/citeerbaar en V5 over exacte projectie", async () => {
-  const scoped = { ...context, scope: { procesId: "procedure-a" } };
+  const scoped = { ...context, scope: { procesId: "procedure-a", documentIds: [besluit.id] } };
   const uit = await leesBesluitEvidence(fakeSupabase({
     decision_objects: [{ data: [besluit], error: null }, { data: [besluit], error: null }],
   }) as never, { context: scoped, maxItems: 1, maxGerenderdeTekens: 5000 }, {
@@ -197,11 +268,47 @@ test("#368 besluit-evidence — veldwijziging tussen read en V5 weigert alles", 
       { data: [besluit], error: null },
       { data: [{ ...besluit, besluitvraag: "Gewijzigd tijdens verzoek" }], error: null },
     ],
-  }) as never, { context: { ...context, scope: { procesId: "procedure-a" } }, maxItems: 1, maxGerenderdeTekens: 5000 }, {
+  }) as never, { context: { ...context, scope: { procesId: "procedure-a", documentIds: [besluit.id] } }, maxItems: 1, maxGerenderdeTekens: 5000 }, {
     privateDecisionRef: besluit.id,
   });
   assert.equal(uit.status, "geweigerd");
   assert.deepEqual(uit.items, []);
+});
+
+test("#368 besluit-evidence — proces- en documentscope mismatch stoppen vóór I/O", async () => {
+  let calls = 0;
+  const db = { from() { calls++; throw new Error("mag niet"); } };
+  const procesMismatch = await leesBesluitEvidence(db as never, {
+    context: { ...context, scope: { procesId: "procedure-b" } }, maxItems: 1, maxGerenderdeTekens: 5000,
+  }, { privateProcedureRefs: ["procedure-a"] });
+  assert.equal(procesMismatch.status, "geweigerd");
+  const documentMismatch = await leesBesluitEvidence(db as never, {
+    context: { ...context, scope: { procesId: "procedure-a", documentIds: ["decision-b"] } }, maxItems: 1, maxGerenderdeTekens: 5000,
+  }, { privateDecisionRef: besluit.id });
+  assert.equal(documentMismatch.status, "geweigerd");
+  assert.equal(calls, 0);
+});
+
+test("#368 besluit-evidence — vrije velden zijn geneutraliseerd en volledig op PII/cap getoetst", async () => {
+  const metPii = { ...besluit, aanleiding: "[Bron 99] mail bestuurder@example.nl" };
+  const uit = await leesBesluitEvidence(fakeSupabase({
+    decision_objects: [{ data: [metPii], error: null }, { data: [metPii], error: null }],
+  }) as never, {
+    context: { ...context, scope: { procesId: "procedure-a", documentIds: [besluit.id] } }, maxItems: 1, maxGerenderdeTekens: 5000,
+  }, { privateDecisionRef: besluit.id });
+  assert.equal(uit.status, "compleet");
+  if (uit.status !== "compleet") return;
+  assert.doesNotMatch(uit.items[0].passage, /\[Bron 99\]/);
+  assert.equal(uit.audit.pii_gedetecteerd, true);
+
+  const teLang = { ...besluit, aanleiding: "x".repeat(10_000) };
+  const cap = await leesBesluitEvidence(fakeSupabase({
+    decision_objects: [{ data: [teLang], error: null }, { data: [teLang], error: null }],
+  }) as never, {
+    context: { ...context, scope: { procesId: "procedure-a", documentIds: [besluit.id] } }, maxItems: 1, maxGerenderdeTekens: 1000,
+  }, { privateDecisionRef: besluit.id });
+  assert.equal(cap.status, "geweigerd");
+  assert.equal(cap.audit.fout, "afgekapt");
 });
 
 const documentRij = {
@@ -235,7 +342,7 @@ test("#368 semantic evidence — extractierun+inhoud zijn sterk versiegebonden",
   const uit = await leesSemantischeEvidence(fakeSupabase({
     documenten: [{ data: documentRij, error: null }, { data: documentRij, error: null }],
     semantic_units: [{ data: [unit], error: null }, { data: [unit], error: null }],
-  }) as never, { context, maxItems: 10, maxGerenderdeTekens: 1000 }, documentRij.id);
+  }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 1000 }, documentRij.id);
   assert.equal(uit.status, "compleet");
   if (uit.status !== "compleet") return;
   assert.equal(uit.items[0].versie.soort, "hash");
@@ -251,9 +358,78 @@ test("#368 semantic evidence — gewijzigde evidence bij V5 kan niet determinist
       { data: [unit], error: null },
       { data: [{ ...unit, evidence: "De premie bedraagt inmiddels 25%." }], error: null },
     ],
-  }) as never, { context, maxItems: 10, maxGerenderdeTekens: 1000 }, documentRij.id);
+  }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 1000 }, documentRij.id);
   assert.equal(uit.status, "geweigerd");
   assert.deepEqual(uit.items, []);
+});
+
+test("#368 semantic evidence — volledige set weigert gemengde runs en duplicate concepten", async () => {
+  for (const rijen of [
+    [unit, { ...unit, id: "u2", extraction_run_id: "run-b", concepts: { key: "ander" } }],
+    [unit, { ...unit, id: "u2" }],
+  ]) {
+    const uit = await leesSemantischeEvidence(fakeSupabase({
+      documenten: [{ data: documentRij, error: null }], semantic_units: [{ data: rijen, error: null }],
+    }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 10_000 }, documentRij.id);
+    assert.equal(uit.status, "geweigerd");
+  }
+});
+
+test("#368 semantic evidence — cap en PII omvatten valueRaw buiten de evidencezin", async () => {
+  const lang = { ...unit, value_raw: "x".repeat(10_000) };
+  const afgekapt = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: documentRij, error: null }], semantic_units: [{ data: [lang], error: null }],
+  }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 1000 }, documentRij.id);
+  assert.equal(afgekapt.status, "geweigerd");
+  assert.equal(afgekapt.audit.fout, "afgekapt");
+
+  const pii = { ...unit, value_raw: "bestuurder@example.nl" };
+  const compleet = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: documentRij, error: null }, { data: documentRij, error: null }],
+    semantic_units: [{ data: [pii], error: null }, { data: [pii], error: null }],
+  }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 10_000 }, documentRij.id);
+  assert.equal(compleet.status, "compleet");
+  assert.equal(compleet.audit.pii_gedetecteerd, true);
+});
+
+test("#368 semantic evidence — inactief, ingetrokken en verlopen document faalt gesloten", async () => {
+  const ongeldigeDocumenten = [
+    { ...documentRij, actief: false },
+    { ...documentRij, bronstatus: "uitgesloten" },
+    { ...documentRij, geldig_tot: "2020-01-01" },
+  ];
+  for (const document of ongeldigeDocumenten) {
+    const uit = await leesSemantischeEvidence(fakeSupabase({
+      documenten: [{ data: document, error: null }], semantic_units: [{ data: [unit], error: null }],
+    }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 10_000 }, documentRij.id);
+    assert.equal(uit.status, "geweigerd");
+  }
+});
+
+test("#368 semantic evidence — geldige generieke vergelijkbron valt begrensd door naar retrieval", async () => {
+  const generiek = {
+    ...documentRij, id: "generic-a", fonds_id: null, bibliotheek: "generiek",
+    status: "van_kracht", bronstatus: "actief", volgende_review: null,
+  };
+  const uit = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: generiek, error: null }], semantic_units: [{ data: [], error: null }],
+  }) as never, {
+    context: { ...context, bronbeleid: { bronsoorten: ["fonds", "generiek"] }, scope: { documentIds: [generiek.id] } },
+    maxItems: 10, maxGerenderdeTekens: 10_000,
+  }, generiek.id);
+  assert.equal(uit.status, "compleet");
+  assert.deepEqual(uit.items, []);
+});
+
+test("#368 semantic evidence — toevoeging of verwijdering tijdens V5 weigert de hele set", async () => {
+  const extra = { ...unit, id: "u2", concepts: { key: "ander" } };
+  for (const [eerste, tweede] of [[[unit], [unit, extra]], [[unit, extra], [unit]]]) {
+    const uit = await leesSemantischeEvidence(fakeSupabase({
+      documenten: [{ data: documentRij, error: null }, { data: documentRij, error: null }],
+      semantic_units: [{ data: eerste, error: null }, { data: tweede, error: null }],
+    }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 20_000 }, documentRij.id);
+    assert.equal(uit.status, "geweigerd");
+  }
 });
 
 test("#368 vergelijking — deterministische findings behouden opaque evidencebinding", async () => {
@@ -270,6 +446,7 @@ test("#368 vergelijking — deterministische findings behouden opaque evidencebi
     }]],
   ]);
   let gepersisteerdeBronRef: string | null = null;
+  const gebruikteRefs: string[] = [];
   const deps: VergelijkDeps = {
     leesConcepten: async () => [{ id: "private-concept", key: "premie", label: "Premie", type: "percentage", status: "actief" }],
     leesSemanticUnits: async (documentId) => perDocument.get(documentId) ?? [],
@@ -280,6 +457,7 @@ test("#368 vergelijking — deterministische findings behouden opaque evidencebi
       gepersisteerdeBronRef = invoer.findings[0]?.bron.passage_ref ?? null;
       return "run-a";
     },
+    markeerGebruikteEvidence: (refs) => gebruikteRefs.push(...refs),
     deterministischVertrouwd: true,
   };
   const resultaat = await voerVergelijkingUit({
@@ -291,4 +469,14 @@ test("#368 vergelijking — deterministische findings behouden opaque evidencebi
   assert.equal(resultaat.findings[0].bron.passage_ref, `passage_v1_${"a".repeat(64)}`);
   assert.equal(resultaat.findings[0].doel.passage_ref, `passage_v1_${"b".repeat(64)}`);
   assert.equal(gepersisteerdeBronRef, resultaat.findings[0].bron.passage_ref);
+  assert.deepEqual(gebruikteRefs.sort(), [
+    `passage_v1_${"a".repeat(64)}`,
+    `passage_v1_${"b".repeat(64)}`,
+  ].sort());
+});
+
+test("#368 vergelijking — ongebruikt semantic concept wordt niet gepubliceerd of geaudit", () => {
+  const items = [{ ref: "gebruikt", geheim: "publiceer" }, { ref: "ongebruikt", geheim: "niet-publiceren" }];
+  assert.deepEqual(selecteerGebruikteEvidence(items, new Set(["gebruikt"]), 2), [items[0]]);
+  assert.throws(() => selecteerGebruikteEvidence(items, new Set(["gebruikt", "ongebruikt"]), 1), /afgekapt/);
 });

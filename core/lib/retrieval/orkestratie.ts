@@ -31,6 +31,7 @@ import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEF
 import type { Afbreekgrendel } from "./afbreken";
 import { maakDocumentIdentiteit } from "./identiteit";
 import type {
+  AdapterCapabilities,
   AdapterUitkomst,
   Bronresultaat,
   Bronsoort,
@@ -118,7 +119,9 @@ export function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): b
     // terwijl na #367 alleen de opaque identiteit de adaptergrens passeert.
     // Een externe adapter moet een al-opaque scopewaarde leveren; voor de
     // lokale fonds/generiek-adapter herleiden we dezelfde centrale identiteit.
-    const namespace = bron.bronsoort === "generiek"
+    const namespace = bron.documentIdentiteit.bron === "Decision Object"
+      ? `fonds:${ctx.fondsId}:decision`
+      : bron.bronsoort === "generiek"
       ? "generiek"
       : bron.bronsoort === "fonds" || bron.bronsoort === "notulen"
         ? `fonds:${ctx.fondsId}`
@@ -131,6 +134,22 @@ export function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): b
   }
   if (ctx.scope?.procesId && identiteit.procesId !== ctx.scope.procesId) return false;
   return true;
+}
+
+/**
+ * De volledige servergrens vóór V1–V5: fonds/bibliotheek/processcope én het
+ * server-afgeleide bronbeleid moeten alle drie kloppen. Niet-zoekende
+ * evidencereaders gebruiken exact deze functie; zo ontstaat naast de
+ * orkestratie geen tweede, zwakkere scopepoort.
+ */
+export function binnenCentraleServergrens(
+  ctx: RetrievalContext,
+  capabilities: Pick<AdapterCapabilities, "bronsoorten">,
+  bron: Bronresultaat
+): boolean {
+  return ctx.bronbeleid.bronsoorten.includes(bron.bronsoort)
+    && capabilities.bronsoorten.includes(bron.bronsoort)
+    && binnenServerScope(ctx, bron);
 }
 
 /**
@@ -242,7 +261,6 @@ export async function voerRetrievalUit(
     //     dan niet bevraagd; `zoek()` wordt aantoonbaar niet aangeroepen.
     const caps = opdracht.adapter.capabilities();
     const toegestaneBronsoorten = new Set(ctx.bronbeleid.bronsoorten);
-    const adapterBronsoorten = new Set(caps.bronsoorten);
     const nietOndersteund = sporen.map(({ query }) => {
       const fouten = nietOndersteundeFilters(caps, query);
       if (!caps.strategieen.includes(query.strategie)) fouten.push(`strategie:${query.strategie}`);
@@ -287,10 +305,7 @@ export async function voerRetrievalUit(
     const scopeweigeringen: Weigering[] = [];
     const beleidsToegelaten = uitkomsten.map((u, spoor) =>
       u.kandidaten.filter((b) => {
-        const toegestaan =
-          toegestaneBronsoorten.has(b.bronsoort) &&
-          adapterBronsoorten.has(b.bronsoort) &&
-          binnenServerScope(spoorContext[spoor], b);
+        const toegestaan = binnenCentraleServergrens(spoorContext[spoor], caps, b);
         if (!toegestaan) {
           scopeweigeringen.push({ spoor, ref: b.ref, grond: "buiten_server_scope" });
         }

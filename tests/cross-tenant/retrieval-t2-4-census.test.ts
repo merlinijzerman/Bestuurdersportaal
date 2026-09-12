@@ -34,6 +34,33 @@ function telFysiekeQueries(bron: string, tabel: string): number {
   return aantal;
 }
 
+function modelcontextQueriesBuitenReader(bron: string): string[] {
+  const tabellen = new Set([
+    "agendapunten", "risicos", "risico_log", "risico_maatregelen", "procedures",
+    "procedure_stappen", "procedure_requirements", "procedure_bewijs", "documenten",
+    "governance_log_inhoud",
+  ]);
+  const bestand = ts.createSourceFile("route.tsx", bron, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const buiten: string[] = [];
+  const bezoek = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.name.text === "from" && ts.isStringLiteralLike(node.arguments[0])
+      && tabellen.has(node.arguments[0].text)) {
+      let ouder: ts.Node | undefined = node;
+      let begrensd = false;
+      while (ouder) {
+        if (ts.isCallExpression(ouder) && ts.isIdentifier(ouder.expression)
+          && ouder.expression.text === "leesModelcontext") { begrensd = true; break; }
+        ouder = ouder.parent;
+      }
+      if (!begrensd) buiten.push(node.arguments[0].text);
+    }
+    ts.forEachChild(node, bezoek);
+  };
+  bezoek(bestand);
+  return buiten;
+}
+
 test("#368 — nul evidencelezingen buiten de retrievalkern", () => {
   assert.equal(register.basis, "50c54ed7093");
   assert.deepEqual(register.entries, []);
@@ -95,6 +122,16 @@ test("#368 — alle 26 modelcontextlezingen blijven apart van evidence", () => {
   assert.equal(context.lezingen_per_klasse.modelcontext.length, 26);
   assert.match(lees("app/api/chat/route.ts"), /combineerModelcontext/);
   assert.match(lees("app/api/chat/route.ts"), /modelcontext_audit/);
+});
+
+test("#368 modelcontextboundary — chatcontextqueries staan uitvoerend binnen de typed reader", () => {
+  const route = lees("app/api/chat/route.ts");
+  assert.deepEqual(modelcontextQueriesBuitenReader(route), []);
+  const mutatie = `${route}\nconst bypass = supabase.from("risicos").select("titel");\n`;
+  assert.deepEqual(modelcontextQueriesBuitenReader(mutatie), ["risicos"]);
+  for (const helper of ["core/lib/profielsturing.ts", "core/lib/organisatieprofiel.ts", "core/lib/portaalcontext.ts"]) {
+    assert.match(lees(helper), /leesModelcontext\(/, `${helper} mist de uitvoerende readergrens`);
+  }
 });
 
 test("#368 — typed evidence hergebruikt centrale poort en lekt geen opslag-idvelden", () => {
