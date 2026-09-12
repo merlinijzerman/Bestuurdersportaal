@@ -152,8 +152,8 @@ begin
       'verschil_type_ruw','gelijk','method','deterministisch'));
   v_run := public.fn_schrijf_vergelijking(
     'symmetrisch','opus','pv1','cmp1', f, 't5-check-correlation',
-    '{"pogingen":[{"document_id":"d1a11111-1111-1111-1111-111111111111","dimensie":"franchise","methode":"fts_dutch_ranked","opgehaald":2,"geselecteerd":1}]}'::jsonb,
-    '[{"citation_id":1,"passage_ref":"passage-a","document_id":"d1a11111-1111-1111-1111-111111111111","pagina":37,"bibliotheek":"fonds","bronsoort":"fonds","documentstatus":"vastgesteld","versie":{"soort":"hash","waarde":"v1","gecontroleerdOp":"2026-09-11T00:00:00Z"}}]'::jsonb
+    '{"pogingen":[{"document_id":"doc_v1_5816172404264aa4c3e22f65eb2668695e8788cae4b78683767fd0e9de1bc5b8","dimensie":"franchise","methode":"fts_dutch_ranked","opgehaald":2,"geselecteerd":1}]}'::jsonb,
+    '[{"citation_id":1,"passage_ref":"passage-a","document_id":"doc_v1_5816172404264aa4c3e22f65eb2668695e8788cae4b78683767fd0e9de1bc5b8","pagina":37,"bibliotheek":"fonds","bronsoort":"fonds","documentstatus":"vastgesteld","versie":{"soort":"hash","waarde":"v1","gecontroleerdOp":"2026-09-11T00:00:00Z"}}]'::jsonb
   );
   select count(*) into n from public.comparison_results
     where comparison_run_id=v_run and fonds_id='11111111-1111-1111-1111-111111111111';
@@ -187,12 +187,59 @@ begin
     'verschil_type_ruw','verschilt','method','llm'));
   perform public.fn_schrijf_vergelijking(
     'symmetrisch','opus','pv1','cmp1', f, 't5-check-vreemd', '{"pogingen":[]}'::jsonb,
-    '[{"citation_id":1,"passage_ref":"x","document_id":"d2a22222-2222-2222-2222-222222222222"}]'::jsonb
+    '[{"citation_id":1,"passage_ref":"x","document_id":"doc_v1_37f437130c12750d773cf1af2a7d13c13d472d4fa9deed302ba32b3f0c2b784b"}]'::jsonb
   );
   raise exception 'LEK #3: bevinding naar een document van fonds B TOEGESTAAN — tenant-guard werkt niet.';
 exception
   when others then
     if sqlstate='42501' then raise notice 'OK #3: bevinding naar vreemd document geweigerd (tenant-guard).';
+    elsif sqlstate='P0001' and sqlerrm like 'LEK:%' then raise;
+    else raise;
+    end if;
+end $$;
+
+-- #3b (bronprovenance): eigen findings met een opaque bron van fonds B → 42501.
+-- Hiermee bewijst de check de nieuwe #369-bronvalidatie afzonderlijk van de
+-- bestaande document-FK's in p_findings.
+do $$
+declare f jsonb;
+begin
+  f := jsonb_build_array(jsonb_build_object(
+    'finding_key','fk-bron-x','dimensie','franchise',
+    'bron_document_id','d1a11111-1111-1111-1111-111111111111',
+    'doel_document_id','d1b11111-1111-1111-1111-111111111111',
+    'verschil_type_ruw','verschilt','method','llm'));
+  perform public.fn_schrijf_vergelijking(
+    'symmetrisch','opus','pv1','cmp1', f, 't5-check-vreemde-bron', '{"pogingen":[]}'::jsonb,
+    '[{"citation_id":1,"passage_ref":"x","document_id":"doc_v1_37f437130c12750d773cf1af2a7d13c13d472d4fa9deed302ba32b3f0c2b784b","bibliotheek":"fonds","bronsoort":"fonds"}]'::jsonb
+  );
+  raise exception 'LEK #3b: opaque bron van fonds B TOEGESTAAN — tenant-guard werkt niet.';
+exception
+  when others then
+    if sqlstate='42501' then raise notice 'OK #3b: opaque bron van vreemd fonds geweigerd.';
+    elsif sqlstate='P0001' and sqlerrm like 'LEK:%' then raise;
+    else raise;
+    end if;
+end $$;
+
+-- #3c (retrievalaudit): ook een opaque poging voor fonds B wordt geweigerd.
+do $$
+declare f jsonb;
+begin
+  f := jsonb_build_array(jsonb_build_object(
+    'finding_key','fk-poging-x','dimensie','franchise',
+    'bron_document_id','d1a11111-1111-1111-1111-111111111111',
+    'doel_document_id','d1b11111-1111-1111-1111-111111111111',
+    'verschil_type_ruw','verschilt','method','llm'));
+  perform public.fn_schrijf_vergelijking(
+    'symmetrisch','opus','pv1','cmp1', f, 't5-check-vreemde-poging',
+    '{"pogingen":[{"document_id":"doc_v1_37f437130c12750d773cf1af2a7d13c13d472d4fa9deed302ba32b3f0c2b784b","dimensie":"franchise","methode":"geen","opgehaald":0,"geselecteerd":0}]}'::jsonb,
+    '[]'::jsonb
+  );
+  raise exception 'LEK #3c: opaque retrievalpoging van fonds B TOEGESTAAN.';
+exception
+  when others then
+    if sqlstate='42501' then raise notice 'OK #3c: opaque retrievalpoging van vreemd fonds geweigerd.';
     elsif sqlstate='P0001' and sqlerrm like 'LEK:%' then raise;
     else raise;
     end if;

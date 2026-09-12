@@ -335,6 +335,7 @@ test("T2-1 — het aanvullende spoor erft de documentscope van het primaire spoo
   // verbreding naar de bibliotheek stil. De goldens zien dit niet, omdat de
   // chatfixtures geen documentscope gebruiken.
   const gezienScope: [string, string[] | undefined][] = [];
+  const primairDocument = documentIdVoor("doc-primair");
   const adapter = nepAdapter({
     perQuery: {
       primair: [sharepointBron(1, "doc-primair", "Het gekozen stuk.")],
@@ -343,18 +344,18 @@ test("T2-1 — het aanvullende spoor erft de documentscope van het primaire spoo
     gezienScope,
   });
   const tussen = await voerRetrievalUit(
-    { ...CTX, scope: { documentIds: ["doc-primair"] } },
+    { ...CTX, scope: { documentIds: [primairDocument] } },
     {
       adapter,
       sporen: [
-        { query: QUERY("primair", { documentScope: ["doc-primair"] }), grenzen: GRENZEN },
+        { query: QUERY("primair", { documentScope: [primairDocument] }), grenzen: GRENZEN },
         { query: QUERY("aanvullend", { documentScope: undefined }), grenzen: GRENZEN },
       ],
     }
   );
 
   const perSpoor = Object.fromEntries(gezienScope);
-  assert.deepEqual(perSpoor["primair"], ["doc-primair"], "het primaire spoor blijft hard afgebakend");
+  assert.deepEqual(perSpoor["primair"], [primairDocument], "het primaire spoor blijft hard afgebakend");
   assert.equal(perSpoor["aanvullend"], undefined, "het aanvullende spoor mag GEEN documentscope krijgen");
 
   // En de regressie zoals de review hem formuleerde: beide documenten komen in

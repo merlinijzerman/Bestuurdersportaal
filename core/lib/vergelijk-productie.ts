@@ -21,6 +21,7 @@ import type { RetrievalOpties } from "./rag";
 import { voerVolledigeRetrievalUit } from "./retrieval/orkestratie";
 import { bewaakNaIO, isAfbreking } from "./retrieval/afbreken";
 import type { Bronresultaat, RetrievalAdapter, RetrievalContext, RetrievalUitkomst } from "./retrieval/contract";
+import { maakDocumentIdentiteit } from "./retrieval/identiteit";
 import { citaatOpdracht, maakVergelijkSpoor } from "./retrieval/productiepaden-core";
 import type {
   ConceptLite,
@@ -171,6 +172,7 @@ async function haalPassages(
   maxResultaten = MAX_PASSAGES_PER_ZIJDE
 ): Promise<PassageLite[]> {
   const vraag = `${dimensie.label} (${dimensie.key})`;
+  const auditDocumentId = maakDocumentIdentiteit(`fonds:${retrieval.context.fondsId}`, documentId);
   try {
     const uitkomst = await voerVolledigeRetrievalUit(
       { ...retrieval.context, scope: { ...retrieval.context.scope, documentIds: [documentId] } },
@@ -187,9 +189,9 @@ async function haalPassages(
           }),
         ],
       },
-      citaatOpdracht([documentId])
+      citaatOpdracht([maakDocumentIdentiteit(`fonds:${retrieval.context.fondsId}`, documentId)])
     );
-    retrieval.audit.registreer(documentId, dimensie, uitkomst);
+    retrieval.audit.registreer(auditDocumentId, dimensie, uitkomst);
     return uitkomst.geselecteerd.map((b) => ({
       tekst: b.weergave?.aangeleverdePassage ?? b.passage,
       page: b.locator.pagina ?? null,
@@ -199,7 +201,7 @@ async function haalPassages(
     // Een providerfout blijft best-effort zoals vóór #369; annulering en onze
     // deadline zijn terminal en mogen nooit als een lege evidence-set doorgaan.
     if (isAfbreking(e)) throw e;
-    retrieval.audit.registreerProviderfout(documentId, dimensie);
+    retrieval.audit.registreerProviderfout(auditDocumentId, dimensie);
     console.error(`[vergelijk] retrieval mislukt (doc ${documentId}, dim ${dimensie.key}):`, (e as Error).message);
     return [];
   }

@@ -71,13 +71,20 @@ function adapter(zoek: RetrievalAdapter["zoek"]): RetrievalAdapter {
       bronsoorten: ["fonds", "generiek", "notulen"],
       strategieen: ["gericht", "vergelijk"],
       ondersteundeFilters: ["modus", "bronsoort", "procesinstantie_ids"],
-      versiebewijs: false,
+      versiebewijs: true,
+      versiebeleid: { sterk: [], gedegradeerd: ["status-datum"] },
       permissionProof: false,
       preview: false,
       cancellation: true,
       timeout: true,
     }),
     zoek,
+    verifieerVersies: async (_ctx, refs) => new Map(refs.map((ref) => [ref, {
+      beschikbaar: true,
+      documentIdentiteit: ref === PASSAGE_A ? DOC_A : DOC_B,
+      passageIdentiteit: ref,
+      versie: { soort: "status-datum" as const, waarde: "2026-09-11" },
+    }])),
   };
 }
 
@@ -152,10 +159,10 @@ test("T2-2 — /zoeken-succesgrens blijft byte-/structuurcompatibel met de W322-
 });
 
 test("T2-2 review — alleen een echte generieke bron mag zonder fonds-id door de serverscope", () => {
-  assert.equal(binnenServerScope(context, bron({ documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "fonds" } })), false);
-  assert.equal(binnenServerScope(context, bron({ bronsoort: "notulen", documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "fonds" } })), false);
-  assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "fonds" } })), false);
-  assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { documentId: UUID_A, fondsId: null, bibliotheek: "generiek" } })), true);
+  assert.equal(binnenServerScope(context, bron({ documentIdentiteit: { id: DOC_A, fondsId: null, bibliotheek: "fonds" } })), false);
+  assert.equal(binnenServerScope(context, bron({ bronsoort: "notulen", documentIdentiteit: { id: DOC_A, fondsId: null, bibliotheek: "fonds" } })), false);
+  assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { id: DOC_A, fondsId: null, bibliotheek: "fonds" } })), false);
+  assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { id: DOC_A, fondsId: null, bibliotheek: "generiek" } })), true);
 });
 
 test("T2-2 review — requestbrede deadline voorkomt persistentie als een concept-read abort negeert", async () => {

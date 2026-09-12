@@ -103,7 +103,10 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
     // voorheen, maar stopt nu vóór de adapter (dus vóór embedding/rerank/RPC).
     if (procesinstantie) {
       if (!geldigeUuid(procesinstantie)) {
-        return NextResponse.json({ resultaten: [], procesinstanties: [], meta: null });
+        return NextResponse.json(maakZoekRespons({
+          resultaten: [], procesinstanties: [], methode: "geen",
+          opgehaald: 0, geselecteerd: 0, modus,
+        }));
       }
       const { data: proces } = await supabase
         .from("procedures")
@@ -112,7 +115,10 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
         .eq("fonds_id", fondsId)
         .maybeSingle();
       if (!proces) {
-        return NextResponse.json({ resultaten: [], procesinstanties: [], meta: null });
+        return NextResponse.json(maakZoekRespons({
+          resultaten: [], procesinstanties: [], methode: "geen",
+          opgehaald: 0, geselecteerd: 0, modus,
+        }));
       }
     }
 
@@ -148,7 +154,15 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
       },
       citaatOpdracht([])
     );
-    const resultaten = groepeerZoekresultaten(voltooid.geselecteerd);
+    // #367 houdt de retrievalgrens opaque. Dit bestaande HTTP-contract gebruikt
+    // document_id echter als lokale downloadlocator; projecteer uitsluitend op
+    // deze legacy responsegrens terug via het providerprivate adapterregister.
+    // Daarmee blijven de W322-respons en de bestaande UI-links intact zonder
+    // dat een database-id selectie, citatie of audit binnenkomt.
+    const resultaten = groepeerZoekresultaten(voltooid.geselecteerd).map((resultaat) => ({
+      ...resultaat,
+      document_id: retrieval.lokaleDocumentRefVoor(resultaat.document_id) ?? resultaat.document_id,
+    }));
 
     // Resolveer procesinstantie-titels (dossiers) voor groepering + filter-UI.
     // RLS bepaalt zichtbaarheid; ontbreekt een titel, dan valt de client terug op

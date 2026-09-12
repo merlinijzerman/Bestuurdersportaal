@@ -29,6 +29,7 @@ import {
 } from "./toelatingspoort";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type { Afbreekgrendel } from "./afbreken";
+import { maakDocumentIdentiteit } from "./identiteit";
 import type {
   AdapterUitkomst,
   Bronresultaat,
@@ -112,7 +113,22 @@ export function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): b
   } else if (identiteit.fondsId !== ctx.fondsId) {
     return false;
   }
-  if (ctx.scope?.documentIds?.length && !ctx.scope.documentIds.includes(identiteit.id)) return false;
+  if (ctx.scope?.documentIds?.length) {
+    // Bestaande lokale aanroepers leveren server-side documentrefs (UUID's),
+    // terwijl na #367 alleen de opaque identiteit de adaptergrens passeert.
+    // Een externe adapter moet een al-opaque scopewaarde leveren; voor de
+    // lokale fonds/generiek-adapter herleiden we dezelfde centrale identiteit.
+    const namespace = bron.bronsoort === "generiek"
+      ? "generiek"
+      : bron.bronsoort === "fonds" || bron.bronsoort === "notulen"
+        ? `fonds:${ctx.fondsId}`
+        : null;
+    const binnenDocumentScope = ctx.scope.documentIds.some((scopeRef) =>
+      scopeRef === identiteit.id ||
+      (namespace !== null && maakDocumentIdentiteit(namespace, scopeRef) === identiteit.id)
+    );
+    if (!binnenDocumentScope) return false;
+  }
   if (ctx.scope?.procesId && identiteit.procesId !== ctx.scope.procesId) return false;
   return true;
 }

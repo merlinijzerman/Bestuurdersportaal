@@ -93,20 +93,54 @@ begin
     raise exception 'vergelijking_vreemd_document' using errcode = '42501';
   end if;
 
+  -- Ook de inhoudsvrije pogingen dragen sinds #367 uitsluitend opaque
+  -- documentidentiteiten. Bind ze aan een echt, zichtbaar document voordat ze
+  -- in het append-only spoor komen; een directe RPC-aanroeper mag geen vrij
+  -- auditlabel kunnen planten.
+  select count(*) into v_vreemd
+    from jsonb_array_elements(coalesce(p_retrieval_meta->'pogingen', '[]'::jsonb)) as p
+   where not exists (
+           select 1 from public.documenten d
+            where (d.fonds_id = v_fonds or (d.fonds_id is null and d.bibliotheek = 'generiek'))
+              and p->>'document_id' = 'doc_v1_' || encode(extensions.digest(
+                octet_length('bestuurdersportaal:doc:v1')::text || ':bestuurdersportaal:doc:v1|' ||
+                octet_length(case when d.fonds_id is null then 'generiek' else 'fonds:' || d.fonds_id::text end)::text || ':' ||
+                  case when d.fonds_id is null then 'generiek' else 'fonds:' || d.fonds_id::text end || '|' ||
+                octet_length(d.id::text)::text || ':' || d.id::text,
+                'sha256'
+              ), 'hex'));
+  if v_vreemd > 0 then
+    raise exception 'vergelijking_vreemde_retrievalpoging' using errcode = '42501';
+  end if;
+
   select count(*) into v_vreemd
     from jsonb_array_elements(p_bronnen) as b
    where not exists (
            select 1 from public.documenten d
-            where d.id = (b->>'document_id')::uuid
-              and (
-                d.fonds_id = v_fonds
+            where (
+                (
+                  d.fonds_id = v_fonds
+                  and b->>'bronsoort' in ('fonds', 'notulen')
+                  and coalesce(b->>'bibliotheek', 'fonds') <> 'generiek'
+                )
                 or (
                   d.fonds_id is null
                   and d.bibliotheek = 'generiek'
                   and b->>'bronsoort' = 'generiek'
                   and b->>'bibliotheek' = 'generiek'
                 )
-              ));
+              )
+              -- #367: de duurzame/publieke bron draagt geen database-UUID.
+              -- Herleid dezelfde opaque documentidentiteit uit de echte,
+              -- tenantgecontroleerde rij; zo blijft de DEFINER-check streng
+              -- zonder een providerprivate locator in het auditspoor op te slaan.
+              and b->>'document_id' = 'doc_v1_' || encode(extensions.digest(
+                octet_length('bestuurdersportaal:doc:v1')::text || ':bestuurdersportaal:doc:v1|' ||
+                octet_length(case when d.fonds_id is null then 'generiek' else 'fonds:' || d.fonds_id::text end)::text || ':' ||
+                  case when d.fonds_id is null then 'generiek' else 'fonds:' || d.fonds_id::text end || '|' ||
+                octet_length(d.id::text)::text || ':' || d.id::text,
+                'sha256'
+              ), 'hex'));
   if v_vreemd > 0 then
     raise exception 'vergelijking_vreemde_bron' using errcode = '42501';
   end if;

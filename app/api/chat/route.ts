@@ -19,7 +19,7 @@ import { timeoutUitConfig, maakAfbreekgrendel, RetrievalAfgebroken as BeurtAfgeb
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
-import { maakCitationId } from "@/core/lib/retrieval/identiteit";
+import { maakCitationId, maakDocumentIdentiteit } from "@/core/lib/retrieval/identiteit";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import { telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, chunkAlsBronresultaat, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters, maxPerDocVoor, resolveerRetrievalVlaggen } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
@@ -2654,7 +2654,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // daar zwaarder dan bredere duiding.
       const primairPadActief = scopeActief || agendapuntMetStukken;
       const primaireIds = new Set<string>(
-        primairPadActief ? scopeDocumentIds ?? [] : []
+        primairPadActief
+          ? (scopeDocumentIds ?? []).map((id) => maakDocumentIdentiteit(`fonds:${fondsId}`, id))
+          : []
       );
       // ── T2-1 — C1 loopt door het retrievalcontract ───────────────────────
       //  De adapter levert kandidaten; de orkestratie selecteert per spoor,
