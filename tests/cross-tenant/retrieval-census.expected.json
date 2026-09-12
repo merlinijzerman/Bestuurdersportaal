@@ -50,9 +50,7 @@
         ]
       },
       "rpcs": [],
-      "tabellen": [
-        "document_chunks"
-      ]
+      "tabellen": []
     },
     "app/api/classificatie/backfill/route.ts": {
       "modules": {},
@@ -112,6 +110,9 @@
         ],
         "bronfragment": [
           "bouwBronfragment"
+        ],
+        "bron-afbakening": [
+          "neutraliseerBrontekst"
         ]
       },
       "rpcs": [],
@@ -192,6 +193,15 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/retrieval/modelcontext.ts": {
+      "modules": {
+        "bron-afbakening": [
+          "neutraliseerBrontekst"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
     "core/lib/retrieval/orkestratie.ts": {
       "modules": {
         "rag": [
@@ -251,6 +261,28 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/retrieval/supabase-evidence.ts": {
+      "modules": {
+        "bron-afbakening": [
+          "neutraliseerBrontekst"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "core/lib/retrieval/supabase-parent.ts": {
+      "modules": {
+        "rag": [
+          "DocumentChunk"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
     "core/lib/retrieval/supabase-versie.ts": {
       "modules": {
         "rag": [
@@ -266,6 +298,9 @@
       "modules": {
         "rag": [
           "RetrievalOpties"
+        ],
+        "bronfragment": [
+          "bouwBronfragment"
         ]
       },
       "rpcs": [],

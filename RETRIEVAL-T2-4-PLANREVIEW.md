@@ -1,11 +1,36 @@
 # #368 T2-4 — planreview, census en karakterisering
 
-**Basis:** `origin/preview` op `afd0efb45583`
+**Inventarisatiebasis:** `origin/preview` op `afd0efb45583`
 
-**Tranche:** inventarisatie en karakterisering; nog geen productiecode
+**Implementatiebasis:** `origin/preview` op `50c54ed7093`
 
-**Besluit:** GO voor deze test-/documentatietranche; definitieve wiring blijft een afzonderlijke
-productietranche. De contracten uit #367, #369 en #370 staan inmiddels in deze basis.
+**Status:** productietranche uitgevoerd op branch `codex/368-evidencelezingen-implementatie`;
+nog niet gepusht, gemerged of uitgerold. De contracten uit #367, #369 en #370 zijn leidend.
+
+## 0. Implementatie-uitkomst
+
+- De vijf evidencelezingen buiten de retrievalkern zijn gemigreerd. De transitieve census meldt
+  nul evidencelezingen buiten `core/lib/rag.ts` en `core/lib/retrieval/`.
+- Chunkpresentie is contentvrij, server-scoped en fail-closed. Maximaal 2.000 documentrefs en
+  2.000 resultaatrijen worden verwerkt; bereikt de rijencap voordat alle refs zijn opgelost, dan
+  komt geen gedeeltelijke set vrij en kan de route niet fondsbreed terugvallen.
+- Beide Decision Object-rollen blijven bestaan: procescontext en formele besluitbron. Beide
+  krijgen opaque document-/passage-/citation-identiteit, een sterke versie over de exacte
+  veldprojectie, een tweede V5-herlezing en centrale `verifieerToelating`.
+- Parent/sibling-context blijft een adapterhook. De providerprivate query heeft cap+1-
+  detectie; iedere gebruikte sibling moet dezelfde toegelaten document-/indexversie dragen.
+  Afkap of mismatch is terminaal en levert nooit gedeeltelijke parentcontext.
+- `semantic_units` worden deterministisch geordend, maximaal 500 per document en maximaal
+  60.000 werkelijk gebruikte evidence-tekens. Extractierun, canonieke unitinhoud en documenthash
+  vormen de sterke versie; findings, bronaudit en persistentie behouden de opaque passagebinding.
+- De 26 overige modelcontextlezingen blijven expliciet **modelcontext**, geen evidence. Hun
+  gerenderde blokken lopen via één typed servercontextcontract met PII-klasse, neutralisatie,
+  blok- en combinatiecaps en een afzonderlijk inhoudsvrij auditspoor.
+- `chunksVoor()` is bewust nog niet verwijderd: de chatroute heeft aantoonbaar nog precies één
+  goedgekeurde downstreamconsumer voor bestaande `DocumentChunk`-logica. De providerprivate
+  brug staat niet in het publieke retrievalcontract.
+
+Geen live Microsoft-/Graph-wiring en geen database-migratie zijn toegevoegd.
 
 ## 1. Huidige census
 

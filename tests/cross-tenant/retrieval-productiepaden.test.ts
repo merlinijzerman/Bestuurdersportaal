@@ -367,11 +367,14 @@ test("T2-2 karakterisering — schema-run slaat runtimevarianten over en queryt 
   );
 });
 
-test("T2-2 — directe semantic_units-lezing is één gemotiveerde RLS-uitzondering met cancellation", () => {
+test("#368 — semantic_units loopt typed, begrensd en annuleerbaar via de centrale evidencereader", () => {
   const code = lees("core/lib/vergelijk-productie.ts");
-  assert.equal((code.match(/\.from\("semantic_units"\)/g) ?? []).length, 1);
-  assert.match(code, /Gemotiveerde uitzondering:[\s\S]*semantic_units/);
-  assert.match(code, /query = query\.abortSignal\(signal\)/);
+  const reader = lees("core/lib/retrieval/supabase-evidence.ts");
+  assert.equal((code.match(/\.from\("semantic_units"\)/g) ?? []).length, 0);
+  assert.match(code, /leesSemantischeEvidence/);
+  assert.match(reader, /MAX_SEMANTISCHE_UNITS = 500/);
+  assert.match(reader, /verifieerToelating/);
+  assert.match(reader, /abortSignal\(opdracht\.context\.signal\)/);
 });
 
 test("T2-2 — providerfout degradeert alleen in vergelijk; afbraak en auditafronding blijven terminaal", () => {
