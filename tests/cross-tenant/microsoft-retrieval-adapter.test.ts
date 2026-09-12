@@ -7,7 +7,9 @@
 // ============================================================================
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { foutcategorieVoor, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
 import { RetrievalAfgebroken, isAfbreking } from "../../core/lib/retrieval/afbreken";
 import type {
@@ -65,6 +67,8 @@ const CITAAT: CitaatOpdracht = {
   sentinel: "FIXTURE370",
 };
 
+const ANDER_FONDS_ID = "33333333-3333-4333-8333-333333333333";
+
 async function voerUit(
   scenario: MicrosoftFixtureScenario,
   opties: Parameters<typeof maakMicrosoftRetrievalFixture>[0] = {},
@@ -86,10 +90,10 @@ test("#370 — capabilities zijn expliciet, defensief gekopieerd en volledig bew
   const b = fixture.adapter.capabilities();
   assert.deepEqual(a, {
     bronsoorten: ["sharepoint"],
-    strategieen: ["gericht", "volledig", "vergelijk"],
+    strategieen: ["gericht"],
     ondersteundeFilters: ["modus"],
     versiebewijs: true,
-    versiebeleid: { sterk: ["hash"], gedegradeerd: [] },
+    versiebeleid: { sterk: ["etag", "ctag"], gedegradeerd: [] },
     permissionProof: true,
     preview: true,
     cancellation: true,
@@ -108,7 +112,8 @@ test("#370 — de geclaimde modusfilter verkleint de set werkelijk", async () =>
     resultaatRef: "loc-r-h001",
     documentRef: "loc-d-h001",
     registratieRef: "loc-b-h001",
-    versieWaarde: "loc-v-h001",
+    versieSoort: "etag",
+    versieTag: 'W/"synthetisch-h001"',
     passageNr: 2,
     actueel: false,
     documentstatus: "vervangen",
@@ -127,14 +132,16 @@ test("#370 — de geclaimde modusfilter verkleint de set werkelijk", async () =>
 
 test("#370 — algemeen resultaat draagt opaque identiteit, versie, locator, tijd en permission proof", async () => {
   const ctx = context();
+  const ruweBron = maakSynthetischeMicrosoftFixtureBron() as Record<string, unknown>;
   const { uitkomst } = await voerUit("algemeen", {}, ctx);
   assert.equal(uitkomst.geselecteerd.length, 2);
+  assert.deepEqual(new Set(uitkomst.geselecteerd.map((bron) => bron.versie.soort)), new Set(["etag", "ctag"]));
   for (const bron of uitkomst.geselecteerd) {
     assert.match(bron.ref, /^passage_v1_[a-f0-9]{64}$/);
     assert.match(bron.documentIdentiteit.id, /^doc_v1_[a-f0-9]{64}$/);
     assert.equal(bron.passageIdentiteit.id, bron.ref, "de publieke ref is aan de passage-identiteit gebonden");
     assert.equal(bron.documentIdentiteit.fondsId, ctx.fondsId);
-    assert.equal(bron.versie.soort, "hash");
+    assert.ok(bron.versie.soort === "etag" || bron.versie.soort === "ctag");
     assert.match(bron.versie.waarde ?? "", /^version_v1_[a-f0-9]{64}$/);
     assert.equal(bron.versie.gecontroleerdOp, ctx.verzoekStartOp);
     assert.match(bron.locator.mappad ?? "", /^\/Bestuur\//);
@@ -143,12 +150,52 @@ test("#370 — algemeen resultaat draagt opaque identiteit, versie, locator, tij
     assert.equal(bron.toegangscontrole?.resultaatRef, bron.ref);
     assert.equal(bron.toegangscontrole?.bronregistratieRef, bron.bronregistratieRef);
   }
+  assert.notEqual(
+    uitkomst.geselecteerd.find((bron) => bron.versie.soort === "etag")?.versie.waarde,
+    ruweBron.versieTag,
+    "de exacte eTag voedt de opaque #367-versie-identiteit maar verlaat de adapter niet rauw"
+  );
   assert.equal(uitkomst.bronverwijzingen.length, 2, "citaties blijven centraal gebouwd");
   assert.equal(uitkomst.meta.correlation_id, ctx.correlationId);
   const publiek = JSON.stringify(uitkomst);
-  for (const providerPrivaat of ["loc-r-7f12", "loc-d-19c4", "loc-v-0042", "a".repeat(64)]) {
+  for (const providerPrivaat of [
+    "loc-r-7f12",
+    "loc-d-19c4",
+    "loc-b-3a81",
+    'W/"synthetisch-0042"',
+    '"synthetisch-0043"',
+  ]) {
     assert.ok(!publiek.includes(providerPrivaat), `providerprivate identiteit lekt niet: ${providerPrivaat}`);
   }
+});
+
+test("#370 — exacte eTag/cTag-semantiek voedt de opaque versie-identiteit", async () => {
+  const basis = maakSynthetischeMicrosoftFixtureBron() as Record<string, unknown>;
+  const gewijzigdeTag = { ...basis, versieTag: 'W/"synthetisch-0042-gewijzigd"' };
+  const cTag = { ...basis, versieSoort: "ctag", versieTag: '"synthetisch-c0042"' };
+  const ctx = context();
+
+  const basisResultaat = await maakMicrosoftRetrievalFixture({ bronInvoer: [basis] }).adapter.zoek(ctx, query());
+  const gewijzigdResultaat = await maakMicrosoftRetrievalFixture({ bronInvoer: [gewijzigdeTag] }).adapter.zoek(ctx, query());
+  const cTagResultaat = await maakMicrosoftRetrievalFixture({ bronInvoer: [cTag] }).adapter.zoek(ctx, query());
+
+  assert.equal(basisResultaat.kandidaten[0].versie.soort, "etag");
+  assert.equal(cTagResultaat.kandidaten[0].versie.soort, "ctag");
+  assert.notEqual(
+    basisResultaat.kandidaten[0].versie.waarde,
+    gewijzigdResultaat.kandidaten[0].versie.waarde,
+    "elk teken van de exacte provider-eTag bepaalt de afgeleide versie"
+  );
+  assert.notEqual(
+    basisResultaat.kandidaten[0].versie.waarde,
+    cTagResultaat.kandidaten[0].versie.waarde,
+    "dezelfde documentbinding met cTag is een andere versie-identiteit dan eTag"
+  );
+  assert.doesNotMatch(
+    JSON.stringify([basisResultaat, gewijzigdResultaat, cTagResultaat]),
+    /synthetisch-(?:0042|c0042)/,
+    "ruwe provider-tags verlaten de adaptergrens niet"
+  );
 });
 
 test("#370 — scenario's beperkt, historisch en verplaatst zijn deterministisch", async () => {
@@ -157,7 +204,9 @@ test("#370 — scenario's beperkt, historisch en verplaatst zijn deterministisch
   assert.deepEqual(beperkt.fixture.waarneming(), {
     zoekAanroepen: 1,
     versieAanroepen: 1,
+    versieIoAanroepen: 1,
     v5Aanroepen: 1,
+    v5IoAanroepen: 1,
     aangebodenKandidaten: 1,
     versieReferenties: 1,
     v5Referenties: 1,
@@ -217,11 +266,14 @@ test("#370 — ontbrekende, ongeldige of verkeerd gebonden publieke identiteit f
 
 test("#370 — werkelijk onvolledige lokale ref, documentidentiteit of locator faalt vóór ranking", async () => {
   const geldig = maakSynthetischeMicrosoftFixtureBron() as Record<string, unknown>;
+  const { fondsId: _fonds, ...zonderFondsbinding } = geldig;
   const { resultaatRef: _ref, ...zonderLokaleRef } = geldig;
   const { documentRef: _document, ...zonderDocumentidentiteit } = geldig;
   const { mappad: _locator, ...zonderLocator } = geldig;
 
   for (const [label, bronInvoer] of [
+    ["fondsbinding", zonderFondsbinding],
+    ["ongeldige fondsbinding", { ...geldig, fondsId: "niet-een-uuid" }],
     ["lokale ref", zonderLokaleRef],
     ["ongeldige lokale ref", { ...geldig, resultaatRef: "niet-lokaal" }],
     ["documentidentiteit", zonderDocumentidentiteit],
@@ -322,6 +374,93 @@ test("#370 — een niet-ondersteund filter blokkeert vóór zoek()", async () =>
   assert.equal(uitkomst.meta.toelating?.gronden.filter_niet_ondersteund, 1);
 });
 
+test("#370 — alleen strategie gericht is ondersteund; elke andere strategie blokkeert vóór zoek()", async () => {
+  for (const strategie of ["volledig", "vergelijk", "bevroren"] as const) {
+    const fixture = maakMicrosoftRetrievalFixture();
+    const uitkomst = await voerVolledigeRetrievalUit(
+      context(),
+      {
+        adapter: fixture.adapter,
+        sporen: [{ query: query({ strategie }), grenzen: GRENZEN }],
+        timeoutMs: 1_000,
+      },
+      CITAAT
+    );
+    assert.equal(fixture.waarneming().zoekAanroepen, 0, strategie);
+    assert.equal(uitkomst.perAdapter[0].fout, "configuratiefout", strategie);
+    assert.equal(uitkomst.meta.toelating?.gronden.filter_niet_ondersteund, 1, strategie);
+  }
+});
+
+test("#370 — ruwe bronnen en beide herlezingen zijn fondsgebonden", async () => {
+  const bronA = maakSynthetischeMicrosoftFixtureBron() as Record<string, unknown>;
+  const bronB = { ...bronA, fondsId: ANDER_FONDS_ID };
+  const fixture = maakMicrosoftRetrievalFixture({ bronInvoer: [bronA, bronB] });
+  const fondsA = context();
+  const fondsB = context({ fondsId: ANDER_FONDS_ID, correlationId: "corr-fixture-370-fonds-b" });
+  const uitA = await fixture.adapter.zoek(fondsA, query());
+  assert.equal(uitA.kandidaten.length, 1);
+
+  const uitB = await fixture.adapter.zoek(fondsB, query());
+  assert.equal(uitB.kandidaten.length, 1);
+  assert.notEqual(uitA.kandidaten[0].ref, uitB.kandidaten[0].ref, "dezelfde ruwe refs krijgen per fonds een andere passage-id");
+  assert.notEqual(
+    uitA.kandidaten[0].bronregistratieRef,
+    uitB.kandidaten[0].bronregistratieRef,
+    "dezelfde ruwe registratieref krijgt per fonds een andere opaque binding"
+  );
+
+  const kandidaatA = uitA.kandidaten[0];
+  const versiestandB = await fixture.adapter.verifieerVersies!(fondsB, [kandidaatA.ref]);
+  const registratiestandB = await fixture.adapter.verifieerBronregistratie!(fondsB, [kandidaatA.bronregistratieRef!]);
+  assert.equal(versiestandB.size, 0, "een opaque resultaatref uit fonds A resolveert niet onder fonds B");
+  assert.equal(registratiestandB.size, 0, "een opaque bronregistratieref uit fonds A resolveert niet onder fonds B");
+  assert.equal(fixture.waarneming().versieIoAanroepen, 0, "fonds-B-refcontrole start geen versie-I/O voor fonds A");
+  assert.equal(fixture.waarneming().v5IoAanroepen, 0, "fonds-B-refcontrole start geen V5-I/O voor fonds A");
+
+  const ongeldigeContext = context({ fondsId: "client-aangeleverd-fonds" });
+  const vroegGeweigerd = await maakMicrosoftRetrievalFixture({ providerFout: "onverwacht" }).adapter.zoek(
+    ongeldigeContext,
+    query()
+  );
+  assert.equal(vroegGeweigerd.fout, "configuratiefout", "fondsvalidatie staat vóór de providernaad");
+  assert.equal(vroegGeweigerd.provider, "geen");
+});
+
+test("#370 — een kandidaat/ref uit fonds A kan onder fonds B niet via versie- of V5-stand worden gelegitimeerd", async () => {
+  const fixture = maakMicrosoftRetrievalFixture();
+  const fondsA = context();
+  const fondsB = context({ fondsId: ANDER_FONDS_ID, correlationId: "corr-fixture-370-aanval" });
+  const directA = await fixture.adapter.zoek(fondsA, query());
+  const kandidaatA = directA.kandidaten[0];
+
+  // Simuleer de bewezen aanval: de onbetrouwbare adapteruitkomst plakt alleen
+  // het scopeveld van fonds B op een verder volledig fonds-A-resultaat. De
+  // centrale scopescan alleen zou dit veld accepteren; de fondsgebonden hooks
+  // mogen de A-referenties onder B vervolgens niet terugvinden.
+  const gemanipuleerd: Bronresultaat = {
+    ...kandidaatA,
+    documentIdentiteit: { ...kandidaatA.documentIdentiteit, fondsId: ANDER_FONDS_ID },
+  };
+  const aanvallendeAdapter: RetrievalAdapter = {
+    ...fixture.adapter,
+    async zoek() {
+      return { ...directA, kandidaten: [gemanipuleerd], opgehaald: 1 };
+    },
+  };
+  const uitkomst = await voerVolledigeRetrievalUit(
+    fondsB,
+    { adapter: aanvallendeAdapter, sporen: [{ query: query(), grenzen: GRENZEN }], timeoutMs: 1_000 },
+    CITAAT
+  );
+  assert.deepEqual(uitkomst.kandidaten, []);
+  assert.deepEqual(uitkomst.geselecteerd, []);
+  assert.equal(uitkomst.bronverwijzingen.length, 0);
+  assert.equal(uitkomst.meta.toelating?.gronden.versiestand_ontbreekt, 1);
+  assert.equal(fixture.waarneming().versieIoAanroepen, 0);
+  assert.equal(fixture.waarneming().v5IoAanroepen, 0);
+});
+
 test("#370 — truncatie is expliciet en behoudt uitsluitend de begrensde kandidaat", async () => {
   const fixture = maakMicrosoftRetrievalFixture({ maxKandidatenTerug: 1 });
   const adapterUitkomst = await fixture.adapter.zoek(context(), query());
@@ -358,17 +497,38 @@ test("#370 — echte providerthrows worden genormaliseerd en door de orkestratie
   }
 });
 
-test("#370 — timeout en cancellation breken echte wachtende adapter-I/O af", async () => {
-  for (const reden of ["timeout", "annulering"] as const) {
-    const controller = new AbortController();
-    const fixture = maakMicrosoftRetrievalFixture({ vertragingMs: 5_000 });
-    const bezig = fixture.adapter.zoek(context({ signal: controller.signal }), query());
-    controller.abort(new RetrievalAfgebroken(reden));
-    await assert.rejects(
-      () => bezig,
-      (fout: unknown) => isAfbreking(fout) && foutcategorieVoor(fout) === reden
-    );
-  }
+test("#370 — cancellation breekt echte wachtende initiële adapter-I/O af", async () => {
+  const controller = new AbortController();
+  const fixture = maakMicrosoftRetrievalFixture({ vertragingMs: 5_000 });
+  const bezig = fixture.adapter.zoek(context({ signal: controller.signal }), query());
+  controller.abort(new RetrievalAfgebroken("annulering"));
+  await assert.rejects(
+    () => bezig,
+    (fout: unknown) => isAfbreking(fout) && foutcategorieVoor(fout) === "annulering"
+  );
+});
+
+test("#370 — de echte orkestratiedeadline breekt de initiële zoek-I/O af en start geen hooks", async () => {
+  const fixture = maakMicrosoftRetrievalFixture({ vertragingMs: 5_000 });
+  const bezig = voerVolledigeRetrievalUit(
+    context(),
+    { adapter: fixture.adapter, sporen: [{ query: query(), grenzen: GRENZEN }], timeoutMs: 25 },
+    CITAAT
+  );
+  await assert.rejects(
+    () => bezig,
+    (fout: unknown) => isAfbreking(fout) && foutcategorieVoor(fout) === "timeout"
+  );
+  assert.deepEqual(fixture.waarneming(), {
+    zoekAanroepen: 1,
+    versieAanroepen: 0,
+    versieIoAanroepen: 0,
+    v5Aanroepen: 0,
+    v5IoAanroepen: 0,
+    aangebodenKandidaten: 0,
+    versieReferenties: 0,
+    v5Referenties: 0,
+  });
 });
 
 test("#370 — cancellation en deadline breken een lopende V5-herlezing af vóór ranking", async () => {
@@ -450,6 +610,24 @@ test("#370 — de fixture is hermetisch, inhoudsvrij in observatie en niet produ
     assert.ok(!code.includes(verboden), `de fixture bevat verboden I/O/identiteit: ${verboden}`);
   }
 
+  const repo = fileURLToPath(new URL("../../", import.meta.url));
+  const productiecode: string[] = [];
+  const verzamel = (map: string) => {
+    for (const item of readdirSync(map, { withFileTypes: true })) {
+      const pad = join(map, item.name);
+      if (item.isDirectory()) verzamel(pad);
+      else if ([".ts", ".tsx", ".js", ".mjs", ".cjs"].includes(extname(item.name))) {
+        productiecode.push(readFileSync(pad, "utf8"));
+      }
+    }
+  };
+  for (const map of ["app", "core", "platform", "fondsen"]) verzamel(join(repo, map));
+  const productie = productiecode.join("\n");
+  assert.doesNotMatch(
+    productie,
+    /tests\/cross-tenant\/fixtures\/microsoft-retrieval-adapter|maakMicrosoftRetrievalFixture|MicrosoftFixtureScenario/,
+    "geen productiebron importeert of benoemt de testfixture"
+  );
   const contract = readFileSync(new URL("../../core/lib/retrieval/contract.ts", import.meta.url), "utf8");
   const orkestratie = readFileSync(new URL("../../core/lib/retrieval/orkestratie.ts", import.meta.url), "utf8");
   assert.doesNotMatch(contract + orkestratie, /MicrosoftFixture|Graph[A-Z]|Azure[A-Z]|SearchResponse|DriveItem/);
@@ -459,8 +637,10 @@ test("#370 — de fixture is hermetisch, inhoudsvrij in observatie en niet produ
   assert.deepEqual(Object.keys(waarneming).sort(), [
     "aangebodenKandidaten",
     "v5Aanroepen",
+    "v5IoAanroepen",
     "v5Referenties",
     "versieAanroepen",
+    "versieIoAanroepen",
     "versieReferenties",
     "zoekAanroepen",
   ]);

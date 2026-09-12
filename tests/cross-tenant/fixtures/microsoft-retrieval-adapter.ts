@@ -7,10 +7,10 @@
 //  synthetische, fondsgebonden en niet-herleidbare lokale referenties.
 // ============================================================================
 import { isAfbreking, slaapMetSignaal } from "../../../core/lib/retrieval/afbreken";
+import { createHash } from "node:crypto";
 import {
   maakDocumentIdentiteit,
   maakPassageIdentiteit,
-  maakVolledigeVersieHash,
 } from "../../../core/lib/retrieval/identiteit";
 import type {
   ActueleVersiestand,
@@ -61,7 +61,9 @@ export interface MicrosoftFixtureOpties {
 export interface MicrosoftFixtureWaarneming {
   zoekAanroepen: number;
   versieAanroepen: number;
+  versieIoAanroepen: number;
   v5Aanroepen: number;
+  v5IoAanroepen: number;
   aangebodenKandidaten: number;
   versieReferenties: number;
   v5Referenties: number;
@@ -87,11 +89,12 @@ export type MicrosoftFixtureProviderfoutcode =
   | "onverwacht";
 
 interface SynthetischeBron {
+  fondsId: string;
   resultaatRef: string;
   documentRef: string;
   registratieRef: string;
-  versieWaarde: string;
-  bestandHash: string;
+  versieSoort: "etag" | "ctag";
+  versieTag: string;
   configuratieVersie: number;
   titel: string;
   passageNr: number;
@@ -104,12 +107,12 @@ interface SynthetischeBron {
 
 const CAPABILITIES: Readonly<AdapterCapabilities> = {
   bronsoorten: ["sharepoint"],
-  strategieen: ["gericht", "volledig", "vergelijk"],
+  strategieen: ["gericht"],
   // De fixture past alleen `modus` werkelijk toe. Elke andere filterclaim zou
   // een ongefilterde, bredere kandidatenset doorlaten.
   ondersteundeFilters: ["modus"],
   versiebewijs: true,
-  versiebeleid: { sterk: ["hash"], gedegradeerd: [] },
+  versiebeleid: { sterk: ["etag", "ctag"], gedegradeerd: [] },
   permissionProof: true,
   preview: true,
   cancellation: true,
@@ -122,11 +125,12 @@ const CAPABILITIES: Readonly<AdapterCapabilities> = {
  */
 export function maakSynthetischeMicrosoftFixtureBron(): unknown {
   return {
+    fondsId: "11111111-1111-4111-8111-111111111111",
     resultaatRef: "loc-r-7f12",
     documentRef: "loc-d-19c4",
     registratieRef: "loc-b-3a81",
-    versieWaarde: "loc-v-0042",
-    bestandHash: "a".repeat(64),
+    versieSoort: "etag",
+    versieTag: 'W/"synthetisch-0042"',
     configuratieVersie: 7,
     titel: "Synthetisch bestuursstuk A",
     passageNr: 1,
@@ -139,11 +143,12 @@ export function maakSynthetischeMicrosoftFixtureBron(): unknown {
 
 const BASIS: readonly SynthetischeBron[] = Object.freeze([
   {
+    fondsId: "11111111-1111-4111-8111-111111111111",
     resultaatRef: "loc-r-7f12",
     documentRef: "loc-d-19c4",
     registratieRef: "loc-b-3a81",
-    versieWaarde: "loc-v-0042",
-    bestandHash: "a".repeat(64),
+    versieSoort: "etag",
+    versieTag: 'W/"synthetisch-0042"',
     configuratieVersie: 7,
     titel: "Synthetisch bestuursstuk A",
     passageNr: 1,
@@ -153,11 +158,12 @@ const BASIS: readonly SynthetischeBron[] = Object.freeze([
     toegestaan: true,
   },
   {
+    fondsId: "11111111-1111-4111-8111-111111111111",
     resultaatRef: "loc-r-8b37",
     documentRef: "loc-d-20d5",
     registratieRef: "loc-b-4c92",
-    versieWaarde: "loc-v-0043",
-    bestandHash: "b".repeat(64),
+    versieSoort: "ctag",
+    versieTag: '"synthetisch-0043"',
     configuratieVersie: 7,
     titel: "Synthetisch bestuursstuk B",
     passageNr: 2,
@@ -172,18 +178,48 @@ function isRecord(waarde: unknown): waarde is Record<string, unknown> {
   return typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
 }
 
-function lokaleRef(waarde: unknown, soort: "r" | "d" | "b" | "v"): waarde is string {
+function lokaleRef(waarde: unknown, soort: "r" | "d" | "b"): waarde is string {
   return typeof waarde === "string" && new RegExp(`^loc-${soort}-[a-z0-9]+$`).test(waarde);
+}
+
+function fondsId(waarde: unknown): waarde is string {
+  return typeof waarde === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(waarde);
+}
+
+function opaqueFixtureId(prefix: "bron" | "version", delen: readonly string[]): string {
+  const canoniek = delen.map((deel) => `${Buffer.byteLength(deel, "utf8")}:${deel}`).join("|");
+  return `${prefix}_v1_${createHash("sha256").update(`microsoft-fixture:${prefix}:v1|${canoniek}`).digest("hex")}`;
+}
+
+function maakBronregistratieIdentiteit(fonds: string, registratieRef: string): string {
+  return opaqueFixtureId("bron", [fonds, registratieRef]);
+}
+
+function maakMicrosoftVersieIdentiteit(
+  documentIdentiteit: string,
+  soort: "etag" | "ctag",
+  exacteTag: string
+): string {
+  // §4.7 bepaalt de providersemantiek: soort + exacte eTag/cTag. De actuele
+  // centrale #367-identiteitsgrens laat providerprivate waarden echter niet
+  // rechtstreeks door en eist `version_v1_<sha256>`. Daarom is de exacte tag
+  // hier een cryptografisch ingrediënt, samen met document en tagsoort.
+  return opaqueFixtureId("version", [documentIdentiteit, soort, exacteTag]);
+}
+
+function fondsSleutel(fonds: string, ref: string): string {
+  return `${fonds}:${ref}`;
 }
 
 /** De runtimegrens tussen een onbekende providerprojectie en Bronresultaat. */
 function valideerBronInvoer(waarde: unknown): SynthetischeBron | null {
   if (!isRecord(waarde)) return null;
+  if (!fondsId(waarde.fondsId)) return null;
   if (!lokaleRef(waarde.resultaatRef, "r")) return null;
   if (!lokaleRef(waarde.documentRef, "d")) return null;
   if (!lokaleRef(waarde.registratieRef, "b")) return null;
-  if (!lokaleRef(waarde.versieWaarde, "v")) return null;
-  if (typeof waarde.bestandHash !== "string" || !/^[a-f0-9]{64}$/.test(waarde.bestandHash)) return null;
+  if (waarde.versieSoort !== "etag" && waarde.versieSoort !== "ctag") return null;
+  if (typeof waarde.versieTag !== "string" || waarde.versieTag.length === 0) return null;
   if (!Number.isInteger(waarde.configuratieVersie) || Number(waarde.configuratieVersie) < 1) return null;
   if (typeof waarde.titel !== "string" || waarde.titel.length === 0) return null;
   if (!Number.isInteger(waarde.passageNr) || Number(waarde.passageNr) < 1) return null;
@@ -246,14 +282,14 @@ function bronnenVoor(scenario: MicrosoftFixtureScenario): SynthetischeBron[] {
       return [
         {
           ...bronnen[0],
-          versieWaarde: "loc-v-0011",
+          versieTag: 'W/"synthetisch-0011"',
           documentstatus: "vervangen",
           actueel: false,
           geldigTot: "2025-12-31",
         },
       ];
     case "gewijzigd":
-      return [{ ...bronnen[0], versieWaarde: "loc-v-0044" }];
+      return [{ ...bronnen[0], versieTag: 'W/"synthetisch-0044"' }];
     case "verplaatst":
       return [{ ...bronnen[0], mappad: "/Bestuur/Archief/Herordend" }];
     case "ingetrokken":
@@ -265,8 +301,9 @@ function bronnenVoor(scenario: MicrosoftFixtureScenario): SynthetischeBron[] {
 
 function maakBewijs(
   ctx: RetrievalContext,
-  bron: SynthetischeBron,
   resultaatRef: string,
+  bronregistratieRef: string,
+  configuratieVersie: number,
   variant: MicrosoftFixtureBewijsvariant
 ): Toegangsbewijs | undefined {
   if (variant === "ontbreekt") return undefined;
@@ -274,13 +311,13 @@ function maakBewijs(
   const basis: Toegangsbewijs = {
     toegestaan: true,
     resultaatRef,
-    bronregistratieRef: bron.registratieRef,
+    bronregistratieRef,
     gebruikerId: ctx.actor.soort === "gebruiker" ? ctx.actor.id : "",
     correlationId: ctx.correlationId,
     // Gelijk aan het server-side verzoekbegin: reproduceerbaar én binnen V4.
     gecontroleerdOp: ctx.verzoekStartOp,
     basis: "delegated_user",
-    bronconfiguratieVersie: bron.configuratieVersie,
+    bronconfiguratieVersie: configuratieVersie,
   };
 
   switch (variant) {
@@ -308,9 +345,19 @@ function alsResultaat(
   positie: number,
   opties: MicrosoftFixtureOpties
 ): Bronresultaat {
-  const documentIdentiteit = maakDocumentIdentiteit(`microsoft-fixture:${ctx.fondsId}`, bron.documentRef);
+  // De lokale sharepoint_documenten-ref uit §4.7 is de adapterprivate seed.
+  // Sinds #367 verlaat alleen de fondsgebonden opaque document-/passagevorm de
+  // centrale grens; de providerref zelf blijft dus ook uit audit en citatie.
+  const documentIdentiteit = maakDocumentIdentiteit(`microsoft-fixture:${bron.fondsId}`, bron.documentRef);
   const passageIdentiteit = maakPassageIdentiteit(documentIdentiteit, bron.resultaatRef);
-  const toegangscontrole = maakBewijs(ctx, bron, passageIdentiteit, opties.bewijs ?? "volledig");
+  const bronregistratieRef = maakBronregistratieIdentiteit(bron.fondsId, bron.registratieRef);
+  const toegangscontrole = maakBewijs(
+    ctx,
+    passageIdentiteit,
+    bronregistratieRef,
+    bron.configuratieVersie,
+    opties.bewijs ?? "volledig"
+  );
   return {
     ref: passageIdentiteit,
     bronsoort: "sharepoint",
@@ -319,17 +366,17 @@ function alsResultaat(
       id: documentIdentiteit,
       bibliotheek: "fonds",
       bron: "Microsoft 365",
-      fondsId: ctx.fondsId,
+      fondsId: bron.fondsId,
     },
     passageIdentiteit: { id: passageIdentiteit },
     versie: {
-      soort: "hash",
+      soort: bron.versieSoort,
       waarde: opties.versieOntbreekt
         ? null
-        : maakVolledigeVersieHash(bron.documentRef, bron.versieWaarde, bron.bestandHash),
+        : maakMicrosoftVersieIdentiteit(documentIdentiteit, bron.versieSoort, bron.versieTag),
       gecontroleerdOp: ctx.verzoekStartOp,
     },
-    bronregistratieRef: bron.registratieRef,
+    bronregistratieRef,
     ...(toegangscontrole ? { toegangscontrole } : {}),
     locator: { mappad: bron.mappad, paragraaf: `fixture-${bron.passageNr}` },
     passage:
@@ -359,7 +406,7 @@ export function maakMicrosoftRetrievalFixture(opties: MicrosoftFixtureOpties = {
   const synthetischeBronnen = bronInvoer.map(valideerBronInvoer).filter((bron): bron is SynthetischeBron => bron !== null);
   const standen = new Map<string, Bronregistratiestand>(
     synthetischeBronnen.map((bron) => [
-      bron.registratieRef,
+      fondsSleutel(bron.fondsId, maakBronregistratieIdentiteit(bron.fondsId, bron.registratieRef)),
       {
         verbonden: true,
         versie: bron.configuratieVersie,
@@ -369,7 +416,9 @@ export function maakMicrosoftRetrievalFixture(opties: MicrosoftFixtureOpties = {
   const meting: MicrosoftFixtureWaarneming = {
     zoekAanroepen: 0,
     versieAanroepen: 0,
+    versieIoAanroepen: 0,
     v5Aanroepen: 0,
+    v5IoAanroepen: 0,
     aangebodenKandidaten: 0,
     versieReferenties: 0,
     v5Referenties: 0,
@@ -407,6 +456,19 @@ export function maakMicrosoftRetrievalFixture(opties: MicrosoftFixtureOpties = {
     async zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst> {
       meting.zoekAanroepen++;
       try {
+        // Een context zonder geldige, server-afgeleide fondsidentiteit bereikt
+        // geen providernaad. Een geldige context ziet uitsluitend ruwe bronnen
+        // die expliciet aan datzelfde fonds zijn gebonden.
+        if (!fondsId(ctx.fondsId)) {
+          return {
+            kandidaten: [],
+            methode: "geen",
+            provider: "geen",
+            latencyMs: 0,
+            opgehaald: 0,
+            fout: "configuratiefout",
+          };
+        }
         if (opties.vertragingMs && opties.vertragingMs > 0) {
           await slaapMetSignaal(opties.vertragingMs, ctx.signal);
         }
@@ -426,15 +488,20 @@ export function maakMicrosoftRetrievalFixture(opties: MicrosoftFixtureOpties = {
           };
         }
 
-        const toegestaan = (gevalideerd as SynthetischeBron[]).filter((bron) => bron.toegestaan);
+        const fondsgebonden = (gevalideerd as SynthetischeBron[]).filter((bron) => bron.fondsId === ctx.fondsId);
+        const toegestaan = fondsgebonden.filter((bron) => bron.toegestaan);
         const gefilterd = pasModusToe(toegestaan, query);
         const alleKandidaten = gefilterd.map((bron, index) => alsResultaat(ctx, bron, index + 1, opties));
         for (const [index, kandidaat] of alleKandidaten.entries()) {
           const bron = gefilterd[index];
           const actueleVersie = scenario === "gewijzigd"
-            ? maakVolledigeVersieHash(bron.documentRef, `${bron.versieWaarde}-actueel`, bron.bestandHash)
+            ? maakMicrosoftVersieIdentiteit(
+                kandidaat.documentIdentiteit.id,
+                bron.versieSoort,
+                `${bron.versieTag}-actueel`
+              )
             : kandidaat.versie.waarde;
-          versiestanden.set(kandidaat.ref, {
+          versiestanden.set(fondsSleutel(ctx.fondsId, kandidaat.ref), {
             beschikbaar: true,
             documentIdentiteit: kandidaat.documentIdentiteit.id,
             passageIdentiteit: kandidaat.passageIdentiteit.id,
@@ -478,16 +545,22 @@ export function maakMicrosoftRetrievalFixture(opties: MicrosoftFixtureOpties = {
     ): Promise<Map<string, ActueleVersiestand>> {
       meting.versieAanroepen++;
       meting.versieReferenties += refs.length;
+      if (!fondsId(ctx.fondsId)) return new Map();
+      const fondsstanden = new Map(
+        refs.flatMap((ref) => {
+          const stand = versiestanden.get(fondsSleutel(ctx.fondsId, ref));
+          return stand ? ([[ref, { ...stand, versie: { ...stand.versie } }]] as const) : [];
+        })
+      );
+      // Een onbekende of fondsvreemde ref strandt vóór de gesimuleerde
+      // provider-I/O; hij kan dus ook geen timing- of bestaanssignaal leveren.
+      if (fondsstanden.size === 0) return fondsstanden;
+      meting.versieIoAanroepen++;
       meldVersieStart();
       if (opties.versieVertragingMs && opties.versieVertragingMs > 0) {
         await slaapMetSignaal(opties.versieVertragingMs, ctx.signal);
       }
-      return new Map(
-        refs.flatMap((ref) => {
-          const stand = versiestanden.get(ref);
-          return stand ? ([[ref, { ...stand, versie: { ...stand.versie } }]] as const) : [];
-        })
-      );
+      return fondsstanden;
     },
     async verifieerBronregistratie(
       ctx: RetrievalContext,
@@ -495,16 +568,20 @@ export function maakMicrosoftRetrievalFixture(opties: MicrosoftFixtureOpties = {
     ): Promise<Map<string, Bronregistratiestand>> {
       meting.v5Aanroepen++;
       meting.v5Referenties += refs.length;
+      if (!fondsId(ctx.fondsId)) return new Map();
+      const fondsstanden = new Map(
+        refs.flatMap((ref) => {
+          const stand = standen.get(fondsSleutel(ctx.fondsId, ref));
+          return stand ? ([[ref, { ...stand }]] as const) : [];
+        })
+      );
+      if (fondsstanden.size === 0) return fondsstanden;
+      meting.v5IoAanroepen++;
       meldV5Start();
       if (opties.v5VertragingMs && opties.v5VertragingMs > 0) {
         await slaapMetSignaal(opties.v5VertragingMs, ctx.signal);
       }
-      return new Map(
-        refs.flatMap((ref) => {
-          const stand = standen.get(ref);
-          return stand ? ([[ref, { ...stand }]] as const) : [];
-        })
-      );
+      return fondsstanden;
     },
   };
 
