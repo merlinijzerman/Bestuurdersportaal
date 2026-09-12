@@ -792,6 +792,10 @@ test("#368 — audit-forward/check/rollback zijn additief en de DB-check draait 
   assert.match(forward, /jsonb_build_object\('evidence_audit'/);
   assert.match(forward, /jsonb_build_object\('modelcontext_audit'/);
   assert.match(forward, /onvolledig evidenceobject passeert/);
+  assert.match(forward, /p\s+#>>\s+'\{\}'\s+not in\s+\('bsn','email','iban','telefoon','persoonsaanduiding','fondsnaam'\)/);
+  assert.match(forward, /e->>'soort'\s+not in\s+\([\s\S]*?'profielsturing'[\s\S]*?'samengestelde_modelcontext'/);
+  assert.doesNotMatch(forward, /length\(e->>'soort'\)\s+not between/, "modelcontextsoort mag geen vrije korte tekst zijn");
+  assert.match(check, /vrije auditwaarde passeert enum/);
   assert.doesNotMatch(rollback, /evidence_audit|modelcontext_audit/);
   assert.match(check, /vrije inhoud lekt door evidence_audit/);
   assert.match(keten, /SQL_EVIDENCE_AUDIT="supabase\/checks\/2026_09_12_368_evidence_auditprojectie\.sql"/);
