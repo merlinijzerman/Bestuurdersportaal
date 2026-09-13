@@ -1,20 +1,53 @@
 # #368 T2-4 — planreview, census en karakterisering
 
-**Basis:** `origin/preview` op `afd0efb45583`
+**Inventarisatiebasis:** `origin/preview` op `afd0efb45583`
 
-**Tranche:** inventarisatie en karakterisering; nog geen productiecode
+**Implementatiebasis:** `origin/preview` op `50c54ed7093`
 
-**Besluit:** GO voor deze test-/documentatietranche; definitieve wiring blijft een afzonderlijke
-productietranche. De contracten uit #367, #369 en #370 staan inmiddels in deze basis.
+**Status:** productietranche uitgevoerd op branch `codex/368-evidencelezingen-implementatie`;
+nog niet gepusht, gemerged of uitgerold. De contracten uit #367, #369 en #370 zijn leidend.
 
-## 1. Huidige census
+## 0. Implementatie-uitkomst
 
-De bestaande transitieve antwoordpadscan bereikt 126 bestanden en 46 unieke geclassificeerde
+De eerste implementatieronde wijzigde ten opzichte van implementatiebasis `50c54ed7093`
+exact **23 bestanden**. Dat is de gecontroleerde pre-reviewtelling; latere reviewfixes
+worden daar niet met terugwerkende kracht in verstopt.
+
+- De vijf evidencelezingen buiten de retrievalkern zijn gemigreerd. De transitieve census meldt
+  nul evidencelezingen buiten `core/lib/rag.ts` en `core/lib/retrieval/`.
+- Chunkpresentie is contentvrij, server-scoped en fail-closed. Maximaal 2.000 documentrefs en
+  2.000 resultaatrijen worden verwerkt; bereikt de rijencap voordat alle refs zijn opgelost, dan
+  komt geen gedeeltelijke set vrij en kan de route niet fondsbreed terugvallen.
+- Beide Decision Object-rollen blijven bestaan: procescontext en formele besluitbron. Beide
+  krijgen opaque document-/passage-/citation-identiteit, een sterke versie over de exacte
+  veldprojectie, een tweede V5-herlezing en centrale `verifieerToelating`.
+- Parent/sibling-context blijft een adapterhook. De providerprivate query heeft cap+1-
+  detectie; iedere gebruikte sibling moet dezelfde toegelaten document-/indexversie dragen.
+  Afkap of mismatch is terminaal en levert nooit gedeeltelijke parentcontext.
+- `semantic_units` worden deterministisch geordend, maximaal 500 per document en maximaal
+  60.000 werkelijk gebruikte evidence-tekens. Extractierun, canonieke unitinhoud en documenthash
+  vormen de sterke versie; findings, bronaudit en persistentie behouden de opaque passagebinding.
+- De 26 overige modelcontextlezingen blijven expliciet **modelcontext**, geen evidence. De
+  chatlezingen en de typed profiel-, organisatie- en portaalreaders lopen uitvoerend door één
+  server-scoped readergrens met samengestelde cancellation/deadline, providerfout, status- en
+  geldigheidscontrole, rijcaps, PII over werkelijk gerenderde tekst, neutralisatie, blok- en
+  combinatiecaps en een afzonderlijk inhoudsvrij auditspoor.
+- `chunksVoor()` is bewust nog niet verwijderd: de chatroute heeft aantoonbaar nog precies één
+  goedgekeurde downstreamconsumer voor bestaande `DocumentChunk`-logica. De providerprivate
+  brug staat niet in het publieke retrievalcontract.
+
+Geen live Microsoft-/Graph-wiring en geen schema- of datamigratie zijn toegevoegd. Wel is een
+additieve forward/rollback-wrapper toegevoegd die uitsluitend de gesloten, inhoudsvrije
+`evidence_audit`- en `modelcontext_audit`-vormen aan de bestaande leesprojectie toevoegt.
+
+## 1. Inventarisatiecensus vóór implementatie
+
+De transitieve antwoordpadscan op de inventarisatiebasis bereikte 132 bestanden en 46 unieke geclassificeerde
 `bestand::tabel`-lezingen: 8 evidence, 26 modelcontext, 11 configuratie en 3 audit (48
 klassetoewijzingen, doordat twee lezingen in meer dan één klasse vallen). Drie evidencelezingen
-zitten in de centrale retrievalimplementatie: twee in `core/lib/rag.ts` en de door #367
+zaten in de centrale retrievalimplementatie: twee in `core/lib/rag.ts` en de door #367
 toegevoegde versieherlezing in `core/lib/retrieval/supabase-versie.ts`. De overige **vijf**
-omzeilen de volledige centrale retrievalketen. Die vijf logische lezingen bestaan samen uit
+omzeilden toen de volledige centrale retrievalketen. Die vijf logische lezingen bestonden samen uit
 zeven fysieke query-expressies, omdat `app/api/chat/route.ts::document_chunks` op drie plekken
 chunkpresentie controleert.
 
@@ -38,7 +71,7 @@ onderdeel van de handmatige planreview; de gate pretendeert die niet volledig se
 
 ## 2. Planreview
 
-### Tranche A — deze branch
+### Tranche A — historische inventarisatiecommit
 
 1. Bevries exact de vijf evidencelezingen buiten `rag.ts`/`core/lib/retrieval/` en de drie
    chunkpresentie-call-sites.
@@ -46,7 +79,7 @@ onderdeel van de handmatige planreview; de gate pretendeert die niet volledig se
 3. Pin het overige modelcontextoppervlak op 26 lezingen.
 4. Wijzig geen productiecode en geen bestaande golden.
 
-### Tranche B — afzonderlijke productie-implementatie
+### Tranche B — productie-implementatie op deze implementatiebranch
 
 1. Hergebruik de gemergde versie-/correlatie-identiteit uit #367 en de route-orkestratie uit #369;
    introduceer geen parallel contract.

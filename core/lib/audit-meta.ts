@@ -77,6 +77,10 @@ export const META_BASIS = [
   // #367 — uitsluitend gesloten status/cap van de reflectiebronsetresolutie;
   // geen passage-, document- of providerreferenties.
   "contextbron_resolutie",
+  // #368 — uitsluitend tellingen, caps, gesloten fout/statuscodes en PII-
+  // categorieën; nooit tekst of bronidentiteit.
+  "evidence_audit",
+  "modelcontext_audit",
   // fondsdiscipline (defense-in-depth, increment T4)
   "toegepaste_fonds_filter",
   "namespace_conventie",
@@ -243,6 +247,96 @@ function isObject(waarde: unknown): waarde is JsonObject {
   return typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
 }
 
+const AUDIT_PII_SOORTEN = new Set(["bsn", "email", "iban", "telefoon", "persoonsaanduiding", "fondsnaam"]);
+const EVIDENCE_SOORTEN = new Set(["besluitregistratie", "semantische_unit", "chunk_presentie"]);
+const EVIDENCE_FOUTEN = new Set(["buiten_scope", "providerfout", "onvolledig", "afgekapt"]);
+const MODELCONTEXT_SOORTEN = new Set([
+  "profielsturing", "organisatieprofiel", "regimekader", "agendapunt", "fondsmodules",
+  "portaalstand", "module_scope", "module_scope_risico", "module_scope_risicomatrix",
+  "module_scope_proces", "samengestelde_modelcontext",
+]);
+const MODELCONTEXT_PII = new Set(["geen", "persoonsgebonden", "bijzonder"]);
+const MODELCONTEXT_FOUTEN = new Set(["buiten_scope", "providerfout", "afgekapt"]);
+const CORRELATIE_ID = /^[A-Za-z0-9:_-]{1,128}$/;
+
+function isAuditGetal(waarde: unknown): waarde is number {
+  return typeof waarde === "number" && Number.isSafeInteger(waarde) && waarde >= 0;
+}
+
+function projecteerAuditArray(
+  waarde: unknown,
+  soort: "evidence" | "modelcontext"
+): { spoor: JsonObject[]; ongeldig: string[] } {
+  if (!Array.isArray(waarde)) return { spoor: [], ongeldig: ["geen_array"] };
+  const spoor: JsonObject[] = [];
+  const ongeldig: string[] = [];
+  const evidenceVelden = new Set([
+    "correlation_id", "soort", "gevraagd", "toegelaten", "gerenderde_tekens", "limiet",
+    "afgekapt", "geneutraliseerd", "pii_gedetecteerd", "pii_soorten", "versies", "fout",
+  ]);
+  const modelcontextVelden = new Set([
+    "correlation_id", "soort", "pii", "gerenderde_tekens", "limiet", "afgekapt",
+    "geneutraliseerd", "pii_soorten", "fout",
+  ]);
+  for (const [index, rij] of waarde.entries()) {
+    if (!isObject(rij)) {
+      ongeldig.push(`[${index}]`);
+      continue;
+    }
+    const toegestaan = soort === "evidence" ? evidenceVelden : modelcontextVelden;
+    const uit: JsonObject = {};
+    for (const sleutel of Object.keys(rij)) {
+      if (!toegestaan.has(sleutel)) ongeldig.push(`[${index}].${sleutel}`);
+    }
+    if (typeof rij.correlation_id === "string" && CORRELATIE_ID.test(rij.correlation_id)) {
+      uit.correlation_id = rij.correlation_id;
+    } else ongeldig.push(`[${index}].correlation_id`);
+    const geldigeSoorten = soort === "evidence" ? EVIDENCE_SOORTEN : MODELCONTEXT_SOORTEN;
+    if (typeof rij.soort === "string" && geldigeSoorten.has(rij.soort)) uit.soort = rij.soort;
+    else ongeldig.push(`[${index}].soort`);
+    const getallen = soort === "evidence"
+      ? ["gevraagd", "toegelaten", "gerenderde_tekens", "limiet", "geneutraliseerd"]
+      : ["gerenderde_tekens", "limiet", "geneutraliseerd"];
+    for (const veld of getallen) {
+      if (rij[veld] === undefined) continue;
+      if (isAuditGetal(rij[veld])) uit[veld] = rij[veld];
+      else ongeldig.push(`[${index}].${veld}`);
+    }
+    for (const veld of soort === "evidence" ? ["afgekapt", "pii_gedetecteerd"] : ["afgekapt"]) {
+      if (rij[veld] === undefined) continue;
+      if (typeof rij[veld] === "boolean") uit[veld] = rij[veld];
+      else ongeldig.push(`[${index}].${veld}`);
+    }
+    if (rij.pii_soorten !== undefined) {
+      if (Array.isArray(rij.pii_soorten)
+        && rij.pii_soorten.every((item) => typeof item === "string" && AUDIT_PII_SOORTEN.has(item))) {
+        uit.pii_soorten = [...new Set(rij.pii_soorten)];
+      } else ongeldig.push(`[${index}].pii_soorten`);
+    }
+    if (soort === "evidence") {
+      if (rij.versies !== undefined) {
+        if (isObject(rij.versies) && Object.keys(rij.versies).every((veld) => veld === "sterk" || veld === "gedegradeerd")
+          && isAuditGetal(rij.versies.sterk) && isAuditGetal(rij.versies.gedegradeerd)) {
+          uit.versies = { sterk: rij.versies.sterk, gedegradeerd: rij.versies.gedegradeerd };
+        } else ongeldig.push(`[${index}].versies`);
+      }
+      if (rij.fout !== undefined) {
+        if (typeof rij.fout === "string" && EVIDENCE_FOUTEN.has(rij.fout)) uit.fout = rij.fout;
+        else ongeldig.push(`[${index}].fout`);
+      }
+    } else {
+      if (typeof rij.pii === "string" && MODELCONTEXT_PII.has(rij.pii)) uit.pii = rij.pii;
+      else ongeldig.push(`[${index}].pii`);
+      if (rij.fout !== undefined) {
+        if (typeof rij.fout === "string" && MODELCONTEXT_FOUTEN.has(rij.fout)) uit.fout = rij.fout;
+        else ongeldig.push(`[${index}].fout`);
+      }
+    }
+    spoor.push(uit);
+  }
+  return { spoor, ongeldig };
+}
+
 export interface GesplitsteMeta {
   /** Gaat naar `governance_log.retrieval_meta` — basis + bron, geen inhoud. */
   spoor: JsonObject;
@@ -277,6 +371,19 @@ export function splitsRetrievalMeta(meta: unknown): GesplitsteMeta {
     if (!META_BEKEND.has(sleutel)) {
       onbekend.push(sleutel);
       inhoud[sleutel] = waarde;
+      continue;
+    }
+
+    if (sleutel === "evidence_audit" || sleutel === "modelcontext_audit") {
+      const projectie = projecteerAuditArray(
+        waarde,
+        sleutel === "evidence_audit" ? "evidence" : "modelcontext"
+      );
+      if (projectie.spoor.length > 0) spoor[sleutel] = projectie.spoor;
+      if (projectie.ongeldig.length > 0) {
+        inhoud[sleutel] = waarde;
+        onbekend.push(...projectie.ongeldig.map((pad) => `${sleutel}${pad}`));
+      }
       continue;
     }
 
@@ -325,6 +432,15 @@ export function projecteerSpoorMeta(
     // dragen ze wél. Altijd weglaten.
     if (niveau === "inhoud") continue;
     if (niveau === "bron" && !metBronniveau) continue;
+
+    if (sleutel === "evidence_audit" || sleutel === "modelcontext_audit") {
+      const projectie = projecteerAuditArray(
+        waarde,
+        sleutel === "evidence_audit" ? "evidence" : "modelcontext"
+      );
+      if (projectie.spoor.length > 0) uit[sleutel] = projectie.spoor;
+      continue;
+    }
 
     const sub = SUB_NIVEAUS[sleutel];
     if (sub && isObject(waarde)) {

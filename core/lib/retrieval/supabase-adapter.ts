@@ -198,7 +198,13 @@ export function maakSupabaseAdapter(
       if (chunks.length === 0) return { resultaten: geselecteerd };
       // De peildatum van HET SPOOR, nooit "vandaag": anders zou een historische
       // retrieval ongemerkt met de datum van nu worden verrijkt.
-      const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum, { signal: ctx.signal });
+      const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum, {
+        signal: ctx.signal,
+        verwachteVersies: new Map(geselecteerd.map((bron) => {
+          const chunk = chunkPerRef.get(bron.ref);
+          return [chunk?.id ?? bron.ref, bron.versie] as const;
+        })),
+      });
       const resultaten = p.chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)));
       for (const [index, bron] of resultaten.entries()) chunkPerRef.set(bron.ref, p.chunks[index]);
       return { resultaten, meta: { parent: p.meta } };

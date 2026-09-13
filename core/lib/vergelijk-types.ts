@@ -3,6 +3,7 @@
 import type { BronVerwijzing } from "./rag";
 import type { Bronsoort, Versiebewijs } from "./retrieval/contract";
 import type { Toelatingssamenvatting } from "./retrieval/toelatingspoort";
+import type { EvidenceAudit } from "./retrieval/evidence-contract";
 //  core/lib/vergelijk-types.ts — gedeelde types voor de vergelijkmodus (T5).
 // ----------------------------------------------------------------------------
 //  Dependency-vrij en client-veilig: zowel de service (server) als de resultaat-
@@ -88,6 +89,8 @@ export interface VergelijkRetrievalMeta {
   correlation_id: string;
   pogingen: VergelijkRetrievalPoging[];
   toelating?: Toelatingssamenvatting;
+  /** #368 — inhoudsvrij spoor van deterministische semantic-unit-evidence. */
+  evidence?: EvidenceAudit[];
 }
 
 export interface VergelijkResultaat {

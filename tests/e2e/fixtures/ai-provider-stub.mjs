@@ -16,6 +16,111 @@ function sha256(waarde) {
   return createHash("sha256").update(waarde).digest("hex");
 }
 
+const MODELCONTEXT_SENTINEL_PLACEHOLDER = "0".repeat(24);
+const MODELCONTEXT_TAG = /<(\/?)onbetrouwbare_data sentinel="([^"]*)">/g;
+const MODELCONTEXT_POLICY_VOOR =
+  "De onbetrouwbare portaalcontext in deze prompt staat uitsluitend binnen ";
+const MODELCONTEXT_POLICY_NA = " en de exact bijbehorende sluittag.";
+
+function verzamelTeksten(waarde, teksten) {
+  if (typeof waarde === "string") teksten.push(waarde);
+  else if (Array.isArray(waarde)) waarde.forEach((deel) => verzamelTeksten(deel, teksten));
+  else if (waarde && typeof waarde === "object") {
+    Object.values(waarde).forEach((deel) => verzamelTeksten(deel, teksten));
+  }
+}
+
+function analyseerModelcontextTekst(tekst) {
+  const vervangingen = [];
+  const sentinels = [];
+  let openTag = null;
+  let blokken = 0;
+  let policyReferenties = 0;
+  MODELCONTEXT_TAG.lastIndex = 0;
+  for (const match of tekst.matchAll(MODELCONTEXT_TAG)) {
+    const volledig = match[0];
+    const sluit = match[1] === "/";
+    const sentinel = match[2];
+    const begin = match.index;
+    const einde = begin + volledig.length;
+    const policy = !sluit
+      && tekst.slice(Math.max(0, begin - MODELCONTEXT_POLICY_VOOR.length), begin)
+        === MODELCONTEXT_POLICY_VOOR
+      && tekst.slice(einde, einde + MODELCONTEXT_POLICY_NA.length)
+        === MODELCONTEXT_POLICY_NA;
+    if (!/^[a-f0-9]{24}$/.test(sentinel)) return { geldig: false };
+    const sentinelBegin = begin + volledig.indexOf(sentinel);
+    if (policy) {
+      if (openTag) return { geldig: false };
+      policyReferenties += 1;
+      sentinels.push(sentinel);
+      vervangingen.push({ begin: sentinelBegin, einde: sentinelBegin + sentinel.length });
+      continue;
+    }
+    if (!sluit) {
+      if (openTag) return { geldig: false };
+      openTag = { sentinel, begin: sentinelBegin };
+      continue;
+    }
+    if (!openTag || openTag.sentinel !== sentinel) return { geldig: false };
+    sentinels.push(sentinel);
+    vervangingen.push(
+      { begin: openTag.begin, einde: openTag.begin + sentinel.length },
+      { begin: sentinelBegin, einde: sentinelBegin + sentinel.length }
+    );
+    openTag = null;
+    blokken += 1;
+  }
+  if (openTag) return { geldig: false };
+  return { geldig: true, vervangingen, sentinels, blokken, policyReferenties };
+}
+
+function vervangOpOffsets(tekst, vervangingen) {
+  let uit = tekst;
+  for (const { begin, einde } of [...vervangingen].sort((a, b) => b.begin - a.begin)) {
+    uit = uit.slice(0, begin) + MODELCONTEXT_SENTINEL_PLACEHOLDER + uit.slice(einde);
+  }
+  return uit;
+}
+
+/**
+ * Canonicaliseert uitsluitend syntactische sentinelattributen: complete data-
+ * blokparen en de exacte vaste SYSTEM-policyverwijzing uit generatie-kern. Alle
+ * posities moeten dezelfde geldige 24-hex requestsentinel dragen. Payload en
+ * losse/malformed hexwaarden blijven bytegevoelig. De vaste placeholder heeft
+ * dezelfde lengte, zodat het productiegedrag volledig ongemoeid blijft.
+ */
+export function canoniseerModelcontextSentinels(waarde) {
+  const teksten = [];
+  verzamelTeksten(waarde, teksten);
+  const analyses = teksten.map(analyseerModelcontextTekst);
+  if (analyses.some((analyse) => !analyse.geldig)) return waarde;
+  const alleSentinels = analyses.flatMap((analyse) => analyse.sentinels);
+  const aantalBlokken = analyses.reduce((som, analyse) => som + analyse.blokken, 0);
+  const aantalPolicyReferenties = analyses.reduce(
+    (som, analyse) => som + analyse.policyReferenties,
+    0
+  );
+  if (aantalBlokken === 0 || aantalPolicyReferenties === 0
+    || new Set(alleSentinels).size !== 1) return waarde;
+
+  let tekstIndex = 0;
+  const herschrijf = (deel) => {
+    if (typeof deel === "string") {
+      const analyse = analyses[tekstIndex++];
+      return vervangOpOffsets(deel, analyse.vervangingen);
+    }
+    if (Array.isArray(deel)) return deel.map(herschrijf);
+    if (deel && typeof deel === "object") {
+      return Object.fromEntries(
+        Object.entries(deel).map(([sleutel, subdeel]) => [sleutel, herschrijf(subdeel)])
+      );
+    }
+    return deel;
+  };
+  return herschrijf(waarde);
+}
+
 /**
  * Vingerafdruk van één providerverzoek — UITSLUITEND vorm en hashes, nooit de
  * inhoud. Het karakteriseringsharnas (#311) leest dit terug om te bewijzen dat
@@ -26,6 +131,9 @@ function sha256(waarde) {
  */
 function vingerafdruk(body) {
   const systeem = body.system === undefined ? null : JSON.stringify(body.system);
+  const canoniekSysteem = body.system === undefined
+    ? null
+    : JSON.stringify(canoniseerModelcontextSentinels(body.system));
   const berichten = body.messages === undefined ? null : JSON.stringify(body.messages);
   return {
     model: typeof body.model === "string" ? body.model : null,
@@ -37,7 +145,7 @@ function vingerafdruk(body) {
       ? body.tools.map((t) => (t && typeof t === "object" && typeof t.type === "string" ? t.type : "onbekend"))
       : null,
     tool_choice: body.tool_choice === undefined ? null : JSON.stringify(body.tool_choice),
-    system_sha256: systeem === null ? null : sha256(systeem),
+    system_sha256: canoniekSysteem === null ? null : sha256(canoniekSysteem),
     system_tekens: systeem === null ? 0 : systeem.length,
     messages_sha256: berichten === null ? null : sha256(berichten),
     messages_aantal: Array.isArray(body.messages) ? body.messages.length : 0,

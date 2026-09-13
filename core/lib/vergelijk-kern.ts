@@ -36,6 +36,8 @@ export interface ConceptLite {
 
 export interface SemanticUnitLite {
   concept_id: string;
+  /** Providerneutrale domeinsleutel; productie gebruikt deze i.p.v. DB-id. */
+  concept_key?: string;
   type: string;
   value_num: number | null;
   value_date: string | null; // ISO
@@ -44,6 +46,8 @@ export interface SemanticUnitLite {
   value_unit: string | null;
   page: number | null;
   evidence: string;
+  /** Opaque #367-binding van de deterministische evidence. */
+  passage_ref?: string | null;
 }
 
 export interface PassageLite {
@@ -99,6 +103,8 @@ export interface VergelijkDeps {
   persisteer(input: PersisteerInvoer): Promise<string | null>;
   /** Productie levert na alle retrievals één deterministische auditprojectie. */
   retrievalAudit?(): { bronnen: VergelijkBron[]; meta: VergelijkRetrievalMeta };
+  /** Markeer alleen semantic evidence die werkelijk een finding heeft gevoed. */
+  markeerGebruikteEvidence?(refs: readonly string[]): void;
   // De contingentie-poort: alleen als dit true is mag het deterministische pad vuren.
   deterministischVertrouwd: boolean;
 }
@@ -195,7 +201,8 @@ function indexeerUnits(units: SemanticUnitLite[]): Map<string, SemanticUnitLite>
   for (const u of units) {
     // Eerste unit per concept wint (ontdubbeling gebeurde al bij extractie; een
     // dimensie vergelijkt op één representatieve waarde per document).
-    if (!m.has(u.concept_id)) m.set(u.concept_id, u);
+    const sleutel = u.concept_key ?? u.concept_id;
+    if (!m.has(sleutel)) m.set(sleutel, u);
   }
   return m;
 }
@@ -207,6 +214,7 @@ function zijdeUitUnit(documentId: string, u: SemanticUnitLite, norm: string | nu
     evidence: u.evidence,
     page: u.page,
     document_id: documentId,
+    passage_ref: u.passage_ref ?? null,
   };
 }
 
@@ -252,13 +260,21 @@ export async function voerVergelijkingUit(
       dimensie: dim.key,
     });
 
-    const bu = conceptId ? bronUnits.get(conceptId) : undefined;
-    const du = conceptId ? doelUnits.get(conceptId) : undefined;
+    // Productie-evidence koppelt providerneutraal op conceptsleutel. Bestaande
+    // injecteerbare deps/tests mogen nog de interne concept-id aanleveren; die
+    // compatibiliteitsroute blijft server-side en komt niet in evidencecontracten.
+    const bu = (dim.concept_key ? bronUnits.get(dim.concept_key) : undefined)
+      ?? (conceptId ? bronUnits.get(conceptId) : undefined);
+    const du = (dim.concept_key ? doelUnits.get(dim.concept_key) : undefined)
+      ?? (conceptId ? doelUnits.get(conceptId) : undefined);
 
     // Deterministisch pad: alleen als de poort open is ÉN BEIDE zijden een unit
     // hebben (acceptatiecriterium). Anders LLM.
     if (deps.deterministischVertrouwd && bu && du) {
       const cmp = deterministischeVergelijking(bu, du, dim.type);
+      deps.markeerGebruikteEvidence?.(
+        [bu.passage_ref, du.passage_ref].filter((ref): ref is string => Boolean(ref))
+      );
       findings.push({
         finding_key,
         dimensie: dim.key,

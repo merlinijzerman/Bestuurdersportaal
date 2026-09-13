@@ -233,6 +233,12 @@ const VOLLEDIGE_META: Record<string, unknown> = {
     context_kandidaat_vraag: "Breng het wettelijke kader van de solidariteitsreserve in kaart",
   },
   context_geneutraliseerd: 0,
+  evidence_audit: [
+    { correlation_id: "corr-1", soort: "semantische_unit", gevraagd: 1, toegelaten: 1, gerenderde_tekens: 120, limiet: 500, afgekapt: false, pii_gedetecteerd: false },
+  ],
+  modelcontext_audit: [
+    { correlation_id: "corr-1", soort: "portaalstand", pii: "persoonsgebonden", gerenderde_tekens: 80, limiet: 500, afgekapt: false },
+  ],
   terugval: { termen: ["dekkingsgraad"], query: "dekkingsgraad | abtn", versie: "v1" },
   duur_ms: 4200,
   duur_model_ms: 5100,
@@ -316,6 +322,38 @@ test("P5-sleutels overleven de splitsing daadwerkelijk", () => {
   assert.equal(spoor.duur_model_ms, 5100);
   assert.equal(spoor.geselecteerd, 5);
   assert.deepEqual(spoor.tokens, { in: 12000, out: 800 });
+});
+
+test("#368 evidence/modelcontext-audit blijft inhoudsvrij op basisniveau", () => {
+  const { spoor, inhoud } = splitsRetrievalMeta(VOLLEDIGE_META);
+  assert.deepEqual(spoor.evidence_audit, VOLLEDIGE_META.evidence_audit);
+  assert.deepEqual(spoor.modelcontext_audit, VOLLEDIGE_META.modelcontext_audit);
+  assert.equal("evidence_audit" in inhoud, false);
+  assert.equal("modelcontext_audit" in inhoud, false);
+});
+
+test("#368 nested audit wordt vóór persist strikt geprojecteerd", () => {
+  const { spoor, inhoud, onbekend } = splitsRetrievalMeta({
+    evidence_audit: [{
+      correlation_id: "corr-1", soort: "semantische_unit", gevraagd: 1, toegelaten: 1,
+      gerenderde_tekens: 12, limiet: 100, afgekapt: false,
+      tekst: "ZEER GEHEIM", private_document_id: "db-123",
+    }],
+    modelcontext_audit: [{
+      correlation_id: "corr-1", soort: "portaalstand", pii: "geen",
+      gerenderde_tekens: 4, limiet: 10, afgekapt: false, pii_soorten: ["wildcard"],
+    }],
+  });
+  const spoorTekst = JSON.stringify(spoor);
+  assert.equal(spoorTekst.includes("ZEER GEHEIM"), false);
+  assert.equal(spoorTekst.includes("db-123"), false);
+  assert.equal(spoorTekst.includes("wildcard"), false);
+  assert.equal((spoor.evidence_audit as Array<Record<string, unknown>>)[0]?.soort, "semantische_unit");
+  assert.equal((spoor.modelcontext_audit as Array<Record<string, unknown>>)[0]?.soort, "portaalstand");
+  assert.equal(JSON.stringify(inhoud).includes("ZEER GEHEIM"), true);
+  assert.ok(onbekend.includes("evidence_audit[0].tekst"));
+  assert.ok(onbekend.includes("evidence_audit[0].private_document_id"));
+  assert.ok(onbekend.includes("modelcontext_audit[0].pii_soorten"));
 });
 
 // ── 3. Inhoud komt nooit in het spoor ───────────────────────────────────────

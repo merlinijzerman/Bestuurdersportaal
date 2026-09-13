@@ -22,6 +22,10 @@ import { voerVolledigeRetrievalUit } from "./retrieval/orkestratie";
 import { bewaakNaIO, isAfbreking } from "./retrieval/afbreken";
 import type { Bronresultaat, RetrievalAdapter, RetrievalContext, RetrievalUitkomst } from "./retrieval/contract";
 import { maakDocumentIdentiteit } from "./retrieval/identiteit";
+import { leesSemantischeEvidence, type SemantischeEvidenceWaarde } from "./retrieval/supabase-evidence";
+import type { EvidenceAudit, EvidenceItem } from "./retrieval/evidence-contract";
+import { bouwBronfragment } from "./bronfragment";
+import { selecteerGebruikteEvidence } from "./vergelijk-audit-core";
 import { citaatOpdracht, maakVergelijkSpoor } from "./retrieval/productiepaden-core";
 import type {
   ConceptLite,
@@ -56,6 +60,7 @@ export const VERGELIJK_MODEL = AI_MODEL;
 
 const MAX_PASSAGES_PER_ZIJDE = 4;
 const MAX_EXTRA_DIMENSIES = 6;
+const MAX_VERGELIJK_AUDITBRONNEN = 1000;
 
 interface VergelijkRetrieval {
   adapter: RetrievalAdapter;
@@ -79,6 +84,9 @@ interface GeregistreerdePoging {
  */
 export class VergelijkAuditVerzamelaar {
   private readonly pogingen = new Map<string, GeregistreerdePoging>();
+  private readonly gestructureerdeEvidence = new Map<string, EvidenceItem<SemantischeEvidenceWaarde>>();
+  private readonly evidenceAuditPerRef = new Map<string, EvidenceAudit>();
+  private readonly gebruikteEvidenceRefs = new Set<string>();
 
   constructor(private readonly correlationId: string) {}
 
@@ -118,6 +126,20 @@ export class VergelijkAuditVerzamelaar {
     });
   }
 
+  registreerGestructureerdeEvidence(
+    items: readonly EvidenceItem<SemantischeEvidenceWaarde>[],
+    audit: EvidenceAudit
+  ): void {
+    for (const item of items) {
+      this.gestructureerdeEvidence.set(item.ref, item);
+      this.evidenceAuditPerRef.set(item.ref, audit);
+    }
+  }
+
+  markeerGebruikteEvidence(refs: readonly string[]): void {
+    for (const ref of refs) if (this.gestructureerdeEvidence.has(ref)) this.gebruikteEvidenceRefs.add(ref);
+  }
+
   snapshot(): { bronnen: VergelijkBron[]; meta: VergelijkRetrievalMeta } {
     const geordend = [...this.pogingen.values()].sort((a, b) => a.sleutel.localeCompare(b.sleutel));
     const uniek = new Map<string, Omit<VergelijkBron, "citation_id">>();
@@ -144,12 +166,50 @@ export class VergelijkAuditVerzamelaar {
       }
     }
 
+    const gebruikteEvidence = selecteerGebruikteEvidence(
+      [...this.gestructureerdeEvidence.values()], this.gebruikteEvidenceRefs, MAX_VERGELIJK_AUDITBRONNEN
+    );
+    for (const item of gebruikteEvidence) {
+      if (uniek.has(item.ref)) continue;
+      uniek.set(item.ref, {
+        passage_ref: item.ref,
+        bronsoort: item.bronsoort,
+        verwijzing: {
+          citation_id: item.citationId,
+          document_id: item.documentIdentiteit,
+          titel: item.titel,
+          bron: "Semantische evidence",
+          pagina: item.locator.pagina ?? null,
+          paragraaf: item.locator.paragraaf ?? null,
+          fragment: bouwBronfragment(item.passage),
+          heeft_origineel: false,
+          documentstatus: item.status.documentstatus ?? null,
+          bronstatus: item.status.bronstatus ?? null,
+        },
+        versie: item.versie,
+        status: item.status,
+      });
+    }
+
+    if (uniek.size > MAX_VERGELIJK_AUDITBRONNEN) throw new Error("vergelijk_bronnen_afgekapt");
     return {
       bronnen: [...uniek.values()].map((bron, index) => ({ citation_id: index + 1, ...bron })),
       meta: {
         correlation_id: this.correlationId,
         pogingen: geordend.map((p) => p.poging),
         ...(geweigerd > 0 ? { toelating: { geweigerd, categorieen, gronden } } : {}),
+        ...(gebruikteEvidence.length > 0 ? {
+          evidence: gebruikteEvidence.map((item) => {
+            const basis = this.evidenceAuditPerRef.get(item.ref)!;
+            return {
+              ...basis,
+              gevraagd: 1,
+              toegelaten: 1,
+              gerenderde_tekens: item.gerenderdeTekens ?? item.passage.length,
+              versies: { sterk: item.versie.soort === "hash" ? 1 : 0, gedegradeerd: item.versie.soort === "status-datum" ? 1 : 0 },
+            };
+          }),
+        } : {}),
       },
     };
   }
@@ -396,16 +456,31 @@ async function leesConcepten(supabase: SupabaseClient, signal?: AbortSignal): Pr
   return data as ConceptLite[];
 }
 
-async function leesSemanticUnits(supabase: SupabaseClient, documentId: string, signal?: AbortSignal): Promise<SemanticUnitLite[]> {
-  let query = supabase
-    .from("semantic_units")
-    .select("concept_id, type, value_num, value_date, value_text, value_raw, value_unit, page, evidence")
-    .eq("document_id", documentId);
-  if (signal) query = query.abortSignal(signal);
-  const { data, error } = await query;
-  if (isAfbreking(error)) throw error;
-  if (error || !data) return [];
-  return data as SemanticUnitLite[];
+async function leesSemanticUnits(retrieval: VergelijkRetrieval, supabase: SupabaseClient, documentId: string): Promise<SemanticUnitLite[]> {
+  const uitkomst = await leesSemantischeEvidence(supabase, {
+    context: retrieval.context,
+    maxItems: 500,
+    maxGerenderdeTekens: 60_000,
+  }, documentId);
+  if (uitkomst.status === "geweigerd") {
+    throw new Error(`semantic_evidence_${uitkomst.audit.fout}`);
+  }
+  retrieval.audit.registreerGestructureerdeEvidence(uitkomst.items, uitkomst.audit);
+  return uitkomst.items.map((item) => ({
+    // Leeg en uitsluitend voor compatibiliteit met bestaande testfixtures; de
+    // productiekern koppelt via de stabiele conceptsleutel, nooit via DB-id.
+    concept_id: "",
+    concept_key: item.waarde.conceptSleutel,
+    type: item.waarde.type,
+    value_num: item.waarde.valueNum,
+    value_date: item.waarde.valueDate,
+    value_text: item.waarde.valueText,
+    value_raw: item.waarde.valueRaw,
+    value_unit: item.waarde.valueUnit,
+    page: item.waarde.page,
+    evidence: item.waarde.evidence,
+    passage_ref: item.ref,
+  }));
 }
 
 // ── Persisteren via de DEFINER-RPC ───────────────────────────────────────────
@@ -486,13 +561,14 @@ export function productieDeps(ctx: {
     // getypeerde waarden voor het deterministische vergelijkpad. Ze zijn geen
     // zoekprovider en worden onder dezelfde RLS-client, documentbinding en
     // request-cancellation gelezen. T2-4 kan dit evidencepad typed opnemen.
-    leesSemanticUnits: (documentId) => leesSemanticUnits(supabase, documentId, ctx.retrieval.context.signal),
+    leesSemanticUnits: (documentId) => leesSemanticUnits(ctx.retrieval, supabase, documentId),
     bepaalExtraDimensies: ({ bronDocumentId, doelDocumentId, catalogus }) =>
       haalExtraDimensies(gw, ctx.retrieval, bronDocumentId, doelDocumentId, catalogus),
     retrieveerPassages: (documentId, dimensie) => haalPassages(ctx.retrieval, documentId, dimensie),
     vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(gw, { ...input, signal: ctx.retrieval.context.signal }),
     persisteer: (inv) => persisteer(supabase, inv, ctx.retrieval.context.signal),
     retrievalAudit: () => audit.snapshot(),
+    markeerGebruikteEvidence: (refs) => audit.markeerGebruikteEvidence(refs),
     deterministischVertrouwd: deterministischVertrouwd(),
   };
 }
