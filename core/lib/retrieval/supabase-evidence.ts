@@ -587,7 +587,10 @@ function documentProjectieHash(document: DocumentVersieRij): string {
   });
 }
 
-const SEMANTIC_SELECT = "id, fonds_id, document_id, extraction_run_id, type, value_num, value_date, value_text, value_raw, value_unit, page, evidence, concepts!inner(key)";
+// semantic_units heeft zowel een enkelvoudige als samengestelde FK naar concepts.
+// Zonder expliciete relatiehint weigert PostgREST de embed als ambigu (PGRST201),
+// óók wanneer de documentselectie geen semantic units bevat.
+const SEMANTIC_SELECT = "id, fonds_id, document_id, extraction_run_id, type, value_num, value_date, value_text, value_raw, value_unit, page, evidence, concepts!fk_semantic_units_concept_type!inner(key)";
 const DOCUMENT_VERSIE_SELECT = "id, fonds_id, bibliotheek, bestand_hash, documentdatum, status, bronstatus, actief, titel, geldig_vanaf, geldig_tot, volgende_review";
 
 function ruweSemantischeWaarde(r: SemanticRij): SemantischeEvidenceWaarde | null {
