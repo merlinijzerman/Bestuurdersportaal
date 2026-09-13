@@ -1,20 +1,26 @@
 # Bestuurdersportaal MVP — Handover
 
-> **2026-09-12 — #368 evidencelezingen productietranche voorbereid (niet uitgerold):** de vijf
-> niet-centrale evidencelezingen voor chunkpresentie, Decision Objects, parent/siblings en
-> deterministische `semantic_units` zijn achter het providerneutrale #367-contract, typed
-> preflight of adapterhook gebracht. Opaque document-/passage-/citation-identiteiten, centrale
-> toelating en V5, harde caps zonder gedeeltelijke context, cancellation, cross-tenantchecks en
-> inhoudsvrije evidence-audit zijn geborgd. De 26 overige modelcontextlezingen blijven apart van
-> evidence en lopen via één uitvoerende typed readergrens: serverfonds/-actor/-objectscope,
-> status/geldigheid, providerfout, samengestelde requestdeadline/cancellation en rijcaps worden
-> vóór vrijgave gecontroleerd; werkelijk gerenderde tekst wordt geneutraliseerd, begrensd en op
-> PII geaudit. `chunksVoor()` blijft als één providerprivate migratiebrug bestaan omdat de
-> chatroute nog één goedgekeurde downstreamconsumer heeft. Geen Graph-wiring en geen schema- of
-> datamigratie; alleen een additieve forward/rollback-wrapper sluit de nieuwe inhoudsvrije
-> auditprojecties. Branch
-> `codex/368-evidencelezingen-implementatie` is nog niet gepusht/gemerged. Zie
-> `RETRIEVAL-T2-4-PLANREVIEW.md`.
+> **2026-09-13 — M365 fase 4 geïntegreerd en op Preview geaccepteerd; nog niet naar Productie
+> gepromoveerd:** #367, #369, #370 en #368 zijn in de afgesproken volgorde via PR's
+> [#379](https://github.com/merlinijzerman/Bestuurdersportaal/pull/379),
+> [#381](https://github.com/merlinijzerman/Bestuurdersportaal/pull/381),
+> [#380](https://github.com/merlinijzerman/Bestuurdersportaal/pull/380) en
+> [#382](https://github.com/merlinijzerman/Bestuurdersportaal/pull/382) in `preview` geïntegreerd;
+> #368-karakterisering landde vooraf via [#378](https://github.com/merlinijzerman/Bestuurdersportaal/pull/378).
+> Preview staat op **`ca57f5c`** en bevat productiecommit **`09d473f`** als ancestor. Daarmee zijn
+> volledige opaque versie-/passage-/citation-identiteit en correlatie, centrale orkestratie van
+> `/zoeken` en `/vergelijk`, de hermetische Microsoft-adapterstub en de begrensde evidence- en
+> modelcontextlezingen samengebracht. De drie nieuwe migraties zijn lokaal vanaf een schone stack
+> vooruit toegepast, in volgorde teruggerold, in oude vorm gecontroleerd en opnieuw toegepast;
+> volledige DB/RLS/grants/cross-tenantcontrole, secrets, boundaries, build en tests zijn groen.
+> Live Preview: twee bestaande geldige tenantsessies, zoekresultaat `ORION-4827`, chatantwoord met
+> bron op pagina 1 en twee inhoudsarme governanceregels zijn waargenomen. **Niet afzonderlijk
+> uitgevoerd:** verse wachtwoordlogin, positieve live documentvergelijking (slechts één geschikt
+> PGB-testdocument), negatieve live cross-tenantaccounttest en live Microsoft/Graph-, Outlook- of
+> SharePointretrieval. Issues #367–#370 blijven daarom open als release-/productieopvolging totdat
+> de promotie is afgerond; de Microsoftstub bevat nadrukkelijk geen productiewiring. Zie
+> `RELEASEBEWIJS-M365-FASE4-PREVIEW-2026-09-13.md` en
+> `PROMOTIE-M365-FASE4-PREVIEW-NAAR-MAIN-2026-09-13.md`.
 
 > **2026-09-11 — Productierelease Microsoft/AI/retrieval uitgevoerd:** promotie-PR [#373](https://github.com/merlinijzerman/Bestuurdersportaal/pull/373) is na afzonderlijk opdrachtgeverakkoord gemerged naar `main` als productiecommit **`09d473f`**. Vóór de merge zijn vijf minimale databaserollen ingericht, elf geordende migratie-/seedstappen toegepast, de feature-, RLS-, grants-, SECURITY DEFINER- en cross-tenantcontroles groen bevonden en de vier gatewayverbindingen als Production Secrets in beide Vercel-projecten gezet. Beide productiedeployments werden `Ready`; de publieke healthcheck gaf `{"ok":true}`. De niet-activerende PGB-productiesmoke bewees een geldige bestaande sessie en portaal-UI, twee geslaagde chatgeneraties en één contextprefix-call via Anthropic, `gateway_log_fouten_24u = 0`, plus een nieuw synthetisch PDF-document dat `beschikbaar` werd met 1 pagina, 1 chunk, 1 embedding en 1 contextprefix. De assistent vond `DELTA-0911` en citeerde exact die bron. Microsoft-login, Outlook en SharePoint bleven voor alle fondsen uit; op de profielpagina verscheen geen Microsoftbediening. **Niet afzonderlijk uitgevoerd:** een verse wachtwoordlogin (de bestaande sessie was nog geldig) en afschrift-/besluitconceptgeneratie (het PGB-testfonds had geen geschikte vergadering/notulenfixture). Zie `PROMOTIE-MICROSOFT-RETRIEVAL-PREVIEW-NAAR-MAIN-2026-09-11.md` en `RELEASEBEWIJS-MICROSOFT-AI-RETRIEVAL-PRODUCTIE-2026-09-11.md`.
 
