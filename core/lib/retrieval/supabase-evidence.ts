@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { bewaakNaIO, isAfbreking } from "./afbreken";
 import type {
+  EvidenceAudit,
   EvidenceItem,
   EvidenceOpdracht,
   EvidenceUitkomst,
@@ -65,7 +66,10 @@ function documentIsActueel(
     && (document.bronstatus ?? "actief") === "actief";
 }
 
-function piiAudit(teksten: readonly string[]): { pii_gedetecteerd: boolean; pii_soorten?: string[] } {
+function piiAudit(teksten: readonly string[]): {
+  pii_gedetecteerd: boolean;
+  pii_soorten?: NonNullable<EvidenceAudit["pii_soorten"]>;
+} {
   const soorten = [...new Set(teksten.flatMap((tekst) => bevatPersoonsgegevens(tekst).soorten))];
   return soorten.length > 0 ? { pii_gedetecteerd: true, pii_soorten: soorten } : { pii_gedetecteerd: false };
 }

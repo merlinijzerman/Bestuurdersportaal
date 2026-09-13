@@ -1370,8 +1370,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             lees: async (signal) => {
               const { data, error } = await supabase
                 .from("risico_log")
-                .select("risico_id, event_type, payload, actor_naam, tijdstip")
+                .select("risico_id, event_type, payload, actor_naam, tijdstip, risicos!inner(fonds_id)")
                 .in("risico_id", ids)
+                .eq("risicos.fonds_id", fondsId)
                 .order("tijdstip", { ascending: false })
                 .limit(81)
                 .abortSignal(signal);
@@ -1432,8 +1433,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             context: evidenceContext, soort: "risico", scope: { fondsId, privateRefs: [risico.id] }, maxItems: 200,
             lees: async (signal) => {
               const { data, error } = await supabase.from("risico_log")
-                .select("risico_id, event_type, payload, actor_naam, tijdstip")
-                .eq("risico_id", risico.id).order("tijdstip", { ascending: false }).limit(201).abortSignal(signal);
+                .select("risico_id, event_type, payload, actor_naam, tijdstip, risicos!inner(fonds_id)")
+                .eq("risico_id", risico.id).eq("risicos.fonds_id", fondsId)
+                .order("tijdstip", { ascending: false }).limit(201).abortSignal(signal);
               return { data: (data ?? []).map((rij) => fondsModelcontextRij(
                 rij, fondsId, rij.risico_id as string, MODELCONTEXT_GEEN_GELDIGHEID
               )), error };
@@ -1443,8 +1445,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             context: evidenceContext, soort: "risico", scope: { fondsId, privateRefs: [risico.id] }, maxItems: 200,
             lees: async (signal) => {
               const { data, error } = await supabase.from("risico_maatregelen")
-                .select("risico_id, beschrijving, status, verantwoordelijke, volgorde")
-                .eq("risico_id", risico.id).order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
+                .select("risico_id, beschrijving, status, verantwoordelijke, volgorde, risicos!inner(fonds_id)")
+                .eq("risico_id", risico.id).eq("risicos.fonds_id", fondsId)
+                .order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
               return { data: (data ?? []).map((rij) => fondsModelcontextRij(
                 rij,
                 fondsId,
@@ -1548,8 +1551,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           context: evidenceContext, soort: "proces", scope: { fondsId, privateRefs: [proc.id as string] }, maxItems: 200,
           lees: async (signal) => {
             const { data, error } = await supabase.from("procedure_stappen")
-              .select("id, procedure_id, volgorde, naam, beschrijving, status")
-              .eq("procedure_id", proc.id).order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
+              .select("id, procedure_id, volgorde, naam, beschrijving, status, procedures!inner(fonds_id)")
+              .eq("procedure_id", proc.id).eq("procedures.fonds_id", fondsId)
+              .order("volgorde", { ascending: true }).limit(201).abortSignal(signal);
             return { data: (data ?? []).map((rij) => fondsModelcontextRij(
               rij,
               fondsId,
@@ -3433,7 +3437,15 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       }));
     }
     const samengesteldeModelcontext = combineerModelcontext(evidenceContext, portaalDelen, 16_000);
-    if (portaalDelen.length > 0) modelcontextAudits.push(samengesteldeModelcontext.audit);
+    if (portaalDelen.length > 0) {
+      // De bronblokaudits zijn aanbod; alleen de samengestelde audit beschrijft
+      // exact wat ná de totale eindcap werkelijk in de prompt is opgenomen.
+      const samengesteldeSoorten = new Set(portaalDelen.map((blok) => blok.audit.soort));
+      for (let index = modelcontextAudits.length - 1; index >= 0; index--) {
+        if (samengesteldeSoorten.has(modelcontextAudits[index]!.soort)) modelcontextAudits.splice(index, 1);
+      }
+      modelcontextAudits.push(samengesteldeModelcontext.audit);
+    }
     const portaalContextPrefix = samengesteldeModelcontext.tekst.length > 0
       ? `${samengesteldeModelcontext.tekst}\n\n---\n\n`
       : "";

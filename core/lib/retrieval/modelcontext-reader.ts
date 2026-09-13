@@ -9,6 +9,24 @@ export type ModelcontextLezingSoort =
   | "fondsmodules" | "risicomatrix" | "risico" | "proces"
   | "documentlabels" | "gespreksdraad";
 
+const MODELCONTEXT_LEZING_SOORTEN = new Set<string>([
+  "profiel", "organisatie", "portaalstand", "agendapunt", "fondsmodules",
+  "risicomatrix", "risico", "proces", "documentlabels", "gespreksdraad",
+]);
+const BRONSOORTEN = new Set<string>(["fonds", "generiek", "sharepoint", "notulen", "web"]);
+const BEKENDE_STATUSSEN = new Set<string>([
+  "actief", "inactief", "open", "gesloten", "concept", "vastgesteld", "van_kracht",
+  "published", "draft", "lopend", "gepland", "afgerond", "gepauzeerd", "ingetrokken",
+  "gearchiveerd", "historisch", "vervallen", "geannuleerd", "nieuw", "in_behandeling",
+  "goedgekeurd", "afgekeurd", "voltooid", "mislukt", "pending",
+  "in_uitvoering", "wacht_op_besluit", "ter_besluitvorming", "besloten",
+  "in_implementatie", "heropend", "in_voorbereiding", "genomen",
+]);
+const NIET_ACTUELE_STATUSSEN = new Set<string>([
+  "inactief", "gesloten", "afgerond", "ingetrokken", "gearchiveerd", "historisch",
+  "vervallen", "geannuleerd", "afgekeurd", "mislukt",
+]);
+
 export interface ModelcontextScope {
   fondsId: string;
   actorId?: string;
@@ -44,13 +62,51 @@ export const MODELCONTEXT_GEEN_GELDIGHEID: ModelcontextGeldigheid = Object.freez
   soort: "niet_van_toepassing",
 });
 
+function record(waarde: unknown): Record<string, unknown> | null {
+  return typeof waarde === "object" && waarde !== null && !Array.isArray(waarde)
+    ? waarde as Record<string, unknown>
+    : null;
+}
+
+/** Providerkolommen winnen altijd van callbackclaims. Relaties worden alleen
+ * gelezen uit bekende serverprojecties; request/contextwaarden vullen nooit
+ * een aanwezige afwijkende providerwaarde aan. */
+function providerFondsId(waarde: unknown): string | null | undefined {
+  const rij = record(waarde);
+  if (!rij) return undefined;
+  if (Object.hasOwn(rij, "fonds_id")) return typeof rij.fonds_id === "string" ? rij.fonds_id : null;
+  for (const relatie of ["vergaderingen", "risicos", "procedures"] as const) {
+    const gekoppeld = Array.isArray(rij[relatie]) ? (rij[relatie] as unknown[])[0] : rij[relatie];
+    const gekoppeldeRij = record(gekoppeld);
+    if (gekoppeldeRij && Object.hasOwn(gekoppeldeRij, "fonds_id")) {
+      return typeof gekoppeldeRij.fonds_id === "string" ? gekoppeldeRij.fonds_id : null;
+    }
+  }
+  return undefined;
+}
+
+function providerActorId(waarde: unknown): string | null | undefined {
+  const rij = record(waarde);
+  if (!rij) return undefined;
+  for (const veld of ["gebruiker_id", "actor_id"] as const) {
+    if (Object.hasOwn(rij, veld)) return typeof rij[veld] === "string" ? rij[veld] as string : null;
+  }
+  return undefined;
+}
+
 export function fondsModelcontextRij<T>(
   waarde: T,
   fondsId: string,
   privateRef: string | null,
   geldigheid: ModelcontextGeldigheid
 ): ModelcontextRij<T> {
-  return { waarde, scope: { soort: "fonds", fondsId }, privateRef, geldigheid };
+  const providerFonds = providerFondsId(waarde);
+  return {
+    waarde,
+    scope: { soort: "fonds", fondsId: providerFonds === undefined ? fondsId : providerFonds ?? "" },
+    privateRef,
+    geldigheid,
+  };
 }
 
 export function actorModelcontextRij<T>(
@@ -60,7 +116,18 @@ export function actorModelcontextRij<T>(
   privateRef: string | null,
   geldigheid: ModelcontextGeldigheid
 ): ModelcontextRij<T> {
-  return { waarde, scope: { soort: "actor", fondsId, actorId }, privateRef, geldigheid };
+  const providerFonds = providerFondsId(waarde);
+  const providerActor = providerActorId(waarde);
+  return {
+    waarde,
+    scope: {
+      soort: "actor",
+      fondsId: providerFonds === undefined ? fondsId : providerFonds ?? "",
+      actorId: providerActor === undefined ? actorId : providerActor ?? "",
+    },
+    privateRef,
+    geldigheid,
+  };
 }
 
 export function generiekModelcontextRij<T>(
@@ -128,12 +195,22 @@ export async function voerDuurzameSchrijfBinnenDeadlineUit<T>(
 }
 
 function isActueel(geldigheid: ModelcontextGeldigheid, peildatum: string): boolean {
-  if (geldigheid.soort === "niet_van_toepassing") return true;
-  if (geldigheid.actief === false) return false;
-  if (geldigheid.geldigVanaf && geldigheid.geldigVanaf > peildatum) return false;
-  if (geldigheid.geldigTot && geldigheid.geldigTot < peildatum) return false;
-  if (geldigheid.status && ["ingetrokken", "gearchiveerd", "historisch", "vervallen", "geannuleerd"].includes(geldigheid.status)) return false;
-  return true;
+  switch (geldigheid.soort) {
+    case "niet_van_toepassing":
+      return true;
+    case "geverifieerd": {
+      if (geldigheid.status !== null && !BEKENDE_STATUSSEN.has(geldigheid.status)) return false;
+      if (geldigheid.actief === false) return false;
+      if (geldigheid.geldigVanaf && !/^\d{4}-\d{2}-\d{2}$/.test(geldigheid.geldigVanaf)) return false;
+      if (geldigheid.geldigTot && !/^\d{4}-\d{2}-\d{2}$/.test(geldigheid.geldigTot)) return false;
+      if (geldigheid.geldigVanaf && geldigheid.geldigVanaf > peildatum) return false;
+      if (geldigheid.geldigTot && geldigheid.geldigTot < peildatum) return false;
+      if (geldigheid.status && NIET_ACTUELE_STATUSSEN.has(geldigheid.status)) return false;
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 export async function leesModelcontext<T>(opdracht: {
@@ -144,6 +221,11 @@ export async function leesModelcontext<T>(opdracht: {
   lees: (signal: AbortSignal) => PromiseLike<ModelcontextProviderResult<T>>;
 }): Promise<T[]> {
   const { context, scope } = opdracht;
+  if (!MODELCONTEXT_LEZING_SOORTEN.has(opdracht.soort)) throw new ModelcontextWeigering("providerfout");
+  if (!Array.isArray(context.bronbeleid.bronsoorten)
+    || context.bronbeleid.bronsoorten.some((soort) => !BRONSOORTEN.has(soort))) {
+    throw new ModelcontextWeigering("providerfout");
+  }
   const actorId = context.actor.soort === "gebruiker" ? context.actor.id : null;
   if (scope.fondsId !== context.fondsId || (scope.actorId && scope.actorId !== actorId)) {
     throw new ModelcontextWeigering("buiten_scope");
@@ -166,20 +248,25 @@ export async function leesModelcontext<T>(opdracht: {
   const peildatum = context.verzoekStartOp.slice(0, 10);
   for (const rij of rows) {
     if (!rij.scope || !rij.geldigheid || !("privateRef" in rij)) throw new ModelcontextWeigering("buiten_scope");
-    if (rij.scope.soort === "fonds" && rij.scope.fondsId !== context.fondsId) throw new ModelcontextWeigering("buiten_scope");
-    if (rij.scope.soort === "actor"
-      && (rij.scope.fondsId !== context.fondsId || rij.scope.actorId !== actorId)) {
-      throw new ModelcontextWeigering("buiten_scope");
-    }
-    if (rij.scope.soort === "generiek" && rij.scope.bibliotheek !== "generiek") {
-      throw new ModelcontextWeigering("buiten_scope");
-    }
-    if (rij.scope.soort === "generiek" && !context.bronbeleid.bronsoorten.includes("generiek")) {
-      throw new ModelcontextWeigering("buiten_scope");
-    }
-    if ((rij.scope.soort === "fonds" || rij.scope.soort === "actor")
-      && !context.bronbeleid.bronsoorten.includes("fonds")) {
-      throw new ModelcontextWeigering("buiten_scope");
+    switch (rij.scope.soort) {
+      case "fonds":
+        if (rij.scope.fondsId !== context.fondsId || !context.bronbeleid.bronsoorten.includes("fonds")) {
+          throw new ModelcontextWeigering("buiten_scope");
+        }
+        break;
+      case "actor":
+        if (rij.scope.fondsId !== context.fondsId || rij.scope.actorId !== actorId
+          || !context.bronbeleid.bronsoorten.includes("fonds")) {
+          throw new ModelcontextWeigering("buiten_scope");
+        }
+        break;
+      case "generiek":
+        if (rij.scope.bibliotheek !== "generiek" || !context.bronbeleid.bronsoorten.includes("generiek")) {
+          throw new ModelcontextWeigering("buiten_scope");
+        }
+        break;
+      default:
+        throw new ModelcontextWeigering("buiten_scope");
     }
     // Een rij met een private locator vereist altijd een expliciete,
     // server-afgeleide selector. Een lege selector is geen fondsbrede wildcard.

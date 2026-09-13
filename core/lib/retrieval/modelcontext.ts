@@ -6,6 +6,7 @@ import type { RetrievalContext } from "./contract";
 import type { ModelcontextAudit, ModelcontextBlok } from "./evidence-contract";
 import { neutraliseerBrontekst } from "../bron-afbakening";
 import { bevatPersoonsgegevens } from "../pii-gate";
+import { createHash } from "node:crypto";
 
 export interface ModelcontextOpdracht {
   context: RetrievalContext;
@@ -19,7 +20,16 @@ const INSTRUCTIE_PATRONEN: RegExp[] = [
   /\b(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?\b/gi,
   /\b(?:negeer|vergeet)\s+(?:alle\s+)?(?:vorige|eerdere|bovenstaande)\s+instructies?\b/gi,
   /\b(?:reveal|toon|openbaar)\s+(?:the\s+)?(?:secrets?|geheimen?)\b/gi,
+  /^\s*(?:(?:voer|doe|volg|negeer|vergeet|antwoord|beantwoord|toon|onthul|geef|schrijf|zeg|stop|gebruik|reageer)\b|(?:you\s+must|you\s+should|always\b|never\b|do\s+not\b|don['’]t\b|ignore\b|disregard\b|forget\b|answer\b|respond\b|reveal\b|show\b|output\b|print\b|execute\b|follow\b)).*$/gim,
+  /<\/?\s*onbetrouwbare[_-]data\b[^>]*>/gi,
 ];
+
+const AUDIT_SOORTEN = new Set<string>([
+  "profielsturing", "organisatieprofiel", "regimekader", "agendapunt", "fondsmodules",
+  "portaalstand", "module_scope", "module_scope_risico", "module_scope_risicomatrix",
+  "module_scope_proces", "samengestelde_modelcontext",
+]);
+const PII_NIVEAUS = new Set<string>(["geen", "persoonsgebonden", "bijzonder"]);
 
 export function neutraliseerModelcontextTekst(tekst: string): {
   tekst: string;
@@ -38,14 +48,26 @@ export function neutraliseerModelcontextTekst(tekst: string): {
 }
 
 export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): ModelcontextBlok {
+  if (!AUDIT_SOORTEN.has(opdracht.soort) || !PII_NIVEAUS.has(opdracht.pii)) {
+    throw new Error("ongeldige_modelcontext_classificatie");
+  }
   const limiet = Math.max(0, Math.floor(opdracht.maxGerenderdeTekens));
   const neutraal = neutraliseerModelcontextTekst(opdracht.tekst);
-  const afgekapt = neutraal.tekst.length > limiet;
-  const tekst = afgekapt ? neutraal.tekst.slice(0, limiet) : neutraal.tekst;
+  const sentinel = createHash("sha256")
+    .update(`${opdracht.context.correlationId}:${opdracht.soort}`)
+    .digest("hex").slice(0, 12);
+  const begin = `<onbetrouwbare_data sentinel="${sentinel}">\n`;
+  const einde = `\n</onbetrouwbare_data sentinel="${sentinel}">`;
+  const ruimte = Math.max(0, limiet - begin.length - einde.length);
+  const afgekapt = neutraal.tekst.length > ruimte;
+  const inhoud = neutraal.tekst.slice(0, ruimte);
+  const tekst = inhoud.length > 0 && limiet >= begin.length + einde.length
+    ? `${begin}${inhoud}${einde}`
+    : "";
   const piiAnalyse = bevatPersoonsgegevens(tekst);
   const pii = piiAnalyse.bevatPii
     ? (piiAnalyse.soorten.some((soort) => /bsn|medisch|gezondheid/i.test(soort)) ? "bijzonder" : "persoonsgebonden")
-    : opdracht.pii;
+    : "geen";
   return {
     tekst,
     audit: {
@@ -73,6 +95,7 @@ export function combineerModelcontext(
   let gebruikt = 0;
   let afgekapt = false;
   const piiSoorten = new Set<NonNullable<ModelcontextAudit["pii_soorten"]>[number]>();
+  let pii: ModelcontextAudit["pii"] = "geen";
   for (const blok of blokken) {
     if (!blok.tekst) continue;
     const scheiding = opgenomen.length === 0 ? 0 : 2;
@@ -82,6 +105,8 @@ export function combineerModelcontext(
     }
     opgenomen.push(blok.tekst);
     for (const soort of blok.audit.pii_soorten ?? []) piiSoorten.add(soort);
+    if (blok.audit.pii === "bijzonder") pii = "bijzonder";
+    else if (blok.audit.pii === "persoonsgebonden" && pii === "geen") pii = "persoonsgebonden";
     gebruikt += scheiding + blok.tekst.length;
   }
   return {
@@ -89,11 +114,7 @@ export function combineerModelcontext(
     audit: {
       correlation_id: context.correlationId,
       soort: "samengestelde_modelcontext",
-      pii: blokken.some((b) => b.audit.pii === "bijzonder")
-        ? "bijzonder"
-        : blokken.some((b) => b.audit.pii === "persoonsgebonden")
-          ? "persoonsgebonden"
-          : "geen",
+      pii,
       gerenderde_tekens: gebruikt,
       limiet,
       afgekapt,

@@ -10,6 +10,7 @@ import type { Bronsoort, RetrievalContext, Versiebewijs } from "./contract";
 
 export type EvidenceSoort = "besluitregistratie" | "semantische_unit";
 export type EvidenceFout = "buiten_scope" | "providerfout" | "onvolledig" | "afgekapt";
+export type AuditPiiSoort = "bsn" | "email" | "iban" | "telefoon" | "persoonsaanduiding" | "fondsnaam";
 
 export interface EvidenceAudit {
   correlation_id: string;
@@ -21,7 +22,7 @@ export interface EvidenceAudit {
   afgekapt: boolean;
   geneutraliseerd?: number;
   pii_gedetecteerd?: boolean;
-  pii_soorten?: string[];
+  pii_soorten?: AuditPiiSoort[];
   versies?: { sterk: number; gedegradeerd: number };
   fout?: EvidenceFout;
 }
@@ -80,7 +81,7 @@ export interface ModelcontextAudit {
   limiet: number;
   afgekapt: boolean;
   geneutraliseerd?: number;
-  pii_soorten?: Array<"bsn" | "email" | "iban" | "telefoon" | "persoonsaanduiding" | "fondsnaam">;
+  pii_soorten?: AuditPiiSoort[];
   fout?: "buiten_scope" | "providerfout" | "afgekapt";
 }
 
