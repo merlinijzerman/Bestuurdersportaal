@@ -16,6 +16,31 @@ function sha256(waarde) {
   return createHash("sha256").update(waarde).digest("hex");
 }
 
+const MODELCONTEXT_SENTINEL_PLACEHOLDER = "0".repeat(24);
+const MODELCONTEXT_BLOK = /<onbetrouwbare_data sentinel="([a-f0-9]{24})">([\s\S]*?)<\/onbetrouwbare_data sentinel="\1">/g;
+
+/**
+ * Canonicaliseert uitsluitend een syntactisch compleet modelcontextblok waarvan
+ * open- en sluittag exact dezelfde geldige 24-hex requestsentinel dragen.
+ * Andere tekst en losse/malformed hexwaarden blijven bytegevoelig. De vaste
+ * placeholder heeft dezelfde lengte, zodat deze testnormalisatie niets zegt
+ * over de echte promptlengte en het productiegedrag volledig ongemoeid laat.
+ */
+export function canoniseerModelcontextSentinels(waarde) {
+  if (typeof waarde === "string") {
+    return waarde.replace(MODELCONTEXT_BLOK, (blok, sentinel) =>
+      blok.split(sentinel).join(MODELCONTEXT_SENTINEL_PLACEHOLDER)
+    );
+  }
+  if (Array.isArray(waarde)) return waarde.map(canoniseerModelcontextSentinels);
+  if (waarde && typeof waarde === "object") {
+    return Object.fromEntries(
+      Object.entries(waarde).map(([sleutel, deel]) => [sleutel, canoniseerModelcontextSentinels(deel)])
+    );
+  }
+  return waarde;
+}
+
 /**
  * Vingerafdruk van één providerverzoek — UITSLUITEND vorm en hashes, nooit de
  * inhoud. Het karakteriseringsharnas (#311) leest dit terug om te bewijzen dat
@@ -26,6 +51,9 @@ function sha256(waarde) {
  */
 function vingerafdruk(body) {
   const systeem = body.system === undefined ? null : JSON.stringify(body.system);
+  const canoniekSysteem = body.system === undefined
+    ? null
+    : JSON.stringify(canoniseerModelcontextSentinels(body.system));
   const berichten = body.messages === undefined ? null : JSON.stringify(body.messages);
   return {
     model: typeof body.model === "string" ? body.model : null,
@@ -37,7 +65,7 @@ function vingerafdruk(body) {
       ? body.tools.map((t) => (t && typeof t === "object" && typeof t.type === "string" ? t.type : "onbekend"))
       : null,
     tool_choice: body.tool_choice === undefined ? null : JSON.stringify(body.tool_choice),
-    system_sha256: systeem === null ? null : sha256(systeem),
+    system_sha256: canoniekSysteem === null ? null : sha256(canoniekSysteem),
     system_tekens: systeem === null ? 0 : systeem.length,
     messages_sha256: berichten === null ? null : sha256(berichten),
     messages_aantal: Array.isArray(body.messages) ? body.messages.length : 0,

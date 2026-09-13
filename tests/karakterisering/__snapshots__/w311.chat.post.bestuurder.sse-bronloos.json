@@ -134,7 +134,7 @@
         "model": "claude-opus-4-8",
         "stream": true,
         "system_sha256": "0da264df93436449dbaa635c2aa50b928ac7773e974c9ef45adb39d99656529c",
-        "system_tekens": 5716,
+        "system_tekens": 7124,
         "temperature": null,
         "tool_choice": null,
         "tools": null,
