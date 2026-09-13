@@ -21,11 +21,20 @@ import type { RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
-import { verifieerToelating, nietOndersteundeFilters, vatToelatingSamen } from "./toelatingspoort";
+import {
+  verifieerToelating,
+  nietOndersteundeFilters,
+  vatToelatingSamen,
+  type Weigering,
+} from "./toelatingspoort";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
-import type { Afbreekgrendel } from "./afbreken";import type {
+import type { Afbreekgrendel } from "./afbreken";
+import { maakDocumentIdentiteit } from "./identiteit";
+import type {
+  AdapterCapabilities,
   AdapterUitkomst,
   Bronresultaat,
+  Bronsoort,
   CitaatOpdracht,
   Queries,
   RetrievalAdapter,
@@ -34,6 +43,17 @@ import type { Afbreekgrendel } from "./afbreken";import type {
   RetrievalTussenresultaat,
   RetrievalUitkomst,
 } from "./contract";
+
+const BRONSOORTEN = new Set<string>(["fonds", "generiek", "sharepoint", "notulen", "web"]);
+const BIBLIOTHEKEN = new Set<string>(["fonds", "generiek", "sharepoint", "notulen", "web"]);
+
+function isBekendeBronsoort(waarde: unknown): waarde is Bronsoort {
+  return typeof waarde === "string" && BRONSOORTEN.has(waarde);
+}
+
+function geldigeBronsoorten(waarde: unknown): waarde is Bronsoort[] {
+  return Array.isArray(waarde) && waarde.every(isBekendeBronsoort);
+}
 
 /** Grenzen en vlaggen die de selectie stuurt; per query geresolveerd. */
 export interface SelectiegrenzenPerQuery {
@@ -60,23 +80,26 @@ export interface Orkestratieopdracht {
 function alsAuditBron(b: Bronresultaat): AuditBron {
   return {
     ref: b.ref,
-    documentId: b.documentIdentiteit.documentId,
+    documentId: b.documentIdentiteit.id,
     bron: b.documentIdentiteit.bron ?? "",
     bibliotheek: b.documentIdentiteit.bibliotheek ?? "fonds",
     fondsId: b.documentIdentiteit.fondsId ?? null,
     documentstatus: b.status.documentstatus ?? null,
     bronstatus: b.status.bronstatus ?? null,
-    documentdatum: b.versie.waarde ?? null,
+    documentdatum: b.weergave?.documentdatum ?? null,
     score: b.rang.score ?? null,
     fts: b.rang.fts ?? null,
     vec: b.rang.vec ?? null,
+    documentIdentiteit: b.documentIdentiteit.id,
+    passageIdentiteit: b.passageIdentiteit.id,
+    versie: b.versie,
   };
 }
 
 function alsSelectieBron(b: Bronresultaat): SelectieBron {
   return {
     id: b.ref,
-    document_id: b.documentIdentiteit.documentId,
+    document_id: b.documentIdentiteit.id,
     tekst: b.passage,
     rang: b.rang.score ?? null,
     titel: b.titel,
@@ -84,6 +107,66 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
     normgewicht: b.curatie?.normgewicht ?? null,
     wettelijkRegime: b.curatie?.wettelijkRegime ?? null,
   };
+}
+
+/**
+ * Een adapter krijgt server-afgeleide scope, maar mag niet de enige bewaker
+ * daarvan zijn. Een foutieve of kwaadwillige adapteruitkomst wordt hier nog
+ * eenmaal providerneutraal tegen fonds, document en proces getoetst.
+ */
+export function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): boolean {
+  if (!isBekendeBronsoort(bron.bronsoort)) return false;
+  const identiteit = bron.documentIdentiteit;
+  if (identiteit.bibliotheek !== undefined && identiteit.bibliotheek !== null
+    && !BIBLIOTHEKEN.has(identiteit.bibliotheek)) return false;
+  // Fondsgebonden bronnen zonder fonds-id zijn géén neutrale bron: zonder deze
+  // expliciete tak werd `null` als "niet te controleren" behandeld en dus
+  // doorgelaten. Alleen een bron die zowel contractueel als in de
+  // documentidentiteit echt generiek is, mag fondsloos zijn.
+  if (identiteit.fondsId == null) {
+    if (bron.bronsoort !== "generiek" || identiteit.bibliotheek !== "generiek") return false;
+  } else if (identiteit.fondsId !== ctx.fondsId) {
+    return false;
+  }
+  if (ctx.scope?.documentIds?.length) {
+    // Bestaande lokale aanroepers leveren server-side documentrefs (UUID's),
+    // terwijl na #367 alleen de opaque identiteit de adaptergrens passeert.
+    // Een externe adapter moet een al-opaque scopewaarde leveren; voor de
+    // lokale fonds/generiek-adapter herleiden we dezelfde centrale identiteit.
+    const namespace = bron.documentIdentiteit.bron === "Decision Object"
+      ? `fonds:${ctx.fondsId}:decision`
+      : bron.bronsoort === "generiek"
+      ? "generiek"
+      : bron.bronsoort === "fonds" || bron.bronsoort === "notulen"
+        ? `fonds:${ctx.fondsId}`
+        : null;
+    const binnenDocumentScope = ctx.scope.documentIds.some((scopeRef) =>
+      scopeRef === identiteit.id ||
+      (namespace !== null && maakDocumentIdentiteit(namespace, scopeRef) === identiteit.id)
+    );
+    if (!binnenDocumentScope) return false;
+  }
+  if (ctx.scope?.procesId && identiteit.procesId !== ctx.scope.procesId) return false;
+  return true;
+}
+
+/**
+ * De volledige servergrens vóór V1–V5: fonds/bibliotheek/processcope én het
+ * server-afgeleide bronbeleid moeten alle drie kloppen. Niet-zoekende
+ * evidencereaders gebruiken exact deze functie; zo ontstaat naast de
+ * orkestratie geen tweede, zwakkere scopepoort.
+ */
+export function binnenCentraleServergrens(
+  ctx: RetrievalContext,
+  capabilities: Pick<AdapterCapabilities, "bronsoorten">,
+  bron: Bronresultaat
+): boolean {
+  if (!geldigeBronsoorten(ctx.bronbeleid.bronsoorten)
+    || !geldigeBronsoorten(capabilities.bronsoorten)
+    || !isBekendeBronsoort(bron.bronsoort)) return false;
+  return ctx.bronbeleid.bronsoorten.includes(bron.bronsoort)
+    && capabilities.bronsoorten.includes(bron.bronsoort)
+    && binnenServerScope(ctx, bron);
 }
 
 /**
@@ -98,7 +181,13 @@ function bouwRetrievalMeta(
 ): RetrievalMeta {
   const primair = opgenomen.filter((b) => basis.primaireRefs.has(b.ref));
   const aanvullend = opgenomen.filter((b) => !basis.primaireRefs.has(b.ref));
-  const basisMeta = bouwMeta(basis.methode, basis.opgehaald, primair.map(alsAuditBron));
+  const basisMeta = bouwMeta(basis.methode, basis.opgehaald, primair.map(alsAuditBron), basis.correlationId);
+  const volledigeBronmeta = bouwMeta(
+    basis.methode,
+    basis.opgehaald,
+    opgenomen.map(alsAuditBron),
+    basis.correlationId
+  );
   return {
     ...basisMeta,
     ...basis.diagnostiek,
@@ -107,17 +196,20 @@ function bouwRetrievalMeta(
       ...basisMeta.chunks,
       ...aanvullend.map((b) => ({
         id: b.ref,
-        document_id: b.documentIdentiteit.documentId,
+        document_id: b.documentIdentiteit.id,
         rang: b.rang.score ?? null,
       })),
     ],
+    // Een bevroren reflectiebronset moet ook bij meerdere sporen iedere
+    // geselecteerde passage volledig aan versie en citation kunnen binden.
+    bronversie_audit: volledigeBronmeta.bronversie_audit,
     opgehaald: basis.opgehaald,
     geselecteerd: opgenomen.length,
     ...(basis.meerdereSporen
       ? {
           aanvullend: {
             chunks: aanvullend.length,
-            documenten: new Set(aanvullend.map((b) => b.documentIdentiteit.documentId)).size,
+            documenten: new Set(aanvullend.map((b) => b.documentIdentiteit.id)).size,
           },
         }
       : {}),
@@ -185,7 +277,21 @@ export async function voerRetrievalUit(
     //     zoekt hij breder dan gevraagd en ziet niemand het. Dat spoor wordt
     //     dan niet bevraagd; `zoek()` wordt aantoonbaar niet aangeroepen.
     const caps = opdracht.adapter.capabilities();
-    const nietOndersteund = sporen.map(({ query }) => nietOndersteundeFilters(caps, query));
+    const contextBronsoortenGeldig = geldigeBronsoorten(ctx.bronbeleid.bronsoorten);
+    const capabilityBronsoortenGeldig = geldigeBronsoorten(caps.bronsoorten);
+    const toegestaneBronsoorten = new Set(contextBronsoortenGeldig ? ctx.bronbeleid.bronsoorten : []);
+    const nietOndersteund = sporen.map(({ query }) => {
+      const fouten = nietOndersteundeFilters(caps, query);
+      if (!contextBronsoortenGeldig) fouten.push("bronbeleid:ongeldige_bronsoort");
+      if (!capabilityBronsoortenGeldig) fouten.push("capability:ongeldige_bronsoort");
+      if (!caps.strategieen.includes(query.strategie)) fouten.push(`strategie:${query.strategie}`);
+      for (const bronsoort of query.filters?.bronsoort ?? []) {
+        if (!isBekendeBronsoort(bronsoort) || !toegestaneBronsoorten.has(bronsoort)) {
+          fouten.push(`bronbeleid:${bronsoort}`);
+        }
+      }
+      return fouten;
+    });
     const filterweigeringen = nietOndersteund.filter((f) => f.length > 0).length;
 
     const uitkomsten: AdapterUitkomst[] = await Promise.all(
@@ -214,16 +320,32 @@ export async function voerRetrievalUit(
     //    ÉÉN BATCH over alle sporen: één `poortNu` en één V5-herlezing per unieke
     //    bron. Per spoor apart zou dezelfde bron twee keer worden gelezen en bij
     //    een intrekking tussen die lezingen verschillend worden beoordeeld.
+    // Bronbeleid is server-side context. Ook een adapter die per ongeluk of
+    // kwaadwillig een niet-toegestane soort terugstuurt, kan die grens niet
+    // verruimen. De filtering staat vóór de toelatingspoort en selectie.
+    const scopeweigeringen: Weigering[] = [];
+    const beleidsToegelaten = uitkomsten.map((u, spoor) =>
+      u.kandidaten.filter((b) => {
+        const toegestaan = binnenCentraleServergrens(spoorContext[spoor], caps, b);
+        if (!toegestaan) {
+          scopeweigeringen.push({ spoor, ref: b.ref, grond: "buiten_server_scope" });
+        }
+        return toegestaan;
+      })
+    );
     const poort = await verifieerToelating(
       ctxMetGrendel,
       opdracht.adapter,
-      uitkomsten.map((u) => u.kandidaten)
+      beleidsToegelaten
     );
     grendel.bewaak();
     const toegelatenPerSpoor = poort.toegelatenPerSpoor;
-    const geweigerdPerSpoor = sporen.map((_, i) => poort.geweigerd.filter((w) => w.spoor === i).length);
+    const alleWeigeringen = [...scopeweigeringen, ...poort.geweigerd];
+    const geweigerdPerSpoor = sporen.map(
+      (_, i) => alleWeigeringen.filter((w) => w.spoor === i).length
+    );
     // Inhoudsvrij, alleen tellingen; `null` als er niets is geweigerd.
-    const toelating = vatToelatingSamen(poort.geweigerd, filterweigeringen);
+    const toelating = vatToelatingSamen(alleWeigeringen, filterweigeringen);
 
     // 3. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
     //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
@@ -236,7 +358,7 @@ export async function voerRetrievalUit(
       methode: u.methode,
       latencyMs: u.latencyMs,
       kandidaten: toegelatenPerSpoor[i].length,
-      fout: u.fout,
+      fout: u.fout ?? (scopeweigeringen.some((w) => w.spoor === i) ? "buiten_scope" : undefined),
       // Alleen aanwezig als er werkelijk iets is geweigerd: een veld dat altijd
       // op 0 staat zou elke bestaande snapshot veranderen zonder iets te melden.
       ...(geweigerdPerSpoor[i] > 0 ? { geweigerd: geweigerdPerSpoor[i] } : {}),
@@ -291,11 +413,11 @@ export async function voerRetrievalUit(
     // 5. Samenvoegen. Het primaire spoor vooraan; een document dat daar al in zit
     //    komt niet nóg eens uit een volgend spoor (één passage, één bronnummer).
     const primair = geselecteerdPerSpoor[0] ?? [];
-    const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.documentId));
+    const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.id));
     const aanvullend = geselecteerdPerSpoor
       .slice(1)
       .flat()
-      .filter((b) => !primaireDocIds.has(b.documentIdentiteit.documentId));
+      .filter((b) => !primaireDocIds.has(b.documentIdentiteit.id));
     const geselecteerd = [...primair, ...aanvullend];
 
     // 6. De contextgrens wordt NIET hier afgedwongen. Meten op de kale passage zou
@@ -315,6 +437,7 @@ export async function voerRetrievalUit(
       extra: { ...(extraPerSpoor[0] ?? {}), ...(toelating ? { toelating } : {}) },
       primaireRefs: new Set(primair.map((b) => b.ref)),
       meerdereSporen: uitkomsten.length > 1,
+      correlationId: ctx.correlationId,
     };
     const meta = bouwRetrievalMeta(geselecteerd, metaBasis);
 
@@ -324,7 +447,9 @@ export async function voerRetrievalUit(
       perAdapter,
       latencyMs: Date.now() - t0,
       truncatie,
-      fout: uitkomsten.find((u) => u.fout)?.fout,
+      fout:
+        uitkomsten.find((u) => u.fout)?.fout ??
+        (scopeweigeringen.length > 0 ? "buiten_scope" : undefined),
       meta,
       // De gezaghebbende grens komt van de primaire query en reist mee, zodat
       // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).
@@ -428,7 +553,21 @@ export async function citeer(
     // Eerst de DEFINITIEVE context bouwen — inclusief de harde grens — en pas
     // daarna alle metadata afleiden van exact de bronnen die erin staan.
     // De grens komt UITSLUITEND van de query, via het tussenresultaat.
-    const c = bouwCitaties(verrijkt, { ...opdracht, maxContextTekens: tussen.maxContextTekens });
+    // De aanroeper kent mogelijk alleen providerprivate scope-id's. Leid de
+    // primaire set daarom hier opnieuw af uit de opaque refs die fase 1 zelf
+    // vastlegde; zo hoeft geen database-id het providercontract in.
+    const primaireDocumentIds = opdracht.primaireDocumentIds?.size
+      ? new Set(
+          verrijkt
+            .filter((bron) => tussen.metaBasis.primaireRefs.has(bron.ref))
+            .map((bron) => bron.documentIdentiteit.id)
+        )
+      : opdracht.primaireDocumentIds;
+    const c = bouwCitaties(verrijkt, {
+      ...opdracht,
+      primaireDocumentIds,
+      maxContextTekens: tussen.maxContextTekens,
+    });
     return {
       ...tussenData,
       geselecteerd: c.opgenomen,

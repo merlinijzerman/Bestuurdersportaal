@@ -20,17 +20,16 @@ test("F4-census — directe aanroepers van de retrievalkern zijn exact het bevro
   assert.deepEqual(nu, verwacht, "symbolen/RPC's/tabellen per aanroeper zijn gewijzigd — motiveer en regenereer het register");
 });
 
-test("F4-census — zoek-RPC's leven uitsluitend in rag.ts; directe document_chunks-lezers op het antwoordpad zijn bekend", () => {
+test("F4-census — zoek-RPC's en directe evidencelezers leven uitsluitend in de retrievalkern", () => {
   const nu = census();
   const directeRpc = Object.entries(nu).filter(([, e]) => (e as { rpcs: string[] }).rpcs.length > 0).map(([b]) => b);
   assert.deepEqual(directeRpc, [], `zoek-RPC buiten de kern: ${directeRpc.join(", ")}`);
-  // Bevinding F4-T1 (geen aanname): de chatroute leest document_chunks ook
-  // rechtstreeks, buiten rag.ts om. T2 brengt dat achter de adapter; tot die
-  // tijd is dit de enige route op het antwoordpad met directe tabeltoegang.
+  // #368: de chatroute leest document_chunks niet meer rechtstreeks. Nieuwe
+  // tabeltoegang op een API-antwoordpad is daarmee altijd een grensregressie.
   const antwoordpad = Object.entries(nu)
     .filter(([b, e]) => b.startsWith("app/api/") && (e as { tabellen: string[] }).tabellen.length > 0 && !/backfill|classificatie/.test(b))
     .map(([b]) => b).sort();
-  assert.deepEqual(antwoordpad, ["app/api/chat/route.ts"]);
+  assert.deepEqual(antwoordpad, []);
 });
 
 test("F4-census — de productie-ingangen van zoekRelevanteChunksMetMeta zijn bekend, en de chatroute hoort er niet meer bij", () => {
@@ -41,13 +40,10 @@ test("F4-census — de productie-ingangen van zoekRelevanteChunksMetMeta zijn be
   // T2-1/PR-A: C1 loopt door het contract, dus `app/api/chat/route.ts` roept de
   // retrievalkern niet langer rechtstreeks aan — de adapter doet dat. Dit is de
   // krimp die T2-4 voor de hele census beoogt, hier alvast voor het antwoordpad.
-  // C5 (zoeken) en C6 (vergelijk) volgen in T2-2; blijven die staan, dan is de
-  // cutover onvolledig en hoort deze lijst rood te worden.
-  assert.deepEqual(ingangen, [
-    "app/api/zoeken/route.ts",
-    "core/lib/retrieval/supabase-adapter.ts",
-    "core/lib/vergelijk-productie.ts",
-  ]);
+  // T2-2 (#369): ook C5 (zoeken) en C6 (vergelijk) lopen nu via de adapter.
+  // Een tweede productie-ingang betekent dat selectie, citatie of toelating
+  // opnieuw kan divergeren en hoort deze lijst rood te maken.
+  assert.deepEqual(ingangen, ["core/lib/retrieval/supabase-adapter.ts"]);
 });
 
 // ── #348 §1 — het antwoordpadregister (reviewronde 3) ───────────────────────
@@ -110,8 +106,8 @@ test("F4-context — de bestanden die alleen via ../ of een geneste ./ bereikbaa
   // Het register bevat alleen LEZERS; voor de graafcontrole tellen we de omvang.
   assert.ok(contextCensus().bereikte_bestanden >= 110,
     `de graaf is kleiner dan verwacht (${contextCensus().bereikte_bestanden}) — resolveert de scanner nog wel?`);
-  assert.ok(alleBereikt.has("core/lib/parent-context.ts"),
-    "parent-context.ts leest document_chunks en moet in het register staan");
+  assert.ok(alleBereikt.has("core/lib/retrieval/supabase-parent.ts"),
+    "de centrale parentreader moet transitief in het antwoordpadregister staan");
 });
 
 // ── (b) classificatie per lezing ───────────────────────────────────────────
@@ -126,12 +122,12 @@ test("F4-context — elke bereikte lezing is geclassificeerd", () => {
 
 test("F4-context — de klassenverdeling per lezing is hard gepind", () => {
   const k = lezingenPerKlasse() as Record<string, string[]>;
-  assert.equal(lezingen().length, 45, "het aantal lezingen op het antwoordpad is gewijzigd");
-  assert.equal(k.evidence.length, 7, `evidence: ${k.evidence.join(", ")}`);
+  assert.equal(lezingen().length, 46, "het aantal lezingen op het antwoordpad is gewijzigd");
+  assert.equal(k.evidence.length, 8, `evidence: ${k.evidence.join(", ")}`);
   assert.equal(k.modelcontext.length, 26, `modelcontext: ${k.modelcontext.join(", ")}`);
   assert.equal(k.configuratie.length, 11, `configuratie: ${k.configuratie.join(", ")}`);
   assert.equal(k.audit.length, 3, `audit: ${k.audit.join(", ")}`);
-  assert.equal(Object.keys(LEZINGKLASSE).length, 45, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
+  assert.equal(Object.keys(LEZINGKLASSE).length, 46, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
 });
 
 test("F4-context — één tabel kan meerdere hoedanigheden hebben", () => {
@@ -155,21 +151,25 @@ test("F4-context — configuratie en bronbeleid tellen niet als modelcontext", (
 });
 
 // ── (c) evidence: wat is werkelijk citeerbaar bewijs ────────────────────────
-test("F4-context — evidence is documentgebonden bewijs, en drie van de vier lopen deels buiten de kern", () => {
+test("F4-context — documentgebonden evidence loopt volledig door de retrievalkern", () => {
   const k = lezingenPerKlasse() as Record<string, string[]>;
   const evidenceTabellen = [...new Set(k.evidence.map((s) => s.split("::")[1]))].sort();
   // `concepts` staat hier bewust NIET meer: dat is een begrippencatalogus
   // (id/key/label/type/status), geen documentgebonden bewijs.
   assert.deepEqual(evidenceTabellen, ["decision_objects", "document_chunks", "documenten", "semantic_units"]);
-  const viaKern = k.evidence.filter((s) => s.startsWith("core/lib/rag.ts::")).sort();
-  assert.deepEqual(viaKern, ["core/lib/rag.ts::document_chunks", "core/lib/rag.ts::documenten"]);
-  // De overige vijf evidencelezingen lopen buiten rag.ts om — gaplijst G-1a/G-8.
-  const buitenKern = k.evidence.filter((s) => !s.startsWith("core/lib/rag.ts::")).sort();
-  assert.deepEqual(buitenKern, [
-    "app/api/chat/route.ts::decision_objects",
-    "app/api/chat/route.ts::document_chunks",
-    "core/lib/besluitvorming-bron.ts::decision_objects",
-    "core/lib/parent-context.ts::document_chunks",
-    "core/lib/vergelijk-productie.ts::semantic_units",
+  const viaKern = k.evidence.filter((s) => s.startsWith("core/lib/rag.ts::") || s.startsWith("core/lib/retrieval/")).sort();
+  assert.deepEqual(viaKern, [
+    "core/lib/rag.ts::document_chunks",
+    "core/lib/rag.ts::documenten",
+    "core/lib/retrieval/supabase-evidence.ts::decision_objects",
+    "core/lib/retrieval/supabase-evidence.ts::document_chunks",
+    "core/lib/retrieval/supabase-evidence.ts::documenten",
+    "core/lib/retrieval/supabase-evidence.ts::semantic_units",
+    "core/lib/retrieval/supabase-parent.ts::document_chunks",
+    "core/lib/retrieval/supabase-versie.ts::document_chunks",
   ]);
+  // #368 sluit de vijf geïnventariseerde directe evidencelezingen: niets op het
+  // antwoordpad mag nog buiten rag.ts/retrieval om evidence ophalen.
+  const buitenKern = k.evidence.filter((s) => !viaKern.includes(s)).sort();
+  assert.deepEqual(buitenKern, []);
 });

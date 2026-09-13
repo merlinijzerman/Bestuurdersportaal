@@ -15,6 +15,10 @@
 
 import type { createServerSupabase } from "@/core/lib/supabase-server";
 import type { RetrievalMeta } from "@/core/lib/rag";
+import type { RetrievalContext } from "@/core/lib/retrieval/contract";
+import { bewaakNaIO } from "@/core/lib/retrieval/afbreken";
+import { isAfbreking } from "@/core/lib/retrieval/afbreken";
+import { fondsModelcontextRij, leesModelcontext, MODELCONTEXT_GEEN_GELDIGHEID } from "@/core/lib/retrieval/modelcontext-reader";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerSupabase>>;
 
@@ -47,20 +51,28 @@ function tekstOfNull(v: unknown): string | null {
 // Haalt het profiel voor één organisatie op via fonds_id (1-op-1). Retourneert
 // null als er geen rij is. "Leeg profiel" (rij bestaat, alles null) bepaalt de
 // blokbouw via bouwOrganisatieprofielBlok().
-export async function haalOrganisatieprofiel(
+async function haalOrganisatieprofielProvider(
   supabase: SupabaseClient,
-  fondsId: string
-): Promise<Organisatieprofiel | null> {
-  const { data: p } = await supabase
+  fondsId: string,
+  context: RetrievalContext
+): Promise<{ waarde: Organisatieprofiel; scopeRij: unknown; fondsId: string } | null> {
+  let query = supabase
     .from("organisatie_profielen")
     .select(
-      "organisatietype, uitvoerende_partijen, omvang, kernfeiten, missie, visie, strategische_speerpunten, risicohouding, peildatum"
+      "fonds_id, organisatietype, uitvoerende_partijen, omvang, kernfeiten, missie, visie, strategische_speerpunten, risicohouding, peildatum"
     )
-    .eq("fonds_id", fondsId)
-    .single();
+    .eq("fonds_id", fondsId);
+  if (context.signal) query = query.abortSignal(context.signal);
+  // Het organisatieprofiel is een optionele 0/1-relatie. `.single()` vertaalt
+  // de geldige nulrij naar PostgREST PGRST116, waardoor iedere chatbeurt zonder
+  // ingericht profiel als providerstoring faalt. `maybeSingle()` houdt nulrij
+  // en echte query-/schemafouten expliciet van elkaar gescheiden.
+  const { data: p, error } = await query.maybeSingle();
+  bewaakNaIO(context.signal, error);
+  if (error) throw error;
   if (!p) return null;
 
-  return {
+  const waarde: Organisatieprofiel = {
     organisatietype: tekstOfNull(p.organisatietype),
     uitvoerendePartijen: tekstOfNull(p.uitvoerende_partijen),
     omvang: tekstOfNull(p.omvang),
@@ -71,6 +83,36 @@ export async function haalOrganisatieprofiel(
     risicohouding: tekstOfNull(p.risicohouding),
     peildatum: tekstOfNull(p.peildatum),
   };
+  return { waarde, scopeRij: p, fondsId: p.fonds_id as string };
+}
+
+export async function haalOrganisatieprofiel(
+  supabase: SupabaseClient,
+  fondsId: string,
+  context: RetrievalContext
+): Promise<Organisatieprofiel | null> {
+  const rows = await leesModelcontext({
+    context, soort: "organisatie", scope: { fondsId }, maxItems: 1,
+    lees: async () => {
+      try {
+        const bevestigd = await haalOrganisatieprofielProvider(supabase, fondsId, context);
+        return {
+          data: bevestigd ? [fondsModelcontextRij(
+            bevestigd.waarde,
+            bevestigd.fondsId,
+            null,
+            MODELCONTEXT_GEEN_GELDIGHEID,
+            bevestigd.scopeRij
+          )] : [],
+          error: null,
+        };
+      } catch (error) {
+        if (isAfbreking(error)) throw error;
+        return { data: [], error };
+      }
+    },
+  });
+  return rows[0] ?? null;
 }
 
 // ── Hulpfuncties ─────────────────────────────────────────────────────────────
@@ -102,10 +144,26 @@ function feitenRegel(p: Organisatieprofiel): string | null {
 // Zet het profiel om naar het prompt-blok + aspecten. Retourneert null als geen
 // enkel veld is ingevuld (leeg profiel → geen blok, gedrag als nu). De vaste
 // GEBRUIK-VAN-DIT-PROFIEL-regels (bronhiërarchie, markeer, conflictregel,
-// niet-aanvullen) staan altíjd in het blok zodra er inhoud is.
+// niet-aanvullen) zijn servergeschreven control-plane. `dataTekst` houdt ze
+// daarom strikt apart van de providerwaarden die als onbetrouwbare data naar
+// het model gaan. `tekst` blijft de samengestelde weergave voor de bestaande
+// profiel-preview en evaluaties.
+export const ORGANISATIEPROFIEL_SYSTEEMREGELS = `GEBRUIK VAN HET ORGANISATIEPROFIEL:
+- Het organisatieprofiel is organisatiespecifieke context voor deze organisatie en gaat vóór algemene sectorkennis.
+- Het vervangt GEEN wet- en regelgeving, formele organisatiedocumenten (statuten, reglementen, beleidsstukken, bestuursbesluiten) of actuele vergaderstukken — die gaan vóór dit profiel.
+- Baseer je een bewering op dit profiel, markeer die direct met [Organisatieprofiel].
+- Gebruik missie, visie, speerpunten en risicohouding uitsluitend voor duiding, aandachtspunten en vergadervragen — nooit als harde besluitregel. Formuleer in termen van "dit lijkt aan te sluiten bij", "dit kan spanning geven met", "dit vraagt bestuurlijke toetsing op" of een bespreekvraag voor bestuur/commissie. Je vervangt geen bestuurlijk besluit.
+- CONFLICTREGEL: spreekt een formeler of recenter stuk dit profiel tegen, benoem dan het verschil, noem (indien aanwezig) de peildatum van het profiel, geef aan welke bron formeler of recenter lijkt, en formuleer een verificatievraag. Kies nooit stilzwijgend één bron.
+- Vul ontbrekende juridische, reglementaire, actuariële of uitvoeringsspecifieke details NIET aan vanuit dit profiel; benoem onzekerheid als die details ontbreken.`;
+
 export function bouwOrganisatieprofielBlok(
   p: Organisatieprofiel
-): { tekst: string; aspecten: OrganisatieprofielAspecten } | null {
+): {
+  tekst: string;
+  dataTekst: string;
+  systeemInstructies: string;
+  aspecten: OrganisatieprofielAspecten;
+} | null {
   const inhoudsRegels: string[] = [];
 
   const feiten = feitenRegel(p);
@@ -123,18 +181,15 @@ export function bouwOrganisatieprofielBlok(
     ? `=== ORGANISATIEPROFIEL (contextprofiel, peildatum ${p.peildatum}) ===`
     : `=== ORGANISATIEPROFIEL (contextprofiel) ===`;
 
-  const tekst = `${kop}
-${inhoudsRegels.join("\n")}
+  const dataTekst = `${kop}\n${inhoudsRegels.join("\n")}`;
+  const tekst = `${dataTekst}\n\n${ORGANISATIEPROFIEL_SYSTEEMREGELS}`;
 
-GEBRUIK VAN DIT PROFIEL:
-- Dit is organisatiespecifieke context voor déze organisatie en gaat vóór algemene sectorkennis.
-- Het vervangt GEEN wet- en regelgeving, formele organisatiedocumenten (statuten, reglementen, beleidsstukken, bestuursbesluiten) of actuele vergaderstukken — die gaan vóór dit profiel.
-- Baseer je een bewering op dit profiel, markeer die direct met [Organisatieprofiel].
-- Gebruik missie, visie, speerpunten en risicohouding uitsluitend voor duiding, aandachtspunten en vergadervragen — nooit als harde besluitregel. Formuleer in termen van "dit lijkt aan te sluiten bij", "dit kan spanning geven met", "dit vraagt bestuurlijke toetsing op" of een bespreekvraag voor bestuur/commissie. Je vervangt geen bestuurlijk besluit.
-- CONFLICTREGEL: spreekt een formeler of recenter stuk dit profiel tegen, benoem dan het verschil, noem (indien aanwezig) de peildatum van het profiel, geef aan welke bron formeler of recenter lijkt, en formuleer een verificatievraag. Kies nooit stilzwijgend één bron.
-- Vul ontbrekende juridische, reglementaire, actuariële of uitvoeringsspecifieke details NIET aan vanuit dit profiel; benoem onzekerheid als die details ontbreken.`;
-
-  return { tekst, aspecten: aspectenVan(p) };
+  return {
+    tekst,
+    dataTekst,
+    systeemInstructies: ORGANISATIEPROFIEL_SYSTEEMREGELS,
+    aspecten: aspectenVan(p),
+  };
 }
 
 // ── T4 Regime-borging (Deel B) — prompt-blok B6 ──────────────────────────────
@@ -174,9 +229,15 @@ GEBRUIK:
 // 'actief' (blok !== null) of 'geen-profiel' (null).
 export async function bouwOrganisatieprofiel(
   supabase: SupabaseClient,
-  fondsId: string
-): Promise<{ tekst: string; aspecten: OrganisatieprofielAspecten } | null> {
-  const p = await haalOrganisatieprofiel(supabase, fondsId);
+  fondsId: string,
+  context: RetrievalContext
+): Promise<{
+  tekst: string;
+  dataTekst: string;
+  systeemInstructies: string;
+  aspecten: OrganisatieprofielAspecten;
+} | null> {
+  const p = await haalOrganisatieprofiel(supabase, fondsId, context);
   if (!p) return null;
   return bouwOrganisatieprofielBlok(p);
 }

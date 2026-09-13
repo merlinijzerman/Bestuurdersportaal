@@ -1,4 +1,9 @@
 // ============================================================================
+
+import type { BronVerwijzing } from "./rag";
+import type { Bronsoort, Versiebewijs } from "./retrieval/contract";
+import type { Toelatingssamenvatting } from "./retrieval/toelatingspoort";
+import type { EvidenceAudit } from "./retrieval/evidence-contract";
 //  core/lib/vergelijk-types.ts — gedeelde types voor de vergelijkmodus (T5).
 // ----------------------------------------------------------------------------
 //  Dependency-vrij en client-veilig: zowel de service (server) als de resultaat-
@@ -36,6 +41,8 @@ export interface FindingZijde {
   evidence: string | null; // verbatim bronpassage (evidence-link)
   page: number | null;
   document_id: string;
+  /** Providerneutrale passage-ref waarmee het bewijs aan `bronnen` bindt. */
+  passage_ref?: string | null;
 }
 
 export interface Finding {
@@ -48,6 +55,44 @@ export interface Finding {
   method: VergelijkMethode;
 }
 
+/**
+ * Eén centraal gevormde bronverwijzing uit de retrievalorkestratie. Status en
+ * versie staan er expliciet naast: een vergelijking mag niet alleen de tekst
+ * bewaren en daarmee de toelatings-/actualiteitscontext verliezen.
+ */
+export interface VergelijkBron {
+  citation_id: number;
+  passage_ref: string;
+  bronsoort: Bronsoort;
+  verwijzing: BronVerwijzing;
+  versie: Versiebewijs;
+  status: {
+    documentstatus?: string | null;
+    bronstatus?: string | null;
+    geldigTot?: string | null;
+    actueel: boolean;
+  };
+}
+
+export interface VergelijkRetrievalPoging {
+  document_id: string;
+  dimensie: string;
+  methode: string;
+  opgehaald: number;
+  geselecteerd: number;
+  fout?: string;
+  toelating?: Toelatingssamenvatting;
+}
+
+/** Inhoudsvrij, duurzaam spoor; de volledige fragmenten staan alleen in `bronnen`. */
+export interface VergelijkRetrievalMeta {
+  correlation_id: string;
+  pogingen: VergelijkRetrievalPoging[];
+  toelating?: Toelatingssamenvatting;
+  /** #368 — inhoudsvrij spoor van deterministische semantic-unit-evidence. */
+  evidence?: EvidenceAudit[];
+}
+
 export interface VergelijkResultaat {
   comparison_run_id: string | null; // null wanneer (nog) niet gepersisteerd
   mode: VergelijkMode;
@@ -57,4 +102,8 @@ export interface VergelijkResultaat {
   // géén gelijkheids-/volledigheidsclaim buiten deze assen).
   dimensies: Dimensie[];
   findings: Finding[];
+  /** Additieve #369-uitbreiding; centraal gevormd, providerneutraal en citeerbaar. */
+  bronnen?: VergelijkBron[];
+  /** Correlation + inhoudsvrije toelatings-/uitvoeringstelemetrie. */
+  retrieval_meta?: VergelijkRetrievalMeta;
 }

@@ -140,9 +140,7 @@ export const LEZINGKLASSE = {
   "app/api/chat/route.ts::procedure_stappen": { klassen: ["modelcontext"], doel: "fasering in het procesblok" },
   "app/api/chat/route.ts::procedure_requirements": { klassen: ["modelcontext"], doel: "vereisten in het procesblok" },
   "app/api/chat/route.ts::procedure_bewijs": { klassen: ["modelcontext"], doel: "bewijsstukken bij het dossier" },
-  "app/api/chat/route.ts::decision_objects": { klassen: ["evidence"], doel: "besluitregistratie als formele bron náást document_chunks" },
   "app/api/chat/route.ts::documenten": { klassen: ["modelcontext"], doel: "documenttitels voor scope- en bronlabels" },
-  "app/api/chat/route.ts::document_chunks": { klassen: ["evidence"], doel: "chunkpresentie per document, buiten rag.ts om (gap G-8)" },
   "app/api/chat/route.ts::voorbereidingen": { klassen: ["audit"], doel: "upsert van het bewaarde antwoordproduct" },
 
   // ── contextmodules ────────────────────────────────────────────────────────
@@ -165,9 +163,12 @@ export const LEZINGKLASSE = {
   // ── evidencebronnen buiten en binnen de kern ──────────────────────────────
   "core/lib/rag.ts::document_chunks": { klassen: ["evidence"], doel: "de retrievalkern zelf" },
   "core/lib/rag.ts::documenten": { klassen: ["evidence"], doel: "documentmetadata bij de chunks (status, geldigheid, normgewicht)" },
-  "core/lib/parent-context.ts::document_chunks": { klassen: ["evidence"], doel: "parent-context rond een geselecteerde chunk — buiten rag.ts om (gap G-8)" },
-  "core/lib/besluitvorming-bron.ts::decision_objects": { klassen: ["evidence"], doel: "besluitregistratie als formele bron (gap G-1a)" },
-  "core/lib/vergelijk-productie.ts::semantic_units": { klassen: ["evidence"], doel: "documentgebonden waarden met pagina en evidence (gap G-1a)" },
+  "core/lib/retrieval/supabase-versie.ts::document_chunks": { klassen: ["evidence"], doel: "#367 herleest de actuele document- en indexeringsversie vóór ranking" },
+  "core/lib/retrieval/supabase-evidence.ts::decision_objects": { klassen: ["evidence"], doel: "getypeerde besluitregistratie met V5, versie en centrale citation" },
+  "core/lib/retrieval/supabase-evidence.ts::document_chunks": { klassen: ["evidence"], doel: "contentvrije, begrensde chunkpresentiepreflight" },
+  "core/lib/retrieval/supabase-evidence.ts::documenten": { klassen: ["evidence"], doel: "documentversie en status voor semantische evidence" },
+  "core/lib/retrieval/supabase-evidence.ts::semantic_units": { klassen: ["evidence"], doel: "deterministische, versiegebonden semantische evidence" },
+  "core/lib/retrieval/supabase-parent.ts::document_chunks": { klassen: ["evidence"], doel: "begrensde siblingverrijking achter de adapterhook" },
 
   // ── configuratie, autorisatie en bronbeleid — GEEN contextlaag ────────────
   "core/lib/vergelijk-productie.ts::concepts": { klassen: ["configuratie"], doel: "begrippencatalogus (id/key/label/type/status) die semantic_units interpreteert; geen documentgebonden bewijs" },

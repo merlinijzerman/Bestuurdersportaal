@@ -257,6 +257,9 @@ export interface RetrievalVlaggen {
   jargonExpansie: boolean;
   parentRetrieval: boolean;
   representatieConstraints: boolean;
+  /** #369/G-11 — regimeweging is, net als de andere selectieregels, per fonds
+   *  stuurbaar. Ontbrekend = historische veilige default aan, tenzij env `off`. */
+  regimeWeging: boolean;
   drempelWaarde?: number;
   /** D5 — deadline over de hele retrievalketen, in ms. Ontbrekend of buiten
    *  5.000–60.000 → de veilige default van 20 s (zie timeoutUitConfig). */
@@ -276,6 +279,7 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
       "jargon_expansie",
       "parent_retrieval",
       "representatie_constraints",
+      "regime_weging",
       "relevantie_drempel_waarde",
       // D5 — deadline over de retrievalketen (ms).
       "retrieval_timeout_ms",
@@ -304,6 +308,9 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
     jargonExpansie: vlag("jargon_expansie", "JARGON_EXPANSIE"),
     parentRetrieval: vlag("parent_retrieval", "PARENT_RETRIEVAL"),
     representatieConstraints: vlag("representatie_constraints", "REPRESENTATIE_CONSTRAINTS"),
+    regimeWeging: m.has("regime_weging")
+      ? flagAlsBoolean(m.get("regime_weging")!)
+      : process.env.REGIME_WEGING !== "off",
     drempelWaarde,
     retrievalTimeoutMs,
     generatieTimeoutMs,

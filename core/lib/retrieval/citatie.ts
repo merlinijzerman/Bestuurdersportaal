@@ -22,6 +22,7 @@ import { bouwBronfragment } from "../bronfragment";
 import { statuslabelVoorBron } from "../documentstatus-label";
 import type { BronVerwijzing } from "../rag";
 import type { Bronresultaat, CitaatOpdracht } from "./contract";
+import { maakCitationId } from "./identiteit";
 
 export interface Citaatuitkomst {
   contextTekst: string;
@@ -102,7 +103,7 @@ export function bouwCitaties(
 
     const herkomstLabel =
       opdracht.primaireDocumentIds && opdracht.primaireDocumentIds.size > 0
-        ? opdracht.primaireDocumentIds.has(bron.documentIdentiteit.documentId)
+        ? opdracht.primaireDocumentIds.has(bron.documentIdentiteit.id)
           ? opdracht.hoofddocumentLabel
           : " [aanvullend uit de bibliotheek]"
         : "";
@@ -124,7 +125,15 @@ export function bouwCitaties(
     contextDelen.push(blok);
     opgenomen.push(bron);
     verwijzingen.push({
-      document_id: bron.documentIdentiteit.documentId,
+      ...(bron.versie.waarde ? { citation_id: maakCitationId(
+        bron.documentIdentiteit.id,
+        bron.passageIdentiteit.id,
+        bron.versie.soort,
+        bron.versie.waarde
+      ) } : {}),
+      // Bestaande veldnaam; de waarde is vanaf #367 een providerneutrale,
+      // opaque documentidentiteit en nadrukkelijk geen database-id.
+      document_id: bron.documentIdentiteit.id,
       titel: w.notulen ? bronTitel : bron.titel,
       bron: bron.documentIdentiteit.bron ?? "",
       pagina: bron.locator.pagina ?? null,

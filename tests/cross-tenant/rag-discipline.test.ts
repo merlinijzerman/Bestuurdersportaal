@@ -27,6 +27,7 @@ import {
   type DocumentChunk,
 } from "../../core/lib/rag";
 import { verrijkMetParents, type SiblingRij } from "../../core/lib/parent-context";
+import { maakVolledigeVersieHash } from "../../core/lib/retrieval/identiteit";
 import { resolveerGenoemdDocument } from "../../core/lib/vraagrouter";
 
 const FONDS_A = "11111111-1111-1111-1111-111111111111";
@@ -188,4 +189,52 @@ test("T15 — parent-retrieval trekt nooit vreemd-fonds of niet-published generi
   assert.ok(passage.includes("ART5-EIGEN-B"), "eigen-fonds sibling aanwezig");
   assert.ok(!passage.includes("LEK-B"), "vreemd-fonds sibling NIET bijgehaald");
   assert.ok(!passage.includes("GENERIEK-OUD"), "niet-published generiek NIET bijgehaald");
+});
+
+test("#368 — parent-sibling met andere indexversie wordt terminaal geweigerd", async () => {
+  const bestandHash = "a".repeat(64);
+  const hit = sibling("hit", "Kern.", {
+    bibliotheek: "fonds", fonds_id: FONDS_A, bestand_hash: bestandHash,
+  }, 0);
+  hit.indexering_versie = "index-v2";
+  const siblingNieuw = sibling("sib", "Nieuwe context.", {
+    bibliotheek: "fonds", fonds_id: FONDS_A, bestand_hash: bestandHash,
+  }, 1);
+  siblingNieuw.indexering_versie = "index-v3";
+  const treffer: DocumentChunk = {
+    ...hit,
+    documenten: { ...hit.documenten },
+  };
+  const opties = fakeOpties([hit, siblingNieuw]);
+  opties!.verwachteVersies = new Map([["hit", {
+    soort: "hash",
+    waarde: maakVolledigeVersieHash("d1", "index-v2", bestandHash),
+    gecontroleerdOp: new Date().toISOString(),
+  }]]);
+  await assert.rejects(
+    verrijkMetParents([treffer], FONDS_A, "2026-07-15", opties),
+    /parent_siblings_versie_mismatch/
+  );
+});
+
+test("#368 — verdwenen v1-hit met uitsluitend nieuwe v2-hit valt nooit terug op oude passage", async () => {
+  const bestandHash = "b".repeat(64);
+  const oudeHit = sibling("hit-v1", "Oude passage.", {
+    bibliotheek: "fonds", fonds_id: FONDS_A, bestand_hash: bestandHash,
+  }, 0);
+  oudeHit.indexering_versie = "index-v1";
+  const nieuweHit = sibling("hit-v2", "Nieuwe passage.", {
+    bibliotheek: "fonds", fonds_id: FONDS_A, bestand_hash: bestandHash,
+  }, 0);
+  nieuweHit.indexering_versie = "index-v2";
+  const opties = fakeOpties([nieuweHit]);
+  opties!.verwachteVersies = new Map([["hit-v1", {
+    soort: "hash",
+    waarde: maakVolledigeVersieHash("d1", "index-v1", bestandHash),
+    gecontroleerdOp: new Date().toISOString(),
+  }]]);
+  await assert.rejects(
+    verrijkMetParents([{ ...oudeHit, documenten: { ...oudeHit.documenten } }], FONDS_A, "2026-07-15", opties),
+    /parent_siblings_versie_mismatch/
+  );
 });

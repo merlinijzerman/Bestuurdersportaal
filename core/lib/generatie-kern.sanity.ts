@@ -98,7 +98,10 @@ const PIN = {
   SP_REFLECTIE_TEGENPERSPECTIEF: "985c93fa72c732266485db1f31b57066a453e37fe27d462263fe16c130735406",
   static_feitelijk_combineren: "720677da5a653ce08bbe08e051dad1c065a8246c7fa9964ef23d1b16e004cb6e",
   static_sparring_combineren: "bf11b83970b44857951fa520b51022b92968f6d59875e975a5665e5120c14118",
-  dyn_block: "d6e01afa0bc092b7efbc8701fad58af73808ae3e3ee0c719de20366630f5c4d7",
+  // #368: providernaam en fondsnaam zijn uit trusted SYSTEM verwijderd; de
+  // dynamische basis bevat alleen nog vaste rolmapping en een verwijzing naar
+  // de afzonderlijk gemarkeerde portaalcontext.
+  dyn_block: "762fce26884165261ac85f52cf12bd816aaece9c6a90d6c43c8c931497d93402",
   // T2 (05-08-2026) — nieuw, additief. De bureau-toonfamilie en haar assemblage.
   // Deze pins raken GEEN van de bestaande hashes: TOON_BLOK_BUREAU is een nieuwe
   // constante en de bureau-assemblage wordt alleen bereikt met bureauToon=true,
@@ -115,10 +118,7 @@ const PIN = {
 } as const;
 
 const CTX: BestuurderContext = {
-  voornaam: "Jan",
-  volledigeNaam: "Jan de Vries",
   rolLabel: "voorzitter van het bestuur",
-  fondsnaam: "Stichting Pensioenfonds Horizon",
 };
 
 test("toon-/instructieblokken byte-identiek aan gepinde snapshot", () => {
@@ -340,20 +340,22 @@ test("bouwSysteemBlokken: 2 blokken, statisch gecachet (ephemeral) + dynamisch o
   assert.equal(sha(blokken[1].text), PIN.dyn_block);
 });
 
-test("dynamisch blok bevat naam/rol/fondsnaam en géén profiel/organisatie zonder opgave", () => {
+test("dynamisch blok bevat alleen vaste rolmapping en geen providernaam/fondsnaam", () => {
   const dyn = bouwDynamischeContext(CTX);
-  assert.match(dyn, /Jan de Vries/);
   assert.match(dyn, /voorzitter van het bestuur/);
-  assert.match(dyn, /Stichting Pensioenfonds Horizon/);
+  assert.match(dyn, /gemarkeerde portaalcontext/);
+  assert.doesNotMatch(dyn, /Jan de Vries|Stichting Pensioenfonds Horizon/);
   assert.equal(dyn.includes("undefined"), false);
 });
 
 test("dynamisch blok voegt organisatieprofiel + profielsturing toe wanneer aanwezig", () => {
+  const sentinel = "a".repeat(24);
+  const tag = (tekst: string) => `<onbetrouwbare_data sentinel="${sentinel}">\n${tekst}\n</onbetrouwbare_data sentinel="${sentinel}">`;
   const dyn = bouwDynamischeContext({
     ...CTX,
-    organisatieprofiel: "ORGBLOK",
-    profielsturing: "STURINGBLOK",
-  });
+    organisatieprofiel: tag("ORGBLOK"),
+    profielsturing: tag("STURINGBLOK"),
+  }, sentinel);
   assert.match(dyn, /ORGBLOK/);
   assert.match(dyn, /STURINGBLOK/);
   // Volgorde: basis → organisatieprofiel → profielsturing.

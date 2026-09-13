@@ -37,7 +37,7 @@ begin
     ('fn_procedure_heropenen(p_procedure_id uuid, p_reden text, p_reden_type text)', 'rol_fonds', 'Bestuurlijke procedureheropening in het eigen fonds, met verplichte getypeerde reden.'),
     ('fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)', 'eigen_context', 'Rate-limit is alleen op de huidige actor/sessie gebaseerd.'),
     ('fn_schrijf_handeling(p_handeling text, p_methode text, p_pad text, p_status integer, p_request_id uuid)', 'eigen_fonds', 'Append-only handeling leidt actor en fonds server-side af.'),
-    ('fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)', 'eigen_fonds', 'Vergelijkingsresultaat leidt fonds en actor server-side af.'),
+    ('fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb, p_correlation_id text, p_retrieval_meta jsonb, p_bronnen jsonb)', 'eigen_fonds', 'Vergelijkingsresultaat leidt fonds en actor server-side af; #369 bewaart bronprovenance.'),
     ('fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)', 'eigen_fonds', 'Afgeleide cascade-overgang; sessie en procedure worden fail-closed op hetzelfde fonds gebonden.'),
     ('fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)', 'eigen_fonds', 'Gewone processtapactivering; sessie en procedure worden fail-closed op hetzelfde fonds gebonden.'),
     ('fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)', 'eigen_fonds', 'Gewone processtapafronding; sessie en procedure worden fail-closed op hetzelfde fonds gebonden.'),

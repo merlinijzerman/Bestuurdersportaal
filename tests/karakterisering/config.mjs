@@ -20,6 +20,7 @@ export const ENV = {
   // #349 (F4-T1b) — losse vlag voor de embeddingstub; zonder deze URL valt de
   // keten terug op FTS en worden de hybride scenario's ZICHTBAAR overgeslagen.
   embedStubUrl: process.env.WP4_E2E_EMBED_PROVIDER === "local" ? process.env.WP4_E2E_EMBED_PROVIDER_URL || "" : "",
+  vergelijkAan: process.env.VERGELIJKMODUS === "on",
 };
 
 export const FONDS_ID = "00000000-0000-4000-8000-000000000001";
@@ -52,6 +53,9 @@ export const FIX = {
   retrievalChunkHerstel: "00000000-0000-4000-8000-0000000d0c22",
   retrievalChunkRente2: "00000000-0000-4000-8000-0000000d0c23",
   retrievalChunkPremie: "00000000-0000-4000-8000-0000000d0c24",
+  vergelijkChunkBron: "00000000-0000-4000-8000-0000000d0c31",
+  vergelijkChunkDoel: "00000000-0000-4000-8000-0000000d0c32",
+  vergelijkConcept: "00000000-0000-4000-8000-0000000d0c33",
   procedure1: "00000000-0000-4000-8000-00000000cd01",
   // Alleen Preview-waarneming: vaste UI-fixtures naast de kale lokale W1-seed.
   previewProcedureStap1: "00000000-0000-4000-8000-0000000cd201",

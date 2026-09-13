@@ -19,6 +19,8 @@ import type {
   Dimensie,
   Finding,
   FindingZijde,
+  VergelijkBron,
+  VergelijkRetrievalMeta,
   VerschilTypeRuw,
   VergelijkResultaat,
 } from "./vergelijk-types";
@@ -34,6 +36,8 @@ export interface ConceptLite {
 
 export interface SemanticUnitLite {
   concept_id: string;
+  /** Providerneutrale domeinsleutel; productie gebruikt deze i.p.v. DB-id. */
+  concept_key?: string;
   type: string;
   value_num: number | null;
   value_date: string | null; // ISO
@@ -42,11 +46,15 @@ export interface SemanticUnitLite {
   value_unit: string | null;
   page: number | null;
   evidence: string;
+  /** Opaque #367-binding van de deterministische evidence. */
+  passage_ref?: string | null;
 }
 
 export interface PassageLite {
   tekst: string;
   page: number | null;
+  /** Blijft providerneutraal; productie bindt hiermee evidence aan `bronnen`. */
+  passage_ref?: string | null;
 }
 
 // Wat het LLM-pad teruggeeft per dimensie. `gelijk` is het SEMANTISCHE oordeel;
@@ -56,9 +64,11 @@ export interface LLMVergelijkUitkomst {
   bron_value: string | null;
   bron_evidence: string | null;
   bron_page: number | null;
+  bron_passage_ref?: string | null;
   doel_value: string | null;
   doel_evidence: string | null;
   doel_page: number | null;
+  doel_passage_ref?: string | null;
   gelijk: boolean;
 }
 
@@ -68,6 +78,8 @@ export interface PersisteerInvoer {
   promptVersion: string;
   comparatorVersion: string;
   findings: Finding[];
+  bronnen?: VergelijkBron[];
+  retrievalMeta?: VergelijkRetrievalMeta;
 }
 
 export interface VergelijkDeps {
@@ -89,6 +101,10 @@ export interface VergelijkDeps {
   // Schrijft comparison_run + comparison_results en geeft de run-id terug (of null
   // wanneer er bewust niet gepersisteerd wordt).
   persisteer(input: PersisteerInvoer): Promise<string | null>;
+  /** Productie levert na alle retrievals één deterministische auditprojectie. */
+  retrievalAudit?(): { bronnen: VergelijkBron[]; meta: VergelijkRetrievalMeta };
+  /** Markeer alleen semantic evidence die werkelijk een finding heeft gevoed. */
+  markeerGebruikteEvidence?(refs: readonly string[]): void;
   // De contingentie-poort: alleen als dit true is mag het deterministische pad vuren.
   deterministischVertrouwd: boolean;
 }
@@ -185,7 +201,8 @@ function indexeerUnits(units: SemanticUnitLite[]): Map<string, SemanticUnitLite>
   for (const u of units) {
     // Eerste unit per concept wint (ontdubbeling gebeurde al bij extractie; een
     // dimensie vergelijkt op één representatieve waarde per document).
-    if (!m.has(u.concept_id)) m.set(u.concept_id, u);
+    const sleutel = u.concept_key ?? u.concept_id;
+    if (!m.has(sleutel)) m.set(sleutel, u);
   }
   return m;
 }
@@ -197,6 +214,7 @@ function zijdeUitUnit(documentId: string, u: SemanticUnitLite, norm: string | nu
     evidence: u.evidence,
     page: u.page,
     document_id: documentId,
+    passage_ref: u.passage_ref ?? null,
   };
 }
 
@@ -242,13 +260,21 @@ export async function voerVergelijkingUit(
       dimensie: dim.key,
     });
 
-    const bu = conceptId ? bronUnits.get(conceptId) : undefined;
-    const du = conceptId ? doelUnits.get(conceptId) : undefined;
+    // Productie-evidence koppelt providerneutraal op conceptsleutel. Bestaande
+    // injecteerbare deps/tests mogen nog de interne concept-id aanleveren; die
+    // compatibiliteitsroute blijft server-side en komt niet in evidencecontracten.
+    const bu = (dim.concept_key ? bronUnits.get(dim.concept_key) : undefined)
+      ?? (conceptId ? bronUnits.get(conceptId) : undefined);
+    const du = (dim.concept_key ? doelUnits.get(dim.concept_key) : undefined)
+      ?? (conceptId ? doelUnits.get(conceptId) : undefined);
 
     // Deterministisch pad: alleen als de poort open is ÉN BEIDE zijden een unit
     // hebben (acceptatiecriterium). Anders LLM.
     if (deps.deterministischVertrouwd && bu && du) {
       const cmp = deterministischeVergelijking(bu, du, dim.type);
+      deps.markeerGebruikteEvidence?.(
+        [bu.passage_ref, du.passage_ref].filter((ref): ref is string => Boolean(ref))
+      );
       findings.push({
         finding_key,
         dimensie: dim.key,
@@ -284,12 +310,14 @@ export async function voerVergelijkingUit(
         evidence: uit.bron_evidence,
         page: uit.bron_page,
         document_id: bronDocumentId,
+        passage_ref: uit.bron_passage_ref ?? null,
       },
       doel: {
         value: uit.doel_value,
         evidence: uit.doel_evidence,
         page: uit.doel_page,
         document_id: doelDocumentId,
+        passage_ref: uit.doel_passage_ref ?? null,
       },
       verschil_type_ruw: bepaalVerschilTypeRuw(bronAanwezig, doelAanwezig, uit.gelijk),
       method: "llm",
@@ -297,12 +325,15 @@ export async function voerVergelijkingUit(
   }
 
   // 4. Persisteren (append-only run + results via de DEFINER-RPC in productie).
+  const retrievalAudit = deps.retrievalAudit?.();
   const comparison_run_id = await deps.persisteer({
     mode,
     model: params.versies.model,
     promptVersion: params.versies.promptVersion,
     comparatorVersion: params.versies.comparatorVersion,
     findings,
+    bronnen: retrievalAudit?.bronnen,
+    retrievalMeta: retrievalAudit?.meta,
   });
 
   return {
@@ -312,5 +343,8 @@ export async function voerVergelijkingUit(
     doel_document_id: doelDocumentId,
     dimensies,
     findings,
+    ...(retrievalAudit
+      ? { bronnen: retrievalAudit.bronnen, retrieval_meta: retrievalAudit.meta }
+      : {}),
   };
 }

@@ -7,6 +7,8 @@
 //
 //    UUID's      → stabiele mapping per snapshot: <uuid:1>, <uuid:2>, … in
 //                  volgorde van eerste voorkomen in de canonieke traversal.
+//    Opaque ID's → stabiele, relationele mapping per soort en unieke waarde:
+//                  <passage-identiteit:1>, <passage-identiteit:2>, …
 //    Timestamps  → <ts> (ISO-8601).
 //    Array-orde  → arrays worden gesorteerd op hun genormaliseerde inhoud
 //                  (UUID's gemaskeerd), zodat een DB-volgorde zonder ORDER BY
@@ -21,6 +23,7 @@
 // ============================================================================
 
 const UUID_RE = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+const OPAQUE_IDENTITEIT_RE = /\b(doc|passage|version|citation)_v1_[a-f0-9]{64}\b/g;
 // ISO-8601 met optionele fractie/zone; ook de spatie-variant (Postgres) toegestaan.
 const TS_RE = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?/g;
 
@@ -57,7 +60,9 @@ function isObject(v) {
 
 // 1. Vervang timestamps in alle strings.
 function vervangTimestamps(node) {
-  if (typeof node === "string") return node.replace(TS_RE, "<ts>");
+  if (typeof node === "string") {
+    return node.replace(TS_RE, "<ts>");
+  }
   if (Array.isArray(node)) return node.map(vervangTimestamps);
   if (isObject(node)) {
     const out = {};
@@ -69,11 +74,47 @@ function vervangTimestamps(node) {
 
 // Maskeer UUID's voor een orde-onafhankelijke sorteersleutel.
 function maskeerUuids(node) {
-  if (typeof node === "string") return node.replace(UUID_RE, "<uuid>");
+  if (typeof node === "string") {
+    return node
+      .replace(OPAQUE_IDENTITEIT_RE, (_waarde, soort) => `<${soort}-identiteit>`)
+      .replace(UUID_RE, "<uuid>");
+  }
   if (Array.isArray(node)) return node.map(maskeerUuids);
   if (isObject(node)) {
     const out = {};
     for (const k of Object.keys(node).sort()) out[k] = maskeerUuids(node[k]);
+    return out;
+  }
+  return node;
+}
+
+// BESLUIT (#367): opaque identiteiten zijn weliswaar seed-afhankelijk, maar hun
+// RELATIES zijn contract. Eén generieke placeholder maskeerde zowel duplicatie
+// als een verwisselde passage-/versiebinding. Verzamel daarom eerst alle unieke
+// waarden na de bestaande canonieke arraysortering in eerste-voorkomensvolgorde
+// een eigen pseudoniem. Daarmee geldt: dezelfde input → hetzelfde pseudoniem
+// en verschillende input → verschillende pseudoniemen, zonder dat de private
+// digest snapshotdata wordt. Ook objectSLEUTELS tellen mee; anders kon een
+// sleutelgeadresseerde herkomstkaart de opaque waarde alsnog lekken.
+function mapOpaqueIdentiteiten(node, perSoort) {
+  const vervang = (waarde) => waarde.replace(
+    OPAQUE_IDENTITEIT_RE,
+    (match, soort) => {
+      if (!perSoort.has(soort)) perSoort.set(soort, new Map());
+      const mapping = perSoort.get(soort);
+      if (!mapping.has(match)) {
+        mapping.set(match, `<${soort}-identiteit:${mapping.size + 1}>`);
+      }
+      return mapping.get(match);
+    }
+  );
+  if (typeof node === "string") return vervang(node);
+  if (Array.isArray(node)) return node.map((el) => mapOpaqueIdentiteiten(el, perSoort));
+  if (isObject(node)) {
+    const out = {};
+    for (const sleutel of Object.keys(node).sort()) {
+      out[vervang(sleutel)] = mapOpaqueIdentiteiten(node[sleutel], perSoort);
+    }
     return out;
   }
   return node;
@@ -141,12 +182,30 @@ function vervangPeildatum(node) {
   return node;
 }
 
+// BESLUIT (#367): correlation_id moet aanwezig en ongewijzigd zijn, maar de
+// requestwaarde zelf is per opname willekeurig. Sleutelgebonden normalisatie
+// houdt precies die structurele invariant zichtbaar in de golden.
+function vervangCorrelationId(node) {
+  if (Array.isArray(node)) return node.map(vervangCorrelationId);
+  if (isObject(node)) {
+    const out = {};
+    for (const k of Object.keys(node)) {
+      out[k] = k === "correlation_id" && typeof node[k] === "string"
+        ? "<correlation-id>"
+        : vervangCorrelationId(node[k]);
+    }
+    return out;
+  }
+  return node;
+}
+
 /** Normaliseer een geparste JSON-body naar canonieke vorm. */
 export function normaliseerJson(body) {
-  const stap1 = vervangTimestamps(vervangPeildatum(body));
+  const stap1 = vervangTimestamps(vervangCorrelationId(vervangPeildatum(body)));
   const stap2 = sorteerArrays(stap1);
-  const stap3 = mapUuids(stap2, new Map());
-  return stap3;
+  const stap3 = mapOpaqueIdentiteiten(stap2, new Map());
+  const stap4 = mapUuids(stap3, new Map());
+  return stap4;
 }
 
 /** Filter + normaliseer headers tot de vergeleken deelverzameling.

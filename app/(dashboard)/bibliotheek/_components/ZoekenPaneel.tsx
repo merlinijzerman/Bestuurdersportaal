@@ -5,9 +5,8 @@
 // ----------------------------------------------------------------------------
 //  Increment H, verplaatst uit de losse /zoeken-pagina naar een herbruikbaar
 //  component dat in de Documentbibliotheek leeft (knop "Uitgebreid zoeken").
-//  Gedrag is ONGEWIJZIGD: dezelfde GET /api/zoeken, dezelfde retrieval-RPC's
-//  (zoek_chunks / zoek_chunks_hybride, Increment G), dezelfde scope-vóór-ranking
-//  en RLS (SECURITY INVOKER → tenant-isolatie blijft gelden). Resultaten per
+//  Dezelfde GET /api/zoeken, nu via de centrale retrievalorkestratie (#369),
+//  met dezelfde scope-vóór-ranking en RLS (SECURITY INVOKER). Resultaten per
 //  document (max. 3 chunktreffers) gegroepeerd op procesinstantie (dossier).
 // ============================================================================
 

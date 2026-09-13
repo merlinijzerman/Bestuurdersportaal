@@ -39,6 +39,7 @@
             "bron": "Intern",
             "bronorganisatie": null,
             "bronstatus": null,
+            "citation_id": "<citation-identiteit:1>",
             "document_id": "<uuid:1>",
             "documentdatum": null,
             "documentstatus": "concept",
@@ -151,17 +152,26 @@
           "bibliotheek": "fonds",
           "bron": "Intern",
           "bronstatus": null,
-          "document_id": "<uuid:1>",
+          "citation_id": "<citation-identiteit:1>",
+          "document_id": "<doc-identiteit:1>",
+          "document_identiteit": "<doc-identiteit:1>",
           "documentdatum": null,
           "documentstatus": "concept",
-          "fonds_id": "<uuid:2>"
+          "fonds_id": "<uuid:1>",
+          "passage_identiteit": "<passage-identiteit:1>",
+          "versie": {
+            "gecontroleerd_op": "<ts>",
+            "soort": "hash",
+            "toestand": "sterk",
+            "waarde": "<version-identiteit:1>"
+          }
         }
       ],
       "chunks": [
         {
-          "document_id": "<uuid:1>",
+          "document_id": "<doc-identiteit:1>",
           "fts_rang": null,
-          "id": "<uuid:3>",
+          "id": "<passage-identiteit:1>",
           "rang": 0.3,
           "vec_rang": null
         }
@@ -170,6 +180,7 @@
         "ongeldig": 1,
         "totaal": 2
       },
+      "correlation_id": "<correlation-id>",
       "filters": {
         "bronsoort": null,
         "bronstatus": null,
@@ -207,14 +218,14 @@
         "intent": "fonds",
         "regime": "alles"
       },
-      "toegepaste_fonds_filter": "<uuid:2>"
+      "toegepaste_fonds_filter": "<uuid:1>"
     },
     "volgorde": {
       "bronversie_audit": [
-        "00 doc=<uuid:1> bib=fonds fonds=<uuid:2> docstatus=concept bronstatus=geen datum=geen"
+        "00 doc=<doc-identiteit:1> docid=<doc-identiteit:1> passage=<passage-identiteit:1> citation=<citation-identiteit:1> versie=hash:<version-identiteit:1> bib=fonds fonds=<uuid:1> docstatus=concept bronstatus=geen datum=geen"
       ],
       "chunks": [
-        "00 chunk=<uuid:3> doc=<uuid:1> rang=0.3 fts=geen vec=geen"
+        "00 chunk=<passage-identiteit:1> doc=<doc-identiteit:1> rang=0.3 fts=geen vec=geen"
       ],
       "poging_herkomst": null,
       "retrieval_pogingen": []

@@ -168,6 +168,7 @@ function vereisteAanwezig(scenario) {
   if (!scenario.vereist) return true;
   if (scenario.vereist === "ai-stub") return Boolean(ENV.aiStubUrl);
   if (scenario.vereist === "embed-stub") return Boolean(ENV.embedStubUrl);
+  if (scenario.vereist === "vergelijk") return Boolean(ENV.vergelijkAan && ENV.aiStubUrl);
   // #349 — de hybride chatbeurt heeft BEIDE stubs nodig: de embeddingstub voor
   // de vraag-embedding en de providerstub voor de deterministische SSE-stroom.
   if (scenario.vereist === "hybride") return Boolean(ENV.embedStubUrl && ENV.aiStubUrl);
@@ -305,7 +306,20 @@ async function main() {
       );
     }
     // Deel 1 — geen over-strengheid.
-    const teDoen = only ? scenarios.filter((s) => (s.slug === only || s.slug.startsWith(`${only}.`))) : scenarios;
+    const kandidaten = only ? scenarios.filter((s) => (s.slug === only || s.slug.startsWith(`${only}.`))) : scenarios;
+    // De schema-server draait bewust alleen met ENFORCE_SCHEMA=on. Scenario's
+    // waarvoor een aparte runtimevariant nodig is (zoals #369 met
+    // VERGELIJKMODUS=on of het hybride pad met embeddingstub) horen daarom niet
+    // tegen deze server te worden uitgevoerd. De gewone verify-runner hanteert
+    // dezelfde zichtbaar-overgeslagen grens.
+    const teDoen = kandidaten.filter((s) => {
+      const aanwezig = vereisteAanwezig(s);
+      if (!aanwezig) {
+        console.log(`  ⟳ ${s.slug}  — overgeslagen (vereist ${s.vereist}: niet geconfigureerd)`);
+      }
+      return aanwezig;
+    });
+    const overgeslagen = kandidaten.length - teDoen.length;
     let ok1 = 0;
     const gewijzigd = [];
     for (const s of teDoen) {
@@ -314,7 +328,10 @@ async function main() {
       if (nu.status === snapVerwacht.status) ok1++;
       else gewijzigd.push(`${s.slug}: was ${snapVerwacht.status}, nu ${nu.status}`);
     }
-    console.log(`[schema] Deel 1 — geen over-strengheid: ${ok1}/${teDoen.length} status-ongewijzigd.`);
+    console.log(
+      `[schema] Deel 1 — geen over-strengheid: ${ok1}/${teDoen.length} status-ongewijzigd` +
+      `${overgeslagen ? `; ${overgeslagen} runtimevariant(en) zichtbaar overgeslagen` : ""}.`
+    );
     for (const g of gewijzigd) console.log(`  ✗ ${g}`);
 
     // Deel 2 — de handhaving vuurt op de 7 slikkers.
@@ -354,7 +371,10 @@ async function main() {
     for (const f of slikkerFout) console.log(`  ✗ ${f}`);
 
     const fout = gewijzigd.length + slikkerFout.length;
-    console.log(`\n[schema] ${fout === 0 ? "GROEN" : "ROOD"}: ${ok1} ongewijzigd, ${ok2}/${SLIKKERS.length} slikkers bevestigd.`);
+    console.log(
+      `\n[schema] ${fout === 0 ? "GROEN" : "ROOD"}: ${ok1} ongewijzigd, ` +
+      `${overgeslagen} runtimevariant(en) overgeslagen, ${ok2}/${SLIKKERS.length} slikkers bevestigd.`
+    );
     if (fout > 0) process.exit(1);
     return;
   }

@@ -17,6 +17,7 @@
           "RetrievalFilters",
           "RetrievalMeta",
           "VOLLEDIGE_DOCUMENT_CHUNK_CAP",
+          "chunkAlsBronresultaat",
           "haalBevrorenChunks",
           "haalDocumentChunksMetDekking",
           "maakBronSentinel",
@@ -29,7 +30,10 @@
           "verrijkNotulenChunks"
         ],
         "bronset": [
-          "bepaalBronset"
+          "BevrorenBronbinding",
+          "bepaalBronset",
+          "leesBevrorenBronbindingen",
+          "leesLokaleDocumentRefs"
         ],
         "query-reformulatie": [
           "heeftReformulatieNodig",
@@ -46,9 +50,7 @@
         ]
       },
       "rpcs": [],
-      "tabellen": [
-        "document_chunks"
-      ]
+      "tabellen": []
     },
     "app/api/classificatie/backfill/route.ts": {
       "modules": {},
@@ -95,9 +97,7 @@
     "app/api/zoeken/route.ts": {
       "modules": {
         "rag": [
-          "DocumentChunk",
-          "RetrievalFilters",
-          "zoekRelevanteChunksMetMeta"
+          "RetrievalFilters"
         ]
       },
       "rpcs": [],
@@ -107,9 +107,6 @@
       "modules": {
         "rag": [
           "BronVerwijzing"
-        ],
-        "bronfragment": [
-          "bouwBronfragment"
         ]
       },
       "rpcs": [],
@@ -190,11 +187,32 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/retrieval/modelcontext.ts": {
+      "modules": {
+        "bron-afbakening": [
+          "neutraliseerBrontekst"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
     "core/lib/retrieval/orkestratie.ts": {
       "modules": {
         "rag": [
           "RetrievalMeta",
           "effectievePeildatum"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/retrieval/productiepaden-core.ts": {
+      "modules": {
+        "rag": [
+          "RetrievalFilters",
+          "RetrievalOpties",
+          "maxPerDocVoor",
+          "resolveerRetrievalVlaggen"
         ]
       },
       "rpcs": [],
@@ -237,10 +255,55 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/retrieval/supabase-evidence.ts": {
+      "modules": {
+        "bron-afbakening": [
+          "neutraliseerBrontekst"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "core/lib/retrieval/supabase-parent.ts": {
+      "modules": {
+        "rag": [
+          "DocumentChunk"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "core/lib/retrieval/supabase-versie.ts": {
+      "modules": {
+        "rag": [
+          "DocumentChunk"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
     "core/lib/vergelijk-productie.ts": {
       "modules": {
         "rag": [
-          "zoekRelevanteChunksMetMeta"
+          "RetrievalOpties"
+        ],
+        "bronfragment": [
+          "bouwBronfragment"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
+    "core/lib/vergelijk-types.ts": {
+      "modules": {
+        "rag": [
+          "BronVerwijzing"
         ]
       },
       "rpcs": [],

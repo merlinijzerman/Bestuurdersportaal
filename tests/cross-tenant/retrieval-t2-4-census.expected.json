@@ -1,0 +1,5 @@
+{
+  "_doc": "#368 voltooid register: nul evidencelezingen buiten core/lib/retrieval. Providerprivate Supabase-queries staan uitsluitend in supabase-evidence, supabase-parent en supabase-versie; consumers gebruiken het providerneutrale contract/preflight of een adapterhook.",
+  "basis": "50c54ed7093",
+  "entries": []
+}
