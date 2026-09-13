@@ -332,6 +332,30 @@ test("#368 evidence/modelcontext-audit blijft inhoudsvrij op basisniveau", () =>
   assert.equal("modelcontext_audit" in inhoud, false);
 });
 
+test("#368 nested audit wordt vóór persist strikt geprojecteerd", () => {
+  const { spoor, inhoud, onbekend } = splitsRetrievalMeta({
+    evidence_audit: [{
+      correlation_id: "corr-1", soort: "semantische_unit", gevraagd: 1, toegelaten: 1,
+      gerenderde_tekens: 12, limiet: 100, afgekapt: false,
+      tekst: "ZEER GEHEIM", private_document_id: "db-123",
+    }],
+    modelcontext_audit: [{
+      correlation_id: "corr-1", soort: "portaalstand", pii: "geen",
+      gerenderde_tekens: 4, limiet: 10, afgekapt: false, pii_soorten: ["wildcard"],
+    }],
+  });
+  const spoorTekst = JSON.stringify(spoor);
+  assert.equal(spoorTekst.includes("ZEER GEHEIM"), false);
+  assert.equal(spoorTekst.includes("db-123"), false);
+  assert.equal(spoorTekst.includes("wildcard"), false);
+  assert.equal((spoor.evidence_audit as Array<Record<string, unknown>>)[0]?.soort, "semantische_unit");
+  assert.equal((spoor.modelcontext_audit as Array<Record<string, unknown>>)[0]?.soort, "portaalstand");
+  assert.equal(JSON.stringify(inhoud).includes("ZEER GEHEIM"), true);
+  assert.ok(onbekend.includes("evidence_audit[0].tekst"));
+  assert.ok(onbekend.includes("evidence_audit[0].private_document_id"));
+  assert.ok(onbekend.includes("modelcontext_audit[0].pii_soorten"));
+});
+
 // ── 3. Inhoud komt nooit in het spoor ───────────────────────────────────────
 
 test("de vraag zelf verlaat het auditspoor", () => {
