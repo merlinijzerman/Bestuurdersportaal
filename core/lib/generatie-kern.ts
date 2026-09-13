@@ -657,6 +657,9 @@ export interface BestuurderContext {
   // uitsluitend in het dynamische (ongecachte) contextblok — nooit in de gecachte
   // toon-systeemprompt en nooit in retrieval. null/afwezig = geen blok.
   regimeKader?: string | null;
+  /** Servergeschreven control-plane-regels. Deze waarden zijn uitsluitend
+   * gekozen uit codeconstanten en staan bewust buiten onbetrouwbare-data-tags. */
+  vertrouwdeInstructies?: readonly string[];
   voornaam: string;
   volledigeNaam: string;
   rolLabel: string;
@@ -743,6 +746,9 @@ JE SPREEKT NU MET: ${ctx.volledigeNaam} (${ctx.rolLabel}). U mag de voornaam "${
   // bronnen behandeld worden. Alleen aanwezig bij een specifiek fondsregime.
   if (ctx.regimeKader) blokken.push(ctx.regimeKader);
   if (ctx.profielsturing) blokken.push(ctx.profielsturing);
+  if (ctx.vertrouwdeInstructies?.length) {
+    blokken.push(`VERTROUWDE PORTAALREGELS (servergeschreven):\n${ctx.vertrouwdeInstructies.join("\n\n")}`);
+  }
   return blokken.join("\n\n");
 }
 

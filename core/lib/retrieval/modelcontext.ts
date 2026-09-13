@@ -20,6 +20,9 @@ const INSTRUCTIE_PATRONEN: RegExp[] = [
   /\b(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?\b/gi,
   /\b(?:negeer|vergeet)\s+(?:alle\s+)?(?:vorige|eerdere|bovenstaande)\s+instructies?\b/gi,
   /\b(?:reveal|toon|openbaar)\s+(?:the\s+)?(?:secrets?|geheimen?)\b/gi,
+  /\bvanaf\s+nu\s+(?:is\s+)?(?:uw|jouw|je)\s+taak\b[^\n]*/gi,
+  /\b(?:systeemregels?|system\s+(?:rules?|instructions?))\s+(?:negeren|omzeilen|ignore|bypass)\b[^\n]*/gi,
+  /\bbeantwoord\s+de\s+vraag\s+niet\b[^\n]*/gi,
   /^\s*(?:(?:voer|doe|volg|negeer|vergeet|antwoord|beantwoord|toon|onthul|geef|schrijf|zeg|stop|gebruik|reageer)\b|(?:you\s+must|you\s+should|always\b|never\b|do\s+not\b|don['’]t\b|ignore\b|disregard\b|forget\b|answer\b|respond\b|reveal\b|show\b|output\b|print\b|execute\b|follow\b)).*$/gim,
   /^\s*(?:vanaf\s+nu\s+(?:is\s+)?(?:uw|jouw|je)\s+taak\b|(?:systeemregels?|system\s+(?:rules?|instructions?))\s+(?:negeren|omzeilen|ignore|bypass)\b|(?:administrator|admin|system)\s*:\s*.*|(?:disclose|publish|leak|openbaar|onthul)\b.*\b(?:confidential|private|personal|vertrouwelijk|geheim|persoonsgegevens)\b|beantwoord\s+de\s+vraag\s+niet\b).*/gim,
   /<\/?\s*onbetrouwbare[_-]data\b[^>]*>/gi,
@@ -77,11 +80,16 @@ export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): Modelconte
   const gedetecteerdPii = piiAnalyse.bevatPii
     ? (piiAnalyse.soorten.some((soort) => /bsn|medisch|gezondheid/i.test(soort)) ? "bijzonder" : "persoonsgebonden")
     : "geen";
-  const pii = opdracht.pii === "bijzonder" || gedetecteerdPii === "bijzonder"
-    ? "bijzonder"
-    : opdracht.pii === "persoonsgebonden" || gedetecteerdPii === "persoonsgebonden"
-      ? "persoonsgebonden"
-      : "geen";
+  // Alleen werkelijk gerenderde data mag auditclassificatie bijdragen. Een
+  // lege waarde of nulcap persisteert dus ook geen caller-declaratie of
+  // neutralisatietelling van tekst die de prompt nooit heeft bereikt.
+  const pii = tekst.length === 0
+    ? "geen"
+    : opdracht.pii === "bijzonder" || gedetecteerdPii === "bijzonder"
+      ? "bijzonder"
+      : opdracht.pii === "persoonsgebonden" || gedetecteerdPii === "persoonsgebonden"
+        ? "persoonsgebonden"
+        : "geen";
   return {
     tekst,
     audit: {
@@ -91,8 +99,12 @@ export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): Modelconte
       gerenderde_tekens: tekst.length,
       limiet,
       afgekapt,
-      ...(neutraal.geneutraliseerd > 0 ? { geneutraliseerd: neutraal.geneutraliseerd } : {}),
-      ...(piiAnalyse.soorten.length > 0 ? { pii_soorten: piiAnalyse.soorten } : {}),
+      ...(tekst.length === 0
+        ? { geneutraliseerd: 0, pii_soorten: [] }
+        : neutraal.geneutraliseerd > 0
+          ? { geneutraliseerd: neutraal.geneutraliseerd }
+          : {}),
+      ...(tekst.length > 0 && piiAnalyse.soorten.length > 0 ? { pii_soorten: piiAnalyse.soorten } : {}),
       ...(afgekapt ? { fout: "afgekapt" as const } : {}),
     },
   };
@@ -138,6 +150,7 @@ export function combineerModelcontext(
       gerenderde_tekens: gebruikt,
       limiet,
       afgekapt,
+      ...(gebruikt === 0 ? { geneutraliseerd: 0, pii_soorten: [] } : {}),
       ...(piiSoorten.size > 0 ? { pii_soorten: [...piiSoorten] } : {}),
       ...(afgekapt ? { fout: "afgekapt" as const } : {}),
     },

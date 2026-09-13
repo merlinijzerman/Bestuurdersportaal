@@ -823,11 +823,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const contextFonds = Array.isArray(contextFondsenRel) ? contextFondsenRel[0] : contextFondsenRel;
     const fondsnaam = contextFonds?.naam || process.env.NEXT_PUBLIC_FONDS_NAAM || "het pensioenfonds";
 
+    const vertrouwdeInstructies: string[] = [];
     const ctxBestuurder: BestuurderContext = {
       voornaam,
       volledigeNaam,
       rolLabel,
       fondsnaam,
+      vertrouwdeInstructies,
     };
 
     // ── Increment F (FO §14) — profielgestuurde PRIORITERING ────────────────
@@ -844,8 +846,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const sturing = await bouwProfielsturing(supabase, ctx.gebruikerId, evidenceContext);
       if (sturing) {
         ctxBestuurder.profielsturing = begrensModelcontext(
-          "profielsturing", sturing.tekst, 4_000, "persoonsgebonden"
+          "profielsturing", sturing.dataTekst, 4_000, "persoonsgebonden"
         );
+        vertrouwdeInstructies.push(sturing.systeemInstructies);
         profielsturingStatus = "actief";
         profielsturingAspecten = sturing.aspecten;
       } else {
@@ -867,8 +870,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       const orgProfiel = await bouwOrganisatieprofiel(supabase, profiel.fonds_id, evidenceContext);
       if (orgProfiel) {
         ctxBestuurder.organisatieprofiel = begrensModelcontext(
-          "organisatieprofiel", orgProfiel.tekst, 6_000, "geen"
+          "organisatieprofiel", orgProfiel.dataTekst, 6_000, "geen"
         );
+        vertrouwdeInstructies.push(orgProfiel.systeemInstructies);
         organisatieprofielStatus = "actief";
         organisatieprofielAspecten = orgProfiel.aspecten;
       }
@@ -878,9 +882,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // organisatieprofiel (een fonds met een specifiek regime maar leeg profiel
     // krijgt B6 wél). null bij beide/algemeen/NULL-regime → geen blok.
     const regimeKader = bouwRegimeKaderBlok(fondsRegime);
-    ctxBestuurder.regimeKader = regimeKader
-      ? begrensModelcontext("regimekader", regimeKader, 2_000, "geen")
-      : null;
+    // De regimebouwer accepteert alleen de gesloten pw/wvb-enum en retourneert
+    // uitsluitend servergeschreven regels. Er komt dus geen DB-tekst in deze
+    // vertrouwde SYSTEM-sectie en er hoort geen onbetrouwbare-data-tag omheen.
+    if (regimeKader) vertrouwdeInstructies.push(regimeKader);
 
     // ── ADR 0028 — agendapunt-modus: toelichting als seed-context ────────────
     // De route haalt titel + toelichting zélf op via RLS. Een vreemd-fonds-id

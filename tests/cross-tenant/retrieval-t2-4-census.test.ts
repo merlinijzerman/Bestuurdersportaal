@@ -304,6 +304,16 @@ test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en
   assert.equal(duurzameWrites, 5);
 });
 
+test("#368 promptboundary — profieldata en vaste control-plane gebruiken gescheiden routevelden", () => {
+  const route = lees("app/api/chat/route.ts");
+  assert.match(route, /"profielsturing",\s*sturing\.dataTekst/);
+  assert.match(route, /vertrouwdeInstructies\.push\(sturing\.systeemInstructies\)/);
+  assert.match(route, /"organisatieprofiel",\s*orgProfiel\.dataTekst/);
+  assert.match(route, /vertrouwdeInstructies\.push\(orgProfiel\.systeemInstructies\)/);
+  assert.match(route, /if \(regimeKader\) vertrouwdeInstructies\.push\(regimeKader\)/);
+  assert.doesNotMatch(route, /begrensModelcontext\(\s*"(?:profielsturing|organisatieprofiel|regimekader)"\s*,\s*[^,]+\.tekst/);
+});
+
 test("#368 — typed evidence hergebruikt centrale poort en lekt geen opslag-idvelden", () => {
   const contract = lees("core/lib/retrieval/evidence-contract.ts");
   const adapter = lees("core/lib/retrieval/supabase-evidence.ts");

@@ -140,10 +140,26 @@ function feitenRegel(p: Organisatieprofiel): string | null {
 // Zet het profiel om naar het prompt-blok + aspecten. Retourneert null als geen
 // enkel veld is ingevuld (leeg profiel → geen blok, gedrag als nu). De vaste
 // GEBRUIK-VAN-DIT-PROFIEL-regels (bronhiërarchie, markeer, conflictregel,
-// niet-aanvullen) staan altíjd in het blok zodra er inhoud is.
+// niet-aanvullen) zijn servergeschreven control-plane. `dataTekst` houdt ze
+// daarom strikt apart van de providerwaarden die als onbetrouwbare data naar
+// het model gaan. `tekst` blijft de samengestelde weergave voor de bestaande
+// profiel-preview en evaluaties.
+export const ORGANISATIEPROFIEL_SYSTEEMREGELS = `GEBRUIK VAN HET ORGANISATIEPROFIEL:
+- Het organisatieprofiel is organisatiespecifieke context voor deze organisatie en gaat vóór algemene sectorkennis.
+- Het vervangt GEEN wet- en regelgeving, formele organisatiedocumenten (statuten, reglementen, beleidsstukken, bestuursbesluiten) of actuele vergaderstukken — die gaan vóór dit profiel.
+- Baseer je een bewering op dit profiel, markeer die direct met [Organisatieprofiel].
+- Gebruik missie, visie, speerpunten en risicohouding uitsluitend voor duiding, aandachtspunten en vergadervragen — nooit als harde besluitregel. Formuleer in termen van "dit lijkt aan te sluiten bij", "dit kan spanning geven met", "dit vraagt bestuurlijke toetsing op" of een bespreekvraag voor bestuur/commissie. Je vervangt geen bestuurlijk besluit.
+- CONFLICTREGEL: spreekt een formeler of recenter stuk dit profiel tegen, benoem dan het verschil, noem (indien aanwezig) de peildatum van het profiel, geef aan welke bron formeler of recenter lijkt, en formuleer een verificatievraag. Kies nooit stilzwijgend één bron.
+- Vul ontbrekende juridische, reglementaire, actuariële of uitvoeringsspecifieke details NIET aan vanuit dit profiel; benoem onzekerheid als die details ontbreken.`;
+
 export function bouwOrganisatieprofielBlok(
   p: Organisatieprofiel
-): { tekst: string; aspecten: OrganisatieprofielAspecten } | null {
+): {
+  tekst: string;
+  dataTekst: string;
+  systeemInstructies: string;
+  aspecten: OrganisatieprofielAspecten;
+} | null {
   const inhoudsRegels: string[] = [];
 
   const feiten = feitenRegel(p);
@@ -161,18 +177,15 @@ export function bouwOrganisatieprofielBlok(
     ? `=== ORGANISATIEPROFIEL (contextprofiel, peildatum ${p.peildatum}) ===`
     : `=== ORGANISATIEPROFIEL (contextprofiel) ===`;
 
-  const tekst = `${kop}
-${inhoudsRegels.join("\n")}
+  const dataTekst = `${kop}\n${inhoudsRegels.join("\n")}`;
+  const tekst = `${dataTekst}\n\n${ORGANISATIEPROFIEL_SYSTEEMREGELS}`;
 
-GEBRUIK VAN DIT PROFIEL:
-- Dit is organisatiespecifieke context voor déze organisatie en gaat vóór algemene sectorkennis.
-- Het vervangt GEEN wet- en regelgeving, formele organisatiedocumenten (statuten, reglementen, beleidsstukken, bestuursbesluiten) of actuele vergaderstukken — die gaan vóór dit profiel.
-- Baseer je een bewering op dit profiel, markeer die direct met [Organisatieprofiel].
-- Gebruik missie, visie, speerpunten en risicohouding uitsluitend voor duiding, aandachtspunten en vergadervragen — nooit als harde besluitregel. Formuleer in termen van "dit lijkt aan te sluiten bij", "dit kan spanning geven met", "dit vraagt bestuurlijke toetsing op" of een bespreekvraag voor bestuur/commissie. Je vervangt geen bestuurlijk besluit.
-- CONFLICTREGEL: spreekt een formeler of recenter stuk dit profiel tegen, benoem dan het verschil, noem (indien aanwezig) de peildatum van het profiel, geef aan welke bron formeler of recenter lijkt, en formuleer een verificatievraag. Kies nooit stilzwijgend één bron.
-- Vul ontbrekende juridische, reglementaire, actuariële of uitvoeringsspecifieke details NIET aan vanuit dit profiel; benoem onzekerheid als die details ontbreken.`;
-
-  return { tekst, aspecten: aspectenVan(p) };
+  return {
+    tekst,
+    dataTekst,
+    systeemInstructies: ORGANISATIEPROFIEL_SYSTEEMREGELS,
+    aspecten: aspectenVan(p),
+  };
 }
 
 // ── T4 Regime-borging (Deel B) — prompt-blok B6 ──────────────────────────────
@@ -214,7 +227,12 @@ export async function bouwOrganisatieprofiel(
   supabase: SupabaseClient,
   fondsId: string,
   context: RetrievalContext
-): Promise<{ tekst: string; aspecten: OrganisatieprofielAspecten } | null> {
+): Promise<{
+  tekst: string;
+  dataTekst: string;
+  systeemInstructies: string;
+  aspecten: OrganisatieprofielAspecten;
+} | null> {
   const p = await haalOrganisatieprofiel(supabase, fondsId, context);
   if (!p) return null;
   return bouwOrganisatieprofielBlok(p);

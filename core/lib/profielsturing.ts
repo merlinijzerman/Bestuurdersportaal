@@ -228,6 +228,19 @@ export function voorkeurInstructies(v: ProfielVoorkeuren): string[] {
   return regels;
 }
 
+export const PROFIELSTURING_SYSTEEMREGELS = `GEBRUIK VAN HET PERSOONLIJKE PROFIEL:
+- Gebruik het profiel uitsluitend om VOLGORDE en NADRUK te bepalen: behandel wat voor de genoemde focusgebieden of expertise relevant is als eerste en het uitgebreidst.
+- Filter of verberg NIETS uit de gedeelde feitenbasis omdat het buiten het profiel valt; de collectieve onderbouwing blijft intact en zichtbaar.
+- Verwijs in het antwoord niet naar het profiel, naar "algemeen perspectief" of naar het feit dat op het profiel is geprioriteerd. De interface toont die transparantie apart.
+- Profielsturing verandert nooit de feitelijke dekking of bronvermelding.`;
+
+function profielsturingSysteemInstructies(v: ProfielVoorkeuren): string {
+  const voorkeuren = voorkeurInstructies(v);
+  return voorkeuren.length === 0
+    ? PROFIELSTURING_SYSTEEMREGELS
+    : `${PROFIELSTURING_SYSTEEMREGELS}\n\nSCHRIJFVOORKEUREN VAN DEZE LEZER — deze gaan VÓÓR de algemene stijlregels waar ze elkaar tegenspreken:\n${voorkeuren.map((regel) => `- ${regel}`).join("\n")}\nOok hier geldt: vorm en lengte veranderen, feitelijke dekking en bronvermelding niet.`;
+}
+
 // Korte, leesbare weergave van de gekozen voorkeuren — gebruikt door de
 // agenda-afnemer, die een JSON-structuur oplevert en dus geen vorminstructies
 // voor vrije tekst kan gebruiken.
@@ -250,31 +263,35 @@ function aspectenVan(v: ProfielVoorkeuren): ProfielsturingAspecten {
   };
 }
 
-// ── Afnemer 1: AI-assistent (vrije tekst) ────────────────────────────────────
-export async function bouwProfielsturing(
-  supabase: SupabaseClient,
-  userId: string,
-  context: RetrievalContext
-): Promise<{ tekst: string; aspecten: ProfielsturingAspecten } | null> {
-  const v = await haalProfielVoorkeuren(supabase, userId, context);
-  if (!v) return null;
+export interface ProfielsturingBlok {
+  tekst: string;
+  dataTekst: string;
+  systeemInstructies: string;
+  aspecten: ProfielsturingAspecten;
+}
 
+/** Pure control-/data-plane-splitsing voor de AI-prompt. */
+export function bouwProfielsturingBlok(v: ProfielVoorkeuren): ProfielsturingBlok | null {
   const pRegels = profielRegels(v);
   const vInstructies = voorkeurInstructies(v);
   // Niets ingevuld → geen sturing (collectieve weergave is dan de natuurlijke staat).
   if (pRegels.length === 0 && vInstructies.length === 0) return null;
 
-  const tekst = `PERSOONLIJK PROFIEL VAN DE LEZER — UITSLUITEND VOOR PRIORITERING, NOOIT VOOR FILTERING.
-Profiel: ${pRegels.join("; ") || "geen specifieke aandachtsgebieden opgegeven"}.
-Stem de VOLGORDE en NADRUK van je antwoord hierop af: behandel wat voor deze focusgebieden/expertise relevant is als eerste en het uitgebreidst. Je mag uit de gedeelde feitenbasis NIETS wegfilteren of verbergen omdat het buiten het profiel van deze lezer valt — de collectieve onderbouwing blijft voor iedereen intact en zichtbaar. Dat gaat over DEKKING, niet over lengte of vorm: hoe uitgebreid en in welke vorm de lezer het antwoord wil, staat hieronder en is zijn eigen keuze. Verwijs in je antwoord NIET naar dit profiel, naar "algemeen perspectief" of naar het feit dát je op het profiel hebt geprioriteerd — die transparantie regelt de interface apart, in het paneel "Onderbouwing en bronnen". Geef simpelweg het antwoord in de op het profiel afgestemde volgorde, zonder erover te editorialiseren.${
-    vInstructies.length
-      ? `
+  const dataTekst = `PERSOONLIJK PROFIEL VAN DE LEZER:\nProfiel: ${pRegels.join("; ") || "geen specifieke aandachtsgebieden opgegeven"}.`;
+  const systeemInstructies = profielsturingSysteemInstructies(v);
+  // Samengestelde tekst blijft beschikbaar voor bestaande niet-promptafnemers;
+  // de chatroute gebruikt uitsluitend de twee expliciet gescheiden velden.
+  const tekst = `${dataTekst}\n\n${systeemInstructies}`;
 
-SCHRIJFVOORKEUREN VAN DEZE LEZER — deze gaan VÓÓR de algemene stijlregels waar ze elkaar tegenspreken:
-${vInstructies.map((r) => `- ${r}`).join("\n")}
-Ook hier geldt: de vorm en de lengte veranderen, de feitelijke dekking en de bronvermelding niet.`
-      : ""
-  }`;
+  return { tekst, dataTekst, systeemInstructies, aspecten: aspectenVan(v) };
+}
 
-  return { tekst, aspecten: aspectenVan(v) };
+// ── Afnemer 1: AI-assistent (vrije tekst) ────────────────────────────────────
+export async function bouwProfielsturing(
+  supabase: SupabaseClient,
+  userId: string,
+  context: RetrievalContext
+): Promise<ProfielsturingBlok | null> {
+  const v = await haalProfielVoorkeuren(supabase, userId, context);
+  return v ? bouwProfielsturingBlok(v) : null;
 }
