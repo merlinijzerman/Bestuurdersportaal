@@ -63,7 +63,11 @@ async function haalOrganisatieprofielProvider(
     )
     .eq("fonds_id", fondsId);
   if (context.signal) query = query.abortSignal(context.signal);
-  const { data: p, error } = await query.single();
+  // Het organisatieprofiel is een optionele 0/1-relatie. `.single()` vertaalt
+  // de geldige nulrij naar PostgREST PGRST116, waardoor iedere chatbeurt zonder
+  // ingericht profiel als providerstoring faalt. `maybeSingle()` houdt nulrij
+  // en echte query-/schemafouten expliciet van elkaar gescheiden.
+  const { data: p, error } = await query.maybeSingle();
   bewaakNaIO(context.signal, error);
   if (error) throw error;
   if (!p) return null;

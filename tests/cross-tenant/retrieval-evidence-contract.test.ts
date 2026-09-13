@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { bouwModelcontextBlok, combineerModelcontext, maakModelcontextSentinel } from "../../core/lib/retrieval/modelcontext";
 import { bouwSysteemBlokken } from "../../core/lib/generatie-kern";
-import { bouwOrganisatieprofielBlok, bouwRegimeKaderBlok } from "../../core/lib/organisatieprofiel";
+import {
+  bouwOrganisatieprofielBlok,
+  bouwRegimeKaderBlok,
+  haalOrganisatieprofiel,
+} from "../../core/lib/organisatieprofiel";
 import { bouwProfielsturingBlok } from "../../core/lib/profielsturing";
 import {
   controleerChunkPresentie,
@@ -379,6 +383,53 @@ test("#368 modelcontextreader — deadline breekt een niet-antwoordende provider
     context: { ...context, signal }, soort: "fondsmodules", scope: { fondsId: "fonds-a" }, maxItems: 1,
     lees: async () => new Promise<{ data: []; error: null }>(() => {}),
   }), (e: unknown) => e instanceof DOMException && e.name === "TimeoutError");
+});
+
+test("#368 organisatieprofiel — optionele nulrij is geen PGRST116-providerfout", async () => {
+  let singleCalls = 0;
+  let maybeSingleCalls = 0;
+  const builder: Record<string, unknown> = {};
+  const chain = () => builder;
+  for (const methode of ["select", "eq", "abortSignal"]) builder[methode] = chain;
+  builder.single = () => {
+    singleCalls += 1;
+    return Promise.resolve({
+      data: null,
+      error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" },
+    });
+  };
+  builder.maybeSingle = () => {
+    maybeSingleCalls += 1;
+    return Promise.resolve({ data: null, error: null });
+  };
+
+  const resultaat = await haalOrganisatieprofiel(
+    { from: () => builder } as never,
+    "fonds-a",
+    { ...context, signal: AbortSignal.timeout(1_000) }
+  );
+  assert.equal(resultaat, null);
+  assert.equal(maybeSingleCalls, 1);
+  assert.equal(singleCalls, 0, "een optionele nulrij mag niet via .single() in PGRST116 veranderen");
+});
+
+test("#368 organisatieprofiel — echte PostgREST-schemafout blijft fail-closed", async () => {
+  const builder: Record<string, unknown> = {};
+  const chain = () => builder;
+  for (const methode of ["select", "eq", "abortSignal"]) builder[methode] = chain;
+  builder.maybeSingle = () => Promise.resolve({
+    data: null,
+    error: {
+      code: "PGRST204",
+      message: "Could not find the 'kernfeiten' column in the schema cache",
+    },
+  });
+
+  await assert.rejects(() => haalOrganisatieprofiel(
+    { from: () => builder } as never,
+    "fonds-a",
+    { ...context, signal: AbortSignal.timeout(1_000) }
+  ), (error: unknown) => error instanceof ModelcontextWeigering && error.reden === "providerfout");
 });
 
 test("#368 chunkpreflight — over cap faalt vóór I/O en levert geen private refs", async () => {
