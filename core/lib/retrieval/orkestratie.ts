@@ -44,6 +44,17 @@ import type {
   RetrievalUitkomst,
 } from "./contract";
 
+const BRONSOORTEN = new Set<string>(["fonds", "generiek", "sharepoint", "notulen", "web"]);
+const BIBLIOTHEKEN = new Set<string>(["fonds", "generiek", "sharepoint", "notulen", "web"]);
+
+function isBekendeBronsoort(waarde: unknown): waarde is Bronsoort {
+  return typeof waarde === "string" && BRONSOORTEN.has(waarde);
+}
+
+function geldigeBronsoorten(waarde: unknown): waarde is Bronsoort[] {
+  return Array.isArray(waarde) && waarde.every(isBekendeBronsoort);
+}
+
 /** Grenzen en vlaggen die de selectie stuurt; per query geresolveerd. */
 export interface SelectiegrenzenPerQuery {
   maxPerDoc: number;
@@ -104,7 +115,10 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
  * eenmaal providerneutraal tegen fonds, document en proces getoetst.
  */
 export function binnenServerScope(ctx: RetrievalContext, bron: Bronresultaat): boolean {
+  if (!isBekendeBronsoort(bron.bronsoort)) return false;
   const identiteit = bron.documentIdentiteit;
+  if (identiteit.bibliotheek !== undefined && identiteit.bibliotheek !== null
+    && !BIBLIOTHEKEN.has(identiteit.bibliotheek)) return false;
   // Fondsgebonden bronnen zonder fonds-id zijn géén neutrale bron: zonder deze
   // expliciete tak werd `null` als "niet te controleren" behandeld en dus
   // doorgelaten. Alleen een bron die zowel contractueel als in de
@@ -147,6 +161,9 @@ export function binnenCentraleServergrens(
   capabilities: Pick<AdapterCapabilities, "bronsoorten">,
   bron: Bronresultaat
 ): boolean {
+  if (!geldigeBronsoorten(ctx.bronbeleid.bronsoorten)
+    || !geldigeBronsoorten(capabilities.bronsoorten)
+    || !isBekendeBronsoort(bron.bronsoort)) return false;
   return ctx.bronbeleid.bronsoorten.includes(bron.bronsoort)
     && capabilities.bronsoorten.includes(bron.bronsoort)
     && binnenServerScope(ctx, bron);
@@ -260,12 +277,16 @@ export async function voerRetrievalUit(
     //     zoekt hij breder dan gevraagd en ziet niemand het. Dat spoor wordt
     //     dan niet bevraagd; `zoek()` wordt aantoonbaar niet aangeroepen.
     const caps = opdracht.adapter.capabilities();
-    const toegestaneBronsoorten = new Set(ctx.bronbeleid.bronsoorten);
+    const contextBronsoortenGeldig = geldigeBronsoorten(ctx.bronbeleid.bronsoorten);
+    const capabilityBronsoortenGeldig = geldigeBronsoorten(caps.bronsoorten);
+    const toegestaneBronsoorten = new Set(contextBronsoortenGeldig ? ctx.bronbeleid.bronsoorten : []);
     const nietOndersteund = sporen.map(({ query }) => {
       const fouten = nietOndersteundeFilters(caps, query);
+      if (!contextBronsoortenGeldig) fouten.push("bronbeleid:ongeldige_bronsoort");
+      if (!capabilityBronsoortenGeldig) fouten.push("capability:ongeldige_bronsoort");
       if (!caps.strategieen.includes(query.strategie)) fouten.push(`strategie:${query.strategie}`);
       for (const bronsoort of query.filters?.bronsoort ?? []) {
-        if (!toegestaneBronsoorten.has(bronsoort as Bronsoort)) {
+        if (!isBekendeBronsoort(bronsoort) || !toegestaneBronsoorten.has(bronsoort)) {
           fouten.push(`bronbeleid:${bronsoort}`);
         }
       }

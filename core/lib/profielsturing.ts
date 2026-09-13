@@ -44,7 +44,7 @@ async function haalProfielVoorkeurenProvider(
   supabase: SupabaseClient,
   userId: string,
   context: RetrievalContext
-): Promise<{ waarde: ProfielVoorkeuren; fondsId: string; actorId: string } | null> {
+): Promise<{ waarde: ProfielVoorkeuren; scopeRij: unknown; fondsId: string; actorId: string } | null> {
   let profielQuery = supabase
     .from("profielen")
     .select(
@@ -133,6 +133,7 @@ async function haalProfielVoorkeurenProvider(
   };
   return {
     waarde,
+    scopeRij: p,
     fondsId: p.fonds_id as string,
     actorId: p.id as string,
   };
@@ -154,7 +155,8 @@ export async function haalProfielVoorkeuren(
             bevestigd.fondsId,
             bevestigd.actorId,
             null,
-            MODELCONTEXT_GEEN_GELDIGHEID
+            MODELCONTEXT_GEEN_GELDIGHEID,
+            bevestigd.scopeRij
           )] : [],
           error: null,
         };

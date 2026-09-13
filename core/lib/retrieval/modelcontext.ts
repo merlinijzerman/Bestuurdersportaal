@@ -21,6 +21,7 @@ const INSTRUCTIE_PATRONEN: RegExp[] = [
   /\b(?:negeer|vergeet)\s+(?:alle\s+)?(?:vorige|eerdere|bovenstaande)\s+instructies?\b/gi,
   /\b(?:reveal|toon|openbaar)\s+(?:the\s+)?(?:secrets?|geheimen?)\b/gi,
   /^\s*(?:(?:voer|doe|volg|negeer|vergeet|antwoord|beantwoord|toon|onthul|geef|schrijf|zeg|stop|gebruik|reageer)\b|(?:you\s+must|you\s+should|always\b|never\b|do\s+not\b|don['’]t\b|ignore\b|disregard\b|forget\b|answer\b|respond\b|reveal\b|show\b|output\b|print\b|execute\b|follow\b)).*$/gim,
+  /^\s*(?:vanaf\s+nu\s+(?:is\s+)?(?:uw|jouw|je)\s+taak\b|(?:systeemregels?|system\s+(?:rules?|instructions?))\s+(?:negeren|omzeilen|ignore|bypass)\b|(?:administrator|admin|system)\s*:\s*.*|(?:disclose|publish|leak|openbaar|onthul)\b.*\b(?:confidential|private|personal|vertrouwelijk|geheim|persoonsgegevens)\b|beantwoord\s+de\s+vraag\s+niet\b).*/gim,
   /<\/?\s*onbetrouwbare[_-]data\b[^>]*>/gi,
 ];
 
@@ -30,6 +31,16 @@ const AUDIT_SOORTEN = new Set<string>([
   "module_scope_proces", "samengestelde_modelcontext",
 ]);
 const PII_NIVEAUS = new Set<string>(["geen", "persoonsgebonden", "bijzonder"]);
+
+/** Eén cryptografisch requestgebonden label voor alle onbetrouwbare
+ * modelcontextblokken. Het soort hoort bewust niet in de afleiding: meerdere
+ * blokken in één prompt moeten dezelfde systeemgedefinieerde grens dragen. */
+export function maakModelcontextSentinel(context: RetrievalContext): string {
+  return createHash("sha256")
+    .update(`modelcontext-v1:${context.correlationId}`)
+    .digest("hex")
+    .slice(0, 24);
+}
 
 export function neutraliseerModelcontextTekst(tekst: string): {
   tekst: string;
@@ -53,9 +64,7 @@ export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): Modelconte
   }
   const limiet = Math.max(0, Math.floor(opdracht.maxGerenderdeTekens));
   const neutraal = neutraliseerModelcontextTekst(opdracht.tekst);
-  const sentinel = createHash("sha256")
-    .update(`${opdracht.context.correlationId}:${opdracht.soort}`)
-    .digest("hex").slice(0, 12);
+  const sentinel = maakModelcontextSentinel(opdracht.context);
   const begin = `<onbetrouwbare_data sentinel="${sentinel}">\n`;
   const einde = `\n</onbetrouwbare_data sentinel="${sentinel}">`;
   const ruimte = Math.max(0, limiet - begin.length - einde.length);
@@ -65,9 +74,14 @@ export function bouwModelcontextBlok(opdracht: ModelcontextOpdracht): Modelconte
     ? `${begin}${inhoud}${einde}`
     : "";
   const piiAnalyse = bevatPersoonsgegevens(tekst);
-  const pii = piiAnalyse.bevatPii
+  const gedetecteerdPii = piiAnalyse.bevatPii
     ? (piiAnalyse.soorten.some((soort) => /bsn|medisch|gezondheid/i.test(soort)) ? "bijzonder" : "persoonsgebonden")
     : "geen";
+  const pii = opdracht.pii === "bijzonder" || gedetecteerdPii === "bijzonder"
+    ? "bijzonder"
+    : opdracht.pii === "persoonsgebonden" || gedetecteerdPii === "persoonsgebonden"
+      ? "persoonsgebonden"
+      : "geen";
   return {
     tekst,
     audit: {
@@ -96,8 +110,14 @@ export function combineerModelcontext(
   let afgekapt = false;
   const piiSoorten = new Set<NonNullable<ModelcontextAudit["pii_soorten"]>[number]>();
   let pii: ModelcontextAudit["pii"] = "geen";
+  const sentinel = maakModelcontextSentinel(context);
+  const begin = `<onbetrouwbare_data sentinel="${sentinel}">\n`;
+  const einde = `\n</onbetrouwbare_data sentinel="${sentinel}">`;
   for (const blok of blokken) {
     if (!blok.tekst) continue;
+    if (!blok.tekst.startsWith(begin) || !blok.tekst.endsWith(einde)) {
+      throw new Error("ongeldige_modelcontext_afbakening");
+    }
     const scheiding = opgenomen.length === 0 ? 0 : 2;
     if (blok.audit.correlation_id !== context.correlationId || gebruikt + scheiding + blok.tekst.length > limiet) {
       afgekapt = true;

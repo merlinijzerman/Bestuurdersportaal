@@ -55,7 +55,7 @@ async function haalOrganisatieprofielProvider(
   supabase: SupabaseClient,
   fondsId: string,
   context: RetrievalContext
-): Promise<{ waarde: Organisatieprofiel; fondsId: string } | null> {
+): Promise<{ waarde: Organisatieprofiel; scopeRij: unknown; fondsId: string } | null> {
   let query = supabase
     .from("organisatie_profielen")
     .select(
@@ -79,7 +79,7 @@ async function haalOrganisatieprofielProvider(
     risicohouding: tekstOfNull(p.risicohouding),
     peildatum: tekstOfNull(p.peildatum),
   };
-  return { waarde, fondsId: p.fonds_id as string };
+  return { waarde, scopeRij: p, fondsId: p.fonds_id as string };
 }
 
 export async function haalOrganisatieprofiel(
@@ -97,7 +97,8 @@ export async function haalOrganisatieprofiel(
             bevestigd.waarde,
             bevestigd.fondsId,
             null,
-            MODELCONTEXT_GEEN_GELDIGHEID
+            MODELCONTEXT_GEEN_GELDIGHEID,
+            bevestigd.scopeRij
           )] : [],
           error: null,
         };

@@ -68,42 +68,52 @@ function record(waarde: unknown): Record<string, unknown> | null {
     : null;
 }
 
-/** Providerkolommen winnen altijd van callbackclaims. Relaties worden alleen
- * gelezen uit bekende serverprojecties; request/contextwaarden vullen nooit
- * een aanwezige afwijkende providerwaarde aan. */
-function providerFondsId(waarde: unknown): string | null | undefined {
+function providerRelatie(rij: Record<string, unknown>, relatie: string): Record<string, unknown> | null {
+  const gekoppeld = Array.isArray(rij[relatie]) ? (rij[relatie] as unknown[])[0] : rij[relatie];
+  return record(gekoppeld);
+}
+
+/** Scope komt uitsluitend uit providerkolommen of bekende, server-gejoinede
+ * parentrelaties. Ontbrekende provenance is ongeldig; callback-/requestwaarden
+ * zijn nooit een fallback. */
+function providerFondsId(waarde: unknown): string | null {
   const rij = record(waarde);
-  if (!rij) return undefined;
+  if (!rij) return null;
   if (Object.hasOwn(rij, "fonds_id")) return typeof rij.fonds_id === "string" ? rij.fonds_id : null;
-  for (const relatie of ["vergaderingen", "risicos", "procedures"] as const) {
-    const gekoppeld = Array.isArray(rij[relatie]) ? (rij[relatie] as unknown[])[0] : rij[relatie];
-    const gekoppeldeRij = record(gekoppeld);
+  for (const relatie of ["vergaderingen", "risicos", "procedures", "governance_log"] as const) {
+    const gekoppeldeRij = providerRelatie(rij, relatie);
     if (gekoppeldeRij && Object.hasOwn(gekoppeldeRij, "fonds_id")) {
       return typeof gekoppeldeRij.fonds_id === "string" ? gekoppeldeRij.fonds_id : null;
     }
   }
-  return undefined;
+  const stap = providerRelatie(rij, "procedure_stappen");
+  const procedure = stap ? providerRelatie(stap, "procedures") : null;
+  return procedure && typeof procedure.fonds_id === "string" ? procedure.fonds_id : null;
 }
 
-function providerActorId(waarde: unknown): string | null | undefined {
+function providerActorId(waarde: unknown): string | null {
   const rij = record(waarde);
-  if (!rij) return undefined;
-  for (const veld of ["gebruiker_id", "actor_id"] as const) {
+  if (!rij) return null;
+  for (const veld of ["gebruiker_id", "actor_id", "id"] as const) {
     if (Object.hasOwn(rij, veld)) return typeof rij[veld] === "string" ? rij[veld] as string : null;
   }
-  return undefined;
+  const log = providerRelatie(rij, "governance_log");
+  return log && typeof log.gebruiker_id === "string" ? log.gebruiker_id : null;
 }
 
 export function fondsModelcontextRij<T>(
   waarde: T,
-  fondsId: string,
+  _verwachtFondsId: string,
   privateRef: string | null,
-  geldigheid: ModelcontextGeldigheid
+  geldigheid: ModelcontextGeldigheid,
+  /** Alleen voor een mapper die domeinvelden projecteert: de onbewerkte,
+   * servergelezen scope-rij. Bij weglaten is `waarde` zelf die provider-rij. */
+  providerRij: unknown = waarde
 ): ModelcontextRij<T> {
-  const providerFonds = providerFondsId(waarde);
+  const providerFonds = providerFondsId(providerRij);
   return {
     waarde,
-    scope: { soort: "fonds", fondsId: providerFonds === undefined ? fondsId : providerFonds ?? "" },
+    scope: { soort: "fonds", fondsId: providerFonds ?? "" },
     privateRef,
     geldigheid,
   };
@@ -111,19 +121,20 @@ export function fondsModelcontextRij<T>(
 
 export function actorModelcontextRij<T>(
   waarde: T,
-  fondsId: string,
-  actorId: string,
+  _verwachtFondsId: string,
+  _verwachtActorId: string,
   privateRef: string | null,
-  geldigheid: ModelcontextGeldigheid
+  geldigheid: ModelcontextGeldigheid,
+  providerRij: unknown = waarde
 ): ModelcontextRij<T> {
-  const providerFonds = providerFondsId(waarde);
-  const providerActor = providerActorId(waarde);
+  const providerFonds = providerFondsId(providerRij);
+  const providerActor = providerActorId(providerRij);
   return {
     waarde,
     scope: {
       soort: "actor",
-      fondsId: providerFonds === undefined ? fondsId : providerFonds ?? "",
-      actorId: providerActor === undefined ? actorId : providerActor ?? "",
+      fondsId: providerFonds ?? "",
+      actorId: providerActor ?? "",
     },
     privateRef,
     geldigheid,

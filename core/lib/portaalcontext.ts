@@ -81,7 +81,7 @@ export interface PortaalContextInput {
 async function haalPortaalContextProvider(
   input: PortaalContextInput,
   context: RetrievalContext
-): Promise<{ waarde: PortaalContext; fondsId: string; actorId: string }> {
+): Promise<{ waarde: PortaalContext; scopeRij: unknown; fondsId: string; actorId: string }> {
     // Max 1× per server-render is structureel geborgd: precies één call-site per
     // oppervlak (homepage + /ai) en React.cache() hierboven dedupliceert een
     // eventuele herhaalde aanroep binnen dezelfde render.
@@ -248,6 +248,7 @@ async function haalPortaalContextProvider(
 
     return {
       waarde: { volgendeVergadering, agendapunten, openStappen, recentDocument },
+      scopeRij: profiel,
       fondsId,
       actorId: userId,
     };
@@ -284,7 +285,8 @@ export const getPortaalContext = cache(async (input?: PortaalContextInput): Prom
             bevestigd.fondsId,
             bevestigd.actorId,
             null,
-            MODELCONTEXT_GEEN_GELDIGHEID
+            MODELCONTEXT_GEEN_GELDIGHEID,
+            bevestigd.scopeRij
           )],
           error: null,
         };

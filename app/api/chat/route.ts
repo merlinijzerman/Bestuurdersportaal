@@ -20,7 +20,7 @@ import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import { controleerChunkPresentie, leesBesluitEvidence } from "@/core/lib/retrieval/supabase-evidence";
-import { bouwModelcontextBlok, combineerModelcontext } from "@/core/lib/retrieval/modelcontext";
+import { bouwModelcontextBlok, combineerModelcontext, maakModelcontextSentinel } from "@/core/lib/retrieval/modelcontext";
 import {
   actorModelcontextRij,
   documentModelcontextRij,
@@ -658,7 +658,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           context: evidenceContext, soort: "gespreksdraad", scope: { fondsId, actorId: ctx.gebruikerId, privateRefs: [vorigId] }, maxItems: 1,
           lees: async (signal) => {
             const { data, error } = await supabase.from("governance_log_inhoud")
-              .select("log_id, vraag").eq("log_id", vorigId).abortSignal(signal).maybeSingle();
+              .select("log_id, vraag, governance_log!inner(fonds_id, gebruiker_id)")
+              .eq("log_id", vorigId)
+              .eq("governance_log.fonds_id", fondsId)
+              .eq("governance_log.gebruiker_id", ctx.gebruikerId)
+              .abortSignal(signal).maybeSingle();
             return {
               data: data ? [actorModelcontextRij(data, fondsId, ctx.gebruikerId, data.log_id as string, MODELCONTEXT_GEEN_GELDIGHEID)] : [],
               error,
@@ -1597,7 +1601,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               if (proc.template_versie) reqQuery = reqQuery.eq("template_versie", proc.template_versie as string);
               const { data, error } = await reqQuery.limit(201).abortSignal(signal);
               return { data: (data ?? []).map((rij) => fondsModelcontextRij(
-                rij, fondsId, rij.template_code as string, MODELCONTEXT_GEEN_GELDIGHEID
+                rij, fondsId, rij.template_code as string, MODELCONTEXT_GEEN_GELDIGHEID, proc
               )), error };
             },
           });
@@ -1611,8 +1615,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             context: evidenceContext, soort: "proces", scope: { fondsId, privateRefs: stapIds }, maxItems: 500,
             lees: async (signal) => {
               const { data, error } = await supabase.from("procedure_bewijs")
-                .select("stap_id, document_id, titel, documenttype")
-                .in("stap_id", stapIds).limit(501).abortSignal(signal);
+                .select("stap_id, document_id, titel, documenttype, procedure_stappen!inner(procedure_id, procedures!inner(fonds_id))")
+                .in("stap_id", stapIds)
+                .eq("procedure_stappen.procedure_id", proc.id)
+                .eq("procedure_stappen.procedures.fonds_id", fondsId)
+                .limit(501).abortSignal(signal);
               return { data: (data ?? []).map((rij) => fondsModelcontextRij(
                 rij, fondsId, rij.stap_id as string, MODELCONTEXT_GEEN_GELDIGHEID
               )), error };
@@ -1976,7 +1983,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               scope: { fondsId, actorId: ctx.gebruikerId, privateRefs: [rij.bronset_log_id] }, maxItems: 1,
               lees: async (signal) => {
                 const { data, error } = await supabase.from("governance_log_inhoud")
-                  .select("log_id, bronnen").eq("log_id", rij.bronset_log_id).abortSignal(signal).maybeSingle();
+                  .select("log_id, bronnen, governance_log!inner(fonds_id, gebruiker_id)")
+                  .eq("log_id", rij.bronset_log_id)
+                  .eq("governance_log.fonds_id", fondsId)
+                  .eq("governance_log.gebruiker_id", ctx.gebruikerId)
+                  .abortSignal(signal).maybeSingle();
                 return { data: data ? [actorModelcontextRij(
                   data,
                   fondsId,
@@ -3449,6 +3460,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const portaalContextPrefix = samengesteldeModelcontext.tekst.length > 0
       ? `${samengesteldeModelcontext.tekst}\n\n---\n\n`
       : "";
+    // Staat los van de documentsentinel: profiel-, agendapunt- en modulecontext
+    // kan ook in een volledig bronloze beurt aanwezig zijn. In dat geval moet
+    // de systemprompt de onbetrouwbare-data-afbakening nog steeds definiëren.
+    const modelcontextSentinel = modelcontextAudits.some((audit) => audit.gerenderde_tekens > 0)
+      ? maakModelcontextSentinel(evidenceContext)
+      : null;
 
     // Bouw prompt op basis van modus, met persoonlijke context
     let systeemBlokken: TekstBlok[];
@@ -3485,7 +3502,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         reflectieRegels,
         ctxBestuurder,
         antwoordmodus,
-        chunks.length > 0 ? bronSentinel : null
+        chunks.length > 0 ? bronSentinel : null,
+        false,
+        false,
+        modelcontextSentinel
       );
 
       // B-opt tranche 3d — de feitelijke samenstelling, direct boven het bronblok
@@ -3522,7 +3542,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         SP_TRANSFORMATIE_REGELS,
         ctxBestuurder,
         antwoordmodus,
-        chunks.length > 0 ? bronSentinel : null
+        chunks.length > 0 ? bronSentinel : null,
+        false,
+        false,
+        modelcontextSentinel
       );
       gebruikersPrompt =
         chunks.length > 0
@@ -3546,7 +3569,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           : SP_AGENDAPUNT_REGELS,
         ctxBestuurder,
         antwoordmodus,
-        chunks.length > 0 ? bronSentinel : null
+        chunks.length > 0 ? bronSentinel : null,
+        false,
+        false,
+        modelcontextSentinel
       );
       const toelichtingBlok = agendapuntContextBlok?.tekst ?? "";
       const stukkenBlok =
@@ -3586,7 +3612,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ctxBestuurder,
           "feitelijk",
           null,
-          true // bureauToon
+          true, // bureauToon
+          false,
+          modelcontextSentinel
         );
         gebruikersPrompt =
           `U stelt dit stuk op ZONDER aangeleverde fondsdocumenten — lever een ` +
@@ -3601,7 +3629,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ctxBestuurder,
           "feitelijk",
           chunks.length > 0 ? bronSentinel : null,
-          true // bureauToon
+          true, // bureauToon
+          false,
+          modelcontextSentinel
         );
         gebruikersPrompt =
           chunks.length > 0
@@ -3633,7 +3663,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         scopeRegels,
         ctxBestuurder,
         "feitelijk",
-        chunks.length > 0 ? bronSentinel : null
+        chunks.length > 0 ? bronSentinel : null,
+        false,
+        false,
+        modelcontextSentinel
       );
 
       if (scopeStrategie === "map_reduce") {
@@ -3653,7 +3686,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             : `Voor deze vraag zijn geen passages geselecteerd uit het hoofddocument ${titelLabel} of uit de aanvullende bibliotheek.\n\nVRAAG: ${vraag}\n\nFormuleer exact: "Niet gevonden in de geselecteerde passages. Dit is geen uitspraak over het volledige document." Verzin geen antwoord en vul niet aan uit uw algemene kennis.`;
       }
     } else if (promptModus === "algemeen") {
-      systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus, null, false, opstelTaak);
+      systeemBlokken = bouwSysteemBlokken(
+        SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus, null, false, opstelTaak, modelcontextSentinel
+      );
       gebruikersPrompt = `${portaalContextPrefix}${vraagBlok}`;
     } else if (promptModus === "combineren") {
       // Bij nul interne treffers valt het antwoord terug op algemene kennis. Gebruik
@@ -3666,7 +3701,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         antwoordmodus,
         chunks.length > 0 ? bronSentinel : null,
         false,
-        opstelTaak
+        opstelTaak,
+        modelcontextSentinel
       );
       gebruikersPrompt =
         chunks.length > 0
@@ -3680,7 +3716,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         antwoordmodus,
         chunks.length > 0 ? bronSentinel : null,
         false,
-        opstelTaak
+        opstelTaak,
+        modelcontextSentinel
       );
       gebruikersPrompt =
         chunks.length > 0
