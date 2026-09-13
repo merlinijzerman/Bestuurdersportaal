@@ -84,36 +84,40 @@ function functienaam(node: ts.Node): string | null {
 function analyseerModelcontextQueries(bron: string): Map<string, { begrensd: number; buiten: number }> {
   const bestand = ts.createSourceFile("modelcontext.tsx", bron, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const functies = new Map<string, ts.Node>();
-  const helperCallsBinnenReader = new Set<string>();
+  const aanroepen = new Map<string, ts.CallExpression[]>();
   const registreer = (node: ts.Node) => {
     if (ts.isFunctionDeclaration(node) && node.name) functies.set(node.name.text, node);
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
       && node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
       functies.set(node.name.text, node.initializer);
     }
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && binnenReader(node)) {
-      helperCallsBinnenReader.add(node.expression.text);
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const bestaand = aanroepen.get(node.expression.text) ?? [];
+      bestaand.push(node);
+      aanroepen.set(node.expression.text, bestaand);
     }
     ts.forEachChild(node, registreer);
   };
   registreer(bestand);
 
-  // Ondersteun een kleine lokale helperketen zonder op naamconventies te
-  // vertrouwen: alleen echte calls vanuit reeds bewezen begrensde functies.
+  // Een helper is pas veilig wanneer AL zijn lokale productieaanroepers binnen
+  // leesModelcontext staan of zelf volledig veilig zijn. Eén extra directe of
+  // transitieve caller maakt de query dus onmiddellijk onbegrensd.
+  const veiligeHelpers = new Set<string>();
   let gewijzigd = true;
   while (gewijzigd) {
     gewijzigd = false;
-    for (const [naam, functie] of functies) {
-      if (!helperCallsBinnenReader.has(naam)) continue;
-      const bezoek = (node: ts.Node) => {
-        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
-          && functies.has(node.expression.text) && !helperCallsBinnenReader.has(node.expression.text)) {
-          helperCallsBinnenReader.add(node.expression.text);
-          gewijzigd = true;
-        }
-        ts.forEachChild(node, bezoek);
-      };
-      bezoek(functie);
+    for (const naam of functies.keys()) {
+      if (veiligeHelpers.has(naam)) continue;
+      const callers = aanroepen.get(naam) ?? [];
+      if (callers.length > 0 && callers.every((call) => {
+        if (binnenReader(call)) return true;
+        const caller = functienaam(call);
+        return caller !== null && veiligeHelpers.has(caller);
+      })) {
+        veiligeHelpers.add(naam);
+        gewijzigd = true;
+      }
     }
   }
 
@@ -125,7 +129,7 @@ function analyseerModelcontextQueries(bron: string): Map<string, { begrensd: num
       const tabel = node.arguments[0].text;
       const huidig = uit.get(tabel) ?? { begrensd: 0, buiten: 0 };
       const helper = functienaam(node);
-      if (binnenReader(node) || (helper !== null && helperCallsBinnenReader.has(helper))) huidig.begrensd++;
+      if (binnenReader(node) || (helper !== null && veiligeHelpers.has(helper))) huidig.begrensd++;
       else huidig.buiten++;
       uit.set(tabel, huidig);
     }
@@ -225,6 +229,20 @@ test("#368 modelcontextboundary — tabelgedreven mutaties van ieder brontype wo
     const na = analyseerModelcontextQueries(mutatie).get(tabel)?.buiten ?? 0;
     assert.equal(na, voor + 1, `${bestand}::${tabel} mutatie moet de boundaryassertie raken`);
   }
+});
+
+test("#368 modelcontextboundary — directe en transitieve helperbypasses maken de providerquery onveilig", () => {
+  const bron = lees("core/lib/portaalcontext.ts");
+  const voor = analyseerModelcontextQueries(bron).get("profielen") ?? { begrensd: 0, buiten: 0 };
+  assert.ok(voor.begrensd > 0);
+  const direct = analyseerModelcontextQueries(
+    `${bron}\nvoid haalPortaalContextProvider({} as never, {} as never);\n`
+  ).get("profielen") ?? { begrensd: 0, buiten: 0 };
+  assert.ok(direct.buiten > voor.buiten, "directe helpercaller moet de querygrens breken");
+  const transitief = analyseerModelcontextQueries(
+    `${bron}\nfunction onbegrensdeCaller(){ return haalPortaalContextProvider({} as never, {} as never); }\nvoid onbegrensdeCaller();\n`
+  ).get("profielen") ?? { begrensd: 0, buiten: 0 };
+  assert.ok(transitief.buiten > voor.buiten, "transitieve helpercaller moet de querygrens breken");
 });
 
 test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en writes starten niet na abort", () => {
