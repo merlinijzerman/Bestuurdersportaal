@@ -1,9 +1,8 @@
 # Conflict- en afhankelijkhedenkaart — M365 fase 4 #367–#370
 
-**Peildatum:** 11 september 2026
-**Startregel:** ieder ticket werkt in een eigen worktree en branch. Direct na het openen van de
-documentatie-PR zijn de vier schone branches fast-forward op de toen actuele `origin/preview`
-`4a61b7851747` gezet. Elk ticket begint met planreview; productiecode wordt pas daarna gewijzigd.
+**Peildatum:** 13 september 2026
+**Status:** uitgevoerd; de kaart blijft als as-run afhankelijkheden- en conflictbewijs behouden.
+Ieder ticket werkte vanuit een eigen worktree en branch op de toen actuele `origin/preview`.
 
 ## Afhankelijkheden
 
@@ -36,6 +35,22 @@ documentatie-PR zijn de vier schone branches fast-forward op de toen actuele `or
 5. Iedere PR afzonderlijk door volledige gates/build en Preview-waarneming; geen gecombineerde
    productiepromotie zonder nieuw releasebesluit.
 
+## Werkelijk integratieresultaat
+
+| Stap | PR | Preview-mergecommit | Uitkomst |
+|---|---:|---|---|
+| #367 · versie-identiteit | #379 | `9d9b4ca` | Eerst geïntegreerd; contract en correlatie beschikbaar voor vervolg |
+| #369 · zoeken/vergelijken | #381 | `3521a40` | Na #367 geïntegreerd; routes gebruiken centrale orkestratie |
+| #370 · Microsoftstub | #380 | `afd0efb` | Hermetisch geïntegreerd; geen Graph- of productiewiring |
+| #368 · karakterisering | #378 | `50c54ed` | Census en gedrag vóór implementatie vastgezet |
+| #368 · implementatie | #382 | `ca57f5c` | Als laatste geïntegreerd; evidence- en modelcontextgrenzen gesloten |
+
+Er trad geen onopgelost integratieconflict op. De vooraf geïdentificeerde hoge overlap tussen
+#367/#370 en #369/#368 is beheerst door de mergevolgorde, rebase/reconciliatie en herhaalde census-
+en contracttests. De actuele gecombineerde Preview-basis is `ca57f5c`; `main` blijft `09d473f`.
+Issues #367–#370 staan op GitHub nog open en worden pas na het afzonderlijke productie-/releasebesluit
+administratief gesloten.
+
 ## Bestaande geïsoleerde werkplekken
 
 | Ticket | Worktree | Branch | Starttoestand na openen docs-PR |
@@ -45,6 +60,7 @@ documentatie-PR zijn de vier schone branches fast-forward op de toen actuele `or
 | #369 | `mvp-369-zoeken-vergelijken` | `feat/369-t2-2-zoeken-vergelijken` | schoon op `4a61b7851747` |
 | #370 | `mvp-370-microsoft-stub` | `feat/370-microsoft-adapterstub` | schoon op `4a61b7851747`; hermetisch, geen live wiring |
 
-De documentatie-PR blijft ongemergd tot opdrachtgeverakkoord. Ticketwerk gebruikt daarom de
-vastgelegde Preview-basis en neemt het docs-sluitstuk niet mee; vóór iedere ticketmerge worden
-`origin/preview`, afhankelijkheden en overlap opnieuw gecontroleerd.
+De oorspronkelijke documentatie-PR #377 en alle vijf implementatie-/karakteriserings-PR's zijn na
+afzonderlijk akkoord gemerged. De nieuwe acceptatie-/promotiedocumentatie-PR blijft ongemergd tot
+nieuw opdrachtgeverakkoord; daarna kan uitsluitend `preview` zelf als bron voor een PR naar
+`main` worden gebruikt.

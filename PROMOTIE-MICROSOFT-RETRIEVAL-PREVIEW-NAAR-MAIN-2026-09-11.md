@@ -1,5 +1,11 @@
 # Promotie `preview` → `main` — Microsoft 365-fundament, AI-gateway en retrieval T2-1
 
+> **Opvolging 13 september 2026:** deze promotie is uitgevoerd en blijft het bewijs voor
+> productiecommit `09d473f`. De daaropvolgende M365-fase-4-wijzigingen staan uitsluitend op
+> `preview` (`ca57f5c`) en zijn beschreven in
+> `PROMOTIE-M365-FASE4-PREVIEW-NAAR-MAIN-2026-09-13.md`. Dit document is dus geen actuele
+> instructie om de nieuwe Preview-delta opnieuw te promoveren.
+
 **Peildatum:** 11 september 2026
 
 **Releasebron:** `preview` op `4a61b78` na reconciliatie-PR #375
