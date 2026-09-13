@@ -306,6 +306,11 @@ test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en
 
 test("#368 promptboundary — profieldata en vaste control-plane gebruiken gescheiden routevelden", () => {
   const route = lees("app/api/chat/route.ts");
+  const generatie = lees("core/lib/generatie-kern.ts");
+  assert.match(route, /persoonlijkeContext:\s*persoonlijkeContextBlok\.tekst/);
+  assert.match(route, /modelcontextAudits\.push\(persoonlijkeContextBlok\.audit\)/);
+  assert.doesNotMatch(generatie, /ctx\.(?:voornaam|volledigeNaam|fondsnaam)/,
+    "providernamen mogen niet meer in trusted SYSTEM worden geïnterpoleerd");
   assert.match(route, /"profielsturing",\s*sturing\.dataTekst/);
   assert.match(route, /vertrouwdeInstructies\.push\(sturing\.systeemInstructies\)/);
   assert.match(route, /"organisatieprofiel",\s*orgProfiel\.dataTekst/);

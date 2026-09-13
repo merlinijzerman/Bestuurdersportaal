@@ -23,6 +23,7 @@ const INSTRUCTIE_PATRONEN: RegExp[] = [
   /\bvanaf\s+nu\s+(?:is\s+)?(?:uw|jouw|je)\s+taak\b[^\n]*/gi,
   /\b(?:systeemregels?|system\s+(?:rules?|instructions?))\s+(?:negeren|omzeilen|ignore|bypass)\b[^\n]*/gi,
   /\bbeantwoord\s+de\s+vraag\s+niet\b[^\n]*/gi,
+  /\b(?:administrator|admin|system)\s*:\s*[^\n]*/gi,
   /^\s*(?:(?:voer|doe|volg|negeer|vergeet|antwoord|beantwoord|toon|onthul|geef|schrijf|zeg|stop|gebruik|reageer)\b|(?:you\s+must|you\s+should|always\b|never\b|do\s+not\b|don['’]t\b|ignore\b|disregard\b|forget\b|answer\b|respond\b|reveal\b|show\b|output\b|print\b|execute\b|follow\b)).*$/gim,
   /^\s*(?:vanaf\s+nu\s+(?:is\s+)?(?:uw|jouw|je)\s+taak\b|(?:systeemregels?|system\s+(?:rules?|instructions?))\s+(?:negeren|omzeilen|ignore|bypass)\b|(?:administrator|admin|system)\s*:\s*.*|(?:disclose|publish|leak|openbaar|onthul)\b.*\b(?:confidential|private|personal|vertrouwelijk|geheim|persoonsgegevens)\b|beantwoord\s+de\s+vraag\s+niet\b).*/gim,
   /<\/?\s*onbetrouwbare[_-]data\b[^>]*>/gi,

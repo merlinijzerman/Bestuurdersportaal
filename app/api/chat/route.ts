@@ -824,11 +824,22 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const fondsnaam = contextFonds?.naam || process.env.NEXT_PUBLIC_FONDS_NAAM || "het pensioenfonds";
 
     const vertrouwdeInstructies: string[] = [];
+    const persoonlijkeContextBlok = bouwModelcontextBlok({
+      context: evidenceContext,
+      soort: "profielsturing",
+      tekst: [
+        "GESPREKSCONTEXT:",
+        `Naam van de gebruiker: ${volledigeNaam}`,
+        `Aanspreeknaam: ${voornaam}`,
+        `Naam van het pensioenfonds: ${fondsnaam}`,
+      ].join("\n"),
+      maxGerenderdeTekens: 2_000,
+      pii: "persoonsgebonden",
+    });
+    modelcontextAudits.push(persoonlijkeContextBlok.audit);
     const ctxBestuurder: BestuurderContext = {
-      voornaam,
-      volledigeNaam,
       rolLabel,
-      fondsnaam,
+      persoonlijkeContext: persoonlijkeContextBlok.tekst,
       vertrouwdeInstructies,
     };
 

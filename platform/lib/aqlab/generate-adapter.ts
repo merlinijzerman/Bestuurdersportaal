@@ -87,13 +87,10 @@ export interface AdapterResultaat {
 }
 
 // Gepinde, synthetische persona per rol (reproduceerbaar; geen echte persoon).
-function bestuurderContext(rol: string | undefined, fondsnaam: string): BestuurderContext {
+function bestuurderContext(rol: string | undefined, _fondsnaam: string): BestuurderContext {
   const rolLabel = ROL_LABEL[rol ?? "bestuurder"] ?? "bestuurslid";
   return {
-    voornaam: "Testbestuurder",
-    volledigeNaam: "Testbestuurder (synthetisch)",
     rolLabel,
-    fondsnaam,
   };
 }
 
