@@ -1,15 +1,23 @@
-# Releasebewijs 13 september 2026 — M365 fase 4 op Preview
+# Releasebewijs 13 september 2026 — M365 fase 4 op Productie
 
-**Release-id:** 2026-09-13 / Preview `ca57f5c`  
-**Productiebasis:** `main` op `09d473f`  
-**Status:** Preview geaccepteerd met expliciete live-smokebeperkingen; nog niet naar Productie
+**Release-id:** 2026-09-13 / Productie `3a6d9de`
+
+**Geaccepteerde Preview-bron:** `6a0456d`
+
+**Voorafgaande productiebasis:** `09d473f` (release 11 september 2026)
+
+**Status:** uitgevoerd en vrijgegeven met de hieronder vastgelegde beperkingen
 
 ## 1. Samenvatting
 
-M365 fase 4 is via vijf afzonderlijke PR's in `preview` geïntegreerd. De actuele Preview-commit
-`ca57f5c` bevat productiecommit `09d473f` als ancestor. Deze acceptatieronde wijzigt geen
-productiecode: zij legt de gecombineerde technische controles, live Preview-waarnemingen en
-resterende voorwaarden voor een latere `preview` → `main`-promotie vast.
+M365 fase 4 is na afzonderlijk akkoord via PR
+[#384](https://github.com/merlinijzerman/Bestuurdersportaal/pull/384) naar `main` gemerged als
+productiecommit `3a6d9de2d53139a50475569f95c0aa55135fc108`. Die merge bevat Preview-bron
+`6a0456df75332ad96c993dc588475166e97cfcfa` en bouwt voort op de op 11 september uitgevoerde
+productierelease `09d473f2fb4c5b8df147598670af660501e8a67d`. De drie additieve migraties,
+database-eindcontroles, verplichte CI, Vercel-deploys en de begrensde PGB-productiesmoke waren groen.
+Deze afsluitings-PR brengt alleen historie en documentatie terug naar `preview`; hij wijzigt geen
+productiecode.
 
 ## 2. Nieuwe functionaliteit
 
@@ -32,15 +40,15 @@ resterende voorwaarden voor een latere `preview` → `main`-promotie vast.
 
 | Onderdeel | Wijziging | Impact |
 |---|---|---|
-| Code | Retrievalcontract, orkestratie, adapters, readers, routes en contract-/karakteriseringstests | Alleen reeds via #378–#382 geïntegreerde Preview-code |
-| Database | Drie additieve forwardmigraties met bijpassende rollbacks voor vergelijk-, identiteit- en evidence-auditprojecties | Geen destructieve datamigratie |
-| Deze PR | Alleen Markdown-documentatie | Geen productiecode, migratie of configuratie |
+| Productiecode | De reeds op Preview geaccepteerde fase-4-code is via PR #384 gepromoveerd | Geen Microsoftactivering of nieuwe live connector |
+| Database | Drie additieve auditprojectiemigraties, in vastgelegde volgorde toegepast | Geen destructieve dataomzetting |
+| Afsluitings-PR | Alleen Markdown-documentatie plus reconciliatie van de productiehistorie | Geen code, migratie of configuratiewijziging |
 
 ## 5. Architectuurimpact
 
 | Component | Wijziging | Landschapsimpact | Documentatie |
 |---|---|---|---|
-| Retrievalorkestratie | Centrale contractgrens nu ook voor zoeken, vergelijken en evidence | Minder directe gegevenspaden | 00–09-addenda en HANDOVER |
+| Retrievalorkestratie | Centrale contractgrens ook voor zoeken, vergelijken en evidence | Minder directe gegevenspaden | 00–09-addenda en HANDOVER |
 | Microsoftadapter | Alleen hermetische testimplementatie | Geen Graph-, Entra- of SharePointproductiepad toegevoegd | Expliciet als niet-bedraad vastgelegd |
 | Audit | Opaque identiteit en contentsvrije projecties uitgebreid | Bestaande basis-/bron-/inhoudsscheiding blijft leidend | Objectmodel- en security-addenda |
 
@@ -48,88 +56,89 @@ resterende voorwaarden voor een latere `preview` → `main`-promotie vast.
 
 | Onderdeel | Borging | Restrisico / vervolg |
 |---|---|---|
-| Tenantgrens | Serverside fonds-/actorscope, RLS en volledige cross-tenantsuite groen | Negatieve live accountwissel niet afzonderlijk uitgevoerd |
-| Bronbewijs | V1–V5, actuele-versieherlezing en opaque lokale referenties | Echte Graph-intrekking tijdens verzoek blijft live voorwaarde |
+| Tenantgrens | Serverside fonds-/actorscope, RLS en geautomatiseerde cross-tenantsuites groen | Negatieve live accountwissel niet afzonderlijk uitgevoerd |
+| Bronbewijs | V1–V5, actuele-versieherlezing en opaque lokale referenties | Echte Graph-intrekking tijdens verzoek blijft voorwaarde voor latere activering |
 | Inhoudsminimalisatie | PII/injectie-neutralisatie, caps en inhoudsvrije auditprojecties | Menselijke controle blijft nodig bij Microsoftactivering |
-| Afbreken | Eén requestbrede deadline/cancellation tot en met retrieval, evidence en vergelijking | Operationele timeoutwaarden per omgeving blijven monitoren |
+| Afbreken | Eén requestbrede deadline/cancellation tot en met retrieval, evidence en vergelijking | Runtime-logruis op de eerste chatbeurt volgt apart in #386 |
 
 ## 7. Database, objectmodel en datadictionary
 
-| Migratie | Wijziging | Rollbackbewijs |
-|---|---|---|
-| `2026_09_11_369_vergelijk_retrieval_audit.sql` | Vergelijkrun/-resultaat en auditfunctie uitgebreid met opaque retrievalbewijs | Oude kolom-/functievorm gecontroleerd, daarna vooruit hersteld |
-| `2026_09_11_z367_retrieval_identiteit_auditprojectie.sql` | Identiteit-/correlatieprojectie voor retrievalaudit | Nieuwe projectie afwezig na rollback, groen na reapply |
-| `2026_09_12_368_evidence_auditprojectie.sql` | Contentsvrije evidence-/modelcontextprojectie | Nieuwe projectie afwezig na rollback, groen na reapply |
+De volgende productiebytes zijn in deze volgorde toegepast:
 
-De volledige migratiekaart telde 221 forwards, 196 rollbacks en 15 seeds. De drie fase-4-migraties
-zijn op een schone lokale Supabase-stack in afhankelijkheidsvolgorde toegepast, teruggerold,
-tegen de oude vorm gecontroleerd en opnieuw toegepast. Daarna waren de specifieke SQL-checks en de
-volledige DB/RLS/grants/cross-tenantketen groen.
+| Migratie | SHA-256 | Productiecontrole |
+|---|---|---|
+| `2026_09_11_369_vergelijk_retrieval_audit.sql` | `aac2ff587c148d94b361964751cb4b524d4c717e6ff0fc609e7fcd6ed3cdda14` | T5-vergelijking groen |
+| `2026_09_11_z367_retrieval_identiteit_auditprojectie.sql` | `89ca2e1d33a11e6600b3e40ca522bfbe594f16c151cf179514ba55c8866427ae` | retrieval-identiteit groen |
+| `2026_09_12_368_evidence_auditprojectie.sql` | `8e205d7508d4ee1190d3b392ab49abf8f7cfa0c1af736537d38b45a9bad2a4f3` | evidenceprojectie groen |
+
+Ook R1 structurele gates, V3 grants en de SECURITY DEFINER self-gate waren groen. De #367- en
+#368-bestanden zijn bij handmatige toepassing als één expliciete transactie uitgevoerd; #369 is
+zelf-transactioneel. De volledige destructieve cross-tenantrunner is bewust niet op Productie
+gedraaid; dezelfde runner was lokaal en in PR-CI groen. Er bleven geen tijdelijke testtabellen
+achter.
 
 ## 8. Testresultaten
 
 | Testgebied | Status | Bewijs / opmerking |
 |---|---|---|
-| Preview-commit | Groen | `ca57f5c`; acht GitHub-checkruns groen en beide Vercel-deploystatussen `success` |
-| Secrets | Groen | `npm run security:secrets`; geen bekende committed secrets |
-| Structuur/boundaries | Groen | `npm run lint:boundaries`; migratiekaartstructuur groen |
-| Database/RLS/grants | Groen | Volledige §15-suite, 725/725 app-grensgevallen en exacte grantsallowlist |
-| Migratierehearsal | Groen | forward → rollback → oude-vormcheck → forward → drie specifieke checks |
-| Unit/component/contract | Groen | `npm test`; lokale stubtests na toegestane loopbackbinding groen |
-| Build/typecheck | Groen | Next.js-productiebuild en typecontrole met lokale Supabase-buildwaarden |
-| Quality/thema | Groen | quality-baseline zonder nieuwe bevindingen; 0 harde themacontrastovertredingen |
-| Live tenant/UI | Groen, beperkt | Bestaande geldige sessies op Meridiaan en PGB toonden de juiste tenantidentiteit |
-| Live zoeken | Groen | Zoekvraag vond één fragment uit `PGB AI-gateway smoketest` met `ORION-4827` |
-| Live chat/evidence | Groen | Fondsscope bevestigd; correct antwoord met bronkaart, pagina 1 en vastgesteld-status |
-| Live governance/audit | Groen | Terugvraag en antwoord zichtbaar als twee inhoudsarme regels; antwoord gebruikt één bron |
-| Live vergelijken | Niet afzonderlijk uitgevoerd | PGB had slechts één geschikt synthetisch document; geen tweede fixture aangemaakt |
-| Verse wachtwoordlogin | Niet afzonderlijk uitgevoerd | Bestaande geldige tenantsessies zijn hergebruikt |
-| Negatieve live cross-tenantaccounttest | Niet afzonderlijk uitgevoerd | Geautomatiseerde DB/app-isolatiesuite is wel volledig groen |
-| Microsoft/Graph/Outlook/SharePoint | Niet afzonderlijk uitgevoerd | #370 is hermetisch en niet product-bedraad; Microsoft blijft standaard uit |
+| Productiemerge | Groen | PR #384; `main` op `3a6d9de`; verplichte postmergechecks groen |
+| Voorafgaande release | Uitgevoerd | Productiecommit `09d473f`; productiesmoke van 11 september geslaagd en afzonderlijk vastgelegd |
+| Database/RLS/grants | Groen | Drie specifieke checks, R1, V3 en SECURITY DEFINER self-gate |
+| Vercel app | Groen | `dpl_8S5UsM6DtpqfKLw5PNjcSe5ywkGR`, `Ready`, productiecommit `3a6d9de` |
+| Vercel beheer | Groen | `dpl_7hcuTjv5bV7H4MWh9Pw9BkrTFpF1`, `Ready` |
+| Publieke health | Groen | app, PGB en beheer antwoordden `{"ok":true}` |
+| Bestaande tenant/UI | Groen, beperkt | Geldige PGB-sessie voor `Stichting Pensioenfonds PGB`; tenant en rol correct |
+| Zoeken | Groen | `/zoeken` op `ORION-4827` vond twee synthetische documenten |
+| Chat/evidence | Groen | Correct antwoord `ORION-4827`; bron `PGB ingest-worker productietest`, pagina 1 |
+| Governance/audit | Groen | Eén terugvraag en één generatie als twee nieuwe inhoudsarme regels; generatie met tien bronnen |
+| Productiesignalen | Groen met opvolging | 0 app errors, 0 critical/high errors, 0 gatewaylogschrijffouten en 0 niet-OK gatewaycalls; één fail-safe reflectielog wordt gevolgd in #386 |
+| Runtime 5xx | Groen | Geen 5xx in app- of beheerlogs rond de smoke |
+| Positieve live vergelijking | Niet afzonderlijk uitgevoerd | Geen extra veilige productiefixture aangemaakt |
+| Verse wachtwoordlogin | Niet afzonderlijk uitgevoerd | Bestaande geldige PGB-sessie hergebruikt |
+| Negatieve live cross-tenantaccounttest | Niet afzonderlijk uitgevoerd | Destructieve runner niet op Productie; lokale en CI-isolatiebewijzen groen |
+| Microsoft/Graph/Outlook/SharePoint | Niet afzonderlijk uitgevoerd | Microsoft blijft uit en de adapter is niet product-bedraad |
 
-De eerste sandboxrun van build/tests strandde respectievelijk op geblokkeerde Google-Fonts-DNS,
-ontbrekende lokale buildvariabelen en verboden loopbacklisteners. Herhaling met netwerktoegang,
-lokale niet-productie-Supabasewaarden en toegestane hermetische listeners was groen. Lokaal draaide
-Node 24 terwijl de repository Node 22 voorschrijft; de groene GitHub-checks op de Preview-commit
-blijven daarom het beslissende Node-22-bewijs.
+Tijdens de eerste chatbeurt verscheen `Reflectietransitie geweigerd of mislukt:
+gesprek_niet_gevonden` op error-niveau, terwijl de route HTTP 200 en het juiste antwoord leverde. De
+aanroep bestond al in `09d473f` en is dus geen aangetoonde regressie van #367–#370. Opvolging staat
+in [#386](https://github.com/merlinijzerman/Bestuurdersportaal/issues/386); deze docs-only PR bevat
+geen reparatie.
 
 ## 9. Bekende beperkingen
 
 - De Microsoftstub bewijst het contract, niet een live Graphverbinding of productieadapter.
-- Een positieve live vergelijking ontbreekt door de enkelvoudige PGB-testfixture; CI, database- en
-  karakteriseringstests leveren wel het technische bewijs.
-- De as-built Word-momentopname en bestaande PNG/SVG-landschapsplaten zijn niet opnieuw gegenereerd;
-  de Markdown-release-addenda zijn actueel.
-- Issues #367–#370 staan nog open totdat de productiepromotie en administratieve afsluiting apart
-  zijn goedgekeurd.
+- Positieve live vergelijking, verse login, negatieve live accountwissel en Microsoftsmokes zijn
+  niet uitgevoerd en mogen niet als releasebewijs worden gepresenteerd.
+- De volledige cross-tenantrunner is vanwege zijn destructieve/testkarakter niet op Productie
+  uitgevoerd.
+- De as-built Word-momentopname en PNG/SVG-landschapsplaten zijn niet opnieuw gegenereerd; de
+  Markdown-release-addenda zijn actueel.
+- De fail-safe reflectietransitie veroorzaakt op een eerste chatbeurt error-level logruis (#386).
 
 ## 10. Openstaande acties
 
-1. Deze docs-only PR na review en expliciet akkoord naar `preview` mergen.
-2. Daarna `origin/preview` opnieuw verversen en uitsluitend `preview` als bron voor de promotie-PR
-   naar `main` gebruiken.
-3. Vóór productiemerge de drie additieve migraties volgens de promotienotitie toepassen en de
-   database-eindchecks herhalen.
-4. Na productiedeploy health, bestaande appflows, zoeken, chat/evidence en audit opnieuw smoken.
-5. Live vergelijking, verse login en Microsoft/Graph alleen uitvoeren wanneer passende fixtures,
-   accounts en een afzonderlijk activeringsbesluit beschikbaar zijn.
-6. Issues #367–#370 pas na geaccepteerde productie-uitrol sluiten of van expliciete vervolglabels
-   voorzien.
+1. Deze docs-only afsluitings-PR reviewen en alleen na expliciet akkoord naar `preview` mergen.
+2. #386 in een eigen worktree en code-PR oplossen en afzonderlijk accepteren.
+3. #367–#370 na acceptatie van deze releasevastlegging administratief sluiten met verwijzing naar
+   hun implementatie-PR's, productie-PR #384 en dit bewijs.
+4. Live vergelijking, verse login, negatieve accountwissel en Microsoft/Graph alleen uitvoeren
+   wanneer veilige fixtures, accounts en een afzonderlijk activeringsbesluit beschikbaar zijn.
 
 ## 11. Besluit
 
-**Preview geaccepteerd met vastgelegde beperkingen; productiepromotie nog niet vrijgegeven.** De
-gecombineerde code op `ca57f5c` doorstaat de relevante automatische, database- en live
-Preview-controles. Deze documentatie-PR mag niet zonder opdrachtgeverakkoord worden gemerged; ook
-de latere `preview` → `main`-PR vraagt een afzonderlijk akkoord.
+**Uitgevoerd en vrijgegeven met beperkingen.** Productiecommit `3a6d9de` bevat de geaccepteerde
+Preview-bron bovenop de op 11 september uitgevoerde productiecommit `09d473f`. De migraties,
+postmerge-CI, deployments, health, PGB zoeken, chat/evidence en contentsvrije governance-audit zijn
+groen. De expliciet niet uitgevoerde smokes blijven buiten het bewijs. De afsluitings-PR is
+docs-only en mag niet zonder nieuw opdrachtgeverakkoord naar `preview` worden gemerged.
 
 ## Templatecontrole
 
-- Status, release, risico's, architectuur, functioneel ontwerp, technische schuld, security,
-  roadmap, test/acceptatie en objectmodel: voorzien van release-addenda in de 00–09-set.
-- Nieuwe tabellen/relaties/statussen/rechten/RLS/AI-audit: uitsluitend drie auditprojectiemigraties;
-  voorwaarts, rollback, oude vorm en reapply bewezen.
-- Visualisaties: bestaande exports niet opnieuw gegenereerd; de architectuur- en datastroomtekst is
-  bijgewerkt en de afwijking staat expliciet in dit bewijs.
+- Status, release, risico's, architectuur, technische schuld, roadmap, test/acceptatie en
+  objectmodel zijn in de 00–09-set van een productie-addendum voorzien.
+- Nieuwe auditprojecties: exacte productiebytes, volgorde en eindchecks vastgelegd; geen volledige
+  destructieve cross-tenantrun op Productie.
+- Visualisaties: bestaande exports niet opnieuw gegenereerd; tekstuele architectuur- en
+  datastroomaddenda zijn leidend.
 - As-built Word-document: niet opnieuw gegenereerd; de actuele Markdownset is leidend voor deze
-  Preview-kandidaat en Word blijft een later milestone-artefact.
+  release-afsluiting.

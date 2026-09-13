@@ -1,24 +1,31 @@
 # Bestuurdersportaal MVP — Handover
 
-> **2026-09-13 — M365 fase 4 geïntegreerd en op Preview geaccepteerd; nog niet naar Productie
-> gepromoveerd:** #367, #369, #370 en #368 zijn in de afgesproken volgorde via PR's
+> **2026-09-13 — M365 fase 4 naar Productie gepromoveerd en gesmoked:** #367, #369, #370 en #368
+> zijn in de afgesproken volgorde via PR's
 > [#379](https://github.com/merlinijzerman/Bestuurdersportaal/pull/379),
 > [#381](https://github.com/merlinijzerman/Bestuurdersportaal/pull/381),
 > [#380](https://github.com/merlinijzerman/Bestuurdersportaal/pull/380) en
 > [#382](https://github.com/merlinijzerman/Bestuurdersportaal/pull/382) in `preview` geïntegreerd;
 > #368-karakterisering landde vooraf via [#378](https://github.com/merlinijzerman/Bestuurdersportaal/pull/378).
-> Preview staat op **`ca57f5c`** en bevat productiecommit **`09d473f`** als ancestor. Daarmee zijn
+> Samen vormden zij Preview-bron **`6a0456d`**, die na afzonderlijk akkoord via
+> [#384](https://github.com/merlinijzerman/Bestuurdersportaal/pull/384) als productiecommit
+> **`3a6d9de`** gemerged. De voorafgaande, op 11 september uitgevoerde productiebasis was
+> **`09d473f`**. Daarmee zijn
 > volledige opaque versie-/passage-/citation-identiteit en correlatie, centrale orkestratie van
 > `/zoeken` en `/vergelijk`, de hermetische Microsoft-adapterstub en de begrensde evidence- en
-> modelcontextlezingen samengebracht. De drie nieuwe migraties zijn lokaal vanaf een schone stack
-> vooruit toegepast, in volgorde teruggerold, in oude vorm gecontroleerd en opnieuw toegepast;
-> volledige DB/RLS/grants/cross-tenantcontrole, secrets, boundaries, build en tests zijn groen.
-> Live Preview: twee bestaande geldige tenantsessies, zoekresultaat `ORION-4827`, chatantwoord met
-> bron op pagina 1 en twee inhoudsarme governanceregels zijn waargenomen. **Niet afzonderlijk
-> uitgevoerd:** verse wachtwoordlogin, positieve live documentvergelijking (slechts één geschikt
-> PGB-testdocument), negatieve live cross-tenantaccounttest en live Microsoft/Graph-, Outlook- of
-> SharePointretrieval. Issues #367–#370 blijven daarom open als release-/productieopvolging totdat
-> de promotie is afgerond; de Microsoftstub bevat nadrukkelijk geen productiewiring. Zie
+> modelcontextlezingen samengebracht. De drie nieuwe migraties zijn in vaste volgorde op Productie
+> toegepast; T5, identiteit, evidenceprojectie, R1, V3-grants en SECURITY DEFINER self-gate waren
+> groen. App en beheer werden `Ready`; app-, PGB- en beheerhealth antwoordden `{"ok":true}`. De
+> PGB-productiesmoke bewees een bestaande geldige sessie, zoeken op `ORION-4827`, het correcte
+> chatantwoord met bron `PGB ingest-worker productietest` op pagina 1 en twee nieuwe inhoudsarme
+> governanceregels. Geen 5xx, gatewayfout of critical/high-signaal werd waargenomen. Eén fail-safe
+> reflectiemelding op error-niveau tijdens de eerste chatbeurt volgt afzonderlijk in
+> [#386](https://github.com/merlinijzerman/Bestuurdersportaal/issues/386); HTTP 200 en antwoord
+> bleven correct. **Niet afzonderlijk uitgevoerd:** verse wachtwoordlogin, positieve live
+> documentvergelijking, negatieve live cross-tenantaccounttest, volledige destructieve
+> cross-tenantrunner op Productie en live Microsoft/Graph-, Outlook- of SharePointretrieval.
+> Issues #367–#370 blijven open voor administratieve afsluiting na acceptatie van de docs-only
+> terugreconciliatie naar `preview`; de Microsoftstub bevat nadrukkelijk geen productiewiring. Zie
 > `RELEASEBEWIJS-M365-FASE4-PREVIEW-2026-09-13.md` en
 > `PROMOTIE-M365-FASE4-PREVIEW-NAAR-MAIN-2026-09-13.md`.
 
