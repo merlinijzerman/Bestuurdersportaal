@@ -12,7 +12,7 @@ import {
   maakVergelijkSpoor,
   maakZoekSpoor,
 } from "../../core/lib/retrieval/productiepaden-core";
-import { binnenServerScope, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
+import { binnenCentraleServergrens, binnenServerScope, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
 import { voerVergelijkingBinnenDeadline } from "../../core/lib/vergelijk-deadline";
 import type { VergelijkDeps } from "../../core/lib/vergelijk-kern";
 import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
@@ -164,6 +164,22 @@ test("T2-2 review — alleen een echte generieke bron mag zonder fonds-id door d
   assert.equal(binnenServerScope(context, bron({ bronsoort: "notulen", documentIdentiteit: { id: DOC_A, fondsId: null, bibliotheek: "fonds" } })), false);
   assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { id: DOC_A, fondsId: null, bibliotheek: "fonds" } })), false);
   assert.equal(binnenServerScope(context, bron({ bronsoort: "generiek", documentIdentiteit: { id: DOC_A, fondsId: null, bibliotheek: "generiek" } })), true);
+});
+
+test("#368 — onbekende bronsoort of bibliotheek faalt vóór centrale toelating gesloten", () => {
+  const caps = { bronsoorten: ["fonds" as const] };
+  assert.equal(binnenCentraleServergrens(
+    { ...context, bronbeleid: { bronsoorten: ["wildcard" as never] } }, caps, bron()
+  ), false, "ongeldige servercontext");
+  assert.equal(binnenCentraleServergrens(
+    context, { bronsoorten: ["wildcard" as never] }, bron()
+  ), false, "ongeldige capability");
+  assert.equal(binnenCentraleServergrens(
+    context, caps, bron({ bronsoort: "wildcard" as never })
+  ), false, "ongeldige kandidaat");
+  assert.equal(binnenCentraleServergrens(
+    context, caps, bron({ documentIdentiteit: { id: DOC_A, fondsId: "fonds-1", bibliotheek: "wildcard" } })
+  ), false, "ongeldige bibliotheekdiscriminant");
 });
 
 test("T2-2 review — requestbrede deadline voorkomt persistentie als een concept-read abort negeert", async () => {

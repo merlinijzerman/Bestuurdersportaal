@@ -245,6 +245,30 @@ test("#368 modelcontextboundary — directe en transitieve helperbypasses maken 
   assert.ok(transitief.buiten > voor.buiten, "transitieve helpercaller moet de querygrens breken");
 });
 
+test("#368 modelcontextprovenance — fonds/actor komen uit provider- of gejoinde parentrijen", () => {
+  const reader = lees("core/lib/retrieval/modelcontext-reader.ts");
+  assert.doesNotMatch(reader, /providerFonds\s*===\s*undefined\s*\?/,
+    "ontbrekende providerprovenance mag nooit terugvallen op een callbackfonds");
+  assert.doesNotMatch(reader, /providerActor\s*===\s*undefined\s*\?/,
+    "ontbrekende providerprovenance mag nooit terugvallen op een callbackactor");
+
+  const route = lees("app/api/chat/route.ts");
+  for (const parentProjectie of [
+    "governance_log!inner(fonds_id, gebruiker_id)",
+    "risicos!inner(fonds_id)",
+    "procedures!inner(fonds_id)",
+    "procedure_stappen!inner(procedure_id, procedures!inner(fonds_id))",
+  ]) assert.ok(route.includes(parentProjectie), `ontbrekende server-parentprojectie: ${parentProjectie}`);
+  assert.match(route, /MODELCONTEXT_GEEN_GELDIGHEID, proc\s*\)/,
+    "globale procedurerequirements moeten aan de al serverbevestigde procedure-rij zijn gebonden");
+
+  for (const bestand of [
+    "core/lib/profielsturing.ts",
+    "core/lib/organisatieprofiel.ts",
+    "core/lib/portaalcontext.ts",
+  ]) assert.match(lees(bestand), /scopeRij/, `${bestand} moet raw providerprovenance behouden na domeinprojectie`);
+});
+
 test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en writes starten niet na abort", () => {
   const route = ts.createSourceFile(
     "route.tsx", lees("app/api/chat/route.ts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX
