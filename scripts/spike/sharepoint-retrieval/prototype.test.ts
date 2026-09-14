@@ -9,7 +9,7 @@ import {
   voerSharePointPermissionProbeUit,
   voerSharePointRetrievalSpikeUit,
 } from "./prototype";
-import type { SpikeDependencies } from "./prototype";
+import type { SpikeDependencies, SpikeOpdracht } from "./prototype";
 import type { SpikeBronSnapshot, SpikeRoute } from "./types";
 
 const IDS = {
@@ -66,7 +66,7 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
 }
 
-function opdracht(route: SpikeRoute) {
+function opdracht(route: SpikeRoute): SpikeOpdracht {
   return {
     route,
     correlationId: "88888888-8888-4888-8888-888888888888",
@@ -189,6 +189,50 @@ test("drive-search downloadt begrensd en extraheert PowerPoint uitsluitend in-me
   assert.match(uitkomst.kandidaten[0].passage, /kanariewaarde is 314/);
   assert.equal(uitkomst.meting.contentBytes, pptx.byteLength);
   assert.equal(downloadZonderToken, true);
+});
+
+test("drive-search gebruikt vaste korte zoektermen afzonderlijk en ontdubbelt resultaten stabiel", async () => {
+  const urls: string[] = [];
+  const zip = new JSZip();
+  zip.file("ppt/slides/slide1.xml", "<p:sld><a:p><a:r><a:t>Deze volledige vraag met leestekens mag Graph niet bereiken.</a:t></a:r></a:p></p:sld>");
+  const pptx = await zip.generateAsync({ type: "uint8array" });
+  const vraag = opdracht("drive_search_extract");
+  vraag.vraag = {
+    ...vraag.vraag,
+    vraag: "Deze volledige vraag met leestekens? mag Graph niet bereiken.",
+    driveZoektermen: ["Koraalmaat 47", "IJsvogelkompas 73"],
+  };
+  const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.includes("/search(q=")) {
+      urls.push(url);
+      return json({ value: [item()] });
+    }
+    if (url.includes(`/items/${IDS.item}?`)) return json(item());
+    if (url.endsWith(`/items/${IDS.item}/content`)) return new Response(null, { status: 302, headers: { Location: "https://synthetisch-bestand.files.1drv.com/download" } });
+    if (url === "https://synthetisch-bestand.files.1drv.com/download") return new Response(new Uint8Array(pptx).buffer);
+    if (url.endsWith(`/items/${IDS.item}/preview`)) return json({ getUrl: "https://pgb.sharepoint.com/embed" });
+    throw new Error("onverwachte call");
+  }), vraag);
+  assert.equal(uitkomst.kandidaten.length, 1);
+  assert.equal(urls.length, 2);
+  assert.ok(urls[0].includes("Koraalmaat%2047"));
+  assert.ok(urls[1].includes("IJsvogelkompas%2073"));
+  assert.ok(urls.every((url) => !url.includes("leestekens")));
+});
+
+test("drive-search weigert een onbegrensd of ongeldig server-side zoekplan vóór de zoekcall", async () => {
+  let zoekcalls = 0;
+  const vraag = opdracht("drive_search_extract");
+  vraag.vraag = { ...vraag.vraag, driveZoektermen: ["geldig", "", "ook geldig"] };
+  const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.includes("/search(q=")) zoekcalls += 1;
+    return json({ value: [] });
+  }), vraag);
+  assert.equal(uitkomst.fout, "configuratiefout");
+  assert.equal(uitkomst.foutcode, "configuratie_gewijzigd");
+  assert.equal(zoekcalls, 0);
 });
 
 test("intrekking tijdens het verzoek faalt gesloten en laat geen kandidaat door", async () => {

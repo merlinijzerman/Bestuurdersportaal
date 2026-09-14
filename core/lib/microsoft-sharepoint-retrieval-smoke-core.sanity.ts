@@ -31,6 +31,9 @@ test("#353: alleen vaste routes, vragen en fixturecodes uit #385 zijn inzetbaar"
   for (const scenario of ["S02", "S03", "S04", "S08", "S09"] as const) {
     assert.equal(sharePointRetrievalSmokeVraag(scenario).vraag, manifest.scenarios.find((x: { code: string }) => x.code === scenario)?.question);
   }
+  assert.deepEqual(sharePointRetrievalSmokeVraag("S02").driveZoektermen, ["Koraalmaat 47"]);
+  assert.deepEqual(sharePointRetrievalSmokeVraag("S03").driveZoektermen, ["Koraalmaat 47", "IJsvogelkompas 73"]);
+  assert.deepEqual(sharePointRetrievalSmokeVraag("S04").driveZoektermen, ["Maananker Actueel 61"]);
   const manifestCodes = new Set(manifest.fixtures.map((x: { code: string }) => x.code));
   for (const code of SHAREPOINT_RETRIEVAL_FIXTURE_CODES) assert.ok(manifestCodes.has(code));
   assert.equal(fixtureCodeUitBestandsnaam("PGB354-DOC-001-Agenda-en-besluitpunten-september.docx"), "PGB354-DOC-001");

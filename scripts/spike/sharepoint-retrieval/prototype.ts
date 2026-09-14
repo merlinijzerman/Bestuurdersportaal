@@ -428,22 +428,34 @@ async function zoekViaMicrosoftSearch(client: GraphClient, vraag: string, rootWe
   return hits.slice(0, maxKandidaten);
 }
 
-async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vraag: string, maxKandidaten: number): Promise<ZoekHit[]> {
-  const gecodeerdeVraag = encodeURIComponent(vraag.replace(/'/g, "''")).replace(/'/g, "%27");
-  const pad = `/drives/${encodeURIComponent(bron.driveId)}/items/${encodeURIComponent(bron.rootItemId)}/search(q='${gecodeerdeVraag}')`;
-  const eerste = `${GRAPH_BASIS}${pad}?$select=id,name,size,file,eTag,cTag,lastModifiedDateTime,parentReference,webUrl&$top=${Math.min(50, maxKandidaten)}`;
-  const verwachtPad = veiligeGraphUrl(eerste).pathname;
-  let volgende: string | undefined = eerste;
+async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vragen: readonly string[], maxKandidaten: number): Promise<ZoekHit[]> {
+  if (vragen.length < 1 || vragen.length > 4 || vragen.some((vraag) => !vraag.trim() || vraag.length > 120 || /[\u0000-\u001f\u007f]/.test(vraag))) {
+    throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
+  }
   const hits: ZoekHit[] = [];
-  for (let pagina = 0; volgende && pagina < MAX_PAGINAS && hits.length < maxKandidaten; pagina += 1) {
-    const body = await client.json<{ value?: GraphDriveItem[]; "@odata.nextLink"?: string }>(volgende);
-    for (const item of body.value ?? []) if (item.id) hits.push({ itemId: item.id, positie: hits.length + 1, score: null, summary: null });
-    if (body["@odata.nextLink"]) {
-      const parsed = veiligeGraphUrl(body["@odata.nextLink"]);
-      if (parsed.pathname !== verwachtPad) throw new SpikeError("providerfout", "onveilig_vervolgpad");
-      volgende = parsed.toString();
-    } else {
-      volgende = undefined;
+  const gezien = new Set<string>();
+  for (const vraag of vragen) {
+    if (hits.length >= maxKandidaten) break;
+    const gecodeerdeVraag = encodeURIComponent(vraag.replace(/'/g, "''")).replace(/'/g, "%27");
+    const pad = `/drives/${encodeURIComponent(bron.driveId)}/items/${encodeURIComponent(bron.rootItemId)}/search(q='${gecodeerdeVraag}')`;
+    const eerste = `${GRAPH_BASIS}${pad}?$select=id,name,size,file,eTag,cTag,lastModifiedDateTime,parentReference,webUrl&$top=${Math.min(50, maxKandidaten - hits.length)}`;
+    const verwachtPad = veiligeGraphUrl(eerste).pathname;
+    let volgende: string | undefined = eerste;
+    for (let pagina = 0; volgende && pagina < MAX_PAGINAS && hits.length < maxKandidaten; pagina += 1) {
+      const body = await client.json<{ value?: GraphDriveItem[]; "@odata.nextLink"?: string }>(volgende);
+      for (const item of body.value ?? []) {
+        if (!item.id || gezien.has(item.id)) continue;
+        gezien.add(item.id);
+        hits.push({ itemId: item.id, positie: hits.length + 1, score: null, summary: null });
+        if (hits.length >= maxKandidaten) break;
+      }
+      if (body["@odata.nextLink"] && hits.length < maxKandidaten) {
+        const parsed = veiligeGraphUrl(body["@odata.nextLink"]);
+        if (parsed.pathname !== verwachtPad) throw new SpikeError("providerfout", "onveilig_vervolgpad");
+        volgende = parsed.toString();
+      } else {
+        volgende = undefined;
+      }
     }
   }
   return hits.slice(0, maxKandidaten);
@@ -600,7 +612,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
     const maxKandidaten = Math.min(Math.max(1, opdracht.vraag.maxKandidaten ?? 20), 50);
     const hits = opdracht.route === "microsoft_search"
       ? await zoekViaMicrosoftSearch(graphClient, opdracht.vraag.vraag, rootWebUrl, maxKandidaten)
-      : await zoekViaDrive(graphClient, bron, opdracht.vraag.vraag, maxKandidaten);
+      : await zoekViaDrive(graphClient, bron, opdracht.vraag.driveZoektermen ?? [opdracht.vraag.vraag], maxKandidaten);
     await deps.onFase?.("na_zoeken");
 
     const mappingPerItem = new Map(bron.documenten.map((doc) => [doc.itemId, doc]));

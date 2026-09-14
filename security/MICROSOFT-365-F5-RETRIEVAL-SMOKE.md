@@ -29,9 +29,10 @@ set waarde = excluded.waarde, versie = public.fonds_feature_flags.versie + 1,
 
 1. Open `/beheer/microsoft-sharepoint-retrieval` op de PGB Preview-host.
 2. Voer eerst S00 uit. Deze vaste inhoudsloze DriveItem-search onderscheidt een ongeldige Graph-vraag (`graph_bad_request`) van ontbrekende toestemming (`graph_toestemming`) en een toegestane zoekactie (`geslaagd`), zonder documenten te openen of downloaden.
-3. Start daarna de basisvergelijking. Zij voert S02, S03 en S04 via `drive_search_extract` en `microsoft_search` uit, drie rondes per route (18 metingen).
-4. Kopieer de veilige JSON-uitvoer. Controleer per route recall, locator-/versie-/previewdekking, latency, Graph-calls, bytes, throttles en foutcategorieën.
-5. Stop bij een onverwachte toestemming-, tenant-, actor- of configuratiefout. Verruim geen Graph-scope als onderdeel van deze smoke.
+3. Na een groene S00 kan de korte Drive-controle worden gebruikt: S02, S03 en S04 één keer met de vaste termen uit de acceptatieset. Dit houdt een diagnostische herhaling binnen het endpointbudget.
+4. Start pas daarna zo nodig de basisvergelijking. Zij voert S02, S03 en S04 via `drive_search_extract` en `microsoft_search` uit, drie rondes per route (18 metingen).
+5. Kopieer de veilige JSON-uitvoer. Controleer per route recall, locator-/versie-/previewdekking, latency, Graph-calls, bytes, throttles en foutcategorieën.
+6. Stop bij een onverwachte toestemming-, tenant-, actor- of configuratiefout. Verruim geen Graph-scope als onderdeel van deze smoke.
 
 ## S08 — intrekking tijdens het verzoek
 
