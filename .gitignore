@@ -62,4 +62,8 @@ promo/.auth/
 tests/e2e/.auth/
 playwright-report/
 test-results/e2e/
+
+# PGB SharePoint-pilot: private Microsoft-mapping en lokaal meetbewijs.
+.pgb-sharepoint-fixtures.local.json
+.pgb-sharepoint-bewijs.local.ndjson
 /node_modules

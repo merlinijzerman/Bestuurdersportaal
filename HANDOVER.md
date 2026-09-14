@@ -1,5 +1,7 @@
 # Bestuurdersportaal MVP — Handover
 
+> **2026-09-14 — PGB SharePoint-acceptatieset #385 gedeeltelijk ingericht:** in een geïsoleerde branch vanaf `origin/preview` is de vaste synthetische corpus met publieke fixturecodes, checksums, rechtenmatrix, private-statehelper en resetrunbook opgenomen. In de vooraf aangewezen bestaande, lege SharePointmap `PGB` zijn zeven vaste mappaden en tien basisfixtures geplaatst; de v2-mutatiefixture staat uitsluitend lokaal. Word, digitaal doorzoekbare PDF en PowerPoint openen rechtstreeks in Microsoft 365 met het beheerdersaccount. De algemene PGB-root geeft testgroepen A en B lezen; `04 Beperkt bestuur` heeft unieke rechten met Owners en testgroep A, zonder machtiging voor testgroep B. Afzonderlijke testidentiteiten, de effectieve rol-A-/rol-B-proef, fondsgebonden portaalpreview, drie live Graph-rondes uit #353/#357 en de mutatie-/intrekkings-/resetproeven blijven open. Daarom geldt **NO-GO voor productiewiring** totdat deze metingen groen zijn. Zie `security/MICROSOFT-365-PGB-RETRIEVAL-RESULTAAT-2026-09-14.md`.
+
 > **2026-09-13 — M365 fase 4 naar Productie gepromoveerd en gesmoked:** #367, #369, #370 en #368
 > zijn in de afgesproken volgorde via PR's
 > [#379](https://github.com/merlinijzerman/Bestuurdersportaal/pull/379),

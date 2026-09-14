@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "warning": "Lokale kopie invullen. Nooit committen of delen.",
+  "site": {
+    "host_name": null,
+    "server_relative_path": null,
+    "site_id": null,
+    "drive_id": null,
+    "root_item_id": null
+  },
+  "accounts": {
+    "rol_a": {
+      "account_label": "testgebruiker-a",
+      "user_principal_name": null,
+      "group_id": null
+    },
+    "rol_b": {
+      "account_label": "testgebruiker-b-of-groep",
+      "user_principal_name": null,
+      "group_id": null
+    }
+  },
+  "fixtures": {
+    "PGB354-DOC-001": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-PDF-001": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-PDF-002": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-PPT-001": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-DOC-002": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-DOC-003": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-DOC-004": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-DOC-005": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-PDF-003": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null },
+    "PGB354-UNS-001": { "item_id": null, "local_ref": null, "e_tag": null, "c_tag": null }
+  }
+}
