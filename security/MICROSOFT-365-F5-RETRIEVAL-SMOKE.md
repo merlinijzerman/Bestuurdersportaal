@@ -7,7 +7,7 @@ Deze runner is uitsluitend bedoeld om de twee routes uit #353 live te vergelijke
 - De deployment draait met `SEED_DOELOMGEVING=preview` én `VERCEL_ENV=preview`.
 - Het fonds heeft slug `pgb`.
 - Het Microsoft-integratieprofiel, de connectorpilot en `microsoft_sharepoint_fase3` staan aan.
-- De ingelogde gebruiker is beheerder en diens gedelegeerde `Sites.Selected`-verbinding hoort bij de geconfigureerde SharePoint-bron.
+- De ingelogde gebruiker is beheerder en heeft een eigen gedelegeerde `Sites.Selected`-verbinding in dezelfde Entra-tenant als de geconfigureerde fondsbron. De gebruiker die de fondsbron oorspronkelijk koos is auditprovenance, geen vereiste uitvoeridentiteit.
 - De PGB354-fixtures staan in de gekozen bron en de rechten zijn hersteld naar de nulstand.
 
 Zet daarna alleen voor PGB de extra vlag aan. Gebruik de normale beheerfunctie of vul bij handmatige SQL altijd de echte actor in, zodat de bestaande config-audittrigger de wijziging vastlegt:

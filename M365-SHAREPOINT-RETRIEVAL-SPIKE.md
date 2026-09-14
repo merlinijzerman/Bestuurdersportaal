@@ -51,7 +51,7 @@ De standalone adapter staat onder `scripts/spike/sharepoint-retrieval/`. Naast d
 
 De browser kan uitsluitend een vaste scenario-, route- en rondecode kiezen. De vragen komen server-side uit de #385-set; tokens, Graph-identifiers, SharePoint-paden, lokale refs, passages en inhoud verlaten de server niet. De respons bevat alleen fixturecodes, tellingen, timing, bytes, foutcategorieën en korte versiehashes. S08 pauzeert na de eerste rechten-/versiecontrole, zodat toegang tijdens hetzelfde verzoek kan worden ingetrokken; de laatste controle moet de kandidaat verwijderen. S09 bouwt als nieuw verzoek alle bron- en rechtenstaat opnieuw op. Een gevonden fixture in S08 of S09 wordt expliciet als `intrekking_niet_effectief` afgekeurd.
 
-De delegated identiteit wordt nu op drie punten exact gebonden: portaalactor aan de configuratiegebruiker, tenant aan de bron en `actorObjectId` uit het opgehaalde token aan de private `microsoft_object_id` uit diezelfde verbinding. Een gevulde maar afwijkende OID binnen dezelfde tenant faalt vóór de eerste Graph-call.
+De delegated identiteit wordt op drie punten exact gebonden: de portaalactor aan diens eigen private Microsoft-verbinding, de tenant van die verbinding aan de actuele fondsbron en `actorObjectId` uit het opgehaalde token aan de private `microsoft_object_id` uit diezelfde verbinding. `bron.gebruiker_id` blijft auditprovenance van degene die de fondsbron configureerde en is geen leesvoorwaarde. Een gevulde maar afwijkende OID binnen dezelfde tenant faalt vóór de eerste Graph-call.
 
 Per kandidaat is de toelatingsketen:
 
