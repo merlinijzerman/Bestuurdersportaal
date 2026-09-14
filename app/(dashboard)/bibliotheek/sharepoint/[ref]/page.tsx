@@ -9,7 +9,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Browserpreview van een SharePoint-document. De kortlevende URL wordt per
  * paginabezoek opgehaald, alleen als iframe-bron gebruikt en nooit in de
  * adresbalk, opslag of logging gezet. Deze route heeft een eigen CSP met
- * frame-src voor *.sharepoint.com (next.config.ts). */
+ * frame-src voor de afgebakende Microsoft-previewhosts (next.config.ts). */
 export default function SharePointPreviewPagina() {
   const params = useParams<{ ref: string }>();
   const ref = typeof params?.ref === "string" && UUID.test(params.ref) ? params.ref : null;

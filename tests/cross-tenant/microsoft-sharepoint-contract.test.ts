@@ -85,6 +85,7 @@ test("lijst en preview lopen met het token van de gebruiker, zonder content-call
   assert.match(sharepoint, /itemOnderRoot\(item, document\.drive_id, rootPadVanItem\(root, document\.drive_id\)\)/);
   assert.match(sharepoint, /previewActieUrl\(document\.drive_id, document\.item_id\)/);
   assert.match(sharepoint, /veiligeSharePointUrl\(preview\.getUrl\)/);
+  assert.match(sharepoint, /previewUrl\.searchParams\.set\("nb", "true"\)/);
   assert.doesNotMatch(sharepoint, /\/content|downloadUrl|createLink/);
 });
 
@@ -101,11 +102,13 @@ test("de preview-URL wordt nergens bewaard, gelogd of geaudit", () => {
   assert.doesNotMatch(vault, /console\./);
 });
 
-test("de previewpagina is de enige route met frame-src naar SharePoint en gebruikt een strikte iframe", () => {
+test("de previewpagina is de enige route met frame-src naar de afgebakende Microsoft-previewhosts en gebruikt een strikte iframe", () => {
   assert.match(nextConfig, /source: "\/bibliotheek\/sharepoint\/:ref"/);
-  assert.match(nextConfig, /frame-src 'self' https:\/\/challenges\.cloudflare\.com https:\/\/\*\.sharepoint\.com/);
+  assert.match(nextConfig, /frame-src 'self' https:\/\/challenges\.cloudflare\.com https:\/\/\*\.sharepoint\.com https:\/\/\*\.officeapps\.live\.com/);
   // De algemene CSP houdt de oude frame-src; alleen de afgeleide previewvariant voegt SharePoint toe.
   assert.equal(nextConfig.match(/https:\/\/\*\.sharepoint\.com/g)?.length, 1);
+  assert.equal(nextConfig.match(/https:\/\/\*\.officeapps\.live\.com/g)?.length, 1);
+  assert.doesNotMatch(nextConfig, /frame-src[^"\n]* https: "/);
   assert.match(nextConfig, /const cspDirectivesSharePointPreview = cspDirectives\.replace\(/);
   assert.match(nextConfig, /"frame-src 'self' https:\/\/challenges\.cloudflare\.com",/);
   assert.match(nextConfig, /frame-ancestors 'none'/);
