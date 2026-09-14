@@ -43,3 +43,11 @@ test("#353 S08 pauzeert vóór de laatste rechtencheck en S09 start zonder cache
   assert.match(kern, /S09:[\s\S]*benodigdeFixtures: \[\][\s\S]*pauzeVoorLaatsteControle: false/);
   assert.doesNotMatch(brug, /cache|localStorage|sessionStorage/);
 });
+
+test("#353 fondsbron en gedelegeerde smoke-actor zijn afzonderlijk en tenantgebonden", () => {
+  assert.doesNotMatch(brug, /bron\.gebruiker_id\s*!==\s*args\.ctx\.gebruikerId/);
+  assert.match(brug, /vault\.leesVerbinding\(args\.ctx\.fondsId, args\.ctx\.gebruikerId\)/);
+  assert.match(brug, /verbinding\.scopes\.includes\("Sites\.Selected"\)/);
+  assert.match(brug, /verbinding\.tenant_id !== bron\.tenant_id/);
+  assert.match(brug, /sharepointAccessToken\(\{ fondsId: ctx\.fondsId, gebruikerId: ctx\.gebruikerId \}\)/);
+});

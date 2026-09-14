@@ -86,8 +86,16 @@ async function bouwBronlezer(args: {
       vault.leesSharePointBron(args.ctx.fondsId),
       vault.leesVerbinding(args.ctx.fondsId, args.ctx.gebruikerId),
     ]);
-    if (!bron || bron.gebruiker_id !== args.ctx.gebruikerId) throw new Error("bron_niet_actief");
-    if (!verbinding || verbinding.status !== "gekoppeld" || verbinding.tenant_id !== bron.tenant_id || !verbinding.microsoft_object_id) {
+    // De bron is fondsbreed. `bron.gebruiker_id` legt vast wie de configuratie
+    // heeft gekozen, maar is geen autorisatievoorwaarde voor latere lezers. De
+    // smoke draait als beheerder met diens eigen gedelegeerde token en bindt die
+    // identiteit hieronder wel aan dezelfde tenant als de actuele fondsbron.
+    if (!bron || bron.status !== "actief") throw new Error("bron_niet_actief");
+    if (!verbinding
+      || verbinding.status !== "gekoppeld"
+      || !verbinding.scopes.includes("Sites.Selected")
+      || verbinding.tenant_id !== bron.tenant_id
+      || !verbinding.microsoft_object_id) {
       throw new Error("verbinding_niet_actief");
     }
 
