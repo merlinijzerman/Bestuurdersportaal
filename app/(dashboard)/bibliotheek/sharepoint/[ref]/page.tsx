@@ -52,7 +52,12 @@ export default function SharePointPreviewPagina() {
           title={`Preview van ${preview.naam}`}
           src={preview.url}
           className="flex-1 w-full border-0 bg-app-bg"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          // Microsoft 365 voor het web gebruikt in de zakelijke Office-flow een
+          // bovenliggende navigatie voor aanmelding en laat nieuwe vensters uit
+          // de sandbox ontsnappen. De bron blijft beperkt tot de server-
+          // gevalideerde, kortlevende SharePoint-preview-URL en de route-CSP.
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation allow-popups-to-escape-sandbox"
+          allowFullScreen
           referrerPolicy="no-referrer"
           allow=""
         />

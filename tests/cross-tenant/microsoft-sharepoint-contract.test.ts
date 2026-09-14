@@ -112,7 +112,8 @@ test("de previewpagina is de enige route met frame-src naar de afgebakende Micro
   assert.match(nextConfig, /const cspDirectivesSharePointPreview = cspDirectives\.replace\(/);
   assert.match(nextConfig, /"frame-src 'self' https:\/\/challenges\.cloudflare\.com",/);
   assert.match(nextConfig, /frame-ancestors 'none'/);
-  assert.match(previewPagina, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups"/);
+  assert.match(previewPagina, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation allow-popups-to-escape-sandbox"/);
+  assert.match(previewPagina, /allowFullScreen/);
   assert.match(previewPagina, /referrerPolicy="no-referrer"/);
   assert.match(previewPagina, /method: "POST", cache: "no-store"/);
   assert.doesNotMatch(previewPagina, /localStorage|sessionStorage|router\.push\(.*url|history\./);
