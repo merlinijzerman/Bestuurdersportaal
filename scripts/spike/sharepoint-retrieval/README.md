@@ -7,7 +7,7 @@ De browser stuurt uitsluitend een vaste scenario-, route- en rondecode. De serve
 ## Wat de twee routes meten
 
 - `microsoft_search`: `POST /v1.0/search/query`, path-scoped naar de geconfigureerde root. De route gebruikt alleen de security-trimmed summary als passage. Een lege summary is geen kandidaat.
-- `drive_search_extract`: `GET /v1.0/drives/{drive}/items/{root}/search(...)`, daarna voor maximaal de bekende kandidaten een versiegebonden `/content`-download. DOCX, digitaal doorzoekbare PDF en PPTX worden alleen in memory verwerkt. De buffer wordt na extractie overschreven en nooit opgeslagen.
+- `drive_search_extract`: één `GET /v1.0/drives/{drive}/items/{root}/search(...)` per vaste, korte server-side zoekterm, stabiel ontdubbeld, daarna voor maximaal de bekende kandidaten een versiegebonden `/content`-download. De volledige natuurlijke vraag wordt niet als DriveItem-query gebruikt. DOCX, digitaal doorzoekbare PDF en PPTX worden alleen in memory verwerkt. De buffer wordt na extractie overschreven en nooit opgeslagen.
 
 Beide routes volgen dezelfde toelatingsvolgorde:
 

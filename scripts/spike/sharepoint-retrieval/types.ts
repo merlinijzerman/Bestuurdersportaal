@@ -138,6 +138,9 @@ export interface SpikeVraag {
   code: string;
   soort: "gericht" | "fondsbreed" | "meerdere_documenten" | "versieconflict" | "powerpoint" | "pdf" | "negatief";
   vraag: string;
+  /** Vaste, server-side termen voor DriveItem search. Meerdere termen worden
+   * afzonderlijk gezocht en daarna stabiel ontdubbeld. */
+  driveZoektermen?: readonly string[];
   verwachteFixtures: string[];
   maxKandidaten?: number;
 }

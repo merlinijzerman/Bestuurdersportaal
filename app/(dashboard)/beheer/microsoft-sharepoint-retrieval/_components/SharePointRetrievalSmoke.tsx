@@ -88,6 +88,9 @@ export default function SharePointRetrievalSmoke() {
         <button type="button" disabled={bezig} onClick={() => void run(basisTaken)} className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           Basisvergelijking starten (18 metingen)
         </button>
+        <button type="button" disabled={bezig} onClick={() => void run(((["S02", "S03", "S04"] as const).map((scenario) => ({ scenario, route: "drive_search_extract" as const, ronde: 1 as const }))))} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          Drive-controle starten (3 metingen)
+        </button>
       </section>
 
       <section className="rounded-xl border border-line bg-white p-5">

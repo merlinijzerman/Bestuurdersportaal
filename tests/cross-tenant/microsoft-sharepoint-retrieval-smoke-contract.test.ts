@@ -25,6 +25,7 @@ test("#353 browserinvoer bevat uitsluitend vaste scenario-, route- en rondecodes
   assert.doesNotMatch(route, /vraag: z\.|ref: z\.|itemId: z\.|siteId: z\.|driveId: z\./);
   assert.match(kern, /Welke hersteltermijn geldt voor Koraalmaat 47\?/);
   assert.match(kern, /m365-permission-probe-7f4c1d9e-no-match/);
+  assert.match(kern, /driveZoektermen: \["Koraalmaat 47", "IJsvogelkompas 73"\]/);
   assert.match(route, /scenario === "S00" && invoer\.data\.route !== "drive_search_extract"/);
 });
 
