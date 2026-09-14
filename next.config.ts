@@ -71,12 +71,15 @@ const cspDirectives = [
 ].join("; ");
 
 // Microsoft 365 fase 3 (#321): uitsluitend de SharePoint-previewpagina mag een
-// iframe naar de kortlevende Graph-preview op *.sharepoint.com openen. Het
+// iframe naar de kortlevende Graph-preview op *.sharepoint.com openen. De
+// SharePoint embedpagina kan het frame voor Office/PDF-weergave doorsturen naar
+// Microsoft 365 voor het web op *.officeapps.live.com; die finale framehost is
+// daarom uitsluitend op dit pad toegestaan.
 // pad-specifieke headerblok hieronder overschrijft alleen de CSP en de
 // Referrer-Policy voor dat pad; alle andere routes houden de strikte CSP.
 const cspDirectivesSharePointPreview = cspDirectives.replace(
   "frame-src 'self' https://challenges.cloudflare.com",
-  "frame-src 'self' https://challenges.cloudflare.com https://*.sharepoint.com",
+  "frame-src 'self' https://challenges.cloudflare.com https://*.sharepoint.com https://*.officeapps.live.com",
 );
 
 const securityHeaders = [
