@@ -100,6 +100,7 @@ async function leesHerkomst() {
   const gepubliceerd = buildTijd ? new Date(buildTijd) : null;
 
   return {
+    engine: "clamav",
     engineVersion,
     signatureVersion,
     signaturePublishedAt:
