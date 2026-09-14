@@ -43,3 +43,9 @@ gereed is, de EICAR-buildpoort is geslaagd, de signature maximaal 48 uur oud is
 en de actieve image in de laatste 30 minuten is gebouwd. Een rode run laat de
 bestaande gezonde deployment staan en moet als productie-incident worden
 behandeld. De workflow kan voor herstel ook handmatig worden gestart.
+
+Een tweede workflow, `.github/workflows/scanner-signatures-watchdog.yml`,
+controleert diezelfde Production-health iedere zes uur onafhankelijk van de
+deploymentworkflow. Blijven een dagelijkse redeploy of de healthcontrole rood,
+dan opent de watchdog één blijvend GitHub-incident voordat de zeven-dagenpoort
+uploads blokkeert. Na aantoonbaar herstel sluit hij dat incident automatisch.
