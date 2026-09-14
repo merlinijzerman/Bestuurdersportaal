@@ -190,6 +190,7 @@ async function leesBegrensd(response: Response, maxBytes: number): Promise<Uint8
 }
 
 function normaliseerHttpFout(response: Response): SpikeError {
+  if (response.status === 400) return new SpikeError("providerfout", "graph_bad_request");
   if (response.status === 401 || response.status === 403) return new SpikeError("toestemming_geweigerd", "graph_toestemming");
   if (response.status === 404) return new SpikeError("buiten_scope", "document_verwijderd");
   if (response.status === 412) return new SpikeError("buiten_scope", "document_gewijzigd");
@@ -678,6 +679,7 @@ export async function voerSharePointPermissionProbeUit(
     await client.json<{ value?: Array<{ id?: string }> }>(url);
     return {
       status: "toegestaan",
+      foutcode: null,
       latencyMs: Math.max(0, Math.round(klok() - start)),
       microsoftCalls: client.meting.calls,
     };
@@ -688,6 +690,7 @@ export async function voerSharePointPermissionProbeUit(
     }
     return {
       status: veilig.categorie,
+      foutcode: veilig.code,
       latencyMs: Math.max(0, Math.round(klok() - start)),
       microsoftCalls: client?.meting.calls ?? 0,
     };

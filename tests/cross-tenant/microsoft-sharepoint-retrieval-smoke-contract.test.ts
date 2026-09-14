@@ -24,6 +24,8 @@ test("#353 browserinvoer bevat uitsluitend vaste scenario-, route- en rondecodes
   assert.match(route, /ronde: z\.union\(\[z\.literal\(1\), z\.literal\(2\), z\.literal\(3\)\]\)/);
   assert.doesNotMatch(route, /vraag: z\.|ref: z\.|itemId: z\.|siteId: z\.|driveId: z\./);
   assert.match(kern, /Welke hersteltermijn geldt voor Koraalmaat 47\?/);
+  assert.match(kern, /m365-permission-probe-7f4c1d9e-no-match/);
+  assert.match(route, /scenario === "S00" && invoer\.data\.route !== "drive_search_extract"/);
 });
 
 test("#353 alleen de veilige meetprojectie en vaste SSE-statussen verlaten de serverbrug", () => {
@@ -31,6 +33,7 @@ test("#353 alleen de veilige meetprojectie en vaste SSE-statussen verlaten de se
   assert.match(route, /type: "voltooid", meting/);
   assert.doesNotMatch(route, /accessToken|microsoft_object_id|tenant_id|drive_id|item_id|passage/);
   assert.match(brug, /maakVeiligeMeetrij/);
+  assert.match(brug, /voerSharePointPermissionProbeUit/);
   const auditStart = brug.indexOf("async function audit");
   const auditBlok = brug.slice(auditStart, brug.indexOf("\n}\n", auditStart) + 3);
   assert.doesNotMatch(auditBlok, /toegangscontrole|accessToken|passage|tenantId|itemId|driveId/);

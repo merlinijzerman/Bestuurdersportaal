@@ -16,6 +16,7 @@ import {
 import * as vault from "@/core/lib/microsoft-vault";
 import {
   maakVeiligeMeetrij,
+  voerSharePointPermissionProbeUit,
   voerSharePointRetrievalSpikeUit,
   standaardWacht,
 } from "../../scripts/spike/sharepoint-retrieval/prototype";
@@ -176,6 +177,39 @@ export async function voerSharePointRetrievalPreviewSmokeUit(
 ): Promise<SharePointRetrievalVeiligeMeting> {
   const vraag = sharePointRetrievalSmokeVraag(opdracht.scenario);
   const leesBron = await bouwBronlezer({ ctx, scenario: opdracht.scenario });
+  const delegatedToken = async () => {
+    const token = await sharepointAccessToken({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId });
+    return { accessToken: token.accessToken, tenantId: token.tenantId, actorObjectId: token.objectId };
+  };
+
+  if (opdracht.scenario === "S00") {
+    const uitkomst = await voerSharePointPermissionProbeUit({ leesBron, delegatedToken }, {
+      signal: ctx.signal,
+      timeoutMs: 15_000,
+    });
+    const meting: SharePointRetrievalVeiligeMeting = {
+      ronde: opdracht.ronde,
+      vraagcode: "S00",
+      route: "drive_search_extract",
+      resultaat: uitkomst.status === "toegestaan" ? "geslaagd" : "mislukt",
+      foutcategorie: uitkomst.status === "toegestaan" ? null : uitkomst.status,
+      foutcode: uitkomst.foutcode,
+      gevondenFixtures: [],
+      recall: 0,
+      locatorDekking: 0,
+      versieDekking: 0,
+      previewDekking: 0,
+      latencyMs: uitkomst.latencyMs,
+      microsoftCalls: uitkomst.microsoftCalls,
+      responseBytes: 0,
+      contentBytes: 0,
+      throttles: 0,
+      retries: 0,
+      versieVingerafdrukken: [],
+    };
+    await audit(ctx, meting);
+    return meting;
+  }
   let gepauzeerd = false;
   const onFase = vraag.pauzeVoorLaatsteControle
     ? async (fase: SpikeFase, document?: SpikeDocumentMapping) => {
@@ -187,10 +221,7 @@ export async function voerSharePointRetrievalPreviewSmokeUit(
 
   const uitkomst = await voerSharePointRetrievalSpikeUit({
     leesBron,
-    delegatedToken: async () => {
-      const token = await sharepointAccessToken({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId });
-      return { accessToken: token.accessToken, tenantId: token.tenantId, actorObjectId: token.objectId };
-    },
+    delegatedToken,
     onFase,
   }, {
     route: opdracht.route,

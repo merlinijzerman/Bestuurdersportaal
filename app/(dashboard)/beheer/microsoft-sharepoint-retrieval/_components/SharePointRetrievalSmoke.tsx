@@ -75,6 +75,14 @@ export default function SharePointRetrievalSmoke() {
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-line bg-white p-5">
+        <h2 className="font-bold text-ink">Permission-probe</h2>
+        <p className="mt-1 text-sm text-muted">Test één vaste, inhoudsloze DriveItem-zoekactie. Er worden geen documenten geopend of gedownload.</p>
+        <button type="button" disabled={bezig} onClick={() => void run([{ scenario: "S00", route: "drive_search_extract", ronde: 1 }])} className="mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          Permission-probe uitvoeren
+        </button>
+      </section>
+
+      <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="font-bold text-ink">Basisvergelijking</h2>
         <p className="mt-1 text-sm text-muted">Voert S02–S04 via beide routes uit, drie rondes per route. Alleen aantallen, tijden, categorieën en korte versiehashes verschijnen hieronder.</p>
         <button type="button" disabled={bezig} onClick={() => void run(basisTaken)} className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -108,7 +116,7 @@ export default function SharePointRetrievalSmoke() {
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead><tr className="border-b border-line text-muted"><th className="py-2">Scenario</th><th>Route</th><th>Ronde</th><th>Resultaat</th><th>Fixtures</th><th>Latency</th><th>Calls</th><th>Bytes</th></tr></thead>
-              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
+              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}{m.foutcode ? ` · ${m.foutcode}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
             </table>
           </div>
         </section>
