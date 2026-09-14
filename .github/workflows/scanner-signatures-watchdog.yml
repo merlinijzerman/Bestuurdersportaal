@@ -1,0 +1,80 @@
+name: Scanner-signatures Watchdog
+
+on:
+  schedule:
+    # Onafhankelijk van de dagelijkse deployment om stille scheduler- of
+    # deployfouten ruim vóór de zeven-dagenblokkade zichtbaar te maken.
+    - cron: "43 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: scanner-signatures-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    name: Productiescanner-freshness bewaken
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      INCIDENT_TITLE: "[OPS] Productiescanner-signatures verouderd"
+      SCANNER_HEALTH_URL: https://project-pnkzy.vercel.app/health
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Node.js instellen
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Health en signatureouderdom controleren
+        id: health
+        continue-on-error: true
+        run: |
+          node scripts/verify-scanner-health.mjs "$SCANNER_HEALTH_URL" \
+            --max-signature-age-hours 48 \
+            --max-image-age-minutes 1800 \
+            --attempts 6 \
+            --interval-seconds 10
+
+      - name: Blijvend incident openen
+        if: ${{ always() && steps.health.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          nummer="$(gh issue list --state open --limit 100 --json number,title \
+            --jq '.[] | select(.title == "[OPS] Productiescanner-signatures verouderd") | .number' \
+            | head -n 1)"
+          if [ -z "$nummer" ]; then
+            gh issue create \
+              --title "$INCIDENT_TITLE" \
+              --body "De onafhankelijke productiescanner-watchdog is rood. De signatures of scannerimage zijn niet tijdig ververst, of het health-endpoint is niet gezond. Controleer de dagelijkse workflow en herstel vóórdat de zeven-dagenpoort uploads blokkeert. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            echo "Bestaand incident #$nummer blijft open."
+          fi
+
+      - name: Hersteld incident sluiten
+        if: ${{ always() && steps.health.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          nummer="$(gh issue list --state open --limit 100 --json number,title \
+            --jq '.[] | select(.title == "[OPS] Productiescanner-signatures verouderd") | .number' \
+            | head -n 1)"
+          if [ -n "$nummer" ]; then
+            gh issue close "$nummer" \
+              --comment "Automatisch gesloten: de onafhankelijke healthcontrole is weer groen in run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+          fi
+
+      - name: Ongezonde scanner fail-closed zichtbaar houden
+        if: ${{ always() && steps.health.outcome == 'failure' }}
+        shell: bash
+        run: |
+          echo "::error title=Productiescanner ongezond::Een blijvend incident is geopend of bleef open."
+          exit 1
