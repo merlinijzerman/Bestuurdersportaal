@@ -1,8 +1,8 @@
 # #353 — M365 Fase 5 · T0 live SharePoint-retrievalspike
 
-Status: **gecontroleerde live-pilotvoorbereiding gereed; permissionprobe operationeel geblokkeerd vóór Graph; productiewiring blijft geblokkeerd**
-Onderzoeksdatum: **10 september 2026**
-Productiewiring: **geen**
+Status: **Preview-runner gereed voor de live PGB-meetrondes; productiewiring blijft geblokkeerd tot die metingen zijn afgerond**
+Onderzoeksdatum: **10–14 september 2026**
+Productiewiring: **geen; uitsluitend een dubbel begrensde Preview-smokeroute en beheerpagina**
 
 ## Uitkomst in het kort
 
@@ -10,17 +10,17 @@ De voorlopige voorkeursroute is **drive-/root-scoped Graph search met delegated 
 
 Microsoft Search (`POST /search/query`) blijft als vergelijkingsroute in het harnas. Die route levert security-trimmed summaries en een Microsoft-rang, maar geen betrouwbaar pagina-/dia- of alinealocator en geen gegarandeerd eTag/cTag in de hit. Bovendien noemt Microsoft voor driveItem-search via deze API delegated `Files.Read.All`/`Sites.Read.All`, terwijl de huidige connector uitsluitend `Sites.Selected` toestaat. Dat is voor deze toepassing een ongunstiger permissionprofiel.
 
-Het go/no-go is daarom nu **NO-GO voor een productieadapter**. Niet omdat de route technisch ongeschikt is, maar omdat de Definition of Done live bewijs met de #354-set vereist en die set nog niet bestaat. Er is geen consent, appregistratie, Preview-vlag of productiepad gewijzigd.
+Het go/no-go blijft daarom **NO-GO voor een productieadapter**. De vaste #385-acceptatieset staat inmiddels in de PGB-testsite en de read-grant met delegated `Sites.Selected` is ingericht. De eerdere lokale uitvoerblokkade is opgelost met een server-side Preview-runner: die gebruikt de bestaande geheime runtimeconfiguratie zonder geheimen naar de browser te sturen. De drie vergelijkrondes en de tijdens-verzoekintrekking moeten nog live worden uitgevoerd en beoordeeld. Er is geen bredere consenttoestemming, chatwiring, persistente inhoudsopslag of productieactivatie toegevoegd.
 
 ## Branch- en afhankelijkhedeninventaris
 
-De spike staat op `codex/353-sharepoint-retrieval-spike`, opnieuw gebaseerd op `origin/preview` nadat PR #352 en cancellation-PR #355 op 10 september 2026 merge-den. De tijdelijke contractspiegel is verwijderd: `SpikeBronresultaat` breidt nu het echte `Bronresultaat` uit en een niet-aangesloten factory implementeert in de compiler en tests het echte `RetrievalAdapter`-contract. De productiegrens-test verbiedt imports vanuit `app`, `core`, `platform` en `fondsen`.
+De spike staat op `codex/353-sharepoint-retrieval-spike`, opnieuw gebaseerd op de actuele `origin/preview`. De tijdelijke contractspiegel is verwijderd: `SpikeBronresultaat` breidt het echte `Bronresultaat` uit en de niet-aangesloten factory implementeert in compiler en tests het echte `RetrievalAdapter`-contract. Eén expliciete uitzondering op de oorspronkelijke productiegrens is toegevoegd: een `server-only` Preview-bridge mag het harnas aanroepen vanuit precies één dedicated API-route. Chat, zoeken, vergelijken, AI-gateway, `platform` en `fondsen` mogen het prototype niet importeren; de boundarytest borgt dit.
 
 | Afhankelijkheid | Actuele status | Gevolg voor #353 |
 |---|---|---|
 | [PR #352 — typed retrievalcontract](https://github.com/merlinijzerman/Bestuurdersportaal/pull/352) | Gemergd | Contractmapping en rebase uitgevoerd |
 | [PR #355 — cancellation en deadline](https://github.com/merlinijzerman/Bestuurdersportaal/pull/355) | Gemergd | Spike opnieuw gerebased; uiteindelijke adapter kan de gedeelde grendel gebruiken |
-| [Issue #354 — PGB-testbibliotheek en acceptatieset](https://github.com/merlinijzerman/Bestuurdersportaal/issues/354) | Open | Positieve set kan met expliciet akkoord worden opgebouwd; tweede identiteit blijft nodig voor het negatieve A/B-rechtenbewijs |
+| [Issue #385 — PGB-testbibliotheek en acceptatieset](https://github.com/merlinijzerman/Bestuurdersportaal/issues/385) | In uitvoering | Vaste synthetische fixtures en rechtenstructuur staan klaar; live vergelijkrondes, tijdens-verzoekintrekking en replay volgen via de Preview-runner |
 
 ## Onderzochte officiële routes
 
@@ -47,7 +47,9 @@ De bestaande code en besluit 0210 staan alleen delegated `Sites.Selected` toe. G
 
 ## Prototype en security-eigenschappen
 
-De standalone adapter staat onder `scripts/spike/sharepoint-retrieval/` en kan alleen via de lokale CLI worden gestart. Hij gebruikt voor een live run de bestaande `sharepointAccessToken`, `leesSharePointBron` en `leesSharePointDocument`-grenzen. Er is geen service-roleclient.
+De standalone adapter staat onder `scripts/spike/sharepoint-retrieval/`. Naast de lokale CLI is er één gecontroleerde Preview-ingang: `/beheer/microsoft-sharepoint-retrieval` roept via een dedicated `server-only`-bridge dezelfde adapter aan. Deze ingang vereist gelijktijdig `SEED_DOELOMGEVING=preview`, `VERCEL_ENV=preview`, fonds-slug `pgb`, de bestaande Microsoft-/SharePoint-pilotpoorten, de extra vlag `microsoft_sharepoint_retrieval_spike` en beheerdercapability. Buiten die combinatie antwoordt de route neutraal met 404. Er is geen service-roleclient.
+
+De browser kan uitsluitend een vaste scenario-, route- en rondecode kiezen. De vragen komen server-side uit de #385-set; tokens, Graph-identifiers, SharePoint-paden, lokale refs, passages en inhoud verlaten de server niet. De respons bevat alleen fixturecodes, tellingen, timing, bytes, foutcategorieën en korte versiehashes. S08 pauzeert na de eerste rechten-/versiecontrole, zodat toegang tijdens hetzelfde verzoek kan worden ingetrokken; de laatste controle moet de kandidaat verwijderen. S09 bouwt als nieuw verzoek alle bron- en rechtenstaat opnieuw op. Een gevonden fixture in S08 of S09 wordt expliciet als `intrekking_niet_effectief` afgekeurd.
 
 De delegated identiteit wordt nu op drie punten exact gebonden: portaalactor aan de configuratiegebruiker, tenant aan de bron en `actorObjectId` uit het opgehaalde token aan de private `microsoft_object_id` uit diezelfde verbinding. Een gevulde maar afwijkende OID binnen dezelfde tenant faalt vóór de eerste Graph-call.
 
@@ -72,16 +74,16 @@ Negatieve scenario's zijn hermetisch gedekt voor ingetrokken of afwezige toegang
 
 | Eis | Hermetisch bewijs | Live PGB-bewijs |
 |---|---|---|
-| delegated actor-, tenant- en fondsgrens | Ja | **Open — #354** |
-| exacte eTag/cTag vóór/na verwerking | Ja | **Open — #354** |
-| permissionproof met actor + correlation-id | Ja | **Open — #354** |
-| actuele bronconfiguratieherlezing | Ja, tweemaal | **Open — #354** |
-| intrekking/configuratiedrift geeft nul kandidaten | Ja | **Open — #354** |
-| timeout/cancellation/throttling/paginering | Ja, synthetische Graph-responses inclusief onveilig vervolgpad | **Open — #354** |
-| Word/PDF/PowerPoint passage en locator | PPTX bewezen; productextractors voor DOCX/PDF hergebruikt | **Open — #354** |
-| drie rondes, recall, mediaan/p95, calls en bytes | Harnas gereed | **Open — #354** |
+| delegated actor-, tenant- en fondsgrens | Ja | **Runner gereed; live ronde open** |
+| exacte eTag/cTag vóór/na verwerking | Ja | **Runner gereed; live ronde open** |
+| permissionproof met actor + correlation-id | Ja | **Voor-verzoekproef groen; tijdens-verzoekproef open** |
+| actuele bronconfiguratieherlezing | Ja, tweemaal | **Runner gereed; live ronde open** |
+| intrekking/configuratiedrift geeft nul kandidaten | Ja | **Voor-verzoekintrekking groen; S08/S09 open** |
+| timeout/cancellation/throttling/paginering | Ja, synthetische Graph-responses inclusief onveilig vervolgpad | **Runner gereed; live foutpadmetingen open** |
+| Word/PDF/PowerPoint passage en locator | PPTX bewezen; productextractors voor DOCX/PDF hergebruikt | **Fixtures staan klaar; drie live rondes open** |
+| drie rondes, recall, mediaan/p95, calls en bytes | Harnas en Preview-bediening gereed | **Uitvoering open** |
 | geen persistente inhoud/chunks/embeddings | Ja, code- en boundarygate | Nog te controleren in runbewijs |
-| drive/root permissionprobe met bestaande `Sites.Selected` | Harnas en veilige uitvoervorm gereed | Uitvoering gestart op 10-09-2026, maar vóór tokenuitgifte/Graph gestopt: benodigde `preview-stable`-waarden met type `Secret` zijn niet lokaal exporteerbaar; **0 Graph-calls**, dus geen latency- of permissionuitkomst |
+| drive/root permissionprobe met bestaande `Sites.Selected` | Harnas en veilige uitvoervorm gereed | Server-side Preview-runner neemt de niet-exporteerbare runtimegeheimen over; uitvoering volgt na activering van alleen de PGB-smokevlag |
 
 Er worden bewust geen gesimuleerde milliseconden als live latency gerapporteerd. Na #354 schrijft de runner per vraag en route drie of meer inhoudsvrije meetrijen en berekent hij mediaan/p95, recall, locator-, versie- en previewdekking, Graph-calls, response-/contentbytes, retries, throttles en foutcategorieën.
 
@@ -95,7 +97,7 @@ De acht vereiste `MICROSOFT_*`-namen zijn exact eenmaal aanwezig in Vercel custo
 
 Daarom heeft de runner geen vaultverbinding of delegated token geopend en is geen Graph-request gedaan. Tijdelijke helpers en de `0600`-config zijn verwijderd; er is geen secretbestand en geen meetbestand achtergebleven. Dit is een operationele blokkade, geen negatieve permissionmeting: over `Sites.Selected` versus `Files.Read` kan hieruit niets worden geconcludeerd.
 
-Veilige vervolgroutes zijn beperkt tot: (a) de vier oorspronkelijke secretwaarden vanuit de bronsecretmanager tijdelijk in een lokaal, genegeerd `0600`-bestand aanbieden en daarna verwijderen, of (b) een afzonderlijk geautoriseerde, niet-productie uitvoercontext waarin die secrets runtime-only beschikbaar zijn. Secrets tijdelijk zichtbaar maken, scopes verbreden of een probe-endpoint in de applicatie toevoegen hoort niet bij deze spike.
+De gekozen vervolgroute is een afzonderlijk geautoriseerde, Preview-only uitvoercontext waarin de geheimen runtime-only beschikbaar zijn. Die route is dubbel op Preview en PGB begrensd, gebruikt alleen vaste synthetische invoer en staat los van alle productieretrieval. Geheimen zichtbaar maken en scopes verbreden blijven uitgesloten.
 
 ## Beslismatrix live Graph versus Azure AI Search
 
@@ -132,7 +134,7 @@ Deze grenzen zijn werkhypothesen en moeten vóór de live ronde door opdrachtgev
 Voor de productieadapter zijn minimaal nodig:
 
 1. PR-C met de V1–V5-toelatingspoort uit F4-T2-1;
-2. afronding van #354 met de synthetische bibliotheek, tweede testidentiteit, rechtenmatrix en resetprocedure;
+2. afronding van de live #385-rondes met de synthetische bibliotheek, rechtenmatrix en resetprocedure;
 3. expliciet consentbesluit als de bestaande `Sites.Selected`-scope de voorkeursroute niet draagt;
 4. een afzonderlijk ticket voor productie-adapterwiring; chat/zoeken/vergelijken blijven tot die tijd onaangeraakt;
 5. alleen bij overschrijding van de meetdrempels: een begrensde Azure AI Search-spike, zonder automatische fallback.
@@ -147,17 +149,19 @@ npm run typecheck
 npm run security:secrets
 ```
 
-De live runner weigert productie/CI, vereist een genegeerde `.local.json` met modus 0600 en produceert uitsluitend gesaneerde JSON. Intrekking en configuratiewijziging kunnen met de gedocumenteerde handmatige pauzefase midden in een request worden uitgevoerd.
+De lokale live runner weigert productie/CI, vereist een genegeerde `.local.json` met modus 0600 en produceert uitsluitend gesaneerde JSON. De Preview-runner staat beschreven in `security/MICROSOFT-365-F5-RETRIEVAL-SMOKE.md`; hij gebruikt uitsluitend runtimegeheimen, vaste scenario's en een gesaneerde SSE-uitvoer. Intrekking kan met de gedocumenteerde pauzefase midden in één request worden uitgevoerd.
 
 ## Uitgevoerde verificatie
 
 | Controle | Resultaat |
 |---|---|
 | spike-adaptertests | 14/14 groen |
-| statische productiegrens | 3/3 groen |
+| statische productiegrens | 4/4 groen, inclusief de ene toegestane `server-only` Preview-bridge |
+| Preview-runnercontract | 4/4 cross-tenant contracttests en 4/4 kernsanitytests groen |
 | TypeScript | groen |
-| bestaande lokale PR-gates | groen; 538 cross-tenant tests groen |
+| bestaande lokale PR-gates | groen; 729 cross-tenant tests groen |
+| unit-/auditinventaris | 144/144 Vitest groen; inventaris vers gegenereerd met 118 geklasseerde handlers |
 | productiebuild | groen met de repository-eigen niet-geheime CI-placeholders |
-| DB-laag van de gates | overgeslagen omdat `TEST_DATABASE_URL` niet was gezet; deze spike wijzigt geen database of migratie |
+| DB-laag van de gates | overgeslagen omdat geen lokale Supabase-CLI/testdatabase beschikbaar was; deze tranche wijzigt geen database, migratie, grant of RLS-policy |
 
 De lokale gates zijn uitgevoerd met Node 24.15.0 terwijl `package.json` Node 22.x voorschrijft. Dat leverde geen test- of compileerfout op, maar CI op Node 22 blijft leidend.

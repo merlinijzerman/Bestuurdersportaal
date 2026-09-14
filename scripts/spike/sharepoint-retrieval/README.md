@@ -1,6 +1,8 @@
 # #353 — lokale live SharePoint-retrievalspike
 
-Deze tooling is niet aan chat, zoeken, vergelijken, de AI-gateway of een Next-route gekoppeld. De enige ingang is een expliciete lokale CLI met `M365_RETRIEVAL_SPIKE=local`; CI, Vercel en `NODE_ENV=production` worden geweigerd. De statische gate `npm run test:spike-boundary` bewaakt dat productiecode de spike niet importeert. De prototypefactory implementeert wel het definitieve `RetrievalAdapter`-contract uit gemergde PR #352, zodat de mapping compile-time en hermetisch bewezen is zonder hem te wiren.
+Deze tooling is niet aan chat, zoeken, vergelijken of de AI-gateway gekoppeld. Naast de expliciete lokale CLI bestaat één serverbrug voor de PGB Preview-smoke. Die brug is alleen bereikbaar via `/beheer/microsoft-sharepoint-retrieval` en weigert buiten Vercel Preview, buiten fonds `pgb`, zonder de bestaande Microsoft-/SharePoint-poorten, zonder de extra vlag `microsoft_sharepoint_retrieval_spike=true` of zonder de beheerder-capability. De statische gate `npm run test:spike-boundary` bewaakt dat geen ander productiepad de spike importeert. De lokale CLI blijft `M365_RETRIEVAL_SPIKE=local` eisen en weigert CI, Vercel en productie.
+
+De browser stuurt uitsluitend een vaste scenario-, route- en rondecode. De server kiest de vooraf vastgelegde synthetische vraag uit #385. Tokens, passages, lokale refs en private site-/drive-/item-id's verlaten de server niet. De respons bevat alleen categorieën, tellingen, timing, bytes, fixturecodes en korte versiehashes.
 
 ## Wat de twee routes meten
 
@@ -36,6 +38,8 @@ npm run spike:m365-permission-probe -- --config=.m365-permission-probe.local.jso
 ```
 
 Gebruik uitsluitend de reeds verleende `Sites.Selected`-verbinding. Een uitkomst `toestemming_geweigerd` is bewijs om eerst een afzonderlijk consentbesluit voor delegated `Files.Read` voor te leggen, geen toestemming om scopes automatisch te wijzigen.
+
+Voor de Preview-ingang geldt aanvullend het runbook `security/MICROSOFT-365-F5-RETRIEVAL-SMOKE.md`. De extra vlag staat standaard uit en wordt na de meetronde direct weer uitgezet.
 
 ## Voorwaarden voor een live run
 

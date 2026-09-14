@@ -16,13 +16,27 @@ function bronbestanden(map) {
   return resultaat;
 }
 
-test("#353-prototype is statisch onbereikbaar vanuit productiehandlers en productiekern", () => {
-  const overtredingen = [];
+test("#353-prototype is alleen bereikbaar via de ene Preview-only serverbrug", () => {
+  const toegestaneBrug = "core/lib/microsoft-sharepoint-retrieval-smoke.ts";
+  const directeImports = [];
   for (const bestand of [...bronbestanden("app"), ...bronbestanden("core"), ...bronbestanden("platform"), ...bronbestanden("fondsen")]) {
     const inhoud = readFileSync(resolve(root, bestand), "utf8");
-    if (inhoud.includes(spikePad) || inhoud.includes("sharepoint-retrieval/prototype") || inhoud.includes("voerSharePointRetrievalSpikeUit")) overtredingen.push(bestand);
+    if (bestand === toegestaneBrug) continue;
+    if (inhoud.includes(spikePad) || inhoud.includes("sharepoint-retrieval/prototype") || inhoud.includes("voerSharePointRetrievalSpikeUit")) directeImports.push(bestand);
   }
-  assert.deepEqual(overtredingen, [], `spike is bereikbaar vanuit productiecode: ${overtredingen.join(", ")}`);
+  assert.deepEqual(directeImports, [], `spike is buiten de serverbrug bereikbaar: ${directeImports.join(", ")}`);
+
+  const brug = readFileSync(resolve(root, toegestaneBrug), "utf8");
+  assert.match(brug, /import "server-only"/);
+  assert.match(brug, /scripts\/spike\/sharepoint-retrieval\/prototype/);
+
+  const brugImports = [];
+  for (const bestand of [...bronbestanden("app"), ...bronbestanden("core"), ...bronbestanden("platform"), ...bronbestanden("fondsen")]) {
+    if (bestand === toegestaneBrug) continue;
+    const inhoud = readFileSync(resolve(root, bestand), "utf8");
+    if (inhoud.includes("microsoft-sharepoint-retrieval-smoke\"")) brugImports.push(bestand);
+  }
+  assert.deepEqual(brugImports, ["app/api/microsoft/sharepoint/retrieval-smoke/route.ts"]);
 });
 
 test("#353-runner is alleen een expliciet lokaal npm-script en hangt niet onder build, start, gates of test", () => {
@@ -42,5 +56,19 @@ test("#353-prototype wordt niet door Next of TypeScript naar een productie-entry
     let inhoud = "";
     try { inhoud = readFileSync(pad, "utf8"); } catch { continue; }
     assert.doesNotMatch(inhoud, /scripts\/spike\/sharepoint-retrieval/);
+  }
+});
+
+test("#353-Previewbrug is niet bereikbaar vanuit chat, zoeken, vergelijken of de retrievalcompositie", () => {
+  for (const bestand of [
+    "app/api/chat/route.ts",
+    "app/api/zoeken/route.ts",
+    "app/api/vergelijk/route.ts",
+    "core/lib/retrieval/adapter-factory.ts",
+    "core/lib/retrieval/orchestratie.ts",
+  ]) {
+    let inhoud = "";
+    try { inhoud = readFileSync(resolve(root, bestand), "utf8"); } catch { continue; }
+    assert.doesNotMatch(inhoud, /microsoft-sharepoint-retrieval-smoke|sharepoint-retrieval\/prototype/);
   }
 });

@@ -99,10 +99,14 @@ test("Microsoft Search levert alleen na dubbele rechten-, versie-, config- en pr
   assert.equal(uitkomst.kandidaten.length, 1);
   const kandidaat = uitkomst.kandidaten[0];
   assert.equal(kandidaat.ref, IDS.ref);
-  assert.equal(kandidaat.documentIdentiteit.documentId, IDS.ref);
+  assert.equal(kandidaat.documentIdentiteit.id, IDS.ref);
+  assert.deepEqual(kandidaat.passageIdentiteit, { id: `${IDS.ref}:live` });
+  assert.equal(kandidaat.bronregistratieRef, IDS.bron);
   assert.deepEqual(kandidaat.versie, { soort: "etag", waarde: '"v1"', gecontroleerdOp: "2026-09-10T09:00:00.000Z" });
   assert.deepEqual(kandidaat.toegangscontrole, {
     toegestaan: true,
+    resultaatRef: IDS.ref,
+    bronregistratieRef: IDS.bron,
     gebruikerId: IDS.actor,
     correlationId: opdracht("microsoft_search").correlationId,
     gecontroleerdOp: "2026-09-10T09:00:00.000Z",
@@ -126,6 +130,7 @@ test("de spike implementeert het gemergde RetrievalAdapter-contract zonder produ
     strategieen: ["gericht", "volledig", "vergelijk"],
     ondersteundeFilters: [],
     versiebewijs: true,
+    versiebeleid: { sterk: ["etag", "ctag"], gedegradeerd: [] },
     permissionProof: true,
     preview: true,
     cancellation: true,
@@ -137,6 +142,7 @@ test("de spike implementeert het gemergde RetrievalAdapter-contract zonder produ
     taaktype: "chat_generatie",
     bronbeleid: { bronsoorten: ["sharepoint"] },
     correlationId: opdracht("microsoft_search").correlationId,
+    verzoekStartOp: "2026-09-10T09:00:00.000Z",
   }, {
     naam: "contractproef",
     origineleVraag: "Wat is de waarde?",

@@ -529,14 +529,18 @@ async function maakKandidaat(
     bronsoort: "sharepoint",
     titel: (laatsteCheck.name ?? mapping.titel).slice(0, 240),
     documentIdentiteit: {
-      documentId: mapping.ref,
+      id: mapping.ref,
       bibliotheek: bronEerst.driveNaam,
       bron: bronEerst.bronId,
       fondsId: bronEerst.fondsId,
     },
+    passageIdentiteit: { id: `${mapping.ref}:live` },
     versie: { ...laatsteVersie, gecontroleerdOp },
+    bronregistratieRef: bronEerst.bronId,
     toegangscontrole: {
       toegestaan: true,
+      resultaatRef: mapping.ref,
+      bronregistratieRef: bronEerst.bronId,
       gebruikerId: bronEerst.actorId,
       correlationId: opdracht.correlationId,
       gecontroleerdOp,
@@ -560,7 +564,7 @@ function alsSpikeError(fout: unknown): SpikeErrorType {
 }
 
 /**
- * Hoofdingang van de niet-aangesloten adapter. Elke fout levert nul kandidaten;
+ * Hoofdingang van het geïsoleerde prototype. Elke fout levert nul kandidaten;
  * er bestaat hier geen providerfallback en er wordt geen modelcontext gebouwd.
  */
 export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, opdracht: SpikeOpdracht): Promise<SpikeUitkomst> {
@@ -726,6 +730,7 @@ const CONTRACT_CAPABILITIES: AdapterCapabilities = {
   strategieen: ["gericht", "volledig", "vergelijk"],
   ondersteundeFilters: [],
   versiebewijs: true,
+  versiebeleid: { sterk: ["etag", "ctag"], gedegradeerd: [] },
   permissionProof: true,
   preview: true,
   cancellation: true,
@@ -740,7 +745,8 @@ function contractFout(fout: SpikeUitkomst["fout"]): RetrievalFoutcategorie | und
 
 /**
  * Compile-time en runtime brug naar het definitieve contract uit PR #352.
- * Deze brug is alleen voor de spike; de boundarygate verbiedt productie-imports.
+ * Deze brug is alleen voor de spike; de boundarygate staat uitsluitend de
+ * Preview-smokerunner toe en verbiedt de gewone productiepaden.
  */
 export function alsContractUitkomst(uitkomst: SpikeUitkomst): AdapterUitkomst {
   const fout = contractFout(uitkomst.fout);
@@ -757,8 +763,8 @@ export function alsContractUitkomst(uitkomst: SpikeUitkomst): AdapterUitkomst {
 }
 
 /**
- * Niet-aangesloten RetrievalAdapter voor contracttests en de live spike.
- * Geen enkele productiecompositie importeert deze factory.
+ * RetrievalAdapter voor contracttests en de geïsoleerde live spike.
+ * Geen chat-, zoek-, vergelijk- of productiecompositie importeert deze factory.
  */
 export function maakSharePointSpikeContractAdapter(deps: SpikeDependencies, route: SpikeRoute): RetrievalAdapter {
   return {

@@ -89,6 +89,11 @@ export const LIMIETEN = {
   // inlog-start (/auth/microsoft-login/start) gebruikt dezelfde getallen per
   // IP+host in core/lib/microsoft-login-ratelimit-core.ts (geen auth.uid()).
   microsoft_login_start: { endpoint: "microsoft_login_start", limiet: 20, venster: "10 minutes" },
+  // #353 — uitsluitend de vaste PGB Preview-smoke. Eén basisset bestaat uit
+  // 18 metingen; 30/uur laat die set plus S08/S09/herstel toe, maar geen
+  // onbegrensde Graph-downloadlus. De wrapper behandelt deze extern kostende
+  // route fail-closed.
+  microsoft_sharepoint_retrieval_spike: { endpoint: "microsoft_sharepoint_retrieval_spike", limiet: 30, venster: "1 hour" },
 } as const satisfies Record<string, Limiet>;
 
 /** De limietnamen uit het benoemde register — de enige echte declaratiewaarden

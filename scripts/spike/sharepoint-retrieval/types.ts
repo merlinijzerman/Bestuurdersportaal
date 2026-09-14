@@ -1,5 +1,6 @@
 // #353 — spike-uitbreidingen op het definitieve contract uit gemergde PR #352.
-// De productiecode importeert deze map nooit; de boundarygate bewaakt dat.
+// Alleen de ene Preview-only serverbrug mag deze map importeren; de boundarygate
+// verbiedt elk chat-, zoek-, vergelijk- of productieadapterpad.
 import type { Bronresultaat, Toegangsbewijs } from "../../../core/lib/retrieval/contract";
 
 export type SpikeRoute = "microsoft_search" | "drive_search_extract";
