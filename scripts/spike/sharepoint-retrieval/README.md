@@ -2,7 +2,7 @@
 
 Deze tooling is niet aan chat, zoeken, vergelijken of de AI-gateway gekoppeld. Naast de expliciete lokale CLI bestaat één serverbrug voor de PGB Preview-smoke. Die brug is alleen bereikbaar via `/beheer/microsoft-sharepoint-retrieval` en weigert buiten Vercel Preview, buiten fonds `pgb`, zonder de bestaande Microsoft-/SharePoint-poorten, zonder de extra vlag `microsoft_sharepoint_retrieval_spike=true` of zonder de beheerder-capability. De statische gate `npm run test:spike-boundary` bewaakt dat geen ander productiepad de spike importeert. De lokale CLI blijft `M365_RETRIEVAL_SPIKE=local` eisen en weigert CI, Vercel en productie.
 
-De browser stuurt uitsluitend een vaste scenario-, route- en rondecode. De server kiest de vooraf vastgelegde synthetische vraag uit #385. Tokens, passages, lokale refs en private site-/drive-/item-id's verlaten de server niet. De respons bevat alleen categorieën, tellingen, timing, bytes, fixturecodes en korte versiehashes.
+De browser stuurt uitsluitend een vaste scenario-, route- en rondecode. De server kiest de vooraf vastgelegde synthetische vraag uit #385. Scenario S00 voert uitsluitend de vaste inhoudsloze permissionprobe uit. Tokens, passages, lokale refs en private site-/drive-/item-id's verlaten de server niet. De respons bevat alleen categorieën, veilige foutcodes, tellingen, timing, bytes, fixturecodes en korte versiehashes.
 
 ## Wat de twee routes meten
 
@@ -27,7 +27,7 @@ De contentroute volgt redirects niet automatisch. De eerste Graph-call verwacht 
 
 ## Inhoudsvrije permissionprobe
 
-De permissionprobe heeft geen fixtures of tweede identiteit nodig. Hij valideert fonds, bron, configuratiegebruiker, tenant en de exacte private Microsoft-object-id, en doet daarna uitsluitend één drive/root-search met een vaste onwaarschijnlijke term. Eventuele hits worden genegeerd. De uitvoer bevat exact `status`, `latencyMs` en `microsoftCalls`.
+De permissionprobe heeft geen fixtures of tweede identiteit nodig. Hij valideert fonds, bron, tenant en de exacte private Microsoft-object-id van de uitvoerende gebruiker, en doet daarna uitsluitend één drive/root-search met een vaste onwaarschijnlijke term. Eventuele hits worden genegeerd. De uitvoer bevat alleen `status`, een veilige `foutcode`, `latencyMs` en `microsoftCalls`. In Preview is dezelfde probe als S00 op de beheerpagina beschikbaar.
 
 Kopieer de minimale voorbeeldconfig, vul de bestaande lokale fonds- en gebruiker-id in en zet modus 0600:
 

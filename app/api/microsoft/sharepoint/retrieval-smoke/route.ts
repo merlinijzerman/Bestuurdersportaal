@@ -41,6 +41,9 @@ export const POST = withFondsRoute({
 
   const invoer = schema.safeParse(await req.json().catch(() => null));
   if (!invoer.success) return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  if (invoer.data.scenario === "S00" && invoer.data.route !== "drive_search_extract") {
+    return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
 
   const encoder = new TextEncoder();
   const afbreken = new AbortController();

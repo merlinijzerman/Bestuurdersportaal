@@ -379,12 +379,17 @@ test("permissionprobe doet uitsluitend één inhoudsvrije drive/root-search", as
     assert.equal(new Headers(init.headers).get("Authorization"), "Bearer geheim-token");
     return json({ value: [] });
   }));
-  assert.deepEqual(toegestaan, { status: "toegestaan", latencyMs: 0, microsoftCalls: 1 });
+  assert.deepEqual(toegestaan, { status: "toegestaan", foutcode: null, latencyMs: 0, microsoftCalls: 1 });
 
   const geweigerd = await voerSharePointPermissionProbeUit(basisDeps(async () => json({}, 403)));
   assert.equal(geweigerd.status, "toestemming_geweigerd");
+  assert.equal(geweigerd.foutcode, "graph_toestemming");
   assert.equal(geweigerd.microsoftCalls, 1);
-  assert.equal(Object.keys(geweigerd).sort().join(","), "latencyMs,microsoftCalls,status");
+  assert.equal(Object.keys(geweigerd).sort().join(","), "foutcode,latencyMs,microsoftCalls,status");
+
+  const ongeldigeVraag = await voerSharePointPermissionProbeUit(basisDeps(async () => json({}, 400)));
+  assert.equal(ongeldigeVraag.status, "providerfout");
+  assert.equal(ongeldigeVraag.foutcode, "graph_bad_request");
 });
 
 test("standaardWacht ruimt zijn abort-listener ook na normaal aflopen op", async () => {

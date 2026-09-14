@@ -32,7 +32,7 @@ export type SharePointRetrievalVeiligeMeting = {
 export const SHAREPOINT_RETRIEVAL_SMOKE_FLAG = "microsoft_sharepoint_retrieval_spike";
 export const SHAREPOINT_RETRIEVAL_SMOKE_WACHT_MS = 120_000;
 
-export const SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS = ["S02", "S03", "S04", "S08", "S09", "S08R"] as const;
+export const SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS = ["S00", "S02", "S03", "S04", "S08", "S09", "S08R"] as const;
 export type SharePointRetrievalSmokeScenario = typeof SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS[number];
 
 export const SHAREPOINT_RETRIEVAL_SMOKE_ROUTES = ["drive_search_extract", "microsoft_search"] as const satisfies readonly SharePointRetrievalSmokeRoute[];
@@ -47,6 +47,14 @@ type SmokeVraag = {
 };
 
 const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
+  S00: {
+    code: "S00",
+    soort: "negatief",
+    vraag: "m365-permission-probe-7f4c1d9e-no-match",
+    verwachteFixtures: [],
+    benodigdeFixtures: [],
+    pauzeVoorLaatsteControle: false,
+  },
   S02: {
     code: "S02",
     soort: "gericht",

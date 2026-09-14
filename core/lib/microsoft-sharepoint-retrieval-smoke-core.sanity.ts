@@ -25,7 +25,8 @@ test("#353: Preview-grendel vereist beide exacte omgevingswaarden", () => {
 
 test("#353: alleen vaste routes, vragen en fixturecodes uit #385 zijn inzetbaar", () => {
   assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_ROUTES, ["drive_search_extract", "microsoft_search"]);
-  assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS, ["S02", "S03", "S04", "S08", "S09", "S08R"]);
+  assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS, ["S00", "S02", "S03", "S04", "S08", "S09", "S08R"]);
+  assert.equal(sharePointRetrievalSmokeVraag("S00").vraag, "m365-permission-probe-7f4c1d9e-no-match");
   const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "tests/e2e/fixtures/pgb-sharepoint/manifest.json"), "utf8"));
   for (const scenario of ["S02", "S03", "S04", "S08", "S09"] as const) {
     assert.equal(sharePointRetrievalSmokeVraag(scenario).vraag, manifest.scenarios.find((x: { code: string }) => x.code === scenario)?.question);

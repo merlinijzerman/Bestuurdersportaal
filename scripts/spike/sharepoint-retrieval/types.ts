@@ -32,6 +32,7 @@ export type SpikeFoutcode =
   | "document_verwijderd"
   | "extractie_leeg"
   | "graph_annulering"
+  | "graph_bad_request"
   | "graph_response"
   | "graph_timeout"
   | "graph_ratelimit"
@@ -128,6 +129,7 @@ export interface SpikeUitkomst {
 /** Uitsluitend inhoudsvrij bewijs voor de delegated permissionprobe. */
 export interface PermissionProbeUitkomst {
   status: "toegestaan" | SpikeFoutcategorie;
+  foutcode: SpikeFoutcode | null;
   latencyMs: number;
   microsoftCalls: number;
 }
