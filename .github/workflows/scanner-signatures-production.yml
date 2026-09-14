@@ -59,8 +59,7 @@ jobs:
             --force \
             --archive=tgz \
             --yes \
-            --token "$VERCEL_TOKEN" \
-            --meta signature-refresh=scheduled
+            --token "$VERCEL_TOKEN"
 
       - name: Production-health fail-closed verifiëren
         shell: bash
