@@ -74,6 +74,7 @@ export const FAIL_CLOSED_LIMIETEN: ReadonlySet<LimietNaam> = new Set<LimietNaam>
   "her_extract",
   "backfill",
   "segmenteer",
+  "microsoft_sharepoint_retrieval_spike",
 ]);
 
 /** Of een limietsleutel fail-closed is (zie {@link FAIL_CLOSED_LIMIETEN}). */

@@ -130,7 +130,9 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // breakglass (POST, DELETE [id]) en uitnodiging (POST/DELETE) — allemaal op de
   // smalle capability login.beleid.manage (alleen beheerder) mét inline
   // requireCapability, zoals /api/profiel.
-  assert.equal(HANDLERS.length, 149, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 150: #353 voegt één strikt Preview-only PGB-smokehandler toe, uitsluitend
+  // voor beheerders (login.beleid.manage), met vaste invoercodes.
+  assert.equal(HANDLERS.length, 150, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {
