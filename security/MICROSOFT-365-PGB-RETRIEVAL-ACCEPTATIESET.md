@@ -105,7 +105,8 @@ Het manifest is leidend voor de exacte vraag en verwachte bron. Voer de scenario
 | S01 | lijst en preview met rol B | algemene DOCX en PPTX zichtbaar en previewbaar; beperkte stukken afwezig | categorie, duur, `basis`, aantallen |
 | S02 | vraag naar `Koraalmaat 47` | alleen `PGB354-DOC-001`; antwoord vier werkdagen; locator sectie 2.2, pagina 2 | broncount 1 en resultaatcategorie |
 | S03 | fondsbrede vraag naar `Koraalmaat 47` en `IJsvogelkompas 73` | `PGB354-DOC-001` en `PGB354-PPT-001`; vier werkdagen en 23 oktober 2026 met eigen locators | broncount 2 en resultaatcategorie |
-| S04 | actuele vraag naar `Maananker 61` | 34 tot en met 38 procent uit `PGB354-PDF-001`; historische 28 tot en met 32 procent vervangt het antwoord niet | primaire broncount 1, eventuele secundaire count |
+| S04 | actuele vraag naar `Maananker 61` | 34 tot en met 38 procent uitsluitend uit `PGB354-PDF-001`; `PGB354-PDF-002` is uitgesloten | broncount 1; bij aangeboden historie `afwijzing_actualiteit` |
+| S04H | expliciet historische vraag naar `Maananker 61` | 28 tot en met 32 procent uitsluitend uit `PGB354-PDF-002`; de actuele PDF vervangt het historische antwoord niet | broncount 1 en resultaatcategorie |
 | S05 | vraag als rol B naar `Saffierhek 29` | geen bron, passage, titel of antwoordfeit uit `PGB354-DOC-002` | `geen_resultaat_buiten_rechten` |
 | S06 | hernoem en verplaats `PGB354-DOC-003`, vernieuw en vraag naar `Duinglas 84` | dezelfde lokale bronreferentie; bijgewerkte naam en map; woensdag blijft het antwoord | versie-indicator `verplaatst`; broncount 1 |
 | S07 | vervang de inhoud van hetzelfde item voor `PGB354-DOC-004` door de v2-fixture | eTag en cTag veranderen; antwoord wordt vrijdag 10.35 uur | versie-indicator `v2`; broncount 1 |
@@ -114,6 +115,8 @@ Het manifest is leidend voor de exacte vraag en verwachte bron. Voer de scenario
 | S10 | vraag naar `Mistboei 93` en `Veldkei 06` | `tekstlaag_ontbreekt` voor de scan en `bestandstype_niet_ondersteund` voor het onbekende formaat; geen ruwe providerfout | twee genormaliseerde categorieën |
 
 Voor S08 is een controleerbaar pauzepunt tussen itemselectie en de laatste autorisatie-/contentcontrole nodig. Als de spike dat pauzepunt niet biedt, voer alleen de intrekking vóór een nieuw verzoek uit en markeer `intrekking_tijdens_verzoek` zichtbaar als open. Een snelle handmatige klikrace geldt niet als deterministisch bewijs.
+
+Het `actualiteitsbeleid` staat voor ieder vast scenario expliciet in de serverconfiguratie en het manifest. De serververtrouwde status `actueel` of `historisch` wordt uitsluitend via de exacte fixturecode gekoppeld. Leid beleid of status nooit af uit vraagtekst, scenario-, map- of bestandsnaam, pad, titel, eTag of cTag. Een onbekende of conflicterende status valt vóór item-, content- en previewcalls fail-closed af.
 
 ## 6 Mutaties uitvoeren en herstellen
 
@@ -155,7 +158,7 @@ Voer deze procedure na iedere testronde uit, ook na een mislukte ronde.
 4. Verwijder geen versiegeschiedenis. De reset maakt de actuele inhoud en rechten deterministisch; SharePoint-versienummers mogen oplopen.
 5. Vernieuw de portaalbibliotheek en controleer tien zichtbare bestanden voor rol A en acht voor rol B.
 6. Controleer met de repo-checksums dat de lokale uploadbron zelf niet is gewijzigd.
-7. Voer S02, S04 en de positieve preview uit als korte reset-smoke.
+7. Voer S02, S04, S04H en de positieve preview uit als korte reset-smoke.
 8. Leg één bewijsregel vast met categorie `reset_geslaagd`, versie-indicator `basis` en alleen tellingen.
 
 De reset is pas volledig uitgevoerd als iedere controle hierboven is waargenomen. Een teruggezette bestandsnaam zonder rechten- en inhoudscontrole is geen geslaagde reset.

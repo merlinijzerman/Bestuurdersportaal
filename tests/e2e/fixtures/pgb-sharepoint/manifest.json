@@ -95,7 +95,7 @@
       "preview": "beschikbaar",
       "retrieval_error": null,
       "version_behavior": "blijft vindbaar als historische bron maar mag het actuele antwoord niet vervangen",
-      "scenarios": ["S04"]
+      "scenarios": ["S04", "S04H"]
     },
     {
       "code": "PGB354-PPT-001",
@@ -226,6 +226,7 @@
       "title": "Gerichte vraag met één bron",
       "role": "rol_b",
       "question": "Welke hersteltermijn geldt voor Koraalmaat 47?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": ["PGB354-DOC-001"],
       "expected_result": "Vier werkdagen, met sectie 2.2 op pagina 2 als locator"
     },
@@ -234,6 +235,7 @@
       "title": "Fondsbrede vraag met meerdere bronnen",
       "role": "rol_a",
       "question": "Welke hersteltermijn geldt voor Koraalmaat 47 en op welke datum staat het oefenbesluit voor IJsvogelkompas 73?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": ["PGB354-DOC-001", "PGB354-PPT-001"],
       "expected_result": "Vier werkdagen en 23 oktober 2026, elk met de eigen locator"
     },
@@ -242,15 +244,27 @@
       "title": "Actueel en historisch onderscheiden",
       "role": "rol_b",
       "question": "Wat is de actuele bandbreedte voor Maananker 61?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": ["PGB354-PDF-001"],
-      "secondary_sources": ["PGB354-PDF-002"],
+      "forbidden_sources": ["PGB354-PDF-002"],
       "expected_result": "34 tot en met 38 procent; de vervallen 28 tot en met 32 procent mag het antwoord niet vervangen"
+    },
+    {
+      "code": "S04H",
+      "title": "Historische bron expliciet opvragen",
+      "role": "rol_b",
+      "question": "Wat was de historische bandbreedte voor Maananker 61?",
+      "actuality_policy": "alleen_historisch",
+      "expected_sources": ["PGB354-PDF-002"],
+      "forbidden_sources": ["PGB354-PDF-001"],
+      "expected_result": "28 tot en met 32 procent uit de expliciet historische bron; de actuele bron vervangt dit historische antwoord niet"
     },
     {
       "code": "S05",
       "title": "Geen resultaat buiten rechten",
       "role": "rol_b",
       "question": "Wat is het oefenquorum voor Saffierhek 29?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": [],
       "forbidden_sources": ["PGB354-DOC-002"],
       "expected_result": "geen bron, geen passage en geen inhoudslek uit de beperkte map"
@@ -260,6 +274,7 @@
       "title": "Hernoemen en verplaatsen",
       "role": "rol_a",
       "question": "Wat is de controledag voor Duinglas 84?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": ["PGB354-DOC-003"],
       "expected_result": "de lokale bronreferentie blijft gelijk; naam en locatie volgen de mutatie"
     },
@@ -268,6 +283,7 @@
       "title": "Inhoudswijziging met nieuwe versie-indicator",
       "role": "rol_a",
       "question": "Wanneer valt het controlevenster voor Bronzenveer 52?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": ["PGB354-DOC-004"],
       "expected_result": "eerst donderdag 09.20 uur, na vervanging vrijdag 10.35 uur; eTag en cTag zijn veranderd"
     },
@@ -276,6 +292,7 @@
       "title": "Intrekking tijdens een verzoek",
       "role": "rol_a",
       "question": "Wat is de afkaptijd voor Nachtlelie 68?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": [],
       "forbidden_sources": ["PGB354-DOC-005"],
       "expected_result": "fail-closed met genormaliseerde categorie toegang_ingetrokken; geen passage in antwoord of audit"
@@ -285,6 +302,7 @@
       "title": "Replay na intrekking",
       "role": "rol_a",
       "question": "Herhaal het vorige antwoord over Nachtlelie 68.",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": [],
       "forbidden_sources": ["PGB354-DOC-005"],
       "expected_result": "geen hergebruik van eerder opgehaalde inhoud en opnieuw fail-closed"
@@ -294,6 +312,7 @@
       "title": "Moeilijk en niet ondersteund bestand",
       "role": "rol_b",
       "question": "Wat staat in Mistboei 93 en Veldkei 06?",
+      "actuality_policy": "alleen_actueel",
       "expected_sources": [],
       "forbidden_sources": ["PGB354-PDF-003", "PGB354-UNS-001"],
       "expected_result": "tekstlaag_ontbreekt voor de scan en bestandstype_niet_ondersteund voor het onbekende bestand, zonder ruwe providerfout"
