@@ -29,10 +29,14 @@ set waarde = excluded.waarde, versie = public.fonds_feature_flags.versie + 1,
 
 1. Open `/beheer/microsoft-sharepoint-retrieval` op de PGB Preview-host.
 2. Voer eerst S00 uit. Deze vaste inhoudsloze DriveItem-search onderscheidt een ongeldige Graph-vraag (`graph_bad_request`) van ontbrekende toestemming (`graph_toestemming`) en een toegestane zoekactie (`geslaagd`), zonder documenten te openen of downloaden.
-3. Na een groene S00 kan de korte Drive-controle worden gebruikt: S02, S03 en S04 één keer met de vaste termen uit de acceptatieset. Dit houdt een diagnostische herhaling binnen het endpointbudget.
-4. Start pas daarna zo nodig de basisvergelijking. Zij voert S02, S03 en S04 via `drive_search_extract` en `microsoft_search` uit, drie rondes per route (18 metingen).
-5. Kopieer de veilige JSON-uitvoer. Controleer per route recall, locator-/versie-/previewdekking, latency, Graph-calls, bytes, throttles en foutcategorieën.
-6. Stop bij een onverwachte toestemming-, tenant-, actor- of configuratiefout. Verruim geen Graph-scope als onderdeel van deze smoke.
+3. Controleer vóór én na de meetreeks expliciet dat `microsoft_sharepoint_retrieval_spike=false` is. Zet de vlag alleen voor de daadwerkelijke meetreeks aan en gebruik de geaudite beheerroute.
+4. Na een groene S00 kan de korte Drive-controle worden gebruikt: S02, S03, S04 en S04H één keer met de vaste termen uit de acceptatieset. Dit zijn vier diagnostische metingen binnen het endpointbudget.
+5. Controleer de inhoud voordat een volledige vergelijking start: S02 vindt alleen `PGB354-DOC-001`, S03 vindt `PGB354-DOC-001` en `PGB354-PPT-001`, S04 vindt alleen de actuele `PGB354-PDF-001`, en S04H vindt alleen de historische `PGB354-PDF-002`. Een door Graph aangeboden maar door het beleid uitgesloten historische kandidaat telt onder `afwijzing_actualiteit` en mag geen content- of previewcall veroorzaken.
+6. Alleen als deze vier inhoudelijk groen zijn, start de basisvergelijking. Zij voert S02, S03, S04 en S04H via `drive_search_extract` en `microsoft_search` uit, drie rondes per route: 24 metingen.
+7. Kopieer de veilige JSON-uitvoer. Controleer per route recall, locator-/versie-/previewdekking, latency, Graph-calls, bytes, throttles en foutcategorieën.
+8. Stop bij onverwachte inhoud of een toestemming-, tenant-, actor-, configuratie-, timeout- of cancellationfout. Voer S08 en S09 dan niet uit en verruim geen Graph-scope als onderdeel van deze smoke.
+
+De audit mag voor kandidaatdiagnostiek exact deze platte velden bevatten: `afwijzing_mapping`, `afwijzing_binding`, `afwijzing_root`, `afwijzing_rechten_configuratie`, `afwijzing_versie`, `afwijzing_extractie`, `afwijzing_preview` en `afwijzing_actualiteit`. Iedere waarde is een niet-negatief geheel getal; geneste afwijzingsobjecten of andere dynamische sleutels zijn niet toegestaan.
 
 ## S08 — intrekking tijdens het verzoek
 
@@ -50,7 +54,7 @@ Laat de toegang ingetrokken en start S09 als nieuw verzoek. Verwacht opnieuw nul
 
 1. Herstel de toegang van rol A tot `04 Beperkt bestuur`.
 2. Wacht op Microsoft-propagatie en voer `S08R` uit. Verwacht `PGB354-DOC-005` als gevonden fixture.
-3. Zet de extra vlag direct uit met dezelfde geaudite wijzigingsroute (of bovenstaande upsert met `false`).
+3. Zet de extra vlag direct uit met dezelfde geaudite wijzigingsroute (of bovenstaande upsert met `false`) en verifieer expliciet dat de effectieve waarde `false` is.
 4. Controleer `microsoft_private.audit_log`: alleen veilige meetcategorieën, aantallen, timing en bytes; nooit vraagtekst, passages, tokens, URL's of externe identifiers.
 
 ## Stopcriteria en rollback

@@ -27,12 +27,31 @@ export type SharePointRetrievalVeiligeMeting = {
   throttles: number;
   retries: number;
   versieVingerafdrukken: string[];
+  afwijzingMapping: number;
+  afwijzingBinding: number;
+  afwijzingRoot: number;
+  afwijzingRechtenConfiguratie: number;
+  afwijzingVersie: number;
+  afwijzingExtractie: number;
+  afwijzingPreview: number;
+  afwijzingActualiteit: number;
 };
+
+export const SHAREPOINT_RETRIEVAL_AUDIT_AFWIJZINGEN = {
+  afwijzing_mapping: "afwijzingMapping",
+  afwijzing_binding: "afwijzingBinding",
+  afwijzing_root: "afwijzingRoot",
+  afwijzing_rechten_configuratie: "afwijzingRechtenConfiguratie",
+  afwijzing_versie: "afwijzingVersie",
+  afwijzing_extractie: "afwijzingExtractie",
+  afwijzing_preview: "afwijzingPreview",
+  afwijzing_actualiteit: "afwijzingActualiteit",
+} as const satisfies Record<string, keyof SharePointRetrievalVeiligeMeting>;
 
 export const SHAREPOINT_RETRIEVAL_SMOKE_FLAG = "microsoft_sharepoint_retrieval_spike";
 export const SHAREPOINT_RETRIEVAL_SMOKE_WACHT_MS = 120_000;
 
-export const SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS = ["S00", "S02", "S03", "S04", "S08", "S09", "S08R"] as const;
+export const SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS = ["S00", "S02", "S03", "S04", "S04H", "S08", "S09", "S08R"] as const;
 export type SharePointRetrievalSmokeScenario = typeof SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS[number];
 
 export const SHAREPOINT_RETRIEVAL_SMOKE_ROUTES = ["drive_search_extract", "microsoft_search"] as const satisfies readonly SharePointRetrievalSmokeRoute[];
@@ -41,6 +60,7 @@ type SmokeVraag = {
   code: string;
   soort: "gericht" | "fondsbreed" | "meerdere_documenten" | "versieconflict" | "powerpoint" | "pdf" | "negatief";
   vraag: string;
+  actualiteitsbeleid: "alleen_actueel" | "alleen_historisch" | "actueel_en_historisch";
   driveZoektermen?: readonly string[];
   verwachteFixtures: string[];
   benodigdeFixtures: readonly string[];
@@ -52,6 +72,7 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     code: "S00",
     soort: "negatief",
     vraag: "m365-permission-probe-7f4c1d9e-no-match",
+    actualiteitsbeleid: "alleen_actueel",
     verwachteFixtures: [],
     benodigdeFixtures: [],
     pauzeVoorLaatsteControle: false,
@@ -60,6 +81,7 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     code: "S02",
     soort: "gericht",
     vraag: "Welke hersteltermijn geldt voor Koraalmaat 47?",
+    actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Koraalmaat 47"],
     verwachteFixtures: ["PGB354-DOC-001"],
     benodigdeFixtures: ["PGB354-DOC-001"],
@@ -69,6 +91,7 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     code: "S03",
     soort: "meerdere_documenten",
     vraag: "Welke hersteltermijn geldt voor Koraalmaat 47 en op welke datum staat het oefenbesluit voor IJsvogelkompas 73?",
+    actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Koraalmaat 47", "IJsvogelkompas 73"],
     verwachteFixtures: ["PGB354-DOC-001", "PGB354-PPT-001"],
     benodigdeFixtures: ["PGB354-DOC-001", "PGB354-PPT-001"],
@@ -78,15 +101,27 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     code: "S04",
     soort: "versieconflict",
     vraag: "Wat is de actuele bandbreedte voor Maananker 61?",
+    actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Maananker Actueel 61"],
     verwachteFixtures: ["PGB354-PDF-001"],
     benodigdeFixtures: ["PGB354-PDF-001", "PGB354-PDF-002"],
+    pauzeVoorLaatsteControle: false,
+  },
+  S04H: {
+    code: "S04H",
+    soort: "versieconflict",
+    vraag: "Wat was de historische bandbreedte voor Maananker 61?",
+    actualiteitsbeleid: "alleen_historisch",
+    driveZoektermen: ["Maananker Historisch 61"],
+    verwachteFixtures: ["PGB354-PDF-002"],
+    benodigdeFixtures: ["PGB354-PDF-002"],
     pauzeVoorLaatsteControle: false,
   },
   S08: {
     code: "S08",
     soort: "negatief",
     vraag: "Wat is de afkaptijd voor Nachtlelie 68?",
+    actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Nachtlelie 68"],
     verwachteFixtures: [],
     benodigdeFixtures: ["PGB354-DOC-005"],
@@ -96,6 +131,7 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     code: "S09",
     soort: "negatief",
     vraag: "Herhaal het vorige antwoord over Nachtlelie 68.",
+    actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Nachtlelie 68"],
     verwachteFixtures: [],
     // Na intrekking mag dit document juist ontbreken uit de live listing.
@@ -106,6 +142,7 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     code: "S08R",
     soort: "gericht",
     vraag: "Wat is de afkaptijd voor Nachtlelie 68?",
+    actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Nachtlelie 68"],
     verwachteFixtures: ["PGB354-DOC-005"],
     benodigdeFixtures: ["PGB354-DOC-005"],
@@ -120,6 +157,34 @@ export const SHAREPOINT_RETRIEVAL_FIXTURE_CODES = [
   "PGB354-PPT-001",
   "PGB354-DOC-005",
 ] as const;
+
+const SHAREPOINT_RETRIEVAL_FIXTURE_STATUS = {
+  "PGB354-DOC-001": "actueel",
+  "PGB354-PDF-001": "actueel",
+  "PGB354-PDF-002": "historisch",
+  "PGB354-PPT-001": "actueel",
+  "PGB354-DOC-005": "actueel",
+} as const satisfies Record<typeof SHAREPOINT_RETRIEVAL_FIXTURE_CODES[number], "actueel" | "historisch">;
+
+export function sharePointRetrievalFixtureStatus(
+  fixtureCode: string,
+): "actueel" | "historisch" | null {
+  return Object.prototype.hasOwnProperty.call(SHAREPOINT_RETRIEVAL_FIXTURE_STATUS, fixtureCode)
+    ? SHAREPOINT_RETRIEVAL_FIXTURE_STATUS[fixtureCode as keyof typeof SHAREPOINT_RETRIEVAL_FIXTURE_STATUS]
+    : null;
+}
+
+export function projecteerAuditAfwijzingen(
+  meting: SharePointRetrievalVeiligeMeting,
+): Record<keyof typeof SHAREPOINT_RETRIEVAL_AUDIT_AFWIJZINGEN, number> {
+  const auditvelden = Object.keys(SHAREPOINT_RETRIEVAL_AUDIT_AFWIJZINGEN) as Array<keyof typeof SHAREPOINT_RETRIEVAL_AUDIT_AFWIJZINGEN>;
+  return Object.fromEntries(auditvelden.map((auditveld) => {
+    const meetveld = SHAREPOINT_RETRIEVAL_AUDIT_AFWIJZINGEN[auditveld];
+    const waarde = meting[meetveld];
+    if (!Number.isSafeInteger(waarde) || waarde < 0) throw new Error("ongeldige_afwijstelling");
+    return [auditveld, waarde];
+  })) as Record<keyof typeof SHAREPOINT_RETRIEVAL_AUDIT_AFWIJZINGEN, number>;
+}
 
 export type SharePointRetrievalSmokeEvent =
   | { type: "gestart"; scenario: SharePointRetrievalSmokeScenario; route: SharePointRetrievalSmokeRoute; ronde: number }

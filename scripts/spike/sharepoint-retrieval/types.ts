@@ -4,6 +4,21 @@
 import type { Bronresultaat, Toegangsbewijs } from "../../../core/lib/retrieval/contract";
 
 export type SpikeRoute = "microsoft_search" | "drive_search_extract";
+export type SpikeActualiteitsbeleid = "alleen_actueel" | "alleen_historisch" | "actueel_en_historisch";
+export type SpikeFixtureStatus = "actueel" | "historisch";
+
+export const SPIKE_AFWIJSCATEGORIEEN = [
+  "mapping",
+  "binding",
+  "root",
+  "rechten_configuratie",
+  "versie",
+  "extractie",
+  "preview",
+  "actualiteit",
+] as const;
+export type SpikeAfwijscategorie = typeof SPIKE_AFWIJSCATEGORIEEN[number];
+export type SpikeAfwijzingen = Record<SpikeAfwijscategorie, number>;
 export type SpikeFase =
   | "na_zoeken"
   | "na_eerste_rechtencheck"
@@ -61,6 +76,9 @@ export interface SpikeDocumentMapping {
   itemId: string;
   titel: string;
   bestandstype: "docx" | "pdf" | "pptx" | "anders";
+  /** Serververtrouwde teststatus. De Preview-brug koppelt deze uitsluitend op
+   * fixturecode; nooit vanuit browserinvoer, naam, pad of versievelden. */
+  fixtureStatus: SpikeFixtureStatus;
   geregistreerdMappad?: string;
   verwachteMappad?: string;
 }
@@ -123,6 +141,7 @@ export interface SpikeUitkomst {
   latencyMs: number;
   fout?: SpikeFoutcategorie;
   foutcode?: SpikeFoutcode;
+  afwijzingen: SpikeAfwijzingen;
   meting: GraphMeting;
 }
 
@@ -138,6 +157,8 @@ export interface SpikeVraag {
   code: string;
   soort: "gericht" | "fondsbreed" | "meerdere_documenten" | "versieconflict" | "powerpoint" | "pdf" | "negatief";
   vraag: string;
+  /** Expliciet server-side beleid; nooit afgeleid uit soort of vraagtekst. */
+  actualiteitsbeleid: SpikeActualiteitsbeleid;
   /** Vaste, server-side termen voor DriveItem search. Meerdere termen worden
    * afzonderlijk gezocht en daarna stabiel ontdubbeld. */
   driveZoektermen?: readonly string[];
@@ -165,4 +186,12 @@ export interface VeiligeMeetrij {
   throttles: number;
   retries: number;
   versieVingerafdrukken: string[];
+  afwijzingMapping: number;
+  afwijzingBinding: number;
+  afwijzingRoot: number;
+  afwijzingRechtenConfiguratie: number;
+  afwijzingVersie: number;
+  afwijzingExtractie: number;
+  afwijzingPreview: number;
+  afwijzingActualiteit: number;
 }

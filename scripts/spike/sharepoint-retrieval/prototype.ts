@@ -12,6 +12,8 @@ import type {
   DelegatedToken,
   GraphMeting,
   PermissionProbeUitkomst,
+  SpikeAfwijscategorie,
+  SpikeAfwijzingen,
   SpikeBronresultaat,
   SpikeBronSnapshot,
   SpikeDocumentMapping,
@@ -75,6 +77,24 @@ type ZoekHit = { itemId: string; positie: number; score: number | null; summary:
 
 function nieuweMeting(): GraphMeting {
   return { calls: 0, responseBytes: 0, contentBytes: 0, throttles: 0, retries: 0 };
+}
+
+function nieuweAfwijzingen(): SpikeAfwijzingen {
+  return {
+    mapping: 0,
+    binding: 0,
+    root: 0,
+    rechten_configuratie: 0,
+    versie: 0,
+    extractie: 0,
+    preview: 0,
+    actualiteit: 0,
+  };
+}
+
+function wijsKandidaatAf(afwijzingen: SpikeAfwijzingen, categorie: SpikeAfwijscategorie): null {
+  afwijzingen[categorie] += 1;
+  return null;
 }
 
 function veiligeGraphUrl(url: string): URL {
@@ -289,7 +309,7 @@ class GraphClient {
 
 function bronVingerafdruk(bron: SpikeBronSnapshot): string {
   const docs = [...bron.documenten]
-    .map((doc) => [doc.ref, doc.itemId, doc.fixtureCode, doc.titel, doc.bestandstype, doc.geregistreerdMappad ?? "", doc.verwachteMappad ?? ""].join("\u0000"))
+    .map((doc) => [doc.ref, doc.itemId, doc.fixtureCode, doc.titel, doc.bestandstype, doc.fixtureStatus, doc.geregistreerdMappad ?? "", doc.verwachteMappad ?? ""].join("\u0000"))
     .sort()
     .join("\u0001");
   return [bron.fondsId, bron.actorId, bron.microsoftActorObjectId, bron.tenantId, bron.bronId, bron.status, bron.configuratieversie, bron.siteId, bron.siteHostnaam, bron.driveId, bron.driveNaam, bron.rootItemId, docs].join("\u0002");
@@ -304,6 +324,17 @@ function valideerBron(bron: SpikeBronSnapshot): void {
   }
 }
 
+async function leesGeldigeBron(deps: SpikeDependencies): Promise<SpikeBronSnapshot> {
+  try {
+    const bron = await deps.leesBron();
+    valideerBron(bron);
+    return bron;
+  } catch (fout) {
+    if (fout instanceof SpikeError) throw fout;
+    throw new SpikeError("configuratiefout", "configuratie_gewijzigd", { cause: fout });
+  }
+}
+
 function eTagVan(item: GraphDriveItem): { soort: "etag" | "ctag"; waarde: string } {
   const etag = item.eTag?.trim();
   if (etag) return { soort: "etag", waarde: etag };
@@ -312,19 +343,36 @@ function eTagVan(item: GraphDriveItem): { soort: "etag" | "ctag"; waarde: string
   throw new SpikeError("versiebewijs_ontbreekt", "versie_ontbreekt");
 }
 
-function itemGeldig(item: GraphDriveItem, bron: SpikeBronSnapshot, mapping: SpikeDocumentMapping, rootWebUrl: string): boolean {
-  if (item.id !== mapping.itemId || item.parentReference?.driveId !== bron.driveId || !item.file) return false;
+function itemAfwijscategorie(
+  item: GraphDriveItem,
+  bron: SpikeBronSnapshot,
+  mapping: SpikeDocumentMapping,
+  rootWebUrl: string,
+): "binding" | "root" | null {
+  if (item.id !== mapping.itemId || item.parentReference?.driveId !== bron.driveId || !item.file) return "binding";
   const veiligItem = item.webUrl ? veiligeSharePointUrl(item.webUrl, bron.siteHostnaam) : null;
-  if (!veiligItem) return false;
+  if (!veiligItem) return "root";
   try {
     const itemUrl = new URL(veiligItem);
     const rootUrl = new URL(rootWebUrl);
     const rootPad = decodeURIComponent(rootUrl.pathname).replace(/\/$/, "");
     const itemPad = decodeURIComponent(itemUrl.pathname);
-    return itemUrl.origin === rootUrl.origin && itemPad.startsWith(`${rootPad}/`);
+    return itemUrl.origin === rootUrl.origin && itemPad.startsWith(`${rootPad}/`) ? null : "root";
   } catch {
-    return false;
+    return "root";
   }
+}
+
+function actualiteitToegestaan(mapping: SpikeDocumentMapping, vraag: SpikeVraag): boolean {
+  if (mapping.fixtureStatus !== "actueel" && mapping.fixtureStatus !== "historisch") return false;
+  if (vraag.actualiteitsbeleid === "alleen_actueel") return mapping.fixtureStatus === "actueel";
+  if (vraag.actualiteitsbeleid === "alleen_historisch") return mapping.fixtureStatus === "historisch";
+  return vraag.actualiteitsbeleid === "actueel_en_historisch";
+}
+
+function isFataleKandidaatFout(fout: unknown): boolean {
+  return fout instanceof SpikeError
+    && (fout.categorie === "configuratiefout" || fout.categorie === "timeout" || fout.categorie === "annulering" || fout.code === "actor_of_tenant_mismatch");
 }
 
 function mappadVanItem(item: GraphDriveItem, rootWebUrl: string): string {
@@ -482,25 +530,58 @@ async function maakKandidaat(
   rootWebUrl: string,
   mapping: SpikeDocumentMapping,
   hit: ZoekHit,
+  afwijzingen: SpikeAfwijzingen,
 ): Promise<SpikeBronresultaat | null> {
-  const eersteCheck = await client.json<GraphDriveItem>(itemUrl(bronEerst, mapping.itemId));
-  if (!itemGeldig(eersteCheck, bronEerst, mapping, rootWebUrl)) return null;
-  const eersteVersie = eTagVan(eersteCheck);
+  // Vaste fase 1: serververtrouwde fixturestatus. Historische of onbekende
+  // status valt af vóór een content- of previewcall.
+  if (!actualiteitToegestaan(mapping, opdracht.vraag)) return wijsKandidaatAf(afwijzingen, "actualiteit");
+
+  // Vaste fase 2: eerste actuele item-, drive-, bestands- en rootbinding.
+  let eersteCheck: GraphDriveItem;
+  try {
+    eersteCheck = await client.json<GraphDriveItem>(itemUrl(bronEerst, mapping.itemId));
+  } catch (fout) {
+    if (isFataleKandidaatFout(fout)) throw fout;
+    return wijsKandidaatAf(afwijzingen, "rechten_configuratie");
+  }
+  const eersteBindingFout = itemAfwijscategorie(eersteCheck, bronEerst, mapping, rootWebUrl);
+  if (eersteBindingFout) return wijsKandidaatAf(afwijzingen, eersteBindingFout);
+  let eersteVersie: ReturnType<typeof eTagVan>;
+  try {
+    eersteVersie = eTagVan(eersteCheck);
+  } catch {
+    return wijsKandidaatAf(afwijzingen, "versie");
+  }
   await deps.onFase?.("na_eerste_rechtencheck", mapping);
 
+  // Vaste fase 3: passage of begrensde in-memory extractie.
   let passage: string;
   let pagina: number | null = null;
   let paragraaf: string | null = null;
   if (opdracht.route === "microsoft_search") {
     passage = schoneSummary(hit.summary);
-    if (!passage) return null;
+    if (!passage) return wijsKandidaatAf(afwijzingen, "extractie");
   } else {
-    const bytes = await client.content(contentUrl(bronEerst, mapping.itemId), bronEerst.siteHostnaam);
+    let bytes: Buffer;
     try {
-      const extractie = await extractTekst(bytes, bestandstypeVoorExtractie(mapping));
-      const gevonden = passageUitSegmenten(extractie.segmenten, opdracht.vraag.vraag);
-      if (!gevonden) return null;
-      ({ passage, pagina, paragraaf } = gevonden);
+      bytes = await client.content(contentUrl(bronEerst, mapping.itemId), bronEerst.siteHostnaam);
+    } catch (fout) {
+      if (isFataleKandidaatFout(fout)) throw fout;
+      const categorie = fout instanceof SpikeError && fout.categorie === "toestemming_geweigerd"
+        ? "rechten_configuratie"
+        : "extractie";
+      return wijsKandidaatAf(afwijzingen, categorie);
+    }
+    try {
+      try {
+        const extractie = await extractTekst(bytes, bestandstypeVoorExtractie(mapping));
+        const gevonden = passageUitSegmenten(extractie.segmenten, opdracht.vraag.vraag);
+        if (!gevonden) return wijsKandidaatAf(afwijzingen, "extractie");
+        ({ passage, pagina, paragraaf } = gevonden);
+      } catch (fout) {
+        if (isFataleKandidaatFout(fout)) throw fout;
+        return wijsKandidaatAf(afwijzingen, "extractie");
+      }
     } finally {
       bytes.fill(0);
     }
@@ -508,30 +589,50 @@ async function maakKandidaat(
   await deps.onFase?.("na_content", mapping);
   await deps.onFase?.("voor_laatste_rechtencheck", mapping);
 
+  // Vaste fase 4: laatste actuele rechten-, binding- en versiecontrole.
   const gecontroleerdOp = (deps.nu ?? (() => new Date()))().toISOString();
-  const laatsteCheck = await client.json<GraphDriveItem>(itemUrl(bronEerst, mapping.itemId));
-  if (!itemGeldig(laatsteCheck, bronEerst, mapping, rootWebUrl)) return null;
-  const laatsteVersie = eTagVan(laatsteCheck);
+  let laatsteCheck: GraphDriveItem;
+  try {
+    laatsteCheck = await client.json<GraphDriveItem>(itemUrl(bronEerst, mapping.itemId));
+  } catch (fout) {
+    if (isFataleKandidaatFout(fout)) throw fout;
+    return wijsKandidaatAf(afwijzingen, "rechten_configuratie");
+  }
+  const laatsteBindingFout = itemAfwijscategorie(laatsteCheck, bronEerst, mapping, rootWebUrl);
+  if (laatsteBindingFout) return wijsKandidaatAf(afwijzingen, laatsteBindingFout);
+  let laatsteVersie: ReturnType<typeof eTagVan>;
+  try {
+    laatsteVersie = eTagVan(laatsteCheck);
+  } catch {
+    return wijsKandidaatAf(afwijzingen, "versie");
+  }
   if (laatsteVersie.soort !== eersteVersie.soort || laatsteVersie.waarde !== eersteVersie.waarde) {
-    throw new SpikeError("buiten_scope", "document_gewijzigd");
+    return wijsKandidaatAf(afwijzingen, "versie");
   }
 
-  const bronLaatste = await deps.leesBron();
-  valideerBron(bronLaatste);
+  // Bronconfiguratiedrift is verzoekfataal en mag nooit lokaal worden geteld.
+  const bronLaatste = await leesGeldigeBron(deps);
   if (bronVingerafdruk(bronLaatste) !== bronFingerprint) {
     throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
   }
 
-  const preview = await client.json<{ getUrl?: string }>(previewUrl(bronEerst, mapping.itemId), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
+  // Vaste fase 5: previewbewijs.
+  let preview: { getUrl?: string };
+  try {
+    preview = await client.json<{ getUrl?: string }>(previewUrl(bronEerst, mapping.itemId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+  } catch (fout) {
+    if (isFataleKandidaatFout(fout)) throw fout;
+    return wijsKandidaatAf(afwijzingen, "preview");
+  }
   if (!veiligeSharePointUrl(preview.getUrl, bronEerst.siteHostnaam)) {
-    throw new SpikeError("providerfout", "ongeldige_preview_url");
+    return wijsKandidaatAf(afwijzingen, "preview");
   }
   await deps.onFase?.("voor_toelating", mapping);
-  const bronVoorToelating = await deps.leesBron();
+  const bronVoorToelating = await leesGeldigeBron(deps);
   if (bronVingerafdruk(bronVoorToelating) !== bronFingerprint) {
     throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
   }
@@ -562,7 +663,11 @@ async function maakKandidaat(
     },
     locator: { pagina, paragraaf, mappad: mappadVanItem(laatsteCheck, rootWebUrl) },
     passage,
-    status: { bronstatus: "actief", actueel: true },
+    status: {
+      documentstatus: mapping.fixtureStatus,
+      bronstatus: "actief",
+      actueel: mapping.fixtureStatus === "actueel",
+    },
     rang: { positie: hit.positie, score: hit.score },
     previewMogelijk: true,
     weergave: {
@@ -584,17 +689,23 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
   const klok = deps.klok ?? (() => performance.now());
   const start = klok();
   const meting = nieuweMeting();
+  const afwijzingen = nieuweAfwijzingen();
   let client: GraphClient | undefined;
+  let fataleKandidaatFout: SpikeErrorType | null = null;
   try {
-    const bron = await deps.leesBron();
-    valideerBron(bron);
+    const bron = await leesGeldigeBron(deps);
     const token = await deps.delegatedToken();
     if (!token.accessToken || token.tenantId !== bron.tenantId || token.actorObjectId !== bron.microsoftActorObjectId) {
       throw new SpikeError("buiten_scope", "actor_of_tenant_mismatch");
     }
 
     const deadline = AbortSignal.timeout(opdracht.timeoutMs ?? 15_000);
-    const signal = opdracht.signal ? AbortSignal.any([opdracht.signal, deadline]) : deadline;
+    const fataleAfbreking = new AbortController();
+    const signal = AbortSignal.any([
+      ...(opdracht.signal ? [opdracht.signal] : []),
+      deadline,
+      fataleAfbreking.signal,
+    ]);
     const graphClient = new GraphClient(
       token.accessToken,
       deps.fetchImpl ?? ((input, init) => fetch(input, init)),
@@ -615,16 +726,41 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       : await zoekViaDrive(graphClient, bron, opdracht.vraag.driveZoektermen ?? [opdracht.vraag.vraag], maxKandidaten);
     await deps.onFase?.("na_zoeken");
 
-    const mappingPerItem = new Map(bron.documenten.map((doc) => [doc.itemId, doc]));
-    const bekendeHits = hits.flatMap((hit) => {
-      const mapping = mappingPerItem.get(hit.itemId);
-      return mapping ? [{ hit, mapping }] : [];
-    });
+    const uniekeHits = hits.filter((hit, index) => hits.findIndex((kandidaat) => kandidaat.itemId === hit.itemId) === index);
+    const mappingPerItem = new Map<string, SpikeDocumentMapping[]>();
+    for (const document of bron.documenten) {
+      mappingPerItem.set(document.itemId, [...(mappingPerItem.get(document.itemId) ?? []), document]);
+    }
+    const bekendeHits: Array<{ hit: ZoekHit; mapping: SpikeDocumentMapping }> = [];
+    for (const hit of uniekeHits) {
+      const mappings = mappingPerItem.get(hit.itemId) ?? [];
+      if (mappings.length === 0) {
+        wijsKandidaatAf(afwijzingen, "mapping");
+        continue;
+      }
+      if (mappings.length !== 1) {
+        const statussen = new Set(mappings.map((mapping) => mapping.fixtureStatus));
+        wijsKandidaatAf(afwijzingen, statussen.size === 1 ? "mapping" : "actualiteit");
+        continue;
+      }
+      bekendeHits.push({ hit, mapping: mappings[0] });
+    }
     const fingerprint = bronVingerafdruk(bron);
     const kandidaten = await parallelBegrensd(
       bekendeHits,
       Math.min(Math.max(1, opdracht.concurrency ?? MAX_CONCURRENCY), MAX_CONCURRENCY),
-      async ({ hit, mapping }) => maakKandidaat(graphClient, deps, opdracht, bron, fingerprint, rootWebUrl, mapping, hit),
+      async ({ hit, mapping }) => {
+        try {
+          return await maakKandidaat(graphClient, deps, opdracht, bron, fingerprint, rootWebUrl, mapping, hit, afwijzingen);
+        } catch (fout) {
+          if (isFataleKandidaatFout(fout)) {
+            fataleKandidaatFout ??= fout as SpikeErrorType;
+            fataleAfbreking.abort("fatale_kandidaatfout");
+            throw fout;
+          }
+          return wijsKandidaatAf(afwijzingen, "rechten_configuratie");
+        }
+      },
     );
     kandidaten.sort((a, b) => a.rang.positie - b.rang.positie || a.ref.localeCompare(b.ref));
     Object.assign(meting, graphClient.meting);
@@ -635,11 +771,12 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       kandidaten,
       latencyMs: Math.max(0, Math.round(klok() - start)),
       ...(kandidaten.length === 0 ? { fout: "geen_resultaten" as const } : {}),
+      afwijzingen,
       meting,
     };
   } catch (fout) {
     if (client) Object.assign(meting, client.meting);
-    let veilig = alsSpikeError(fout);
+    let veilig = fataleKandidaatFout ?? alsSpikeError(fout);
     if (veilig.categorie === "annulering" && !opdracht.signal?.aborted) {
       veilig = new SpikeError("timeout", "graph_timeout");
     }
@@ -651,6 +788,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       latencyMs: Math.max(0, Math.round(klok() - start)),
       fout: veilig.categorie,
       foutcode: veilig.code,
+      afwijzingen,
       meting,
     };
   }
@@ -737,6 +875,14 @@ export function maakVeiligeMeetrij(ronde: number, vraag: SpikeVraag, uitkomst: S
     throttles: uitkomst.meting.throttles,
     retries: uitkomst.meting.retries,
     versieVingerafdrukken: uitkomst.kandidaten.map((k) => createHash("sha256").update(k.versie.waarde).digest("hex").slice(0, 12)).sort(),
+    afwijzingMapping: uitkomst.afwijzingen.mapping,
+    afwijzingBinding: uitkomst.afwijzingen.binding,
+    afwijzingRoot: uitkomst.afwijzingen.root,
+    afwijzingRechtenConfiguratie: uitkomst.afwijzingen.rechten_configuratie,
+    afwijzingVersie: uitkomst.afwijzingen.versie,
+    afwijzingExtractie: uitkomst.afwijzingen.extractie,
+    afwijzingPreview: uitkomst.afwijzingen.preview,
+    afwijzingActualiteit: uitkomst.afwijzingen.actualiteit,
   };
 }
 
@@ -816,6 +962,7 @@ export function maakSharePointSpikeContractAdapter(deps: SpikeDependencies, rout
           code: query.naam,
           soort: query.strategie === "volledig" ? "fondsbreed" : query.strategie === "vergelijk" ? "meerdere_documenten" : "gericht",
           vraag: query.zoekvraag,
+          actualiteitsbeleid: "alleen_actueel",
           verwachteFixtures: [],
           maxKandidaten: query.maxKandidaten,
         },

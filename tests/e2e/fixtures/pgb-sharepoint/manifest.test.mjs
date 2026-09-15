@@ -45,12 +45,17 @@ test("PGB354 corpus dekt Office, digitaal PDF, historie, mutaties, intrekking en
   assert.ok(fixtures.some((fixture) => fixture.retrieval_error === "bestandstype_niet_ondersteund"));
 });
 
-test("PGB354 acceptatievragen hebben vooraf bepaalde bronnen en uitkomsten", () => {
-  assert.deepEqual(manifest.scenarios.map((scenario) => scenario.code), ["S01", "S02", "S03", "S04", "S05", "S06", "S07", "S08", "S09", "S10"]);
+test("PGB354 acceptatievragen hebben vooraf bepaalde bronnen, actualiteitsbeleid en uitkomsten", () => {
+  assert.deepEqual(manifest.scenarios.map((scenario) => scenario.code), ["S01", "S02", "S03", "S04", "S04H", "S05", "S06", "S07", "S08", "S09", "S10"]);
   for (const scenario of manifest.scenarios) {
     assert.ok(Array.isArray(scenario.expected_sources));
     assert.ok(typeof scenario.expected_result === "string" && scenario.expected_result.length > 12);
+    if (scenario.question) assert.ok(["alleen_actueel", "alleen_historisch", "actueel_en_historisch"].includes(scenario.actuality_policy));
   }
+  assert.equal(manifest.scenarios.find((scenario) => scenario.code === "S04").actuality_policy, "alleen_actueel");
+  assert.deepEqual(manifest.scenarios.find((scenario) => scenario.code === "S04").forbidden_sources, ["PGB354-PDF-002"]);
+  assert.equal(manifest.scenarios.find((scenario) => scenario.code === "S04H").actuality_policy, "alleen_historisch");
+  assert.deepEqual(manifest.scenarios.find((scenario) => scenario.code === "S04H").expected_sources, ["PGB354-PDF-002"]);
   assert.deepEqual(manifest.scenarios.find((scenario) => scenario.code === "S05").forbidden_sources, ["PGB354-DOC-002"]);
   assert.deepEqual(manifest.scenarios.find((scenario) => scenario.code === "S09").forbidden_sources, ["PGB354-DOC-005"]);
 });

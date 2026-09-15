@@ -14,6 +14,21 @@ const ROUTE_LABEL: Record<SharePointRetrievalSmokeRoute, string> = {
   drive_search_extract: "DriveItem search + extractie",
   microsoft_search: "Microsoft Search",
 };
+const BASISSCENARIOS = ["S02", "S03", "S04", "S04H"] as const;
+
+function afwijzingen(meting: SharePointRetrievalVeiligeMeting): string {
+  const tellingen: Array<readonly [string, number]> = [
+    ["mapping", meting.afwijzingMapping],
+    ["binding", meting.afwijzingBinding],
+    ["root", meting.afwijzingRoot],
+    ["rechten/config", meting.afwijzingRechtenConfiguratie],
+    ["versie", meting.afwijzingVersie],
+    ["extractie", meting.afwijzingExtractie],
+    ["preview", meting.afwijzingPreview],
+    ["actualiteit", meting.afwijzingActualiteit],
+  ];
+  return tellingen.filter(([, aantal]) => aantal > 0).map(([label, aantal]) => `${label}:${aantal}`).join(", ") || "—";
+}
 
 async function voerUit(taak: Taak, onEvent: (event: SharePointRetrievalSmokeEvent) => void): Promise<void> {
   const response = await fetch("/api/microsoft/sharepoint/retrieval-smoke", {
@@ -69,7 +84,7 @@ export default function SharePointRetrievalSmoke() {
   };
 
   const basisTaken: Taak[] = ([1, 2, 3] as const).flatMap((ronde) =>
-    (["S02", "S03", "S04"] as const).flatMap((scenario) => ROUTES.map((route) => ({ scenario, route, ronde }))),
+    BASISSCENARIOS.flatMap((scenario) => ROUTES.map((route) => ({ scenario, route, ronde }))),
   );
 
   return (
@@ -84,12 +99,12 @@ export default function SharePointRetrievalSmoke() {
 
       <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="font-bold text-ink">Basisvergelijking</h2>
-        <p className="mt-1 text-sm text-muted">Voert S02–S04 via beide routes uit, drie rondes per route. Alleen aantallen, tijden, categorieën en korte versiehashes verschijnen hieronder.</p>
+        <p className="mt-1 text-sm text-muted">Voert S02–S04 en de positieve historische proef S04H via beide routes uit, drie rondes per route. Alleen aantallen, tijden, categorieën en korte versiehashes verschijnen hieronder.</p>
         <button type="button" disabled={bezig} onClick={() => void run(basisTaken)} className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          Basisvergelijking starten (18 metingen)
+          Basisvergelijking starten (24 metingen)
         </button>
-        <button type="button" disabled={bezig} onClick={() => void run(((["S02", "S03", "S04"] as const).map((scenario) => ({ scenario, route: "drive_search_extract" as const, ronde: 1 as const }))))} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
-          Drive-controle starten (3 metingen)
+        <button type="button" disabled={bezig} onClick={() => void run(BASISSCENARIOS.map((scenario) => ({ scenario, route: "drive_search_extract" as const, ronde: 1 as const })))} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          Drive-controle starten (4 metingen)
         </button>
       </section>
 
@@ -118,8 +133,8 @@ export default function SharePointRetrievalSmoke() {
           </div>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead><tr className="border-b border-line text-muted"><th className="py-2">Scenario</th><th>Route</th><th>Ronde</th><th>Resultaat</th><th>Fixtures</th><th>Latency</th><th>Calls</th><th>Bytes</th></tr></thead>
-              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}{m.foutcode ? ` · ${m.foutcode}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
+              <thead><tr className="border-b border-line text-muted"><th className="py-2">Scenario</th><th>Route</th><th>Ronde</th><th>Resultaat</th><th>Fixtures</th><th>Afwijzingen</th><th>Latency</th><th>Calls</th><th>Bytes</th></tr></thead>
+              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}{m.foutcode ? ` · ${m.foutcode}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{afwijzingen(m)}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
             </table>
           </div>
         </section>
