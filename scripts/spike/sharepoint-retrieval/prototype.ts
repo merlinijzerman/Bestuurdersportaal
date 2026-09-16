@@ -343,24 +343,42 @@ function eTagVan(item: GraphDriveItem): { soort: "etag" | "ctag"; waarde: string
   throw new SpikeError("versiebewijs_ontbreekt", "versie_ontbreekt");
 }
 
+function normaliseerGraphPad(pad: string | null | undefined): string | null {
+  const waarde = pad?.trim();
+  if (!waarde) return null;
+  try {
+    const genormaliseerd = decodeURIComponent(waarde).normalize("NFC").replace(/\/+$/, "");
+    return genormaliseerd && !/[\u0000-\u001f\u007f]/.test(genormaliseerd) ? genormaliseerd : null;
+  } catch {
+    return null;
+  }
+}
+
+function graphPadVanRoot(root: GraphDriveItem): string | null {
+  const ouderPad = normaliseerGraphPad(root.parentReference?.path);
+  const naam = root.name?.trim();
+  if (!ouderPad || !naam || naam.includes("/") || naam.includes("\\")) return null;
+  return normaliseerGraphPad(`${ouderPad}/${naam}`);
+}
+
+function graphPadIsGelijkOfOnder(pad: string, rootPad: string): boolean {
+  const vergelijking = pad.toLocaleLowerCase("nl");
+  const rootVergelijking = rootPad.toLocaleLowerCase("nl");
+  return vergelijking === rootVergelijking || vergelijking.startsWith(`${rootVergelijking}/`);
+}
+
 function itemAfwijscategorie(
   item: GraphDriveItem,
   bron: SpikeBronSnapshot,
   mapping: SpikeDocumentMapping,
-  rootWebUrl: string,
+  rootGraphPad: string,
 ): "binding" | "root" | null {
   if (item.id !== mapping.itemId || item.parentReference?.driveId !== bron.driveId || !item.file) return "binding";
-  const veiligItem = item.webUrl ? veiligeSharePointUrl(item.webUrl, bron.siteHostnaam) : null;
-  if (!veiligItem) return "root";
-  try {
-    const itemUrl = new URL(veiligItem);
-    const rootUrl = new URL(rootWebUrl);
-    const rootPad = decodeURIComponent(rootUrl.pathname).replace(/\/$/, "");
-    const itemPad = decodeURIComponent(itemUrl.pathname);
-    return itemUrl.origin === rootUrl.origin && itemPad.startsWith(`${rootPad}/`) ? null : "root";
-  } catch {
-    return "root";
-  }
+  const ouderId = item.parentReference.id;
+  const ouderPad = normaliseerGraphPad(item.parentReference.path);
+  if (!ouderId) return "root";
+  if (ouderId === bron.rootItemId) return !ouderPad || graphPadIsGelijkOfOnder(ouderPad, rootGraphPad) ? null : "root";
+  return ouderPad && graphPadIsGelijkOfOnder(ouderPad, rootGraphPad) ? null : "root";
 }
 
 function actualiteitToegestaan(mapping: SpikeDocumentMapping, vraag: SpikeVraag): boolean {
@@ -387,13 +405,11 @@ function isFataleKandidaatFout(fout: unknown): boolean {
     );
 }
 
-function mappadVanItem(item: GraphDriveItem, rootWebUrl: string): string {
-  if (!item.webUrl) return "";
-  const itemPad = decodeURIComponent(new URL(item.webUrl).pathname);
-  const rootPad = decodeURIComponent(new URL(rootWebUrl).pathname).replace(/\/$/, "");
-  const relatief = itemPad.slice(rootPad.length + 1);
-  const delen = relatief.split("/").filter(Boolean);
-  return delen.slice(0, -1).join("/").slice(0, 1_000);
+function mappadVanItem(item: GraphDriveItem, rootGraphPad: string): string {
+  const ouderPad = normaliseerGraphPad(item.parentReference?.path);
+  if (!ouderPad || !graphPadIsGelijkOfOnder(ouderPad, rootGraphPad)) return "";
+  if (ouderPad.toLocaleLowerCase("nl") === rootGraphPad.toLocaleLowerCase("nl")) return "";
+  return ouderPad.slice(rootGraphPad.length + 1).slice(0, 1_000);
 }
 
 function escapeKql(waarde: string): string {
@@ -550,7 +566,7 @@ async function maakKandidaat(
   opdracht: SpikeOpdracht,
   bronEerst: SpikeBronSnapshot,
   bronFingerprint: string,
-  rootWebUrl: string,
+  rootGraphPad: string,
   mapping: SpikeDocumentMapping,
   hit: ZoekHit,
   afwijzingen: SpikeAfwijzingen,
@@ -567,7 +583,7 @@ async function maakKandidaat(
     if (isFataleKandidaatFout(fout)) throw fout;
     return wijsKandidaatAf(afwijzingen, "rechten_configuratie");
   }
-  const eersteBindingFout = itemAfwijscategorie(eersteCheck, bronEerst, mapping, rootWebUrl);
+  const eersteBindingFout = itemAfwijscategorie(eersteCheck, bronEerst, mapping, rootGraphPad);
   if (eersteBindingFout) return wijsKandidaatAf(afwijzingen, eersteBindingFout);
   let eersteVersie: ReturnType<typeof eTagVan>;
   try {
@@ -621,7 +637,7 @@ async function maakKandidaat(
     if (isFataleKandidaatFout(fout)) throw fout;
     return wijsKandidaatAf(afwijzingen, "rechten_configuratie");
   }
-  const laatsteBindingFout = itemAfwijscategorie(laatsteCheck, bronEerst, mapping, rootWebUrl);
+  const laatsteBindingFout = itemAfwijscategorie(laatsteCheck, bronEerst, mapping, rootGraphPad);
   if (laatsteBindingFout) return wijsKandidaatAf(afwijzingen, laatsteBindingFout);
   let laatsteVersie: ReturnType<typeof eTagVan>;
   try {
@@ -684,7 +700,7 @@ async function maakKandidaat(
       basis: "delegated_user",
       bronconfiguratieVersie: bronEerst.configuratieversie,
     },
-    locator: { pagina, paragraaf, mappad: mappadVanItem(laatsteCheck, rootWebUrl) },
+    locator: { pagina, paragraaf, mappad: mappadVanItem(laatsteCheck, rootGraphPad) },
     passage,
     status: {
       documentstatus: mapping.fixtureStatus,
@@ -740,7 +756,8 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
 
     const root = await graphClient.json<GraphDriveItem>(itemUrl(bron, bron.rootItemId));
     const rootWebUrl = veiligeSharePointUrl(root.webUrl, bron.siteHostnaam);
-    if (!root.id || !root.folder || root.id !== bron.rootItemId || !rootWebUrl) {
+    const rootGraphPad = graphPadVanRoot(root);
+    if (!root.id || !root.folder || root.id !== bron.rootItemId || root.parentReference?.driveId !== bron.driveId || !rootWebUrl || !rootGraphPad) {
       throw new SpikeError("buiten_scope", "document_buiten_bron");
     }
     const maxKandidaten = Math.min(Math.max(1, opdracht.vraag.maxKandidaten ?? 20), 50);
@@ -774,7 +791,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       Math.min(Math.max(1, opdracht.concurrency ?? MAX_CONCURRENCY), MAX_CONCURRENCY),
       async ({ hit, mapping }) => {
         try {
-          return await maakKandidaat(graphClient, deps, opdracht, bron, fingerprint, rootWebUrl, mapping, hit, afwijzingen);
+          return await maakKandidaat(graphClient, deps, opdracht, bron, fingerprint, rootGraphPad, mapping, hit, afwijzingen);
         } catch (fout) {
           if (isFataleKandidaatFout(fout)) {
             fataleKandidaatFout ??= fout as SpikeErrorType;

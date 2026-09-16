@@ -29,6 +29,8 @@ Iedere afgewezen kandidaat telt precies één categorie, bepaald door de eerste 
 
 Actor-/tenantmismatch, bronconfiguratiedrift, timeout en cancellation zijn fataal voor het hele verzoek en worden nooit door een kandidaatfout ingeslikt. Lokale kandidaatfouten kunnen andere kandidaten niet blokkeren. Intrekking, verwijdering, verplaatsing buiten de bron, versiedrift of onvolledig bewijs laat de betrokken kandidaat fail-closed afvallen. Er is geen fallback naar Supabase of een andere provider.
 
+Rootlidmaatschap wordt uitsluitend vastgesteld met de live Graph-`driveId`, de parent-itemreferentie en het canonieke `parentReference.path` ten opzichte van de opnieuw gelezen root. De `webUrl` van een kandidaat is daarvoor geen bewijs: Word en PowerPoint kunnen geldige Office-weergave-URL's met `/:w:/…` en `/:p:/…` teruggeven die niet het documentbibliotheekpad volgen. Ook het veilige relatieve locatorpad wordt daarom uit de parentreferentie opgebouwd. Ontbrekend, conflicterend of buiten de root vallend parentbewijs wijst de kandidaat vóór content of preview af onder `root`.
+
 De contentroute volgt redirects niet automatisch. De eerste Graph-call verwacht exact een `302`, waarna alleen de eigen geconfigureerde SharePoint-host of een Microsoft `*.files.1drv.com`-downloadhost wordt geaccepteerd. De tweede call bevat geen Graph-token en weigert verdere redirects. Microsoft documenteert dat deze tijdelijke URL vooraf geautoriseerd is en geen `Authorization`-header nodig heeft: [Download driveItem content](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0).
 
 ## Inhoudsvrije permissionprobe
