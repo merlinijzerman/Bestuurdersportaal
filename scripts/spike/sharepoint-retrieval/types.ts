@@ -172,8 +172,8 @@ export interface VeiligeMeetrij {
   vraagcode: string;
   route: SpikeRoute;
   resultaat: "geslaagd" | "geen_resultaten" | "mislukt";
-  foutcategorie: SpikeFoutcategorie | null;
-  foutcode: SpikeFoutcode | null;
+  foutcategorie: SpikeFoutcategorie | "acceptatie_afwijking" | null;
+  foutcode: SpikeFoutcode | "onverwachte_bronset" | null;
   gevondenFixtures: string[];
   recall: number;
   locatorDekking: number;
