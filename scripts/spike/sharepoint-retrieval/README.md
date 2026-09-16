@@ -66,7 +66,7 @@ Laad lokaal dezelfde server-secrets die de bestaande Microsoft-vault en connecto
 npm run spike:m365-retrieval -- --config=.m365-retrieval-acceptatie.local.json > .m365-retrieval-meting.local.json
 ```
 
-De uitvoer bevat geen zoekvraag, passage, token, accountgegevens, lokale refs of private site-/drive-/item-id's. Wel opgenomen: fixturecode, resultaatcategorie, recall, locator-, versie- en previewdekking, timing, Graph-callcount, bytes, throttles, retries en een korte SHA-256-vingerafdruk van eTag/cTag.
+De uitvoer bevat geen zoekvraag, passage, token, accountgegevens, lokale refs of private site-/drive-/item-id's. Wel opgenomen: fixturecode, resultaatcategorie, recall, locator-, versie- en previewdekking, timing, Graph-callcount, bytes, throttles, retries en een korte SHA-256-vingerafdruk van eTag/cTag. Een positieve meting is alleen `geslaagd` wanneer de gevonden fixturecodes exact gelijk zijn aan de vooraf vastgelegde bronset; een ontbrekende of extra fixture wordt `acceptatie_afwijking/onverwachte_bronset`.
 
 ## Intrekking of configuratiewijziging tijdens een verzoek
 

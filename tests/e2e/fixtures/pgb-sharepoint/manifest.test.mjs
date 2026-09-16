@@ -4,6 +4,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import JSZip from "jszip";
 
 const fixtureRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(fixtureRoot, "../../../..");
@@ -90,6 +91,17 @@ test("PGB354 canarytermen zijn uniek en staan in de leesbare bronbestanden", () 
     "bibliotheek/99 Mutatie- en intrekkingstests/PGB354-UNS-001-Onbekend-formaat.bin",
   ].map((relativePath) => readFileSync(resolve(fixtureRoot, relativePath), "utf8")).join("\n");
   for (const canary of canaries) assert.ok(sources.includes(canary), `canary ontbreekt in bron: ${canary}`);
+});
+
+test("PGB354 PowerPoint houdt de gerichte S02-term buiten de S03-fixture", async () => {
+  const pptxPath = resolve(fixtureRoot, "bibliotheek/01 Vergaderstukken/2026-10 Bestuursvergadering/PGB354-PPT-001-Kwartaalplanning-oktober.pptx");
+  const zip = await JSZip.loadAsync(readFileSync(pptxPath));
+  const teksten = await Promise.all(Object.values(zip.files)
+    .filter((bestand) => !bestand.dir && /^ppt\/(slides|notesSlides)\/.*\.xml$/.test(bestand.name))
+    .map((bestand) => bestand.async("string")));
+  const inhoud = teksten.join("\n");
+  assert.match(inhoud, /IJsvogelkompas 73/);
+  assert.doesNotMatch(inhoud, /Koraalmaat 47/);
 });
 
 test("PGB354 gevolgde configuratie bevat geen private Microsoft-waarden of accountnamen", () => {

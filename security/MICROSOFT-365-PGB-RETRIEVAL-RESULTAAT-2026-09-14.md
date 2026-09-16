@@ -18,6 +18,12 @@ PR #400 is in `preview` gemerged. Na de eerste gecontroleerde meetpoging is de e
 
 De live waarneming wijst op een te strikte rootcontrole: PDF-items met een regulier bibliotheekpad slagen, terwijl Word- en PowerPoint-items Office-weergave-URL's van de vorm `/:w:/…` en `/:p:/…` leveren en onder `afwijzing_root` afvallen. Dit is nog geen positief eindbewijs voor de korte reeks. De gerichte vervolgfix bepaalt rootlidmaatschap daarom met de live drive- en parentreferenties en gebruikt de kandidaat-`webUrl` niet meer voor rootbewijs of locatorpad. Hermetische regressies dekken beide Office-URL-vormen en buiten-de-rootgevallen. Na een groene fix-PR worden S00 en de korte reeks S02, S03, S04 en S04H opnieuw uitgevoerd; S08 en S09 blijven tot die tijd buiten scope.
 
+## Aanvulling 16 september 2026 — tweede korte live reeks en bronsetcorrectie
+
+PR #401 is als `1d9f5fc` in `preview` gemerged; alle mergechecks en beide Preview-deployments waren groen. S00 slaagde. De Office-rootfix werkte: S02 en S03 lieten Word en PowerPoint door, terwijl S04 uitsluitend de actuele PDF en S04H uitsluitend de historische PDF toeliet. S02 leverde echter naast `PGB354-DOC-001` ook `PGB354-PPT-001`, terwijl de acceptatieset exact één bron voorschrijft. De 24-metingen en S08/S09 zijn daarom niet gestart. De extra vlag is direct geauditeerd teruggezet naar `false`, versie 6; de vijf meetregels bevatten de acht toegestane platte `afwijzing_*`-velden en geen geneste waarden.
+
+De afwijking heeft twee oorzaken. De veilige meetprojectie markeerde iedere niet-lege kandidaatset als `geslaagd` en berekende alleen recall, waardoor een foutpositief bij recall 1 groen leek. Daarnaast bevatte de zichtbare locatoruitleg in de PowerPoint-fixture zelf de unieke S02-term `Koraalmaat 47`. De correctie vereist voortaan exacte gelijkheid met de vooraf vastgelegde bronset en classificeert een ontbrekende of extra fixture als `acceptatie_afwijking/onverwachte_bronset`. De PowerPoint-fixture behoudt het eigen antwoordfeit `IJsvogelkompas 73`, maar noemt de S02-canary niet meer. Na deploy wordt uitsluitend S00 plus de korte Drive-reeks opnieuw uitgevoerd; de vervolgmetingen blijven tot een volledig groene inhoudscontrole buiten scope.
+
 ## Geanonimiseerd bewijs
 
 | Onderdeel | Waarneming | Status |
@@ -45,10 +51,11 @@ Er zijn geen echte bestuursstukken, klantgegevens, tokens, documentinhoud uit Sh
 2. Vul na een gecontroleerde Graph-listing de private lokale site-, drive-, root- en itemreferenties in.
 3. Registreer de PGB-root als Preview-bron volgens het fase-3-runbook en meet de portaalweergave voor rol A.
 4. Gebruik een echte tweede identiteit voor de negatieve rol-B-lijst-, preview- en retrievalproef.
-5. Merge en deploy eerst de gerichte Office-rootfix. Controleer daarna opnieuw S00 en de korte Drive-reeks S02, S03, S04 en S04H. Stop bij onverwachte inhoud of een fatale fout.
-6. Draai alleen na die groene korte reeks S02–S04H via beide retrievalroutes, drie volledige rondes per route (24 metingen), en leg alleen geanonimiseerde metingen vast.
-7. Voer pas daarna S06–S10 uit, herstel naam, locatie, inhoud en rechten en bewijs één volledige reset.
-8. Neem pas daarna het definitieve besluit: Graph live retrieval of een gerichte Azure AI Search-spike.
+5. Merge en deploy de bronsetcorrectie, vervang daarna uitsluitend de synthetische PowerPoint-fixture volgens het resetrunbook en actualiseer de private versievelden voor hetzelfde item.
+6. Controleer opnieuw S00 en de korte Drive-reeks S02, S03, S04 en S04H. Stop bij `acceptatie_afwijking`, onverwachte inhoud of een fatale fout.
+7. Draai alleen na die groene korte reeks S02–S04H via beide retrievalroutes, drie volledige rondes per route (24 metingen), en leg alleen geanonimiseerde metingen vast.
+8. Voer pas daarna S06–S10 uit, herstel naam, locatie, inhoud en rechten en bewijs één volledige reset.
+9. Neem pas daarna het definitieve besluit: Graph live retrieval of een gerichte Azure AI Search-spike.
 
 ## Beslispunt
 

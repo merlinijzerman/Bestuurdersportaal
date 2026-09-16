@@ -777,3 +777,32 @@ test("meetbewijs bevat geen token, vraag, passage of private Graph-identifiers",
   }
   assert.equal(rij.versieVingerafdrukken[0].length, 12);
 });
+
+test("meetbewijs is alleen geslaagd bij exact de vooraf verwachte bronset", async () => {
+  const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [{ hitId: IDS.item, rank: 1, summary: "oranje kanariewaarde is 314" }] }] }] });
+    if (url.includes(`/items/${IDS.item}?`)) return json(item());
+    if (url.endsWith(`/items/${IDS.item}/preview`)) return json({ getUrl: "https://pgb.sharepoint.com/embed" });
+    throw new Error("onverwachte call");
+  }), opdracht("microsoft_search"));
+  const vraag = opdracht("microsoft_search").vraag;
+  const exact = maakVeiligeMeetrij(1, vraag, uitkomst);
+  assert.equal(exact.resultaat, "geslaagd");
+
+  const extra = maakVeiligeMeetrij(1, vraag, {
+    ...uitkomst,
+    kandidaten: [
+      ...uitkomst.kandidaten,
+      { ...uitkomst.kandidaten[0], fixtureCode: "PGB-ONVERWACHT" },
+    ],
+  });
+  assert.equal(extra.resultaat, "mislukt");
+  assert.equal(extra.foutcategorie, "acceptatie_afwijking");
+  assert.equal(extra.foutcode, "onverwachte_bronset");
+  assert.equal(extra.recall, 1, "recall alleen mag een foutpositief niet groen maken");
+
+  const ontbrekend = maakVeiligeMeetrij(1, { ...vraag, verwachteFixtures: [vraag.verwachteFixtures[0], "PGB-ONTBREEKT"] }, uitkomst);
+  assert.equal(ontbrekend.resultaat, "mislukt");
+  assert.equal(ontbrekend.foutcode, "onverwachte_bronset");
+});

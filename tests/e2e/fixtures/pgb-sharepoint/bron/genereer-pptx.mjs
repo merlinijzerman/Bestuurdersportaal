@@ -3,15 +3,18 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Presentation, PresentationFile } from "@oai/artifact-tool";
 
-const skillDir = "/Users/merlinijzerman/.codex/plugins/cache/openai-primary-runtime/presentations/26.905.11957/skills/presentations";
+const skillDir = "/Users/merlinijzerman/.codex/plugins/cache/openai-primary-runtime/presentations/26.909.12148/skills/presentations";
 const runtimePython = "/Users/merlinijzerman/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3";
 const workspaceDir = process.cwd();
 const fixtureRoot = path.join(workspaceDir, "tests/e2e/fixtures/pgb-sharepoint");
 const buildDir = path.join(workspaceDir, ".artifacts-build/pgb-sharepoint/pptx");
-const finalPath = path.join(
+const standaardFinalPath = path.join(
   fixtureRoot,
   "bibliotheek/01 Vergaderstukken/2026-10 Bestuursvergadering/PGB354-PPT-001-Kwartaalplanning-oktober.pptx",
 );
+const finalPath = process.env.PGB_PPTX_OUTPUT
+  ? path.resolve(workspaceDir, process.env.PGB_PPTX_OUTPUT)
+  : standaardFinalPath;
 
 await fs.mkdir(buildDir, { recursive: true });
 await fs.mkdir(path.dirname(finalPath), { recursive: true });
@@ -109,7 +112,7 @@ function baseSlide() {
   );
   addText(
     slide,
-    "Verwachte locator: dia 3. Een fondsbrede vraag combineert dit feit met Koraalmaat 47 uit PGB354-DOC-001.",
+    "Verwachte locator: dia 3. Een fondsbrede vraag combineert dit feit met de hersteltermijn uit PGB354-DOC-001.",
     { left: 92, top: 455, width: 1050, height: 90 },
     { fontSize: 21, color: colors.muted },
   );

@@ -897,13 +897,21 @@ export function maakVeiligeMeetrij(ronde: number, vraag: SpikeVraag, uitkomst: S
   const gevonden = [...new Set(uitkomst.kandidaten.map((k) => k.fixtureCode))].sort();
   const verwacht = new Set(vraag.verwachteFixtures);
   const raak = gevonden.filter((code) => verwacht.has(code)).length;
+  const exacteBronset = gevonden.length === verwacht.size && gevonden.every((code) => verwacht.has(code));
+  const bronsetAfwijking = uitkomst.kandidaten.length > 0 && !exacteBronset;
   return {
     ronde,
     vraagcode: vraag.code,
     route: uitkomst.route,
-    resultaat: uitkomst.kandidaten.length > 0 ? "geslaagd" : uitkomst.fout === "geen_resultaten" ? "geen_resultaten" : "mislukt",
-    foutcategorie: uitkomst.fout ?? null,
-    foutcode: uitkomst.foutcode ?? null,
+    resultaat: bronsetAfwijking
+      ? "mislukt"
+      : uitkomst.kandidaten.length > 0
+        ? "geslaagd"
+        : uitkomst.fout === "geen_resultaten"
+          ? "geen_resultaten"
+          : "mislukt",
+    foutcategorie: bronsetAfwijking ? "acceptatie_afwijking" : uitkomst.fout ?? null,
+    foutcode: bronsetAfwijking ? "onverwachte_bronset" : uitkomst.foutcode ?? null,
     gevondenFixtures: gevonden,
     recall: verhouding(raak, verwacht.size),
     locatorDekking: verhouding(uitkomst.kandidaten.filter((k) => k.locator.pagina !== null || k.locator.paragraaf !== null || Boolean(k.locator.mappad?.length)).length, uitkomst.kandidaten.length),
