@@ -9,19 +9,25 @@
   ],
   "fixtures": [
     {
-      "fixtureCode": "PGB-DOCX-01",
+      "fixtureCode": "PGB354-DOC-001",
       "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
       "bestandstype": "docx",
       "verwachteMappad": "01 Vergaderstukken/2026-09 Bestuursvergadering"
     },
     {
-      "fixtureCode": "PGB-PDF-01",
+      "fixtureCode": "PGB354-PDF-001",
       "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
       "bestandstype": "pdf",
       "verwachteMappad": "02 Beleid en reglementen"
     },
     {
-      "fixtureCode": "PGB-PPTX-01",
+      "fixtureCode": "PGB354-PDF-002",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "pdf",
+      "verwachteMappad": "03 Historisch en vervallen"
+    },
+    {
+      "fixtureCode": "PGB354-PPT-001",
       "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
       "bestandstype": "pptx",
       "verwachteMappad": "01 Vergaderstukken/2026-10 Bestuursvergadering"
@@ -32,21 +38,32 @@
       "code": "Q-GERICHT-01",
       "soort": "gericht",
       "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
-      "verwachteFixtures": ["PGB-DOCX-01"],
+      "actualiteitsbeleid": "alleen_actueel",
+      "verwachteFixtures": ["PGB354-DOC-001"],
       "maxKandidaten": 20
     },
     {
       "code": "Q-FONDSBREED-01",
       "soort": "fondsbreed",
       "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
-      "verwachteFixtures": ["PGB-DOCX-01", "PGB-PDF-01"],
+      "actualiteitsbeleid": "alleen_actueel",
+      "verwachteFixtures": ["PGB354-DOC-001", "PGB354-PDF-001"],
       "maxKandidaten": 20
     },
     {
       "code": "Q-PPTX-01",
       "soort": "powerpoint",
       "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
-      "verwachteFixtures": ["PGB-PPTX-01"],
+      "actualiteitsbeleid": "alleen_actueel",
+      "verwachteFixtures": ["PGB354-PPT-001"],
+      "maxKandidaten": 20
+    },
+    {
+      "code": "Q-HISTORISCH-01",
+      "soort": "versieconflict",
+      "vraag": "VUL-DE-VASTGESTELDE-HISTORISCHE-VRAAG-UIT-ISSUE-354-IN",
+      "actualiteitsbeleid": "alleen_historisch",
+      "verwachteFixtures": ["PGB354-PDF-002"],
       "maxKandidaten": 20
     }
   ]

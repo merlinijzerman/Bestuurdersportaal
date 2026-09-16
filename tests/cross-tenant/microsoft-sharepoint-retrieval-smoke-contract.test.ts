@@ -26,6 +26,8 @@ test("#353 browserinvoer bevat uitsluitend vaste scenario-, route- en rondecodes
   assert.match(kern, /Welke hersteltermijn geldt voor Koraalmaat 47\?/);
   assert.match(kern, /m365-permission-probe-7f4c1d9e-no-match/);
   assert.match(kern, /driveZoektermen: \["Koraalmaat 47", "IJsvogelkompas 73"\]/);
+  assert.match(kern, /S04:[\s\S]*actualiteitsbeleid: "alleen_actueel"/);
+  assert.match(kern, /S04H:[\s\S]*actualiteitsbeleid: "alleen_historisch"/);
   assert.match(route, /scenario === "S00" && invoer\.data\.route !== "drive_search_extract"/);
 });
 
@@ -35,9 +37,32 @@ test("#353 alleen de veilige meetprojectie en vaste SSE-statussen verlaten de se
   assert.doesNotMatch(route, /accessToken|microsoft_object_id|tenant_id|drive_id|item_id|passage/);
   assert.match(brug, /maakVeiligeMeetrij/);
   assert.match(brug, /voerSharePointPermissionProbeUit/);
+  assert.match(brug, /sharePointRetrievalFixtureStatus\(code\)/);
+  assert.doesNotMatch(brug, /fixtureStatus\s*:\s*document\.(?:naam|mappad|eTag|cTag)/);
   const auditStart = brug.indexOf("async function audit");
   const auditBlok = brug.slice(auditStart, brug.indexOf("\n}\n", auditStart) + 3);
   assert.doesNotMatch(auditBlok, /toegangscontrole|accessToken|passage|tenantId|itemId|driveId/);
+  assert.match(auditBlok, /projecteerAuditAfwijzingen\(meting\)/);
+  assert.deepEqual([...auditBlok.matchAll(/afwijzing_[a-z_]+/g)].map((match) => match[0]), []);
+  assert.deepEqual(Object.keys(JSON.parse(JSON.stringify({
+    afwijzing_mapping: 0,
+    afwijzing_binding: 0,
+    afwijzing_root: 0,
+    afwijzing_rechten_configuratie: 0,
+    afwijzing_versie: 0,
+    afwijzing_extractie: 0,
+    afwijzing_preview: 0,
+    afwijzing_actualiteit: 0,
+  }))), [
+    "afwijzing_mapping",
+    "afwijzing_binding",
+    "afwijzing_root",
+    "afwijzing_rechten_configuratie",
+    "afwijzing_versie",
+    "afwijzing_extractie",
+    "afwijzing_preview",
+    "afwijzing_actualiteit",
+  ]);
 });
 
 test("#353 S08 pauzeert vóór de laatste rechtencheck en S09 start zonder cachepad", () => {

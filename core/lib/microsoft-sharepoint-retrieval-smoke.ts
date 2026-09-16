@@ -7,6 +7,8 @@ import {
   SHAREPOINT_RETRIEVAL_SMOKE_WACHT_MS,
   borgIntrekkingsUitkomst,
   fixtureCodeUitBestandsnaam,
+  projecteerAuditAfwijzingen,
+  sharePointRetrievalFixtureStatus,
   sharePointRetrievalSmokeVraag,
   type SharePointRetrievalSmokeEvent,
   type SharePointRetrievalSmokeRoute,
@@ -105,7 +107,9 @@ async function bouwBronlezer(args: {
       const ref = refs.get(code);
       if (!ref) continue;
       const document = await vault.leesSharePointDocument(args.ctx.fondsId, ref);
+      const fixtureStatus = sharePointRetrievalFixtureStatus(code);
       if (!document
+        || !fixtureStatus
         || document.bron_id !== bron.id
         || document.drive_id !== bron.drive_id
         || document.root_item_id !== bron.root_item_id
@@ -119,6 +123,7 @@ async function bouwBronlezer(args: {
         itemId: document.item_id,
         titel: document.naam,
         bestandstype: bestandstype(document.bestandstype),
+        fixtureStatus,
         geregistreerdMappad: document.mappad,
       });
     }
@@ -162,6 +167,7 @@ async function audit(ctx: SmokeContext, meting: SharePointRetrievalVeiligeMeting
       content_bytes: meting.contentBytes,
       throttles: meting.throttles,
       retries: meting.retries,
+      ...projecteerAuditAfwijzingen(meting),
     },
   });
 }
@@ -206,6 +212,14 @@ export async function voerSharePointRetrievalPreviewSmokeUit(
       throttles: 0,
       retries: 0,
       versieVingerafdrukken: [],
+      afwijzingMapping: 0,
+      afwijzingBinding: 0,
+      afwijzingRoot: 0,
+      afwijzingRechtenConfiguratie: 0,
+      afwijzingVersie: 0,
+      afwijzingExtractie: 0,
+      afwijzingPreview: 0,
+      afwijzingActualiteit: 0,
     };
     await audit(ctx, meting);
     return meting;

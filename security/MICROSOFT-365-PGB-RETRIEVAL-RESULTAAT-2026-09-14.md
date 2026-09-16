@@ -6,6 +6,12 @@ De vaste synthetische PGB-bibliotheek staat in de aangewezen Microsoft 365-testo
 
 Het resultaat is **DEELS GEREED / NO-GO voor productiewiring**. De documentinrichting en de groepsrechten zijn gereed: A en B lezen de algemene PGB-root, terwijl alleen A de beperkte map leest. De koppeling van afzonderlijke testidentiteiten, tweede-identiteitsproef, portaalpreview en drie live retrievalrondes ontbreken nog.
 
+## Aanvulling 15 september 2026 — issue #399
+
+De hermetische retrievalimplementatie is uitgebreid met expliciet actualiteitsbeleid, een positieve historische proef S04H, serververtrouwde fixturestatus op exacte fixturecode en vaste kandidaatdiagnostiek. Status is onderdeel van de bronvingerafdruk; onbekende of conflicterende status valt vóór downloaden fail-closed af. Kandidaatfouten leveren precies één categorie volgens de vaste fasevolgorde, terwijl actor-/tenantmismatch, bronconfiguratiedrift, timeout en cancellation fataal blijven voor het hele verzoek. De auditprojectie gebruikt uitsluitend de acht vaste platte `afwijzing_*`-velden.
+
+Deze wijziging voegt geen migratie, opslag, permissie, productiewiring of scope toe. De Preview-vlag is niet ingeschakeld en er zijn nog geen live PGB-metingen uitgevoerd. De code- en fixturetests zijn lokaal groen; de status blijft **NO-GO voor productiewiring** totdat de PR groen is, op Preview is gedeployed en de onderstaande live volgorde volledig is doorlopen.
+
 ## Geanonimiseerd bewijs
 
 | Onderdeel | Waarneming | Status |
@@ -33,9 +39,10 @@ Er zijn geen echte bestuursstukken, klantgegevens, tokens, documentinhoud uit Sh
 2. Vul na een gecontroleerde Graph-listing de private lokale site-, drive-, root- en itemreferenties in.
 3. Registreer de PGB-root als Preview-bron volgens het fase-3-runbook en meet de portaalweergave voor rol A.
 4. Gebruik een echte tweede identiteit voor de negatieve rol-B-lijst-, preview- en retrievalproef.
-5. Draai de twee retrievalroutes uit #357 drie volledige rondes en leg alleen geanonimiseerde metingen vast.
-6. Voer S06–S10 uit, herstel naam, locatie, inhoud en rechten en bewijs één volledige reset.
-7. Neem pas daarna het definitieve besluit: Graph live retrieval of een gerichte Azure AI Search-spike.
+5. Controleer eerst S00 en daarna de korte Drive-reeks S02, S03, S04 en S04H. Stop bij onverwachte inhoud of een fatale fout.
+6. Draai alleen na die groene korte reeks S02–S04H via beide retrievalroutes, drie volledige rondes per route (24 metingen), en leg alleen geanonimiseerde metingen vast.
+7. Voer pas daarna S06–S10 uit, herstel naam, locatie, inhoud en rechten en bewijs één volledige reset.
+8. Neem pas daarna het definitieve besluit: Graph live retrieval of een gerichte Azure AI Search-spike.
 
 ## Beslispunt
 

@@ -5,6 +5,7 @@ import { resolve, relative } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stderr } from "node:process";
 import { voerSharePointPermissionProbeUit, voerSharePointRetrievalSpikeUit, maakVeiligeMeetrij, vatMetingenSamen } from "./prototype";
+import { sharePointRetrievalFixtureStatus } from "../../../core/lib/microsoft-sharepoint-retrieval-smoke-core";
 import type { SpikeBronSnapshot, SpikeDocumentMapping, SpikeFase, SpikeRoute, SpikeVraag, VeiligeMeetrij } from "./types";
 
 type ConfigFixture = {
@@ -53,7 +54,8 @@ async function leesLokaleConfig(pad: string, alleenPermissionProbe: boolean): Pr
   if (typeof config.rondes !== "number" || !Number.isInteger(config.rondes) || config.rondes < 3 || config.rondes > 10) throw new Error("rondes moet tussen 3 en 10 liggen");
   if (!Array.isArray(config.routes) || config.routes.length === 0 || config.routes.some((route) => route !== "microsoft_search" && route !== "drive_search_extract")) throw new Error("routes is ongeldig");
   if (!Array.isArray(config.fixtures) || config.fixtures.length === 0 || config.fixtures.some((fixture) => !fixture.fixtureCode || !uuid.test(fixture.ref))) throw new Error("fixtures ontbreken of bevatten ongeldige lokale refs");
-  if (!Array.isArray(config.vragen) || config.vragen.length === 0 || config.vragen.some((vraag) => !vraag.code || !vraag.vraag || !Array.isArray(vraag.verwachteFixtures))) throw new Error("acceptatievragen ontbreken of zijn ongeldig");
+  const actualiteitsbeleid = new Set(["alleen_actueel", "alleen_historisch", "actueel_en_historisch"]);
+  if (!Array.isArray(config.vragen) || config.vragen.length === 0 || config.vragen.some((vraag) => !vraag.code || !vraag.vraag || !actualiteitsbeleid.has(vraag.actualiteitsbeleid) || !Array.isArray(vraag.verwachteFixtures))) throw new Error("acceptatievragen ontbreken of zijn ongeldig");
   return config;
 }
 
@@ -76,6 +78,8 @@ async function main() {
       throw new Error("Microsoft-identiteit hoort niet bij de actuele SharePoint-bron");
     }
     const documenten = await Promise.all((config.fixtures ?? []).map(async (fixture) => {
+      const fixtureStatus = sharePointRetrievalFixtureStatus(fixture.fixtureCode);
+      if (!fixtureStatus) throw new Error(`fixture ${fixture.fixtureCode} heeft geen serververtrouwde status`);
       const document = await vault.leesSharePointDocument(config.fondsId, fixture.ref);
       if (!document) throw new Error(`fixture ${fixture.fixtureCode} heeft geen actuele lokale ref`);
       if (
@@ -93,6 +97,7 @@ async function main() {
         itemId: document.item_id,
         titel: document.naam,
         bestandstype: fixture.bestandstype,
+        fixtureStatus,
         geregistreerdMappad: document.mappad,
         verwachteMappad: fixture.verwachteMappad,
       };
