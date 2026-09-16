@@ -60,7 +60,7 @@ const rootItem = {
   id: IDS.root,
   name: "PGB Retrieval Pilot",
   folder: { childCount: 1 },
-  parentReference: { driveId: IDS.drive },
+  parentReference: { driveId: IDS.drive, id: "drive-root", path: "/drives/x/root:" },
   webUrl: "https://pgb.sharepoint.com/sites/retrieval/PGB%20Retrieval%20Pilot",
 };
 
@@ -561,7 +561,7 @@ test("tenant- of actormismatch stopt vóór Graph en een zoek-403 levert geen re
   assert.equal(geweigerd.foutcode, "graph_toestemming");
 });
 
-test("gemanipuleerde drive- of sitebinding en verplaatsing buiten de root falen gesloten", async () => {
+test("drivebinding en parentreferenties bepalen rootlidmaatschap en falen buiten de root gesloten", async () => {
   const scenario = async (actueelItem: Record<string, unknown>) => voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
     if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
     if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [{ hitId: IDS.item, summary: "oranje 314" }] }] }] });
@@ -575,16 +575,53 @@ test("gemanipuleerde drive- of sitebinding en verplaatsing buiten de root falen 
   assert.equal(andereDrive.afwijzingen.binding, 1);
   assert.equal(aantalAfwijzingen(andereDrive), 1);
 
-  const andereSite = await scenario({ ...item(), webUrl: "https://aanvaller.example/document.pptx" });
-  assert.deepEqual(andereSite.kandidaten, []);
-  assert.equal(andereSite.fout, "geen_resultaten");
-  assert.equal(andereSite.afwijzingen.root, 1);
-  assert.equal(aantalAfwijzingen(andereSite), 1);
-
-  const verplaatst = await scenario({ ...item(), webUrl: "https://pgb.sharepoint.com/sites/retrieval/Buiten%20de%20pilot/document.pptx" });
+  const verplaatst = await scenario({
+    ...item(),
+    parentReference: { ...item().parentReference, id: "andere-map", path: "/drives/x/root:/Buiten de pilot" },
+    webUrl: "https://pgb.sharepoint.com/:p:/r/sites/retrieval/_layouts/15/Doc.aspx?sourcedoc=test",
+  });
   assert.deepEqual(verplaatst.kandidaten, []);
   assert.equal(verplaatst.fout, "geen_resultaten");
   assert.equal(verplaatst.afwijzingen.root, 1);
+  assert.equal(aantalAfwijzingen(verplaatst), 1);
+
+  const gelijkendePrefix = await scenario({
+    ...item(),
+    parentReference: { ...item().parentReference, id: "andere-map", path: "/drives/x/root:/PGB Retrieval Pilot-aanvaller" },
+  });
+  assert.equal(gelijkendePrefix.fout, "geen_resultaten");
+  assert.equal(gelijkendePrefix.afwijzingen.root, 1);
+});
+
+test("Word- en PowerPoint-weergave-URL's slagen via drive- en parentreferenties", async () => {
+  for (const [type, bestandstype, fixtureCode, naam, mimeType, officeWebUrl] of [
+    ["Word", "docx", "PGB-DOCX-01", "Synthetisch document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "https://pgb.sharepoint.com/:w:/r/sites/retrieval/_layouts/15/Doc.aspx?sourcedoc=word"],
+    ["PowerPoint", "pptx", "PGB-PPTX-01", "Synthetisch dek.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "https://pgb.sharepoint.com/:p:/r/sites/retrieval/_layouts/15/Doc.aspx?sourcedoc=ppt"],
+  ] as const) {
+    const bronSnapshot = bron({
+      documenten: [{ ...bron().documenten[0], fixtureCode, bestandstype, titel: naam }],
+    });
+    const fetchImpl = async (url: string) => {
+      if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+      if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [{ hitId: IDS.item, summary: "oranje 314" }] }] }] });
+      if (url.includes(`/items/${IDS.item}?`)) return json({
+        ...item(),
+        name: naam,
+        file: { mimeType },
+        parentReference: { driveId: IDS.drive, id: "onderliggende-map", path: "/drives/x/root:/PGB Retrieval Pilot/01 Vergaderstukken" },
+        webUrl: officeWebUrl,
+      });
+      if (url.endsWith(`/items/${IDS.item}/preview`)) return json({ getUrl: "https://pgb.sharepoint.com/sites/retrieval/_layouts/15/embed.aspx?id=test" });
+      throw new Error(`onverwachte ${type}-call`);
+    };
+
+    const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(fetchImpl, async () => bronSnapshot), opdracht("microsoft_search"));
+    assert.equal(uitkomst.fout, undefined, `${type} hoort niet door de Office-weergave-URL te worden afgewezen`);
+    assert.equal(uitkomst.kandidaten.length, 1);
+    assert.equal(uitkomst.kandidaten[0]?.locator.mappad, "01 Vergaderstukken");
+    assert.equal(uitkomst.kandidaten[0]?.weergave?.bestandstype, bestandstype);
+    assert.equal(aantalAfwijzingen(uitkomst), 0);
+  }
 });
 
 test("onveilig paginavervolg, providerfout en ongeldige preview worden genormaliseerd", async () => {

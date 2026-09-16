@@ -12,6 +12,12 @@ De hermetische retrievalimplementatie is uitgebreid met expliciet actualiteitsbe
 
 Deze wijziging voegt geen migratie, opslag, permissie, productiewiring of scope toe. De Preview-vlag is niet ingeschakeld en er zijn nog geen live PGB-metingen uitgevoerd. De code- en fixturetests zijn lokaal groen; de status blijft **NO-GO voor productiewiring** totdat de PR groen is, op Preview is gedeployed en de onderstaande live volgorde volledig is doorlopen.
 
+## Aanvulling 16 september 2026 — eerste korte live reeks en Office-rootfix
+
+PR #400 is in `preview` gemerged. Na de eerste gecontroleerde meetpoging is de extra vlag geauditeerd teruggezet naar `false`, versie 4. De vijf bijbehorende auditregels bevatten exact de acht toegestane platte `afwijzing_*`-velden en geen genest afwijzingsobject.
+
+De live waarneming wijst op een te strikte rootcontrole: PDF-items met een regulier bibliotheekpad slagen, terwijl Word- en PowerPoint-items Office-weergave-URL's van de vorm `/:w:/…` en `/:p:/…` leveren en onder `afwijzing_root` afvallen. Dit is nog geen positief eindbewijs voor de korte reeks. De gerichte vervolgfix bepaalt rootlidmaatschap daarom met de live drive- en parentreferenties en gebruikt de kandidaat-`webUrl` niet meer voor rootbewijs of locatorpad. Hermetische regressies dekken beide Office-URL-vormen en buiten-de-rootgevallen. Na een groene fix-PR worden S00 en de korte reeks S02, S03, S04 en S04H opnieuw uitgevoerd; S08 en S09 blijven tot die tijd buiten scope.
+
 ## Geanonimiseerd bewijs
 
 | Onderdeel | Waarneming | Status |
@@ -39,7 +45,7 @@ Er zijn geen echte bestuursstukken, klantgegevens, tokens, documentinhoud uit Sh
 2. Vul na een gecontroleerde Graph-listing de private lokale site-, drive-, root- en itemreferenties in.
 3. Registreer de PGB-root als Preview-bron volgens het fase-3-runbook en meet de portaalweergave voor rol A.
 4. Gebruik een echte tweede identiteit voor de negatieve rol-B-lijst-, preview- en retrievalproef.
-5. Controleer eerst S00 en daarna de korte Drive-reeks S02, S03, S04 en S04H. Stop bij onverwachte inhoud of een fatale fout.
+5. Merge en deploy eerst de gerichte Office-rootfix. Controleer daarna opnieuw S00 en de korte Drive-reeks S02, S03, S04 en S04H. Stop bij onverwachte inhoud of een fatale fout.
 6. Draai alleen na die groene korte reeks S02–S04H via beide retrievalroutes, drie volledige rondes per route (24 metingen), en leg alleen geanonimiseerde metingen vast.
 7. Voer pas daarna S06–S10 uit, herstel naam, locatie, inhoud en rechten en bewijs één volledige reset.
 8. Neem pas daarna het definitieve besluit: Graph live retrieval of een gerichte Azure AI Search-spike.
