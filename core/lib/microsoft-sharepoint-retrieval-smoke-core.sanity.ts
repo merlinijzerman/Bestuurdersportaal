@@ -42,6 +42,11 @@ test("#353: alleen vaste routes, vragen en fixturecodes uit #385 zijn inzetbaar"
   assert.deepEqual(sharePointRetrievalSmokeVraag("S04H").driveZoektermen, ["Maananker Historisch 61"]);
   const manifestCodes = new Set(manifest.fixtures.map((x: { code: string }) => x.code));
   for (const code of SHAREPOINT_RETRIEVAL_FIXTURE_CODES) assert.ok(manifestCodes.has(code));
+  for (const code of SHAREPOINT_RETRIEVAL_FIXTURE_CODES) {
+    const fixture = manifest.fixtures.find((x: { code: string; status?: string }) => x.code === code) as { status?: string } | undefined;
+    const verwachteStatus = fixture?.status === "vervallen" ? "historisch" : fixture?.status;
+    assert.equal(sharePointRetrievalFixtureStatus(code), verwachteStatus, `${code}: runtime-status wijkt af van manifest`);
+  }
   assert.equal(fixtureCodeUitBestandsnaam("PGB354-DOC-001-Agenda-en-besluitpunten-september.docx"), "PGB354-DOC-001");
   assert.equal(fixtureCodeUitBestandsnaam("ander-document.docx"), null);
 });

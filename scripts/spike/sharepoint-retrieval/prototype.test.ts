@@ -320,6 +320,35 @@ test("per-kandidaatfouten krijgen volgens de vaste fasevolgorde precies één ca
   assert.equal(aantalAfwijzingen(bindingVoorVersie), 1);
 });
 
+test("rate-limit en providerfout tijdens kandidaatcontrole blijven verzoekfataal", async () => {
+  let ratelimitPogingen = 0;
+  const rateLimit = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [{ hitId: IDS.item, summary: "oranje 314" }] }] }] });
+    if (url.includes(`/items/${IDS.item}?`)) {
+      ratelimitPogingen += 1;
+      return json({}, 429, { "Retry-After": "0" });
+    }
+    throw new Error("na rate-limit mag geen content- of previewcall starten");
+  }), opdracht("microsoft_search"));
+  assert.equal(ratelimitPogingen, 3);
+  assert.equal(rateLimit.fout, "rate_limit");
+  assert.equal(rateLimit.foutcode, "graph_ratelimit");
+  assert.deepEqual(rateLimit.kandidaten, []);
+  assert.equal(aantalAfwijzingen(rateLimit), 0);
+
+  const providerfout = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [{ hitId: IDS.item, summary: "oranje 314" }] }] }] });
+    if (url.includes(`/items/${IDS.item}?`)) return json({}, 500);
+    throw new Error("na providerfout mag geen content- of previewcall starten");
+  }), opdracht("microsoft_search"));
+  assert.equal(providerfout.fout, "providerfout");
+  assert.equal(providerfout.foutcode, "graph_response");
+  assert.deepEqual(providerfout.kandidaten, []);
+  assert.equal(aantalAfwijzingen(providerfout), 0);
+});
+
 test("drive-search gebruikt vaste korte zoektermen afzonderlijk en ontdubbelt resultaten stabiel", async () => {
   const urls: string[] = [];
   const zip = new JSZip();

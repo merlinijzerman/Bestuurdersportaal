@@ -372,7 +372,19 @@ function actualiteitToegestaan(mapping: SpikeDocumentMapping, vraag: SpikeVraag)
 
 function isFataleKandidaatFout(fout: unknown): boolean {
   return fout instanceof SpikeError
-    && (fout.categorie === "configuratiefout" || fout.categorie === "timeout" || fout.categorie === "annulering" || fout.code === "actor_of_tenant_mismatch");
+    && (
+      fout.categorie === "configuratiefout"
+      || fout.categorie === "timeout"
+      || fout.categorie === "annulering"
+      || fout.categorie === "rate_limit"
+      || (fout.categorie === "providerfout" && (
+        fout.code === "graph_bad_request"
+        || fout.code === "graph_response"
+        || fout.code === "ongeldige_graph_url"
+        || fout.code === "onveilig_vervolgpad"
+      ))
+      || fout.code === "actor_of_tenant_mismatch"
+    );
 }
 
 function mappadVanItem(item: GraphDriveItem, rootWebUrl: string): string {
@@ -434,18 +446,29 @@ function bestandstypeVoorExtractie(mapping: SpikeDocumentMapping): Bestandstype 
   throw new SpikeError("onondersteund_bestand", "extractie_leeg");
 }
 
-async function parallelBegrensd<T, R>(items: T[], limiet: number, werk: (item: T) => Promise<R | null>): Promise<R[]> {
+async function parallelBegrensd<T, R>(
+  items: T[],
+  limiet: number,
+  werk: (item: T) => Promise<R | null>,
+  stopSignal?: AbortSignal,
+): Promise<R[]> {
   const resultaat: R[] = [];
   let volgende = 0;
   const workers = Array.from({ length: Math.min(Math.max(1, limiet), items.length) }, async () => {
     for (;;) {
+      if (stopSignal?.aborted) return;
       const index = volgende++;
       if (index >= items.length) return;
       const waarde = await werk(items[index]);
       if (waarde !== null) resultaat.push(waarde);
     }
   });
-  await Promise.all(workers);
+  // Wacht ook na de eerste fout op alle reeds gestarte workers. Daardoor kunnen
+  // Graph-calls en afwijstellingen niet meer veranderen nadat de veilige
+  // meetprojectie en audit zijn opgebouwd.
+  const uitkomsten = await Promise.allSettled(workers);
+  const eersteFout = uitkomsten.find((uitkomst): uitkomst is PromiseRejectedResult => uitkomst.status === "rejected");
+  if (eersteFout) throw eersteFout.reason;
   return resultaat;
 }
 
@@ -761,6 +784,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
           return wijsKandidaatAf(afwijzingen, "rechten_configuratie");
         }
       },
+      signal,
     );
     kandidaten.sort((a, b) => a.rang.positie - b.rang.positie || a.ref.localeCompare(b.ref));
     Object.assign(meting, graphClient.meting);
