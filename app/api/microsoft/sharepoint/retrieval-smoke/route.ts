@@ -5,6 +5,7 @@ import { sharePointRetrievalSmokeToegestaan } from "@/core/lib/microsoft-sharepo
 import {
   SHAREPOINT_RETRIEVAL_SMOKE_ROUTES,
   SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS,
+  SHAREPOINT_RETRIEVAL_SEARCH_SCOPES,
   veiligeSmokeFoutcategorie,
   type SharePointRetrievalSmokeEvent,
 } from "@/core/lib/microsoft-sharepoint-retrieval-smoke-core";
@@ -19,6 +20,7 @@ const schema = z.object({
   scenario: z.enum(SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS),
   route: z.enum(SHAREPOINT_RETRIEVAL_SMOKE_ROUTES),
   ronde: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  searchScope: z.enum(SHAREPOINT_RETRIEVAL_SEARCH_SCOPES).optional(),
 }).strict();
 
 function neutraalNietBeschikbaar() {
@@ -42,6 +44,9 @@ export const POST = withFondsRoute({
   const invoer = schema.safeParse(await req.json().catch(() => null));
   if (!invoer.success) return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400, headers: { "Cache-Control": "no-store" } });
   if (invoer.data.scenario === "S00" && invoer.data.route !== "drive_search_extract") {
+    return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
+  if (invoer.data.searchScope && (invoer.data.scenario !== "S02" || invoer.data.route !== "microsoft_search")) {
     return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
 
@@ -71,7 +76,7 @@ export const POST = withFondsRoute({
           gebeurtenis: "microsoft.sharepoint.retrieval_spike.mislukt",
           correlationId: ctx.requestId,
           foutcategorie,
-          details: { ronde: invoer.data.ronde, vraagcode: invoer.data.scenario, route: invoer.data.route, resultaat: "mislukt" },
+          details: { ronde: invoer.data.ronde, vraagcode: invoer.data.scenario, route: invoer.data.route, search_scope: invoer.data.searchScope ?? "niet_van_toepassing", resultaat: "mislukt" },
         }).catch(() => undefined);
         stuur({ type: "mislukt", foutcategorie });
       }).finally(() => {

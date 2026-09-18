@@ -4,6 +4,7 @@
 import type { Bronresultaat, Toegangsbewijs } from "../../../core/lib/retrieval/contract";
 
 export type SpikeRoute = "microsoft_search" | "drive_search_extract" | "candidate_union";
+export type MicrosoftSearchScope = "tenant" | "site_list" | "path";
 export type SpikeActualiteitsbeleid = "alleen_actueel" | "alleen_historisch" | "actueel_en_historisch";
 export type SpikeFixtureStatus = "actueel" | "historisch";
 
@@ -136,6 +137,7 @@ export interface GraphMeting {
 
 export interface SpikeUitkomst {
   route: SpikeRoute;
+  searchScope: MicrosoftSearchScope | null;
   provider: "microsoft";
   methode: "sharepoint_live";
   kandidaten: SpikeBronresultaat[];
@@ -178,6 +180,7 @@ export interface VeiligeMeetrij {
   ronde: number;
   vraagcode: string;
   route: SpikeRoute;
+  searchScope: MicrosoftSearchScope | null;
   resultaat: "geslaagd" | "geen_resultaten" | "mislukt";
   foutcategorie: SpikeFoutcategorie | "acceptatie_afwijking" | null;
   foutcode: SpikeFoutcode | "onverwachte_bronset" | null;
