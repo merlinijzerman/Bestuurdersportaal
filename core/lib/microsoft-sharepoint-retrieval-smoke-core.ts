@@ -6,7 +6,7 @@
 //  Graph-id, SharePoint-pad of lokale documentreferentie aan.
 // ============================================================================
 
-export type SharePointRetrievalSmokeRoute = "microsoft_search" | "drive_search_extract";
+export type SharePointRetrievalSmokeRoute = "microsoft_search" | "drive_search_extract" | "candidate_union";
 
 export type SharePointRetrievalVeiligeMeting = {
   ronde: number;
@@ -16,12 +16,18 @@ export type SharePointRetrievalVeiligeMeting = {
   foutcategorie: string | null;
   foutcode: string | null;
   gevondenFixtures: string[];
+  exacteBronset: boolean;
   recall: number;
+  precision: number;
+  mrr: number;
+  ndcg: number;
   locatorDekking: number;
   versieDekking: number;
   previewDekking: number;
   latencyMs: number;
   microsoftCalls: number;
+  downloads: number;
+  kandidatenVoorVerificatie: number;
   responseBytes: number;
   contentBytes: number;
   throttles: number;
@@ -54,7 +60,7 @@ export const SHAREPOINT_RETRIEVAL_SMOKE_WACHT_MS = 120_000;
 export const SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS = ["S00", "S02", "S03", "S04", "S04H", "S08", "S09", "S08R"] as const;
 export type SharePointRetrievalSmokeScenario = typeof SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS[number];
 
-export const SHAREPOINT_RETRIEVAL_SMOKE_ROUTES = ["drive_search_extract", "microsoft_search"] as const satisfies readonly SharePointRetrievalSmokeRoute[];
+export const SHAREPOINT_RETRIEVAL_SMOKE_ROUTES = ["drive_search_extract", "microsoft_search", "candidate_union"] as const satisfies readonly SharePointRetrievalSmokeRoute[];
 
 type SmokeVraag = {
   code: string;
@@ -62,7 +68,9 @@ type SmokeVraag = {
   vraag: string;
   actualiteitsbeleid: "alleen_actueel" | "alleen_historisch" | "actueel_en_historisch";
   driveZoektermen?: readonly string[];
+  microsoftZoektermen?: readonly string[];
   verwachteFixtures: string[];
+  primaireFixture?: string;
   benodigdeFixtures: readonly string[];
   pauzeVoorLaatsteControle: boolean;
 };
@@ -83,7 +91,9 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     vraag: "Welke hersteltermijn geldt voor Koraalmaat 47?",
     actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Koraalmaat 47"],
+    microsoftZoektermen: ["Welke hersteltermijn geldt voor Koraalmaat 47", "Koraalmaat 47 hersteltermijn"],
     verwachteFixtures: ["PGB354-DOC-001"],
+    primaireFixture: "PGB354-DOC-001",
     benodigdeFixtures: ["PGB354-DOC-001"],
     pauzeVoorLaatsteControle: false,
   },
@@ -93,7 +103,9 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     vraag: "Welke hersteltermijn geldt voor Koraalmaat 47 en op welke datum staat het oefenbesluit voor IJsvogelkompas 73?",
     actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Koraalmaat 47", "IJsvogelkompas 73"],
+    microsoftZoektermen: ["Koraalmaat 47 IJsvogelkompas 73", "hersteltermijn oefenbesluit"],
     verwachteFixtures: ["PGB354-DOC-001", "PGB354-PPT-001"],
+    primaireFixture: "PGB354-DOC-001",
     benodigdeFixtures: ["PGB354-DOC-001", "PGB354-PPT-001"],
     pauzeVoorLaatsteControle: false,
   },
@@ -103,7 +115,9 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     vraag: "Wat is de actuele bandbreedte voor Maananker 61?",
     actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Maananker Actueel 61"],
+    microsoftZoektermen: ["actuele bandbreedte Maananker 61", "Maananker Actueel 61"],
     verwachteFixtures: ["PGB354-PDF-001"],
+    primaireFixture: "PGB354-PDF-001",
     benodigdeFixtures: ["PGB354-PDF-001", "PGB354-PDF-002"],
     pauzeVoorLaatsteControle: false,
   },
@@ -113,7 +127,9 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     vraag: "Wat was de historische bandbreedte voor Maananker 61?",
     actualiteitsbeleid: "alleen_historisch",
     driveZoektermen: ["Maananker Historisch 61"],
+    microsoftZoektermen: ["historische bandbreedte Maananker 61", "Maananker Historisch 61"],
     verwachteFixtures: ["PGB354-PDF-002"],
+    primaireFixture: "PGB354-PDF-002",
     benodigdeFixtures: ["PGB354-PDF-002"],
     pauzeVoorLaatsteControle: false,
   },
@@ -123,6 +139,7 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     vraag: "Wat is de afkaptijd voor Nachtlelie 68?",
     actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Nachtlelie 68"],
+    microsoftZoektermen: ["afkaptijd Nachtlelie 68", "Nachtlelie 68"],
     verwachteFixtures: [],
     benodigdeFixtures: ["PGB354-DOC-005"],
     pauzeVoorLaatsteControle: true,
@@ -133,6 +150,7 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     vraag: "Herhaal het vorige antwoord over Nachtlelie 68.",
     actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Nachtlelie 68"],
+    microsoftZoektermen: ["Nachtlelie 68"],
     verwachteFixtures: [],
     // Na intrekking mag dit document juist ontbreken uit de live listing.
     benodigdeFixtures: [],
@@ -144,7 +162,9 @@ const VRAGEN: Record<SharePointRetrievalSmokeScenario, SmokeVraag> = {
     vraag: "Wat is de afkaptijd voor Nachtlelie 68?",
     actualiteitsbeleid: "alleen_actueel",
     driveZoektermen: ["Nachtlelie 68"],
+    microsoftZoektermen: ["afkaptijd Nachtlelie 68", "Nachtlelie 68"],
     verwachteFixtures: ["PGB354-DOC-005"],
+    primaireFixture: "PGB354-DOC-005",
     benodigdeFixtures: ["PGB354-DOC-005"],
     pauzeVoorLaatsteControle: false,
   },
@@ -198,6 +218,7 @@ export function sharePointRetrievalSmokeVraag(scenario: SharePointRetrievalSmoke
   return {
     ...vraag,
     driveZoektermen: vraag.driveZoektermen ? [...vraag.driveZoektermen] : undefined,
+    microsoftZoektermen: vraag.microsoftZoektermen ? [...vraag.microsoftZoektermen] : undefined,
     verwachteFixtures: [...vraag.verwachteFixtures],
     benodigdeFixtures: [...vraag.benodigdeFixtures],
   };

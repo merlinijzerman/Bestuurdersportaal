@@ -68,6 +68,15 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
 }
 
+const standaardDownloadUrl = "https://synthetisch-bestand.files.1drv.com/standaard-extractie";
+const standaardInhoud = (async () => {
+  const docx = readFileSync(resolve(process.cwd(), "tests/e2e/fixtures/pgb-sharepoint/bibliotheek/01 Vergaderstukken/2026-09 Bestuursvergadering/PGB354-DOC-001-Agenda-en-besluitpunten-september.docx"));
+  const zip = await JSZip.loadAsync(docx);
+  zip.file("word/document.xml", "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>De oranje kanariewaarde is 314. Koraalmaat 47 heeft een hersteltermijn.</w:t></w:r></w:p></w:body></w:document>");
+  zip.file("ppt/slides/slide1.xml", "<p:sld><a:p><a:r><a:t>De oranje kanariewaarde is 314. Koraalmaat 47 heeft een hersteltermijn.</a:t></a:r></a:p></p:sld>");
+  return zip.generateAsync({ type: "uint8array" });
+})();
+
 function opdracht(route: SpikeRoute): SpikeOpdracht {
   return {
     route,
@@ -80,7 +89,17 @@ function basisDeps(fetchImpl: SpikeDependencies["fetchImpl"], leesBron = async (
   return {
     leesBron,
     delegatedToken: async () => ({ accessToken: "geheim-token", tenantId: IDS.tenant, actorObjectId: "private-oid" }),
-    fetchImpl,
+    fetchImpl: async (url, init) => {
+      try {
+        return await fetchImpl!(url, init);
+      } catch (fout) {
+        if (/\/items\/[^/]+\/content$/.test(new URL(url).pathname)) {
+          return new Response(null, { status: 302, headers: { Location: standaardDownloadUrl } });
+        }
+        if (url === standaardDownloadUrl) return new Response((await standaardInhoud).slice().buffer);
+        throw fout;
+      }
+    },
     nu: () => new Date("2026-09-10T09:00:00Z"),
     wacht: async () => undefined,
   };
@@ -94,7 +113,7 @@ test("Microsoft Search levert alleen na dubbele rechten-, versie-, config- en pr
   let itemChecks = 0;
   const fetchImpl = async (url: string) => {
     if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
-    if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ moreResultsAvailable: false, hits: [{ hitId: IDS.item, rank: 1, summary: "<c0>oranje</c0> kanariewaarde is 314 <ddd/>" }] }] }] });
+    if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ moreResultsAvailable: false, hits: [{ hitId: IDS.item, rank: 1, summary: "provider-summary-mag-nooit-door" }] }] }] });
     if (url.includes(`/items/${IDS.item}?`)) { itemChecks += 1; return json(item()); }
     if (url.endsWith(`/items/${IDS.item}/preview`)) return json({ getUrl: "https://pgb.sharepoint.com/sites/retrieval/_layouts/15/embed.aspx?id=test" });
     throw new Error("onverwachte call");
@@ -119,8 +138,78 @@ test("Microsoft Search levert alleen na dubbele rechten-, versie-, config- en pr
     basis: "delegated_user",
     bronconfiguratieVersie: 7,
   });
-  assert.equal(kandidaat.passage, "oranje kanariewaarde is 314 …");
+  assert.match(kandidaat.passage, /oranje kanariewaarde is 314/i);
+  assert.doesNotMatch(kandidaat.passage, /provider-summary-mag-nooit-door/);
   assert.equal(kandidaat.previewMogelijk, true);
+});
+
+test("Microsoft Search neutraliseert gereserveerde operators en beschermt het vaste KQL-pad", async () => {
+  let searchRequest: Record<string, unknown> | null = null;
+  const gevaarlijkeVraag = opdracht("microsoft_search");
+  gevaarlijkeVraag.vraag = {
+    ...gevaarlijkeVraag.vraag,
+    vraag: `oranje\") OR AND NOT NEAR ONEAR XRANK path:\"https://aanvaller.example/breed\"`,
+  };
+  const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(async (url, init) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.endsWith("/search/query")) {
+      searchRequest = JSON.parse(String(init.body));
+      return json({ value: [{ hitsContainers: [{ moreResultsAvailable: false, hits: [] }] }] });
+    }
+    throw new Error("zonder hits mag geen vervolgaanroep starten");
+  }), gevaarlijkeVraag);
+  assert.equal(uitkomst.fout, "geen_resultaten");
+  assert.ok(searchRequest);
+  const query = ((searchRequest as unknown as { requests: Array<{ query: { queryString: string; queryTemplate: string } }> }).requests[0].query);
+  assert.equal(query.queryString, "oranje path https aanvaller example breed");
+  assert.doesNotMatch(query.queryString, /\b(?:AND|OR|NOT|NEAR|ONEAR|XRANK)\b/i);
+  assert.doesNotMatch(query.queryString, /[\":/()]/);
+  assert.equal(query.queryTemplate, `({searchTerms}) path:\"${rootItem.webUrl}\" isDocument=true`);
+});
+
+test("meetunie ontdubbelt centraal en rangschikt deterministisch met één verificatieketen per item", async () => {
+  const eersteItem = "private-document-a";
+  const tweedeItem = "private-document-b";
+  const documenten: SpikeBronSnapshot["documenten"] = [
+    { ...bron().documenten[0], itemId: eersteItem, ref: `${IDS.ref}-a`, fixtureCode: "PGB-PPTX-A" },
+    { ...bron().documenten[0], itemId: tweedeItem, ref: `${IDS.ref}-b`, fixtureCode: "PGB-PPTX-B" },
+  ];
+  const itemVoor = (id: string) => ({ ...item(), id });
+  const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.includes("/search(q=")) return json({ value: [itemVoor(tweedeItem), itemVoor(eersteItem)] });
+    if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [
+      { hitId: eersteItem, rank: 1, summary: "verboden summary A" },
+      { hitId: tweedeItem, rank: 2, summary: "verboden summary B" },
+    ] }] }] });
+    if (url.includes(`/items/${eersteItem}?`)) return json(itemVoor(eersteItem));
+    if (url.includes(`/items/${tweedeItem}?`)) return json(itemVoor(tweedeItem));
+    if (url.endsWith("/preview")) return json({ getUrl: "https://pgb.sharepoint.com/embed" });
+    throw new Error("standaard contentfixture");
+  }, async () => bron({ documenten })), {
+    ...opdracht("candidate_union"),
+    vraag: {
+      ...opdracht("candidate_union").vraag,
+      verwachteFixtures: ["PGB-PPTX-A", "PGB-PPTX-B"],
+      primaireFixture: "PGB-PPTX-A",
+    },
+  });
+  assert.equal(uitkomst.fout, undefined);
+  assert.equal(uitkomst.kandidatenVoorVerificatie, 2);
+  assert.equal(uitkomst.meting.downloads, 2);
+  assert.deepEqual(uitkomst.kandidaten.map((kandidaat) => kandidaat.fixtureCode), ["PGB-PPTX-A", "PGB-PPTX-B"]);
+  assert.ok(uitkomst.kandidaten.every((kandidaat) => !kandidaat.passage.includes("verboden summary")));
+  const meting = maakVeiligeMeetrij(1, {
+    ...opdracht("candidate_union").vraag,
+    verwachteFixtures: ["PGB-PPTX-A", "PGB-PPTX-B"],
+    primaireFixture: "PGB-PPTX-A",
+  }, uitkomst);
+  assert.deepEqual({ precision: meting.precision, recall: meting.recall, mrr: meting.mrr, ndcg: meting.ndcg }, {
+    precision: 1,
+    recall: 1,
+    mrr: 1,
+    ndcg: 1,
+  });
 });
 
 test("de spike implementeert het gemergde RetrievalAdapter-contract zonder productiewiring", async () => {
@@ -304,6 +393,8 @@ test("per-kandidaatfouten krijgen volgens de vaste fasevolgorde precies één ca
     if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
     if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [{ hitId: IDS.item, summary: "" }] }] }] });
     if (url.includes(`/items/${IDS.item}?`)) return json(item());
+    if (url.endsWith(`/items/${IDS.item}/content`)) return new Response(null, { status: 302, headers: { Location: "https://synthetisch-bestand.files.1drv.com/lege-extractie" } });
+    if (url.endsWith("/lege-extractie")) return new Response(new Uint8Array([1, 2, 3]));
     throw new Error("preview mag na lege extractie niet worden bereikt");
   }), opdracht("microsoft_search"));
   assert.equal(extractie.afwijzingen.extractie, 1);
@@ -527,6 +618,7 @@ test("documentwijziging, ontbrekend versiebewijs en een vreemde hit komen nooit 
   assert.equal(vreemdeHit.fout, "geen_resultaten");
   assert.equal(vreemdeHit.afwijzingen.mapping, 1);
   assert.equal(aantalAfwijzingen(vreemdeHit), 1);
+  assert.equal(maakVeiligeMeetrij(1, opdracht("microsoft_search").vraag, vreemdeHit).precision, 0);
 });
 
 test("tenant- of actormismatch stopt vóór Graph en een zoek-403 levert geen resultaten", async () => {

@@ -1,4 +1,4 @@
-# #353 — lokale live SharePoint-retrievalspike
+# #353/#403 — lokale live SharePoint-retrievalspike
 
 Deze tooling is niet aan chat, zoeken, vergelijken of de AI-gateway gekoppeld. Naast de expliciete lokale CLI bestaat één serverbrug voor de PGB Preview-smoke. Die brug is alleen bereikbaar via `/beheer/microsoft-sharepoint-retrieval` en weigert buiten Vercel Preview, buiten fonds `pgb`, zonder de bestaande Microsoft-/SharePoint-poorten, zonder de extra vlag `microsoft_sharepoint_retrieval_spike=true` of zonder de beheerder-capability. De statische gate `npm run test:spike-boundary` bewaakt dat geen ander productiepad de spike importeert. De lokale CLI blijft `M365_RETRIEVAL_SPIKE=local` eisen en weigert CI, Vercel en productie.
 
@@ -6,12 +6,13 @@ De browser stuurt uitsluitend een vaste scenario-, route- en rondecode. De serve
 
 Iedere vaste fixturecode heeft daarnaast een serververtrouwde status `actueel` of `historisch`. Die status wordt uitsluitend met een exacte fixturecode opgezocht, is onderdeel van de bronvingerafdruk en wordt nooit afgeleid uit browserinvoer, pad, titel, bestandsnaam, eTag of cTag. Een onbekende status of meerdere mappings met een conflicterende status vallen fail-closed af voordat een item-, content- of previewcall plaatsvindt.
 
-## Wat de twee routes meten
+## Wat de drie kandidaatstrategieën meten
 
-- `microsoft_search`: `POST /v1.0/search/query`, path-scoped naar de geconfigureerde root. De route gebruikt alleen de security-trimmed summary als passage. Een lege summary is geen kandidaat.
+- `microsoft_search`: één of enkele vaste, server-side varianten via `POST /v1.0/search/query`, met een server-side `queryTemplate` en KQL-`path:` naar de geconfigureerde root. Quotes, haakjes en andere KQL-syntaxis worden uit de querytekst verwijderd; de gereserveerde operatorwoorden `AND`, `OR`, `NOT`, `NEAR`, `ONEAR` en `XRANK` worden geneutraliseerd. Daardoor kan de invoer de vaste `path`-expressie niet wijzigen. `summary` en highlights worden niet bewaard of gebruikt. Iedere gemapte hit doorloopt daarna dezelfde DriveItem-download en eigen extractie als de Drive-route.
 - `drive_search_extract`: één `GET /v1.0/drives/{drive}/items/{root}/search(...)` per vaste, korte server-side zoekterm, stabiel ontdubbeld, daarna voor maximaal de bekende kandidaten een versiegebonden `/content`-download. De volledige natuurlijke vraag wordt niet als DriveItem-query gebruikt. DOCX, digitaal doorzoekbare PDF en PPTX worden alleen in memory verwerkt. De buffer wordt na extractie overschreven en nooit opgeslagen.
+- `candidate_union`: uitsluitend een meetarm. Zij verenigt beide kandidaatsets, ontdubbelt vóór downloads op item-id en rangschikt deterministisch met reciprocal-rank fusion. Daarna loopt per uniek item exact één gedeelde verificatie- en extractieketen. Deze route is niet aan productieverkeer gekoppeld.
 
-Beide routes volgen per kandidaat dezelfde vaste toelatingsvolgorde:
+Alle drie strategieën volgen per kandidaat dezelfde vaste toelatingsvolgorde:
 
 1. actuele bronconfiguratie en lokale fondsreferenties uit de Microsoft-vault;
 2. delegated token voor de testgebruiker;
@@ -19,7 +20,7 @@ Beide routes volgen per kandidaat dezelfde vaste toelatingsvolgorde:
 4. exacte documentmapping en serververtrouwde fixturestatus;
 5. filtering volgens het expliciete `actualiteitsbeleid`;
 6. eerste live `driveItem`-controle op binding, root en versie;
-7. passagebepaling of contentextractie;
+7. begrensde download en eigen contentextractie; een Search-summary is nooit bewijs;
 8. tweede live `driveItem`-controle op rechten, binding, root en dezelfde eTag/cTag;
 9. actuele herlezing van bronconfiguratie en documentmapping;
 10. live previewcheck;
@@ -45,13 +46,18 @@ chmod 600 .m365-permission-probe.local.json
 npm run spike:m365-permission-probe -- --config=.m365-permission-probe.local.json
 ```
 
-Gebruik uitsluitend de reeds verleende `Sites.Selected`-verbinding. Een uitkomst `toestemming_geweigerd` is bewijs om eerst een afzonderlijk consentbesluit voor delegated `Files.Read` voor te leggen, geen toestemming om scopes automatisch te wijzigen.
+Gebruik uitsluitend de reeds verleende verbinding; deze branch wijzigt geen scope of consent. Houd de twee API-routes in het consentbesluit uit elkaar:
+
+- DriveItem Search (`GET .../search(q=...)`) noemt delegated `Files.Read` als minst geprivilegieerde toestemming: [Search for DriveItems within a drive](https://learn.microsoft.com/en-us/graph/api/driveitem-search?view=graph-rest-1.0).
+- Microsoft Search voor bestanden (`POST /search/query`) noemt `Files.Read.All` of `Sites.Read.All`; `Files.Read` dekt die route dus niet: [searchEntity: query](https://learn.microsoft.com/en-us/graph/api/search-query?view=graph-rest-1.0).
+
+Een uitkomst `toestemming_geweigerd` is alleen bewijs om het afzonderlijke consentbesluit te openen, nooit toestemming om een van deze scopes automatisch toe te voegen.
 
 Voor de Preview-ingang geldt aanvullend het runbook `security/MICROSOFT-365-F5-RETRIEVAL-SMOKE.md`. De extra vlag staat standaard uit en wordt na de meetronde direct weer uitgezet.
 
 ## Voorwaarden voor een live run
 
-Issue #354 moet eerst de synthetische PGB-bibliotheek, vragen, rechtenmatrix en lokale refs opleveren. Er is geen consentwijziging in deze spike opgenomen. Begin met de bestaande delegated `Sites.Selected`-verbinding en registreer de werkelijke Graph-uitkomst. Als zoeken 403 geeft, stop: voeg niet zelf `Files.Read`, `Files.Read.All` of `Sites.Read.All` toe. Het spike-rapport beschrijft de beslisroute.
+Issue #354 moet eerst de synthetische PGB-bibliotheek, vragen, rechtenmatrix en lokale refs opleveren. Er is geen consentwijziging in deze spike opgenomen. Begin met de bestaande delegated verbinding en registreer de werkelijke Graph-uitkomst. Als zoeken 403 geeft, stop: voeg niet zelf `Files.Read`, `Files.Read.All` of `Sites.Read.All` toe. Beoordeel een eventueel consentverzoek per API-route zoals hierboven; het spike-rapport beschrijft de beslisroute.
 
 Kopieer `acceptatieset.example.json` naar bijvoorbeeld `.m365-retrieval-acceptatie.local.json`, vul alleen de door #354 vastgestelde waarden in en scherm het bestand af:
 
@@ -66,7 +72,13 @@ Laad lokaal dezelfde server-secrets die de bestaande Microsoft-vault en connecto
 npm run spike:m365-retrieval -- --config=.m365-retrieval-acceptatie.local.json > .m365-retrieval-meting.local.json
 ```
 
-De uitvoer bevat geen zoekvraag, passage, token, accountgegevens, lokale refs of private site-/drive-/item-id's. Wel opgenomen: fixturecode, resultaatcategorie, recall, locator-, versie- en previewdekking, timing, Graph-callcount, bytes, throttles, retries en een korte SHA-256-vingerafdruk van eTag/cTag. Een positieve meting is alleen `geslaagd` wanneer de gevonden fixturecodes exact gelijk zijn aan de vooraf vastgelegde bronset; een ontbrekende of extra fixture wordt `acceptatie_afwijking/onverwachte_bronset`.
+De uitvoer bevat geen zoekvraag, passage, token, accountgegevens, lokale refs of private site-/drive-/item-id's. Wel opgenomen: fixturecode, exacte-bronsetstatus, recall, kandidaatprecision vóór verificatie, MRR, nDCG, locator-, versie- en previewdekking, aantal verificatiekandidaten, downloads, timing, Graph-callcount, bytes, throttles, retries en een korte SHA-256-vingerafdruk van eTag/cTag. Voor `precision` is de noemer `kandidatenVoorVerificatie`, niet de uiteindelijke toegelaten bronset. Een positieve meting is alleen `geslaagd` wanneer de gevonden fixturecodes exact gelijk zijn aan de vooraf vastgelegde bronset; een ontbrekende of extra fixture wordt `acceptatie_afwijking/onverwachte_bronset`.
+
+## Permission- en live-rungrens van #403
+
+Deze branch wijzigt geen Entra-appregistratie, OAuth-scope, tenantconsent of SharePoint-permission. De hermetische tests bewijzen de volledige route zonder netwerk. Een live `microsoft_search`- of `candidate_union`-run blijft geblokkeerd totdat afzonderlijk en expliciet is besloten welke minimaal noodzakelijke delegated scope wordt verleend. Een 401/403 is een stopresultaat, geen aanleiding voor automatische scopeverbreding. Na een eventuele proef moet hetzelfde consentbesluit ook het intrekkings- of terugbrengpad vastleggen.
+
+Vóór de live kwaliteitsvergelijking wordt indexgereedheid los vastgesteld: iedere fixture moet zowel op bestandsnaam als op de unieke inhoudsterm vindbaar zijn. Alleen bestandsnaamtreffers gelden als `index_niet_gereed`; zij tellen niet als adapter- of rechtenfout. De 24 vergelijkingsmetingen starten pas na een vastgelegd gereed indexmoment en bestaan uit S02, S03, S04 en S04H, twee rondes, over alle drie kandidaatstrategieën.
 
 ## Intrekking of configuratiewijziging tijdens een verzoek
 

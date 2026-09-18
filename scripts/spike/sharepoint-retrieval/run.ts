@@ -51,11 +51,21 @@ async function leesLokaleConfig(pad: string, alleenPermissionProbe: boolean): Pr
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (config.doel !== "PGB Preview-pilot" || !uuid.test(config.fondsId) || !uuid.test(config.gebruikerId)) throw new Error("doel, fondsId of gebruikerId is ongeldig");
   if (alleenPermissionProbe) return config;
-  if (typeof config.rondes !== "number" || !Number.isInteger(config.rondes) || config.rondes < 3 || config.rondes > 10) throw new Error("rondes moet tussen 3 en 10 liggen");
-  if (!Array.isArray(config.routes) || config.routes.length === 0 || config.routes.some((route) => route !== "microsoft_search" && route !== "drive_search_extract")) throw new Error("routes is ongeldig");
+  if (typeof config.rondes !== "number" || !Number.isInteger(config.rondes) || config.rondes < 2 || config.rondes > 10) throw new Error("rondes moet tussen 2 en 10 liggen");
+  if (!Array.isArray(config.routes) || config.routes.length === 0 || config.routes.some((route) => !["microsoft_search", "drive_search_extract", "candidate_union"].includes(route))) throw new Error("routes is ongeldig");
   if (!Array.isArray(config.fixtures) || config.fixtures.length === 0 || config.fixtures.some((fixture) => !fixture.fixtureCode || !uuid.test(fixture.ref))) throw new Error("fixtures ontbreken of bevatten ongeldige lokale refs");
   const actualiteitsbeleid = new Set(["alleen_actueel", "alleen_historisch", "actueel_en_historisch"]);
   if (!Array.isArray(config.vragen) || config.vragen.length === 0 || config.vragen.some((vraag) => !vraag.code || !vraag.vraag || !actualiteitsbeleid.has(vraag.actualiteitsbeleid) || !Array.isArray(vraag.verwachteFixtures))) throw new Error("acceptatievragen ontbreken of zijn ongeldig");
+  if (config.vragen.some((vraag) => (
+    vraag.microsoftZoektermen !== undefined
+    && (!Array.isArray(vraag.microsoftZoektermen)
+      || vraag.microsoftZoektermen.length < 1
+      || vraag.microsoftZoektermen.length > 4
+      || vraag.microsoftZoektermen.some((term) => typeof term !== "string" || !term.trim() || term.length > 240))
+  ))) throw new Error("Microsoft Search-varianten zijn ongeldig");
+  if (config.vragen.some((vraag) => vraag.primaireFixture !== undefined && !vraag.verwachteFixtures.includes(vraag.primaireFixture))) {
+    throw new Error("primaire fixture moet onderdeel zijn van de verwachte bronset");
+  }
   return config;
 }
 
