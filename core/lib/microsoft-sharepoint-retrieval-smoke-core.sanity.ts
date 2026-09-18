@@ -27,7 +27,7 @@ test("#353: Preview-grendel vereist beide exacte omgevingswaarden", () => {
 });
 
 test("#353: alleen vaste routes, vragen en fixturecodes uit #385 zijn inzetbaar", () => {
-  assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_ROUTES, ["drive_search_extract", "microsoft_search"]);
+  assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_ROUTES, ["drive_search_extract", "microsoft_search", "candidate_union"]);
   assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS, ["S00", "S02", "S03", "S04", "S04H", "S08", "S09", "S08R"]);
   assert.equal(sharePointRetrievalSmokeVraag("S00").vraag, "m365-permission-probe-7f4c1d9e-no-match");
   const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "tests/e2e/fixtures/pgb-sharepoint/manifest.json"), "utf8"));
@@ -66,12 +66,18 @@ test("#353: negatieve intrekkingsscenario's falen hard zodra een fixture terugko
     foutcategorie: null,
     foutcode: null,
     gevondenFixtures: ["PGB354-DOC-005"],
+    exacteBronset: true,
     recall: 1,
+    precision: 1,
+    mrr: 1,
+    ndcg: 1,
     locatorDekking: 1,
     versieDekking: 1,
     previewDekking: 1,
     latencyMs: 100,
     microsoftCalls: 3,
+    downloads: 1,
+    kandidatenVoorVerificatie: 1,
     responseBytes: 100,
     contentBytes: 100,
     throttles: 0,
@@ -122,12 +128,18 @@ test("#399: auditprojectie heeft exact acht platte niet-negatieve gehele tellers
     foutcategorie: "geen_resultaten",
     foutcode: null,
     gevondenFixtures: [],
+    exacteBronset: false,
     recall: 0,
+    precision: 1,
+    mrr: 0,
+    ndcg: 0,
     locatorDekking: 1,
     versieDekking: 1,
     previewDekking: 1,
     latencyMs: 1,
     microsoftCalls: 1,
+    downloads: 0,
+    kandidatenVoorVerificatie: 1,
     responseBytes: 1,
     contentBytes: 0,
     throttles: 0,

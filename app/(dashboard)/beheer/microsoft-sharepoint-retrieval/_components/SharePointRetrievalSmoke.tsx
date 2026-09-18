@@ -9,10 +9,11 @@ import type {
 } from "@/core/lib/microsoft-sharepoint-retrieval-smoke-core";
 
 type Taak = { scenario: SharePointRetrievalSmokeScenario; route: SharePointRetrievalSmokeRoute; ronde: 1 | 2 | 3 };
-const ROUTES: SharePointRetrievalSmokeRoute[] = ["drive_search_extract", "microsoft_search"];
+const ROUTES: SharePointRetrievalSmokeRoute[] = ["drive_search_extract", "microsoft_search", "candidate_union"];
 const ROUTE_LABEL: Record<SharePointRetrievalSmokeRoute, string> = {
   drive_search_extract: "DriveItem search + extractie",
-  microsoft_search: "Microsoft Search",
+  microsoft_search: "Microsoft Search + DriveItem-verificatie",
+  candidate_union: "Meetunie (centraal ontdubbeld)",
 };
 const BASISSCENARIOS = ["S02", "S03", "S04", "S04H"] as const;
 
@@ -83,7 +84,7 @@ export default function SharePointRetrievalSmoke() {
     }
   };
 
-  const basisTaken: Taak[] = ([1, 2, 3] as const).flatMap((ronde) =>
+  const basisTaken: Taak[] = ([1, 2] as const).flatMap((ronde) =>
     BASISSCENARIOS.flatMap((scenario) => ROUTES.map((route) => ({ scenario, route, ronde }))),
   );
 
@@ -99,7 +100,7 @@ export default function SharePointRetrievalSmoke() {
 
       <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="font-bold text-ink">Basisvergelijking</h2>
-        <p className="mt-1 text-sm text-muted">Voert S02–S04 en de positieve historische proef S04H via beide routes uit, drie rondes per route. Alleen aantallen, tijden, categorieën en korte versiehashes verschijnen hieronder.</p>
+        <p className="mt-1 text-sm text-muted">Voert S02–S04 en S04H via drie kandidaatstrategieën uit, twee rondes per route. Start dit pas na een vastgelegd gereed indexmoment en een afzonderlijk consentbesluit; deze pagina wijzigt geen Microsoft-permissions.</p>
         <button type="button" disabled={bezig} onClick={() => void run(basisTaken)} className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           Basisvergelijking starten (24 metingen)
         </button>
@@ -133,8 +134,8 @@ export default function SharePointRetrievalSmoke() {
           </div>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead><tr className="border-b border-line text-muted"><th className="py-2">Scenario</th><th>Route</th><th>Ronde</th><th>Resultaat</th><th>Fixtures</th><th>Afwijzingen</th><th>Latency</th><th>Calls</th><th>Bytes</th></tr></thead>
-              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}{m.foutcode ? ` · ${m.foutcode}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{afwijzingen(m)}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
+              <thead><tr className="border-b border-line text-muted"><th className="py-2">Scenario</th><th>Route</th><th>Ronde</th><th>Resultaat</th><th>Fixtures</th><th>Kandidaat-P/R</th><th>MRR/nDCG</th><th>Afwijzingen</th><th>Latency</th><th>Calls/downloads</th><th>Bytes</th></tr></thead>
+              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}{m.foutcode ? ` · ${m.foutcode}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{m.precision}/{m.recall}</td><td>{m.mrr}/{m.ndcg}</td><td>{afwijzingen(m)}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}/{m.downloads}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
             </table>
           </div>
         </section>

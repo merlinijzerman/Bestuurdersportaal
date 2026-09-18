@@ -3,7 +3,7 @@
 // verbiedt elk chat-, zoek-, vergelijk- of productieadapterpad.
 import type { Bronresultaat, Toegangsbewijs } from "../../../core/lib/retrieval/contract";
 
-export type SpikeRoute = "microsoft_search" | "drive_search_extract";
+export type SpikeRoute = "microsoft_search" | "drive_search_extract" | "candidate_union";
 export type SpikeActualiteitsbeleid = "alleen_actueel" | "alleen_historisch" | "actueel_en_historisch";
 export type SpikeFixtureStatus = "actueel" | "historisch";
 
@@ -127,6 +127,7 @@ export interface SpikeBronresultaat extends Bronresultaat {
 
 export interface GraphMeting {
   calls: number;
+  downloads: number;
   responseBytes: number;
   contentBytes: number;
   throttles: number;
@@ -138,6 +139,7 @@ export interface SpikeUitkomst {
   provider: "microsoft";
   methode: "sharepoint_live";
   kandidaten: SpikeBronresultaat[];
+  kandidatenVoorVerificatie: number;
   latencyMs: number;
   fout?: SpikeFoutcategorie;
   foutcode?: SpikeFoutcode;
@@ -162,7 +164,12 @@ export interface SpikeVraag {
   /** Vaste, server-side termen voor DriveItem search. Meerdere termen worden
    * afzonderlijk gezocht en daarna stabiel ontdubbeld. */
   driveZoektermen?: readonly string[];
+  /** Vaste, server-side varianten voor Microsoft Search. De vrije browserinvoer
+   * kan deze lijst niet leveren of het KQL-pad wijzigen. */
+  microsoftZoektermen?: readonly string[];
   verwachteFixtures: string[];
+  /** Optionele vooraf vastgelegde primaire bron voor MRR/nDCG. */
+  primaireFixture?: string;
   maxKandidaten?: number;
 }
 
@@ -175,12 +182,20 @@ export interface VeiligeMeetrij {
   foutcategorie: SpikeFoutcategorie | "acceptatie_afwijking" | null;
   foutcode: SpikeFoutcode | "onverwachte_bronset" | null;
   gevondenFixtures: string[];
+  exacteBronset: boolean;
   recall: number;
+  /** Kandidaatprecision vóór verificatie: relevante toegelaten bronnen gedeeld
+   * door kandidatenVoorVerificatie, niet door de uiteindelijke bronset. */
+  precision: number;
+  mrr: number;
+  ndcg: number;
   locatorDekking: number;
   versieDekking: number;
   previewDekking: number;
   latencyMs: number;
   microsoftCalls: number;
+  downloads: number;
+  kandidatenVoorVerificatie: number;
   responseBytes: number;
   contentBytes: number;
   throttles: number;

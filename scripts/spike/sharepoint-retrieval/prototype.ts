@@ -30,6 +30,7 @@ const GRAPH_BASIS = "https://graph.microsoft.com/v1.0";
 const MAX_JSON_BYTES = 5 * 1024 * 1024;
 const MAX_CONTENT_BYTES = 25 * 1024 * 1024;
 const MAX_PAGINAS = 3;
+const MAX_MICROSOFT_SEARCH_CALLS = 4;
 const MAX_CONCURRENCY = 3;
 const MAX_PASSAGE_TEKENS = 1_200;
 const MAX_RETRIES = 2;
@@ -73,10 +74,10 @@ type GraphDriveItem = {
   parentReference?: { driveId?: string; id?: string; path?: string; siteId?: string } | null;
 };
 
-type ZoekHit = { itemId: string; positie: number; score: number | null; summary: string | null };
+type ZoekHit = { itemId: string; positie: number; score: number | null };
 
 function nieuweMeting(): GraphMeting {
-  return { calls: 0, responseBytes: 0, contentBytes: 0, throttles: 0, retries: 0 };
+  return { calls: 0, downloads: 0, responseBytes: 0, contentBytes: 0, throttles: 0, retries: 0 };
 }
 
 function nieuweAfwijzingen(): SpikeAfwijzingen {
@@ -288,6 +289,7 @@ class GraphClient {
     let response: Response;
     try {
       this.meting.calls += 1;
+      this.meting.downloads += 1;
       response = await this.fetchImpl(downloadUrl.toString(), {
         headers: { Accept: "application/octet-stream" },
         cache: "no-store",
@@ -416,16 +418,17 @@ function escapeKql(waarde: string): string {
   return waarde.replace(/["\\]/g, (teken) => `\\${teken}`).replace(/[\u0000-\u001f\u007f]/g, " ").trim();
 }
 
-function schoneSummary(summary: string | null): string {
-  return (summary ?? "")
-    .replace(/<c\d+>/gi, "")
-    .replace(/<\/c\d+>/gi, "")
-    .replace(/<ddd\s*\/>/gi, " … ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_PASSAGE_TEKENS);
+const KQL_GERESERVEERDE_OPERATOREN = new Set(["AND", "OR", "NOT", "NEAR", "ONEAR", "XRANK"]);
+
+function veiligSearchFragment(waarde: string): string {
+  const termen = (waarde
+    .normalize("NFKC")
+    .match(/[\p{L}\p{N}][\p{L}\p{N}\-]{0,63}/gu) ?? [])
+    .filter((term) => !KQL_GERESERVEERDE_OPERATOREN.has(term.toUpperCase()))
+    .slice(0, 24);
+  const fragment = termen.join(" ").slice(0, 240).trim();
+  if (!fragment) throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
+  return fragment;
 }
 
 function zoektermen(vraag: string): string[] {
@@ -488,31 +491,44 @@ async function parallelBegrensd<T, R>(
   return resultaat;
 }
 
-async function zoekViaMicrosoftSearch(client: GraphClient, vraag: string, rootWebUrl: string, maxKandidaten: number): Promise<ZoekHit[]> {
-  const hits: ZoekHit[] = [];
-  for (let pagina = 0; pagina < MAX_PAGINAS && hits.length < maxKandidaten; pagina += 1) {
-    const size = Math.min(50, maxKandidaten - hits.length);
-    const body = await client.json<{
-      value?: Array<{ hitsContainers?: Array<{ moreResultsAvailable?: boolean; hits?: Array<{ hitId?: string; rank?: number; summary?: string; resource?: GraphDriveItem }> }> }>;
-    }>(`${GRAPH_BASIS}/search/query`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requests: [{
-        entityTypes: ["driveItem"],
-        query: { queryString: `${escapeKql(vraag)} path:"${escapeKql(rootWebUrl)}" isDocument=true` },
-        from: pagina * 50,
-        size,
-        fields: ["id", "name", "webUrl", "parentReference", "file", "size", "lastModifiedDateTime", "eTag", "cTag"],
-      }] }),
-    });
-    const container = body.value?.[0]?.hitsContainers?.[0];
-    for (const hit of container?.hits ?? []) {
-      const itemId = hit.resource?.id ?? hit.hitId;
-      if (itemId) hits.push({ itemId, positie: hit.rank ?? hits.length + 1, score: hit.rank ? 1 / hit.rank : null, summary: hit.summary ?? null });
+async function zoekViaMicrosoftSearch(client: GraphClient, vragen: readonly string[], rootWebUrl: string, maxKandidaten: number): Promise<ZoekHit[]> {
+  if (vragen.length < 1 || vragen.length > 4) throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
+  const scores = new Map<string, number>();
+  let searchCalls = 0;
+  const queryTemplate = `({searchTerms}) path:"${escapeKql(rootWebUrl)}" isDocument=true`;
+  for (const vraag of vragen) {
+    if (searchCalls >= MAX_MICROSOFT_SEARCH_CALLS) break;
+    const queryString = veiligSearchFragment(vraag);
+    for (let pagina = 0; pagina < MAX_PAGINAS && searchCalls < MAX_MICROSOFT_SEARCH_CALLS; pagina += 1) {
+      const size = Math.min(50, maxKandidaten);
+      searchCalls += 1;
+      const body = await client.json<{
+        value?: Array<{ hitsContainers?: Array<{ moreResultsAvailable?: boolean; hits?: Array<{ hitId?: string; rank?: number; resource?: GraphDriveItem }> }> }>;
+      }>(`${GRAPH_BASIS}/search/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requests: [{
+          entityTypes: ["driveItem"],
+          query: { queryString, queryTemplate },
+          from: pagina * size,
+          size,
+          fields: ["id"],
+        }] }),
+      });
+      const container = body.value?.[0]?.hitsContainers?.[0];
+      for (const hit of container?.hits ?? []) {
+        const itemId = hit.resource?.id ?? hit.hitId;
+        if (!itemId) continue;
+        const positie = Number.isSafeInteger(hit.rank) && (hit.rank ?? 0) > 0 ? hit.rank! : pagina * size + 1;
+        scores.set(itemId, (scores.get(itemId) ?? 0) + 1 / (60 + positie));
+      }
+      if (!container?.moreResultsAvailable) break;
     }
-    if (!container?.moreResultsAvailable) break;
   }
-  return hits.slice(0, maxKandidaten);
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, maxKandidaten)
+    .map(([itemId, score], index) => ({ itemId, positie: index + 1, score }));
 }
 
 async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vragen: readonly string[], maxKandidaten: number): Promise<ZoekHit[]> {
@@ -533,7 +549,7 @@ async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vragen
       for (const item of body.value ?? []) {
         if (!item.id || gezien.has(item.id)) continue;
         gezien.add(item.id);
-        hits.push({ itemId: item.id, positie: hits.length + 1, score: null, summary: null });
+        hits.push({ itemId: item.id, positie: hits.length + 1, score: null });
         if (hits.length >= maxKandidaten) break;
       }
       if (body["@odata.nextLink"] && hits.length < maxKandidaten) {
@@ -546,6 +562,17 @@ async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vragen
     }
   }
   return hits.slice(0, maxKandidaten);
+}
+
+function verenigKandidaten(driveHits: ZoekHit[], microsoftHits: ZoekHit[], maxKandidaten: number): ZoekHit[] {
+  const RRF_K = 60;
+  const scores = new Map<string, number>();
+  for (const hit of driveHits) scores.set(hit.itemId, (scores.get(hit.itemId) ?? 0) + 1 / (RRF_K + hit.positie));
+  for (const hit of microsoftHits) scores.set(hit.itemId, (scores.get(hit.itemId) ?? 0) + 1 / (RRF_K + hit.positie));
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, maxKandidaten)
+    .map(([itemId, score], index) => ({ itemId, positie: index + 1, score }));
 }
 
 function itemUrl(bron: SpikeBronSnapshot, itemId: string): string {
@@ -593,37 +620,34 @@ async function maakKandidaat(
   }
   await deps.onFase?.("na_eerste_rechtencheck", mapping);
 
-  // Vaste fase 3: passage of begrensde in-memory extractie.
+  // Vaste fase 3: altijd zelf downloaden en begrensd in-memory extraheren.
+  // Microsoft Search-summary/highlights zijn alleen een kandidaatsignaal en
+  // worden bewust niet eens in ZoekHit bewaard.
   let passage: string;
   let pagina: number | null = null;
   let paragraaf: string | null = null;
-  if (opdracht.route === "microsoft_search") {
-    passage = schoneSummary(hit.summary);
-    if (!passage) return wijsKandidaatAf(afwijzingen, "extractie");
-  } else {
-    let bytes: Buffer;
+  let bytes: Buffer;
+  try {
+    bytes = await client.content(contentUrl(bronEerst, mapping.itemId), bronEerst.siteHostnaam);
+  } catch (fout) {
+    if (isFataleKandidaatFout(fout)) throw fout;
+    const categorie = fout instanceof SpikeError && fout.categorie === "toestemming_geweigerd"
+      ? "rechten_configuratie"
+      : "extractie";
+    return wijsKandidaatAf(afwijzingen, categorie);
+  }
+  try {
     try {
-      bytes = await client.content(contentUrl(bronEerst, mapping.itemId), bronEerst.siteHostnaam);
+      const extractie = await extractTekst(bytes, bestandstypeVoorExtractie(mapping));
+      const gevonden = passageUitSegmenten(extractie.segmenten, opdracht.vraag.vraag);
+      if (!gevonden) return wijsKandidaatAf(afwijzingen, "extractie");
+      ({ passage, pagina, paragraaf } = gevonden);
     } catch (fout) {
       if (isFataleKandidaatFout(fout)) throw fout;
-      const categorie = fout instanceof SpikeError && fout.categorie === "toestemming_geweigerd"
-        ? "rechten_configuratie"
-        : "extractie";
-      return wijsKandidaatAf(afwijzingen, categorie);
+      return wijsKandidaatAf(afwijzingen, "extractie");
     }
-    try {
-      try {
-        const extractie = await extractTekst(bytes, bestandstypeVoorExtractie(mapping));
-        const gevonden = passageUitSegmenten(extractie.segmenten, opdracht.vraag.vraag);
-        if (!gevonden) return wijsKandidaatAf(afwijzingen, "extractie");
-        ({ passage, pagina, paragraaf } = gevonden);
-      } catch (fout) {
-        if (isFataleKandidaatFout(fout)) throw fout;
-        return wijsKandidaatAf(afwijzingen, "extractie");
-      }
-    } finally {
-      bytes.fill(0);
-    }
+  } finally {
+    bytes.fill(0);
   }
   await deps.onFase?.("na_content", mapping);
   await deps.onFase?.("voor_laatste_rechtencheck", mapping);
@@ -761,9 +785,17 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       throw new SpikeError("buiten_scope", "document_buiten_bron");
     }
     const maxKandidaten = Math.min(Math.max(1, opdracht.vraag.maxKandidaten ?? 20), 50);
+    const microsoftVragen = opdracht.vraag.microsoftZoektermen ?? [opdracht.vraag.vraag];
+    const driveVragen = opdracht.vraag.driveZoektermen ?? [opdracht.vraag.vraag];
     const hits = opdracht.route === "microsoft_search"
-      ? await zoekViaMicrosoftSearch(graphClient, opdracht.vraag.vraag, rootWebUrl, maxKandidaten)
-      : await zoekViaDrive(graphClient, bron, opdracht.vraag.driveZoektermen ?? [opdracht.vraag.vraag], maxKandidaten);
+      ? await zoekViaMicrosoftSearch(graphClient, microsoftVragen, rootWebUrl, maxKandidaten)
+      : opdracht.route === "drive_search_extract"
+        ? await zoekViaDrive(graphClient, bron, driveVragen, maxKandidaten)
+        : verenigKandidaten(
+          await zoekViaDrive(graphClient, bron, driveVragen, maxKandidaten),
+          await zoekViaMicrosoftSearch(graphClient, microsoftVragen, rootWebUrl, maxKandidaten),
+          maxKandidaten,
+        );
     await deps.onFase?.("na_zoeken");
 
     const uniekeHits = hits.filter((hit, index) => hits.findIndex((kandidaat) => kandidaat.itemId === hit.itemId) === index);
@@ -810,6 +842,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       provider: "microsoft",
       methode: "sharepoint_live",
       kandidaten,
+      kandidatenVoorVerificatie: uniekeHits.length,
       latencyMs: Math.max(0, Math.round(klok() - start)),
       ...(kandidaten.length === 0 ? { fout: "geen_resultaten" as const } : {}),
       afwijzingen,
@@ -826,6 +859,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       provider: "microsoft",
       methode: "sharepoint_live",
       kandidaten: [],
+      kandidatenVoorVerificatie: 0,
       latencyMs: Math.max(0, Math.round(klok() - start)),
       fout: veilig.categorie,
       foutcode: veilig.code,
@@ -889,7 +923,23 @@ export async function voerSharePointPermissionProbeUit(
 }
 
 function verhouding(teller: number, noemer: number): number {
-  return noemer === 0 ? 1 : Number((teller / noemer).toFixed(3));
+  return noemer === 0 ? 1 : Number(Math.min(1, teller / noemer).toFixed(3));
+}
+
+function rankingMetrieken(vraag: SpikeVraag, uitkomst: SpikeUitkomst): { mrr: number; ndcg: number } {
+  const verwacht = new Set(vraag.verwachteFixtures);
+  const primair = vraag.primaireFixture ?? vraag.verwachteFixtures[0];
+  const primairePositie = uitkomst.kandidaten.find((kandidaat) => kandidaat.fixtureCode === primair)?.rang.positie ?? 0;
+  const dcg = uitkomst.kandidaten.reduce((som, kandidaat) => (
+    som + (verwacht.has(kandidaat.fixtureCode) ? 1 / Math.log2(kandidaat.rang.positie + 1) : 0)
+  ), 0);
+  const idealeTreffers = Math.min(verwacht.size, uitkomst.kandidatenVoorVerificatie);
+  let idcg = 0;
+  for (let index = 0; index < idealeTreffers; index += 1) idcg += 1 / Math.log2(index + 2);
+  return {
+    mrr: primairePositie > 0 ? Number((1 / primairePositie).toFixed(3)) : 0,
+    ndcg: idcg > 0 ? Number((dcg / idcg).toFixed(3)) : verwacht.size === 0 ? 1 : 0,
+  };
 }
 
 /** Maakt uitsluitend inhoudsvrij, commitbaar meetbewijs. */
@@ -899,6 +949,7 @@ export function maakVeiligeMeetrij(ronde: number, vraag: SpikeVraag, uitkomst: S
   const raak = gevonden.filter((code) => verwacht.has(code)).length;
   const exacteBronset = gevonden.length === verwacht.size && gevonden.every((code) => verwacht.has(code));
   const bronsetAfwijking = uitkomst.kandidaten.length > 0 && !exacteBronset;
+  const ranking = rankingMetrieken(vraag, uitkomst);
   return {
     ronde,
     vraagcode: vraag.code,
@@ -913,12 +964,23 @@ export function maakVeiligeMeetrij(ronde: number, vraag: SpikeVraag, uitkomst: S
     foutcategorie: bronsetAfwijking ? "acceptatie_afwijking" : uitkomst.fout ?? null,
     foutcode: bronsetAfwijking ? "onverwachte_bronset" : uitkomst.foutcode ?? null,
     gevondenFixtures: gevonden,
+    exacteBronset,
     recall: verhouding(raak, verwacht.size),
+    // Kandidaatprecision vóór verificatie: de noemer is bewust de volledige
+    // kandidaatset die aan de verificatieketen is aangeboden, niet de bronset
+    // die na alle fail-closed controles is toegelaten.
+    precision: uitkomst.kandidatenVoorVerificatie === 0
+      ? (verwacht.size === 0 ? 1 : 0)
+      : verhouding(raak, uitkomst.kandidatenVoorVerificatie),
+    mrr: ranking.mrr,
+    ndcg: ranking.ndcg,
     locatorDekking: verhouding(uitkomst.kandidaten.filter((k) => k.locator.pagina !== null || k.locator.paragraaf !== null || Boolean(k.locator.mappad?.length)).length, uitkomst.kandidaten.length),
     versieDekking: verhouding(uitkomst.kandidaten.filter((k) => Boolean(k.versie.waarde && k.versie.gecontroleerdOp)).length, uitkomst.kandidaten.length),
     previewDekking: verhouding(uitkomst.kandidaten.filter((k) => k.previewMogelijk).length, uitkomst.kandidaten.length),
     latencyMs: uitkomst.latencyMs,
     microsoftCalls: uitkomst.meting.calls,
+    downloads: uitkomst.meting.downloads,
+    kandidatenVoorVerificatie: uitkomst.kandidatenVoorVerificatie,
     responseBytes: uitkomst.meting.responseBytes,
     contentBytes: uitkomst.meting.contentBytes,
     throttles: uitkomst.meting.throttles,
@@ -1027,18 +1089,24 @@ export function vatMetingenSamen(rijen: VeiligeMeetrij[]) {
   return [...groepen.entries()].map(([route, waarden]) => {
     const latencies = waarden.map((rij) => rij.latencyMs).sort((a, b) => a - b);
     const percentiel = (p: number) => latencies[Math.min(latencies.length - 1, Math.max(0, Math.ceil(latencies.length * p) - 1))] ?? 0;
-    const gemiddeld = (veld: "recall" | "locatorDekking" | "versieDekking" | "previewDekking") => Number((waarden.reduce((som, rij) => som + rij[veld], 0) / Math.max(1, waarden.length)).toFixed(3));
+    const gemiddeld = (veld: "recall" | "precision" | "mrr" | "ndcg" | "locatorDekking" | "versieDekking" | "previewDekking") => Number((waarden.reduce((som, rij) => som + rij[veld], 0) / Math.max(1, waarden.length)).toFixed(3));
     return {
       route,
       runs: waarden.length,
       geslaagd: waarden.filter((rij) => rij.resultaat === "geslaagd").length,
+      exacteBronsets: waarden.filter((rij) => rij.exacteBronset).length,
       recall: gemiddeld("recall"),
+      precision: gemiddeld("precision"),
+      mrr: gemiddeld("mrr"),
+      ndcg: gemiddeld("ndcg"),
       locatorDekking: gemiddeld("locatorDekking"),
       versieDekking: gemiddeld("versieDekking"),
       previewDekking: gemiddeld("previewDekking"),
       mediaanLatencyMs: percentiel(0.5),
       p95LatencyMs: percentiel(0.95),
       microsoftCalls: waarden.reduce((som, rij) => som + rij.microsoftCalls, 0),
+      downloads: waarden.reduce((som, rij) => som + rij.downloads, 0),
+      responseBytes: waarden.reduce((som, rij) => som + rij.responseBytes, 0),
       contentBytes: waarden.reduce((som, rij) => som + rij.contentBytes, 0),
       throttles: waarden.reduce((som, rij) => som + rij.throttles, 0),
       foutcategorieen: Object.fromEntries([...new Set(waarden.map((rij) => rij.foutcategorie).filter(Boolean))].map((categorie) => [categorie, waarden.filter((rij) => rij.foutcategorie === categorie).length])),

@@ -1,6 +1,6 @@
 # Microsoft 365 fase 5 — PGB Preview-retrievalsmoke
 
-Deze runner is uitsluitend bedoeld om de twee routes uit #353 live te vergelijken met de synthetische PGB354-set uit #385. Hij is geen productieadapter en is niet aangesloten op chat, zoeken, vergelijken of de AI-gateway.
+Deze runner is uitsluitend bedoeld om de drie kandidaatstrategieën uit #403 live te vergelijken met de synthetische PGB354-set uit #385: DriveItem Search, Microsoft Search met DriveItem-verificatie en hun centraal ontdubbelde meetunie. Hij is geen productieadapter en is niet aangesloten op chat, zoeken, vergelijken of de AI-gateway.
 
 ## Voorwaarden
 
@@ -27,14 +27,16 @@ set waarde = excluded.waarde, versie = public.fonds_feature_flags.versie + 1,
 
 ## Basisvergelijking
 
-1. Open `/beheer/microsoft-sharepoint-retrieval` op de PGB Preview-host.
-2. Voer eerst S00 uit. Deze vaste inhoudsloze DriveItem-search onderscheidt een ongeldige Graph-vraag (`graph_bad_request`) van ontbrekende toestemming (`graph_toestemming`) en een toegestane zoekactie (`geslaagd`), zonder documenten te openen of downloaden.
-3. Controleer vóór én na de meetreeks expliciet dat `microsoft_sharepoint_retrieval_spike=false` is. Zet de vlag alleen voor de daadwerkelijke meetreeks aan en gebruik de geaudite beheerroute.
-4. Na een groene S00 kan de korte Drive-controle worden gebruikt: S02, S03, S04 en S04H één keer met de vaste termen uit de acceptatieset. Dit zijn vier diagnostische metingen binnen het endpointbudget.
-5. Controleer de inhoud voordat een volledige vergelijking start: S02 vindt alleen `PGB354-DOC-001`, S03 vindt `PGB354-DOC-001` en `PGB354-PPT-001`, S04 vindt alleen de actuele `PGB354-PDF-001`, en S04H vindt alleen de historische `PGB354-PDF-002`. De runner vergelijkt de gevonden fixturecodes exact met deze vooraf vastgelegde bronset; een ontbrekende of extra fixture is `acceptatie_afwijking/onverwachte_bronset`, ook als recall 1 is. Een door Graph aangeboden maar door het beleid uitgesloten historische kandidaat telt onder `afwijzing_actualiteit` en mag geen content- of previewcall veroorzaken.
-6. Alleen als deze vier inhoudelijk groen zijn, start de basisvergelijking. Zij voert S02, S03, S04 en S04H via `drive_search_extract` en `microsoft_search` uit, drie rondes per route: 24 metingen.
-7. Kopieer de veilige JSON-uitvoer. Controleer per route recall, locator-/versie-/previewdekking, latency, Graph-calls, bytes, throttles en foutcategorieën.
-8. Stop bij onverwachte inhoud of een toestemming-, tenant-, actor-, configuratie-, timeout- of cancellationfout. Voer S08 en S09 dan niet uit en verruim geen Graph-scope als onderdeel van deze smoke.
+1. Stel read-only vast dat de SharePoint-index gereed is: iedere fixture moet zowel op bestandsnaam als op de unieke inhoudsterm vindbaar zijn. Alleen een bestandsnaamtreffer is `index_niet_gereed`; stop dan zonder adapter- of rechtenconclusie.
+2. Leg vóór de eerste Microsoft Search-call een afzonderlijk consentbesluit vast. Deze code voegt geen scope of consent toe. Zonder dat besluit worden alleen S00 en de DriveItem-diagnostiek uitgevoerd.
+3. Open `/beheer/microsoft-sharepoint-retrieval` op de PGB Preview-host.
+4. Voer eerst S00 uit. Deze vaste inhoudsloze DriveItem-search onderscheidt een ongeldige Graph-vraag (`graph_bad_request`) van ontbrekende toestemming (`graph_toestemming`) en een toegestane zoekactie (`geslaagd`), zonder documenten te openen of downloaden.
+5. Controleer vóór én na de meetreeks expliciet dat `microsoft_sharepoint_retrieval_spike=false` is. Zet de vlag alleen voor de daadwerkelijke meetreeks aan en gebruik de geaudite beheerroute.
+6. Na een groene S00 kan de korte Drive-controle worden gebruikt: S02, S03, S04 en S04H één keer met de vaste termen uit de acceptatieset. Dit zijn vier diagnostische metingen binnen het endpointbudget.
+7. Controleer de inhoud voordat een volledige vergelijking start: S02 vindt alleen `PGB354-DOC-001`, S03 vindt `PGB354-DOC-001` en `PGB354-PPT-001`, S04 vindt alleen de actuele `PGB354-PDF-001`, en S04H vindt alleen de historische `PGB354-PDF-002`. De runner vergelijkt de gevonden fixturecodes exact met deze vooraf vastgelegde bronset; een ontbrekende of extra fixture is `acceptatie_afwijking/onverwachte_bronset`, ook als recall 1 is. Een door Graph aangeboden maar door het beleid uitgesloten historische kandidaat telt onder `afwijzing_actualiteit` en mag geen content- of previewcall veroorzaken.
+8. Alleen als deze vier inhoudelijk groen zijn, start de basisvergelijking. Zij voert S02, S03, S04 en S04H via `drive_search_extract`, `microsoft_search` en `candidate_union` uit, twee rondes per route: 24 metingen.
+9. Kopieer de veilige JSON-uitvoer. Controleer per route exacte bronset, recall, kandidaatprecision vóór verificatie (`precision`, met `kandidatenVoorVerificatie` als noemer), MRR/nDCG, locator-/versie-/previewdekking, verificatiekandidaten, downloads, latency, Graph-calls, bytes, throttles en foutcategorieën.
+10. Stop bij onverwachte inhoud of een toestemming-, tenant-, actor-, configuratie-, timeout- of cancellationfout. Voer S08 en S09 dan niet uit en verruim geen Graph-scope als onderdeel van deze smoke.
 
 De audit mag voor kandidaatdiagnostiek exact deze platte velden bevatten: `afwijzing_mapping`, `afwijzing_binding`, `afwijzing_root`, `afwijzing_rechten_configuratie`, `afwijzing_versie`, `afwijzing_extractie`, `afwijzing_preview` en `afwijzing_actualiteit`. Iedere waarde is een niet-negatief geheel getal; geneste afwijzingsobjecten of andere dynamische sleutels zijn niet toegestaan.
 
