@@ -197,5 +197,5 @@ test("PR-B: registers — zes handelingen, activeringsroute in de LK-10-census, 
     ["microsoft-login.uitnodiging.intrekken", "DELETE microsoft-login/beheer/uitnodiging"],
   ]) assert.equal(audit.handelingen[label!], route);
   assert.match(lees("tests/cross-tenant/login-keten-karakterisering.test.ts"), /"app\/auth\/microsoft-login\/uitnodiging\/route\.ts"/);
-  assert.match(lees("tests/cross-tenant/w7-declaraties.test.ts"), /HANDLERS\.length, 150/);
+  assert.match(lees("tests/cross-tenant/w7-declaraties.test.ts"), /HANDLERS\.length, 151/);
 });

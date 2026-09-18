@@ -85,6 +85,34 @@ Vul vóór de eerste live Microsoft Search-call een gereviewd besluit in met:
 Een 401/403 tijdens de run is een stopresultaat. De runner verruimt nooit zelf
 een scope en valt niet automatisch terug naar een andere provider.
 
+#### Besluit 18 september 2026 — tijdelijke PGB Preview-proef
+
+- API-route: `POST /v1.0/search/query` met `driveItem`.
+- Scope: uitsluitend delegated `Files.Read.All`; geen application permission,
+  geen `Sites.Read.All` en geen schrijfscope.
+- Tenant: `e4ff0e8d-5b92-4695-9f58-2f97200199f9`.
+- Appregistratie: Preview-connector `067351f2-693a-4bd9-ae00-6ff32bc49260`;
+  de login-app en Production-app blijven ongewijzigd.
+- Testidentiteit: `preview-pgb-lid@NETORGFT20476383.onmicrosoft.com`. Vóór de
+  eerste Search-call wordt nogmaals vastgelegd dat deze identiteit functioneel
+  uitsluitend de PGB-testsite kan lezen.
+- Actor voor verlening en intrekking: tenantbeheerder Merlin IJzerman.
+- Geldigheid: alleen gedurende de live #403-meetreeks. Begin- en eindtijd komen
+  bij de smoke-uitkomst; buiten de actieve PGB-spikeflag is de consentroute 404.
+- Terugbrengen: PGB-flag uit; `Files.Read.All` uit de Preview-appregistratie;
+  delegated grant van de testidentiteit intrekken; daarna opnieuw via de gewone
+  SharePoint-route consent geven. Die normale route accepteert de brede scope
+  niet en overschrijft de private verbinding met de oorspronkelijke scopes.
+- Verificatie: de private verbinding noemt daarna geen `Files.Read.All`; een
+  Microsoft Search-tokenaanvraag faalt gesloten, terwijl S00 via
+  `Sites.Selected` opnieuw slaagt.
+
+De code ondersteunt dit besluit via een afzonderlijke consentroute. De scope
+staat bewust niet in `MICROSOFT_TOEGESTANE_SCOPES`; een versleutelde transactie
+met doel `retrieval_smoke`, een echte Preview-runtime, fonds PGB, beheerder-
+capability, de bestaande Microsoft-/SharePoint-poorten én de spikeflag zijn
+tegelijk vereist.
+
 Bronnen: [DriveItem Search-permissions](https://learn.microsoft.com/en-us/graph/api/driveitem-search?view=graph-rest-1.0) en [Microsoft Search-permissions](https://learn.microsoft.com/en-us/graph/api/search-query?view=graph-rest-1.0).
 
 ### 3. Tijdelijke Preview-flag

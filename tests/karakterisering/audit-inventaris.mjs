@@ -155,6 +155,7 @@ const SPLIT_KLASSE = {
   "POST app/api/microsoft/sharepoint/bron/controle/route.ts": "operationeel", // #321 bereikbaarheidscontrole met actuele rechten; wrapper-audit + private connectoraudit
   "POST app/api/microsoft/sharepoint/documenten/[ref]/preview/route.ts": "operationeel", // #321 kortlevende preview-URL; wrapper-audit + private audit met alleen referentie/categorie/latency
   "POST app/api/microsoft/sharepoint/retrieval-smoke/route.ts": "operationeel", // #353 vaste PGB Preview-meting; wrapper-audit + inhoudsvrije microsoft_private-audit
+  "GET app/api/microsoft/sharepoint/retrieval-smoke/toestemming/route.ts": "operationeel", // #405 tijdelijke brede delegated scope, dubbel gegate en wrapper-geaudit
   "DELETE app/api/microsoft-login/koppeling/route.ts": "operationeel", // #335 T2 Microsoft-login ontkoppelen (revoking → unlink → revoked); wrapper-audit + private login_private.audit_log via de gateway
   "POST app/api/microsoft-login/koppeling/route.ts": "operationeel", // #335 T2 idempotent herstel van een half-afgeronde koppeling; wrapper-audit + private login_private.audit_log via de gateway
   "POST app/api/microsoft-login/verhoging/route.ts": "operationeel", // #344 opent het activeringsvenster van een break-glasssessie; wrapper-audit + `breakglass.gebruikt` in login_private.audit_log via de gateway

@@ -1,7 +1,15 @@
 import "server-only";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 import { createHash, randomBytes } from "node:crypto";
-import { microsoftConfig, MICROSOFT_OUTLOOK_SCOPES, MICROSOFT_SCOPES, MICROSOFT_SHAREPOINT_SCOPES, MICROSOFT_TOEGESTANE_SCOPES } from "@/core/lib/microsoft-config";
+import {
+  microsoftConfig,
+  MICROSOFT_OUTLOOK_SCOPES,
+  MICROSOFT_SCOPES,
+  MICROSOFT_SEARCH_SPIKE_SCOPE,
+  MICROSOFT_SEARCH_SPIKE_SCOPES,
+  MICROSOFT_SHAREPOINT_SCOPES,
+  MICROSOFT_TOEGESTANE_SCOPES,
+} from "@/core/lib/microsoft-config";
 import { ontsleutelMicrosoftGeheim, versleutelMicrosoftGeheim, type VersleuteldBlob } from "@/core/lib/microsoft-crypto";
 import { microsoftIdentiteitGeldig } from "@/core/lib/microsoft-identity-core";
 import {
@@ -11,8 +19,10 @@ import {
   microsoftTestFoutcategorie,
 } from "@/core/lib/microsoft-connector-error-core";
 import * as vault from "@/core/lib/microsoft-vault";
+import { isSharePointRetrievalSmokePreview } from "@/core/lib/microsoft-sharepoint-retrieval-smoke-core";
 
 export type ConnectorContext = { fondsId: string; gebruikerId: string };
+type MicrosoftKoppelDoel = "standaard" | "retrieval_smoke";
 const aad = (fondsId: string, gebruikerId: string, soort: string) => `m365:v1:${fondsId}:${gebruikerId}:${soort}`;
 const b64url = (bytes: number) => randomBytes(bytes).toString("base64url");
 const challenge = (verifier: string) => createHash("sha256").update(verifier).digest("base64url");
@@ -57,6 +67,19 @@ function client() {
   const cfg = microsoftConfig();
   return new ConfidentialClientApplication({ auth: { clientId: cfg.clientId, clientSecret: cfg.clientSecret, authority: `https://login.microsoftonline.com/${cfg.tenantId}` } });
 }
+
+function retrievalSmokeOmgeving(): boolean {
+  return isSharePointRetrievalSmokePreview({
+    seedDoelomgeving: process.env.SEED_DOELOMGEVING,
+    vercelEnv: process.env.VERCEL_ENV,
+  });
+}
+
+function toegestaneScopes(doel: MicrosoftKoppelDoel): Set<string> {
+  const scopes = new Set<string>(MICROSOFT_TOEGESTANE_SCOPES);
+  if (doel === "retrieval_smoke" && retrievalSmokeOmgeving()) scopes.add(MICROSOFT_SEARCH_SPIKE_SCOPE);
+  return scopes;
+}
 export async function microsoftPilotActief(supabase: { from: (table: string) => any }, fondsId: string): Promise<boolean> {
   const { data } = await supabase.from("fonds_integratie_profielen").select("integratieprofiel, microsoft_koppeling_pilot").eq("fonds_id", fondsId).maybeSingle();
   return (data?.integratieprofiel === "eigen" || data?.integratieprofiel === "microsoft")
@@ -76,28 +99,46 @@ export async function microsoftSharePointActief(supabase: { from: (table: string
   ]);
   return profiel?.integratieprofiel === "microsoft" && profiel?.microsoft_koppeling_pilot === true && vlag?.waarde === true;
 }
-export async function startKoppeling(ctx: ConnectorContext, returnTo: string, scopes: readonly string[] = MICROSOFT_SCOPES) {
-  const toegestaan = new Set<string>(MICROSOFT_TOEGESTANE_SCOPES);
+export async function startKoppeling(
+  ctx: ConnectorContext,
+  returnTo: string,
+  scopes: readonly string[] = MICROSOFT_SCOPES,
+  doel: MicrosoftKoppelDoel = "standaard",
+) {
+  const toegestaan = toegestaneScopes(doel);
   if (!MICROSOFT_SCOPES.every((scope) => scopes.includes(scope)) || scopes.some((scope) => !toegestaan.has(scope))) {
     throw new MicrosoftConnectorError("oauth_transactie");
   }
   const state = b64url(32), nonce = b64url(32), verifier = b64url(64);
   const cfg = microsoftConfig();
-  await vault.maakOAuthTransactie({ state, fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, expiresAt: new Date(Date.now() + 10 * 60_000), blob: versleutelMicrosoftGeheim(JSON.stringify({ nonce, verifier, returnTo, scopes }), aad(ctx.fondsId, ctx.gebruikerId, "oauth")) });
+  await vault.maakOAuthTransactie({ state, fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, expiresAt: new Date(Date.now() + 10 * 60_000), blob: versleutelMicrosoftGeheim(JSON.stringify({ nonce, verifier, returnTo, scopes, doel }), aad(ctx.fondsId, ctx.gebruikerId, "oauth")) });
   return client().getAuthCodeUrl({ scopes: [...scopes], redirectUri: cfg.callbackUrl, state, nonce, codeChallenge: challenge(verifier), codeChallengeMethod: "S256" });
 }
 /** Een incrementele consent vervangt de opgeslagen scopes van de verbinding.
  * Daarom vraagt iedere uitbreiding de unie van al verleende én nieuwe scopes,
  * zodat Outlook en SharePoint elkaar niet stil uitschakelen. */
-async function scopesMetUitbreiding(ctx: ConnectorContext, uitbreiding: readonly string[]): Promise<string[]> {
+async function scopesMetUitbreiding(
+  ctx: ConnectorContext,
+  uitbreiding: readonly string[],
+  doel: MicrosoftKoppelDoel = "standaard",
+): Promise<string[]> {
   const verbinding = await vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId);
-  const toegestaan = new Set<string>(MICROSOFT_TOEGESTANE_SCOPES);
+  const toegestaan = toegestaneScopes(doel);
   const scopes = new Set<string>(uitbreiding);
   for (const scope of verbinding?.status === "gekoppeld" ? verbinding.scopes : []) if (toegestaan.has(scope)) scopes.add(scope);
   return [...scopes];
 }
 export async function startOutlookToestemming(ctx: ConnectorContext, returnTo: string) { return startKoppeling(ctx, returnTo, await scopesMetUitbreiding(ctx, MICROSOFT_OUTLOOK_SCOPES)); }
 export async function startSharePointToestemming(ctx: ConnectorContext, returnTo: string) { return startKoppeling(ctx, returnTo, await scopesMetUitbreiding(ctx, MICROSOFT_SHAREPOINT_SCOPES)); }
+export async function startMicrosoftSearchSpikeToestemming(ctx: ConnectorContext, returnTo: string) {
+  if (!retrievalSmokeOmgeving()) throw new MicrosoftConnectorError("oauth_transactie");
+  return startKoppeling(
+    ctx,
+    returnTo,
+    await scopesMetUitbreiding(ctx, MICROSOFT_SEARCH_SPIKE_SCOPES, "retrieval_smoke"),
+    "retrieval_smoke",
+  );
+}
 function mask(username: string | undefined) { if (!username) return null; const [left, right] = username.split("@"); return `${left.slice(0, 1)}***${right ? `@${right}` : ""}`; }
 export async function voltooiKoppeling(args: ConnectorContext & { state: string; code: string }) {
   const tx = await koppelStap("oauth_transactie", () => vault.consumeerOAuthTransactie(args.state));
@@ -106,12 +147,14 @@ export async function voltooiKoppeling(args: ConnectorContext & { state: string;
   }
   const geheim = koppelStapSync("oauth_decryptie", () => {
     const waarde = JSON.parse(ontsleutelMicrosoftGeheim({ sleutelVersie: tx.sleutel_versie, iv: tx.iv, tag: tx.tag, ciphertext: tx.ciphertext }, aad(args.fondsId, args.gebruikerId, "oauth"))) as Record<string, unknown>;
-    const toegestaan = new Set<string>(MICROSOFT_TOEGESTANE_SCOPES);
+    const doel = waarde.doel === "retrieval_smoke" ? "retrieval_smoke" : waarde.doel === "standaard" || waarde.doel === undefined ? "standaard" : null;
+    if (!doel) throw new Error("OAuth-transactie heeft een ongeldig doel.");
+    const toegestaan = toegestaneScopes(doel);
     const scopes = waarde.scopes;
     if (typeof waarde.nonce !== "string" || typeof waarde.verifier !== "string" || typeof waarde.returnTo !== "string" || !Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string" && toegestaan.has(scope)) || !MICROSOFT_SCOPES.every((scope) => scopes.includes(scope))) {
       throw new Error("OAuth-transactie is onvolledig.");
     }
-    return { nonce: waarde.nonce, verifier: waarde.verifier, returnTo: waarde.returnTo, scopes: scopes as string[] };
+    return { nonce: waarde.nonce, verifier: waarde.verifier, returnTo: waarde.returnTo, scopes: scopes as string[], doel };
   });
   const cfg = microsoftConfig();
   const msal = client();
@@ -172,7 +215,7 @@ export async function ontkoppelKoppeling(ctx: ConnectorContext) { await vault.on
  * alleen de vernieuwde MSAL-cache. De route geeft het token nooit door aan de
  * browser of aan logging. Ontbreekt de scope op de verbinding, dan faalt dit
  * gesloten: er is geen terugval naar een bredere scope. */
-async function gedelegeerdToken(ctx: ConnectorContext, scope: "Calendars.Read.Shared" | "Sites.Selected") {
+async function gedelegeerdToken(ctx: ConnectorContext, scope: "Calendars.Read.Shared" | "Sites.Selected" | "Files.Read.All") {
   const [verbinding, cache] = await Promise.all([vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId), vault.leesCache(ctx.fondsId, ctx.gebruikerId)]);
   if (!verbinding || verbinding.status !== "gekoppeld" || !cache || !verbinding.scopes.includes(scope)) throw new MicrosoftConnectorError("test_silent_token");
   const msal = client();
@@ -193,4 +236,8 @@ export async function outlookAccessToken(ctx: ConnectorContext) {
 }
 export async function sharepointAccessToken(ctx: ConnectorContext) {
   return gedelegeerdToken(ctx, "Sites.Selected");
+}
+export async function sharepointSearchAccessToken(ctx: ConnectorContext) {
+  if (!retrievalSmokeOmgeving()) throw new MicrosoftConnectorError("test_silent_token");
+  return gedelegeerdToken(ctx, MICROSOFT_SEARCH_SPIKE_SCOPE);
 }

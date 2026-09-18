@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type {
   SharePointRetrievalSmokeEvent,
   SharePointRetrievalSmokeRoute,
@@ -100,9 +101,16 @@ export default function SharePointRetrievalSmoke() {
 
       <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="font-bold text-ink">Basisvergelijking</h2>
-        <p className="mt-1 text-sm text-muted">Voert S02–S04 en S04H via drie kandidaatstrategieën uit, twee rondes per route. Start dit pas na een vastgelegd gereed indexmoment en een afzonderlijk consentbesluit; deze pagina wijzigt geen Microsoft-permissions.</p>
+        <p className="mt-1 text-sm text-muted">Voert S02–S04 en S04H via drie kandidaatstrategieën uit, twee rondes per route. Start dit pas na een vastgelegd gereed indexmoment en het tijdelijke Preview-consent.</p>
+        <Link href="/api/microsoft/sharepoint/retrieval-smoke/toestemming?returnTo=%2Fbeheer%2Fmicrosoft-sharepoint-retrieval" className="mt-4 inline-block rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold">
+          Tijdelijke Microsoft Search-toestemming verlenen
+        </Link>
+        <div />
         <button type="button" disabled={bezig} onClick={() => void run(basisTaken)} className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           Basisvergelijking starten (24 metingen)
+        </button>
+        <button type="button" disabled={bezig} onClick={() => void run([{ scenario: "S02", route: "microsoft_search", ronde: 1 }])} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          Microsoft Search-proef starten (1 meting)
         </button>
         <button type="button" disabled={bezig} onClick={() => void run(BASISSCENARIOS.map((scenario) => ({ scenario, route: "drive_search_extract" as const, ronde: 1 as const })))} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
           Drive-controle starten (4 metingen)

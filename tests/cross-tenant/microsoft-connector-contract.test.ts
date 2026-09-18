@@ -12,13 +12,20 @@ const callback = lees("app/auth/microsoft/callback/route.ts");
 const connectorFouten = lees("core/lib/microsoft-connector-error-core.ts");
 const vaultRij = lees("core/lib/microsoft-vault-row-core.ts");
 
-test("Microsoft F1 houdt de basisset klein; 2A voegt alleen Calendars.Read.Shared toe en 3 alleen Sites.Selected", () => {
+test("Microsoft F1 houdt de basisset klein; de brede Search-scope is uitsluitend een Preview-spike-uitzondering", () => {
   const config = lees("core/lib/microsoft-config.ts");
   assert.match(config, /MICROSOFT_SCOPES = \["openid", "profile", "offline_access", "User\.Read"\] as const/);
   assert.match(config, /MICROSOFT_OUTLOOK_SCOPES = \[\.\.\.MICROSOFT_SCOPES, "Calendars\.Read\.Shared"\] as const/);
   assert.match(config, /MICROSOFT_SHAREPOINT_SCOPES = \[\.\.\.MICROSOFT_SCOPES, "Sites\.Selected"\] as const/);
-  // Bewust verruimd in #321: uitsluitend de Selected-scope; brede lees- of schrijfscopes blijven verboden.
-  assert.doesNotMatch(config, /Files\.|Sites\.Read|Sites\.ReadWrite|Sites\.FullControl|Mail\.|Calendars\.ReadWrite/);
+  assert.match(config, /MICROSOFT_SEARCH_SPIKE_SCOPE = "Files\.Read\.All" as const/);
+  // De normale allowlist blijft klein. De brede scope komt alleen via het
+  // apart gemarkeerde retrieval_smoke-doel in de Preview-omgeving binnen.
+  const normaleAllowlist = config.match(/MICROSOFT_TOEGESTANE_SCOPES[^\n]+/)?.[0] ?? "";
+  assert.doesNotMatch(normaleAllowlist, /MICROSOFT_SEARCH_SPIKE/);
+  assert.doesNotMatch(config, /Sites\.Read|Sites\.ReadWrite|Sites\.FullControl|Mail\.|Calendars\.ReadWrite/);
+  assert.match(connector, /doel === "retrieval_smoke" && retrievalSmokeOmgeving\(\)/);
+  assert.match(connector, /startMicrosoftSearchSpikeToestemming/);
+  assert.match(connector, /if \(!retrievalSmokeOmgeving\(\)\) throw new MicrosoftConnectorError\("oauth_transactie"\)/);
 });
 
 test("Microsoft F1 gebruikt geen Supabase service-role in het tenantpad", () => {

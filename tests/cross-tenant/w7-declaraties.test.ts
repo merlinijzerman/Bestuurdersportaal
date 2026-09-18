@@ -132,7 +132,9 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // requireCapability, zoals /api/profiel.
   // 150: #353 voegt één strikt Preview-only PGB-smokehandler toe, uitsluitend
   // voor beheerders (login.beleid.manage), met vaste invoercodes.
-  assert.equal(HANDLERS.length, 150, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 151: #405 voegt één strikt Preview-only PGB-consenthandler toe voor de
+  // tijdelijke delegated Microsoft Search-scope, achter dezelfde poorten.
+  assert.equal(HANDLERS.length, 151, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

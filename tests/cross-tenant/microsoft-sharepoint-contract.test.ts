@@ -13,9 +13,14 @@ const vault = lees("core/lib/microsoft-vault.ts");
 
 test("SharePoint fase 3 gebruikt uitsluitend delegated Sites.Selected en de driedubbele fonds-poort", () => {
   assert.match(config, /MICROSOFT_SHAREPOINT_SCOPES = \[\.\.\.MICROSOFT_SCOPES, "Sites\.Selected"\] as const/);
-  assert.doesNotMatch(config, /Files\.|Sites\.Read|Sites\.ReadWrite|Sites\.FullControl|Sites\.Manage|AllSites/);
+  assert.doesNotMatch(config, /Sites\.Read|Sites\.ReadWrite|Sites\.FullControl|Sites\.Manage|AllSites/);
+  assert.match(config, /MICROSOFT_SEARCH_SPIKE_SCOPE = "Files\.Read\.All"/);
+  assert.doesNotMatch(config.match(/MICROSOFT_TOEGESTANE_SCOPES[\s\S]*?as const;/)?.[0] ?? "", /Files\.Read\.All/,
+    "de brede proefscope blijft buiten de normale allowlist");
   assert.match(connector, /microsoft_sharepoint_fase3/);
   assert.match(connector, /gedelegeerdToken\(ctx, "Sites\.Selected"\)/);
+  assert.match(connector, /sharepointSearchAccessToken/);
+  assert.match(connector, /isSharePointRetrievalSmokePreview/);
   assert.match(connector, /scopesMetUitbreiding/);
   assert.match(lees("app/api/microsoft/sharepoint/status/route.ts"), /capability: "profile\.view\.own"/);
   assert.match(lees("app/api/microsoft/sharepoint/toestemming/route.ts"), /capability: "profile\.manage\.own"/);
