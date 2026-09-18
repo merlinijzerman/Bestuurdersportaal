@@ -27,6 +27,12 @@ hit de verificatie- en inhoudslaag:
   vrije querytekst verwijderd; de gereserveerde operatorwoorden `AND`, `OR`,
   `NOT`, `NEAR`, `ONEAR` en `XRANK` worden geneutraliseerd. De invoer kan de
   vaste `path`-expressie daardoor niet wijzigen.
+- Na de live S02-nulmeting is een smalle scoped-diagnostiek toegevoegd. Zij
+  vergelijkt dezelfde vaste zoektermen tenantbreed, met `SiteID` + `ListID` en
+  met het bestaande `path:`-filter. De eerste twee varianten zijn uitsluitend
+  diagnostisch: onbekende hits vallen op de private mapping af vóór een
+  DriveItem-, download- of previewcall. Alleen de padvariant blijft de normale
+  meetstand.
 - De vaste scenario's leveren maximaal twee providerneutrale queryvarianten.
   De browser kan vragen, varianten, paden of Graph-identifiers niet invullen.
 - `summary` en highlights uit Microsoft Search worden niet opgeslagen en nooit

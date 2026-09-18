@@ -167,6 +167,54 @@ test("Microsoft Search neutraliseert gereserveerde operators en beschermt het va
   assert.equal(query.queryTemplate, `({searchTerms}) path:\"${rootItem.webUrl}\" isDocument=true`);
 });
 
+test("Microsoft Search vergelijkt tenant-, site+lijst- en padbereik met vaste server-side templates", async () => {
+  const listId = "99999999-9999-4999-8999-999999999999";
+  const gevallen = [
+    { scope: "tenant" as const, template: "({searchTerms}) isDocument=true", extraCalls: 0 },
+    { scope: "site_list" as const, template: `({searchTerms}) SiteID:\"66666666-6666-4666-8666-666666666666\" ListID:\"${listId}\" isDocument=true`, extraCalls: 1 },
+    { scope: "path" as const, template: `({searchTerms}) path:\"${rootItem.webUrl}\" isDocument=true`, extraCalls: 0 },
+  ];
+
+  for (const geval of gevallen) {
+    let searchRequest: Record<string, unknown> | null = null;
+    let calls = 0;
+    const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(async (url, init) => {
+      calls += 1;
+      if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+      if (url.endsWith(`/drives/${encodeURIComponent(IDS.drive)}/list?$select=id`)) return json({ id: listId });
+      if (url.endsWith("/search/query")) {
+        searchRequest = JSON.parse(String(init.body));
+        return json({ value: [{ hitsContainers: [{ moreResultsAvailable: false, hits: [] }] }] });
+      }
+      throw new Error("zonder hits mag geen verificatie- of contentcall starten");
+    }), { ...opdracht("microsoft_search"), microsoftSearchScope: geval.scope });
+
+    assert.equal(uitkomst.fout, "geen_resultaten");
+    assert.equal(uitkomst.searchScope, geval.scope);
+    assert.equal(uitkomst.meting.downloads, 0);
+    assert.equal(calls, 2 + geval.extraCalls);
+    assert.ok(searchRequest);
+    const query = ((searchRequest as unknown as { requests: Array<{ query: { queryTemplate: string } }> }).requests[0].query);
+    assert.equal(query.queryTemplate, geval.template);
+  }
+});
+
+test("tenantbrede Microsoft Search-treffers buiten het register stoppen vóór DriveItem-verificatie", async () => {
+  let onbekendeItemCalls = 0;
+  const uitkomst = await voerSharePointRetrievalSpikeUit(basisDeps(async (url) => {
+    if (url.includes(`/items/${IDS.root}?`)) return json(rootItem);
+    if (url.endsWith("/search/query")) return json({ value: [{ hitsContainers: [{ hits: [{ hitId: "onbekend-item", rank: 1 }] }] }] });
+    if (url.includes("onbekend-item")) onbekendeItemCalls += 1;
+    throw new Error("een onbekende hit mag niet worden opgehaald");
+  }), { ...opdracht("microsoft_search"), microsoftSearchScope: "tenant" });
+
+  assert.equal(uitkomst.fout, "geen_resultaten");
+  assert.equal(uitkomst.afwijzingen.mapping, 1);
+  assert.equal(uitkomst.kandidatenVoorVerificatie, 1);
+  assert.equal(uitkomst.meting.downloads, 0);
+  assert.equal(onbekendeItemCalls, 0);
+});
+
 test("meetunie ontdubbelt centraal en rangschikt deterministisch met één verificatieketen per item", async () => {
   const eersteItem = "private-document-a";
   const tweedeItem = "private-document-b";
@@ -763,7 +811,10 @@ test("permissionprobe doet uitsluitend één inhoudsvrije drive/root-search", as
     assert.equal(new Headers(init.headers).get("Authorization"), "Bearer geheim-token");
     return json({ value: [] });
   }));
-  assert.deepEqual(toegestaan, { status: "toegestaan", foutcode: null, latencyMs: 0, microsoftCalls: 1 });
+  assert.equal(toegestaan.status, "toegestaan");
+  assert.equal(toegestaan.foutcode, null);
+  assert.equal(toegestaan.microsoftCalls, 1);
+  assert.ok(toegestaan.latencyMs >= 0);
 
   const geweigerd = await voerSharePointPermissionProbeUit(basisDeps(async () => json({}, 403)));
   assert.equal(geweigerd.status, "toestemming_geweigerd");

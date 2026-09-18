@@ -43,6 +43,34 @@ set waarde = excluded.waarde, versie = public.fonds_feature_flags.versie + 1,
 9. Kopieer de veilige JSON-uitvoer. Controleer per route exacte bronset, recall, kandidaatprecision vóór verificatie (`precision`, met `kandidatenVoorVerificatie` als noemer), MRR/nDCG, locator-/versie-/previewdekking, verificatiekandidaten, downloads, latency, Graph-calls, bytes, throttles en foutcategorieën.
 10. Stop bij onverwachte inhoud of een toestemming-, tenant-, actor-, configuratie-, timeout- of cancellationfout. Voer S08 en S09 dan niet uit en verruim geen Graph-scope als onderdeel van deze smoke.
 
+### Microsoft Search-scope diagnostiek na een nulmeting
+
+Wanneer S02 met geldig tijdelijk Search-consent nul kandidaten geeft, voer dan
+niet meteen de 24-metingen uit. Gebruik eerst uitsluitend de knop
+**Zoekscope-diagnostiek starten (3 metingen)**. Die herhaalt S02 in vaste
+volgorde:
+
+1. `tenant` — geen bronfilter in de Microsoft Search-query;
+2. `site_list` — `SiteID` uit de fondsbron en een live gelezen `ListID` van de
+   gebonden drive;
+3. `path` — de bestaande root-URL.
+
+De uitvoer en audit bevatten alleen de scopecode, tellingen en fixturecodes.
+Een onbekende tenanttreffer valt als `mapping` af en mag geen DriveItem-,
+content- of previewcall veroorzaken. Interpretatie:
+
+- alleen `tenant` vindt de fixture: onderzoek de site-/lijstidentiteit en het
+  indexveld;
+- `tenant` en `site_list` vinden de fixture, `path` niet: het path-filter of de
+  geïndexeerde URL-vorm is de afwijking;
+- alle drie leveren nul: onderzoek actorafhankelijke security trimming of
+  Graph Search-indexzichtbaarheid;
+- `path` vindt de fixture: de eerdere nulmeting was niet stabiel; herhaal eerst
+  dezelfde diagnostiek voordat de 24-metingen worden vrijgegeven.
+
+Dezelfde tijdelijke consent- en herstelprocedure blijft gelden. Deze
+diagnostiek verbreedt geen apppermission of fondsflag.
+
 De audit mag voor kandidaatdiagnostiek exact deze platte velden bevatten: `afwijzing_mapping`, `afwijzing_binding`, `afwijzing_root`, `afwijzing_rechten_configuratie`, `afwijzing_versie`, `afwijzing_extractie`, `afwijzing_preview` en `afwijzing_actualiteit`. Iedere waarde is een niet-negatief geheel getal; geneste afwijzingsobjecten of andere dynamische sleutels zijn niet toegestaan.
 
 ## S08 — intrekking tijdens het verzoek

@@ -7,11 +7,14 @@
 // ============================================================================
 
 export type SharePointRetrievalSmokeRoute = "microsoft_search" | "drive_search_extract" | "candidate_union";
+export const SHAREPOINT_RETRIEVAL_SEARCH_SCOPES = ["tenant", "site_list", "path"] as const;
+export type SharePointRetrievalSearchScope = typeof SHAREPOINT_RETRIEVAL_SEARCH_SCOPES[number];
 
 export type SharePointRetrievalVeiligeMeting = {
   ronde: number;
   vraagcode: string;
   route: SharePointRetrievalSmokeRoute;
+  searchScope: SharePointRetrievalSearchScope | null;
   resultaat: "geslaagd" | "geen_resultaten" | "mislukt";
   foutcategorie: string | null;
   foutcode: string | null;
@@ -207,7 +210,7 @@ export function projecteerAuditAfwijzingen(
 }
 
 export type SharePointRetrievalSmokeEvent =
-  | { type: "gestart"; scenario: SharePointRetrievalSmokeScenario; route: SharePointRetrievalSmokeRoute; ronde: number }
+  | { type: "gestart"; scenario: SharePointRetrievalSmokeScenario; route: SharePointRetrievalSmokeRoute; ronde: number; searchScope?: SharePointRetrievalSearchScope }
   | { type: "wacht_op_intrekking"; wachtSeconden: number }
   | { type: "wachtend"; resterendSeconden: number }
   | { type: "voltooid"; meting: SharePointRetrievalVeiligeMeting }

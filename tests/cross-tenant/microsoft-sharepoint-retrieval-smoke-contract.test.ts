@@ -34,6 +34,8 @@ test("#353 browserinvoer bevat uitsluitend vaste scenario-, route- en rondecodes
   assert.match(route, /scenario: z\.enum\(SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS\)/);
   assert.match(route, /route: z\.enum\(SHAREPOINT_RETRIEVAL_SMOKE_ROUTES\)/);
   assert.match(route, /ronde: z\.union\(\[z\.literal\(1\), z\.literal\(2\), z\.literal\(3\)\]\)/);
+  assert.match(route, /searchScope: z\.enum\(SHAREPOINT_RETRIEVAL_SEARCH_SCOPES\)\.optional\(\)/);
+  assert.match(route, /scenario !== "S02" \|\| invoer\.data\.route !== "microsoft_search"/);
   assert.doesNotMatch(route, /vraag: z\.|ref: z\.|itemId: z\.|siteId: z\.|driveId: z\./);
   assert.match(kern, /Welke hersteltermijn geldt voor Koraalmaat 47\?/);
   assert.match(kern, /m365-permission-probe-7f4c1d9e-no-match/);
@@ -41,6 +43,13 @@ test("#353 browserinvoer bevat uitsluitend vaste scenario-, route- en rondecodes
   assert.match(kern, /S04:[\s\S]*actualiteitsbeleid: "alleen_actueel"/);
   assert.match(kern, /S04H:[\s\S]*actualiteitsbeleid: "alleen_historisch"/);
   assert.match(route, /scenario === "S00" && invoer\.data\.route !== "drive_search_extract"/);
+});
+
+test("#403 scope-diagnostiek blijft inhoudsvrij en gebruikt alleen drie vaste zoekbereiken", () => {
+  assert.match(kern, /SHAREPOINT_RETRIEVAL_SEARCH_SCOPES = \["tenant", "site_list", "path"\]/);
+  assert.match(brug, /microsoftSearchScope: opdracht\.searchScope/);
+  assert.match(brug, /search_scope: meting\.searchScope \?\? "niet_van_toepassing"/);
+  assert.doesNotMatch(route, /rootWebUrl: z\.|listId: z\.|siteCollectionId: z\.|queryTemplate: z\./);
 });
 
 test("#353 alleen de veilige meetprojectie en vaste SSE-statussen verlaten de serverbrug", () => {

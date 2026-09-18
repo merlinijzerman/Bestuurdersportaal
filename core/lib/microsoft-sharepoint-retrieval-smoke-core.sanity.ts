@@ -10,6 +10,7 @@ import {
   SHAREPOINT_RETRIEVAL_FIXTURE_CODES,
   SHAREPOINT_RETRIEVAL_SMOKE_ROUTES,
   SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS,
+  SHAREPOINT_RETRIEVAL_SEARCH_SCOPES,
   fixtureCodeUitBestandsnaam,
   isSharePointRetrievalSmokePreview,
   sharePointRetrievalSmokeVraag,
@@ -28,6 +29,7 @@ test("#353: Preview-grendel vereist beide exacte omgevingswaarden", () => {
 
 test("#353: alleen vaste routes, vragen en fixturecodes uit #385 zijn inzetbaar", () => {
   assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_ROUTES, ["drive_search_extract", "microsoft_search", "candidate_union"]);
+  assert.deepEqual(SHAREPOINT_RETRIEVAL_SEARCH_SCOPES, ["tenant", "site_list", "path"]);
   assert.deepEqual(SHAREPOINT_RETRIEVAL_SMOKE_SCENARIOS, ["S00", "S02", "S03", "S04", "S04H", "S08", "S09", "S08R"]);
   assert.equal(sharePointRetrievalSmokeVraag("S00").vraag, "m365-permission-probe-7f4c1d9e-no-match");
   const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "tests/e2e/fixtures/pgb-sharepoint/manifest.json"), "utf8"));
@@ -62,6 +64,7 @@ test("#353: negatieve intrekkingsscenario's falen hard zodra een fixture terugko
     ronde: 1,
     vraagcode: "S08",
     route: "drive_search_extract" as const,
+    searchScope: null,
     resultaat: "geslaagd" as const,
     foutcategorie: null,
     foutcode: null,
@@ -124,6 +127,7 @@ test("#399: auditprojectie heeft exact acht platte niet-negatieve gehele tellers
     ronde: 1,
     vraagcode: "S04",
     route: "drive_search_extract" as const,
+    searchScope: null,
     resultaat: "geen_resultaten" as const,
     foutcategorie: "geen_resultaten",
     foutcode: null,

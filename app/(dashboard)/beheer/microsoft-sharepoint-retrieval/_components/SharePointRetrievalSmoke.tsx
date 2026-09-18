@@ -6,10 +6,11 @@ import type {
   SharePointRetrievalSmokeEvent,
   SharePointRetrievalSmokeRoute,
   SharePointRetrievalSmokeScenario,
+  SharePointRetrievalSearchScope,
   SharePointRetrievalVeiligeMeting,
 } from "@/core/lib/microsoft-sharepoint-retrieval-smoke-core";
 
-type Taak = { scenario: SharePointRetrievalSmokeScenario; route: SharePointRetrievalSmokeRoute; ronde: 1 | 2 | 3 };
+type Taak = { scenario: SharePointRetrievalSmokeScenario; route: SharePointRetrievalSmokeRoute; ronde: 1 | 2 | 3; searchScope?: SharePointRetrievalSearchScope };
 const ROUTES: SharePointRetrievalSmokeRoute[] = ["drive_search_extract", "microsoft_search", "candidate_union"];
 const ROUTE_LABEL: Record<SharePointRetrievalSmokeRoute, string> = {
   drive_search_extract: "DriveItem search + extractie",
@@ -17,6 +18,12 @@ const ROUTE_LABEL: Record<SharePointRetrievalSmokeRoute, string> = {
   candidate_union: "Meetunie (centraal ontdubbeld)",
 };
 const BASISSCENARIOS = ["S02", "S03", "S04", "S04H"] as const;
+const SEARCH_SCOPES: SharePointRetrievalSearchScope[] = ["tenant", "site_list", "path"];
+const SEARCH_SCOPE_LABEL: Record<SharePointRetrievalSearchScope, string> = {
+  tenant: "tenantbreed",
+  site_list: "site + bibliotheek",
+  path: "mappad",
+};
 
 function afwijzingen(meting: SharePointRetrievalVeiligeMeting): string {
   const tellingen: Array<readonly [string, number]> = [
@@ -112,6 +119,9 @@ export default function SharePointRetrievalSmoke() {
         <button type="button" disabled={bezig} onClick={() => void run([{ scenario: "S02", route: "microsoft_search", ronde: 1 }])} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
           Microsoft Search-proef starten (1 meting)
         </button>
+        <button type="button" disabled={bezig} onClick={() => void run(SEARCH_SCOPES.map((searchScope) => ({ scenario: "S02", route: "microsoft_search" as const, ronde: 1 as const, searchScope })))} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          Zoekscope-diagnostiek starten (3 metingen)
+        </button>
         <button type="button" disabled={bezig} onClick={() => void run(BASISSCENARIOS.map((scenario) => ({ scenario, route: "drive_search_extract" as const, ronde: 1 as const })))} className="ml-2 mt-4 rounded-lg border border-app-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">
           Drive-controle starten (4 metingen)
         </button>
@@ -142,8 +152,8 @@ export default function SharePointRetrievalSmoke() {
           </div>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead><tr className="border-b border-line text-muted"><th className="py-2">Scenario</th><th>Route</th><th>Ronde</th><th>Resultaat</th><th>Fixtures</th><th>Kandidaat-P/R</th><th>MRR/nDCG</th><th>Afwijzingen</th><th>Latency</th><th>Calls/downloads</th><th>Bytes</th></tr></thead>
-              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}{m.foutcode ? ` · ${m.foutcode}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{m.precision}/{m.recall}</td><td>{m.mrr}/{m.ndcg}</td><td>{afwijzingen(m)}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}/{m.downloads}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
+              <thead><tr className="border-b border-line text-muted"><th className="py-2">Scenario</th><th>Route</th><th>Scope</th><th>Ronde</th><th>Resultaat</th><th>Fixtures</th><th>Kandidaat-P/R</th><th>MRR/nDCG</th><th>Afwijzingen</th><th>Latency</th><th>Calls/downloads</th><th>Bytes</th></tr></thead>
+              <tbody>{metingen.map((m, index) => <tr key={`${m.vraagcode}-${m.route}-${m.searchScope ?? "geen"}-${m.ronde}-${index}`} className="border-b border-line"><td className="py-2">{m.vraagcode}</td><td>{ROUTE_LABEL[m.route]}</td><td>{m.searchScope ? SEARCH_SCOPE_LABEL[m.searchScope] : "—"}</td><td>{m.ronde}</td><td>{m.resultaat}{m.foutcategorie ? ` · ${m.foutcategorie}` : ""}{m.foutcode ? ` · ${m.foutcode}` : ""}</td><td>{m.gevondenFixtures.join(", ") || "—"}</td><td>{m.precision}/{m.recall}</td><td>{m.mrr}/{m.ndcg}</td><td>{afwijzingen(m)}</td><td>{m.latencyMs} ms</td><td>{m.microsoftCalls}/{m.downloads}</td><td>{m.responseBytes + m.contentBytes}</td></tr>)}</tbody>
             </table>
           </div>
         </section>

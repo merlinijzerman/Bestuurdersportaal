@@ -13,6 +13,7 @@ import {
   type SharePointRetrievalSmokeEvent,
   type SharePointRetrievalSmokeRoute,
   type SharePointRetrievalSmokeScenario,
+  type SharePointRetrievalSearchScope,
   type SharePointRetrievalVeiligeMeting,
 } from "@/core/lib/microsoft-sharepoint-retrieval-smoke-core";
 import * as vault from "@/core/lib/microsoft-vault";
@@ -39,6 +40,7 @@ type SmokeOpdracht = {
   scenario: SharePointRetrievalSmokeScenario;
   route: SharePointRetrievalSmokeRoute;
   ronde: number;
+  searchScope?: SharePointRetrievalSearchScope;
 };
 
 type StuurEvent = (event: SharePointRetrievalSmokeEvent) => void;
@@ -159,6 +161,7 @@ async function audit(ctx: SmokeContext, meting: SharePointRetrievalVeiligeMeting
       ronde: meting.ronde,
       vraagcode: meting.vraagcode,
       route: meting.route,
+      search_scope: meting.searchScope ?? "niet_van_toepassing",
       resultaat: meting.resultaat,
       kandidaten: meting.gevondenFixtures.length,
       kandidaten_voor_verificatie: meting.kandidatenVoorVerificatie,
@@ -201,6 +204,7 @@ export async function voerSharePointRetrievalPreviewSmokeUit(
       ronde: opdracht.ronde,
       vraagcode: "S00",
       route: "drive_search_extract",
+      searchScope: null,
       resultaat: uitkomst.status === "toegestaan" ? "geslaagd" : "mislukt",
       foutcategorie: uitkomst.status === "toegestaan" ? null : uitkomst.status,
       foutcode: uitkomst.foutcode,
@@ -249,6 +253,7 @@ export async function voerSharePointRetrievalPreviewSmokeUit(
     onFase,
   }, {
     route: opdracht.route,
+    microsoftSearchScope: opdracht.searchScope,
     correlationId: ctx.correlationId,
     vraag,
     signal: ctx.signal,

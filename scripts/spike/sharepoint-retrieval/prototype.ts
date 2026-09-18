@@ -11,6 +11,7 @@ import type {
 import type {
   DelegatedToken,
   GraphMeting,
+  MicrosoftSearchScope,
   PermissionProbeUitkomst,
   SpikeAfwijscategorie,
   SpikeAfwijzingen,
@@ -49,6 +50,9 @@ export interface SpikeDependencies {
 
 export interface SpikeOpdracht {
   route: SpikeRoute;
+  /** Alleen voor de vaste Microsoft Search-diagnostiek. De standaard blijft
+   * het bestaande, smalste padfilter. */
+  microsoftSearchScope?: MicrosoftSearchScope;
   correlationId: string;
   vraag: SpikeVraag;
   signal?: AbortSignal;
@@ -491,11 +495,46 @@ async function parallelBegrensd<T, R>(
   return resultaat;
 }
 
-async function zoekViaMicrosoftSearch(client: GraphClient, vragen: readonly string[], rootWebUrl: string, maxKandidaten: number): Promise<ZoekHit[]> {
+function siteCollectionId(siteId: string): string {
+  const delen = siteId.split(",");
+  const id = delen.length === 3 ? delen[1] : "";
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
+  }
+  return id;
+}
+
+async function microsoftSearchQueryTemplate(
+  client: GraphClient,
+  bron: SpikeBronSnapshot,
+  rootWebUrl: string,
+  scope: MicrosoftSearchScope,
+): Promise<string> {
+  if (scope === "tenant") return "({searchTerms}) isDocument=true";
+  if (scope === "path") return `({searchTerms}) path:"${escapeKql(rootWebUrl)}" isDocument=true`;
+
+  const lijst = await client.json<{ id?: string }>(
+    `${GRAPH_BASIS}/drives/${encodeURIComponent(bron.driveId)}/list?$select=id`,
+  );
+  const listId = lijst.id?.trim() ?? "";
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(listId)) {
+    throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
+  }
+  return `({searchTerms}) SiteID:"${siteCollectionId(bron.siteId)}" ListID:"${listId}" isDocument=true`;
+}
+
+async function zoekViaMicrosoftSearch(
+  client: GraphClient,
+  bron: SpikeBronSnapshot,
+  vragen: readonly string[],
+  rootWebUrl: string,
+  maxKandidaten: number,
+  scope: MicrosoftSearchScope,
+): Promise<ZoekHit[]> {
   if (vragen.length < 1 || vragen.length > 4) throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
   const scores = new Map<string, number>();
   let searchCalls = 0;
-  const queryTemplate = `({searchTerms}) path:"${escapeKql(rootWebUrl)}" isDocument=true`;
+  const queryTemplate = await microsoftSearchQueryTemplate(client, bron, rootWebUrl, scope);
   for (const vraag of vragen) {
     if (searchCalls >= MAX_MICROSOFT_SEARCH_CALLS) break;
     const queryString = veiligSearchFragment(vraag);
@@ -785,15 +824,16 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
       throw new SpikeError("buiten_scope", "document_buiten_bron");
     }
     const maxKandidaten = Math.min(Math.max(1, opdracht.vraag.maxKandidaten ?? 20), 50);
+    const microsoftSearchScope = opdracht.microsoftSearchScope ?? "path";
     const microsoftVragen = opdracht.vraag.microsoftZoektermen ?? [opdracht.vraag.vraag];
     const driveVragen = opdracht.vraag.driveZoektermen ?? [opdracht.vraag.vraag];
     const hits = opdracht.route === "microsoft_search"
-      ? await zoekViaMicrosoftSearch(graphClient, microsoftVragen, rootWebUrl, maxKandidaten)
+      ? await zoekViaMicrosoftSearch(graphClient, bron, microsoftVragen, rootWebUrl, maxKandidaten, microsoftSearchScope)
       : opdracht.route === "drive_search_extract"
         ? await zoekViaDrive(graphClient, bron, driveVragen, maxKandidaten)
         : verenigKandidaten(
           await zoekViaDrive(graphClient, bron, driveVragen, maxKandidaten),
-          await zoekViaMicrosoftSearch(graphClient, microsoftVragen, rootWebUrl, maxKandidaten),
+          await zoekViaMicrosoftSearch(graphClient, bron, microsoftVragen, rootWebUrl, maxKandidaten, microsoftSearchScope),
           maxKandidaten,
         );
     await deps.onFase?.("na_zoeken");
@@ -839,6 +879,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
     Object.assign(meting, graphClient.meting);
     return {
       route: opdracht.route,
+      searchScope: opdracht.route === "drive_search_extract" ? null : microsoftSearchScope,
       provider: "microsoft",
       methode: "sharepoint_live",
       kandidaten,
@@ -856,6 +897,7 @@ export async function voerSharePointRetrievalSpikeUit(deps: SpikeDependencies, o
     }
     return {
       route: opdracht.route,
+      searchScope: opdracht.route === "drive_search_extract" ? null : (opdracht.microsoftSearchScope ?? "path"),
       provider: "microsoft",
       methode: "sharepoint_live",
       kandidaten: [],
@@ -954,6 +996,7 @@ export function maakVeiligeMeetrij(ronde: number, vraag: SpikeVraag, uitkomst: S
     ronde,
     vraagcode: vraag.code,
     route: uitkomst.route,
+    searchScope: uitkomst.searchScope,
     resultaat: bronsetAfwijking
       ? "mislukt"
       : uitkomst.kandidaten.length > 0
