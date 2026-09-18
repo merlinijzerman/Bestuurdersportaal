@@ -1,4 +1,4 @@
-# #353/#403 — lokale live SharePoint-retrievalspike
+# #353/#403/#407 — lokale live SharePoint-retrievalspike
 
 Deze tooling is niet aan chat, zoeken, vergelijken of de AI-gateway gekoppeld. Naast de expliciete lokale CLI bestaat één serverbrug voor de PGB Preview-smoke. Die brug is alleen bereikbaar via `/beheer/microsoft-sharepoint-retrieval` en weigert buiten Vercel Preview, buiten fonds `pgb`, zonder de bestaande Microsoft-/SharePoint-poorten, zonder de extra vlag `microsoft_sharepoint_retrieval_spike=true` of zonder de beheerder-capability. De statische gate `npm run test:spike-boundary` bewaakt dat geen ander productiepad de spike importeert. De lokale CLI blijft `M365_RETRIEVAL_SPIKE=local` eisen en weigert CI, Vercel en productie.
 
@@ -74,6 +74,131 @@ npm run spike:m365-retrieval -- --config=.m365-retrieval-acceptatie.local.json >
 
 De uitvoer bevat geen zoekvraag, passage, token, accountgegevens, lokale refs of private site-/drive-/item-id's. Wel opgenomen: fixturecode, exacte-bronsetstatus, recall, kandidaatprecision vóór verificatie, MRR, nDCG, locator-, versie- en previewdekking, aantal verificatiekandidaten, downloads, timing, Graph-callcount, bytes, throttles, retries en een korte SHA-256-vingerafdruk van eTag/cTag. Voor `precision` is de noemer `kandidatenVoorVerificatie`, niet de uiteindelijke toegelaten bronset. Een positieve meting is alleen `geslaagd` wanneer de gevonden fixturecodes exact gelijk zijn aan de vooraf vastgelegde bronset; een ontbrekende of extra fixture wordt `acceptatie_afwijking/onverwachte_bronset`.
 
+## #407 — Copilot Retrieval als vierde meetarm
+
+`scripts/spike/sharepoint-retrieval/copilot-retrieval.ts` voegt een vierde arm toe:
+`POST https://graph.microsoft.com/v1.0/copilot/retrieval` met `dataSource = sharePoint`.
+Deze arm heeft **geen serverbrug**. Hij is uitsluitend bereikbaar via de lokale CLI en de
+hermetische tests; de beheerpagina, de Preview-smoke en elk ander productiepad kennen hem
+niet, en de boundarygate faalt zodra dat verandert.
+
+Vaste grenzen, alle server-side afgedwongen vóór de netwerkcall:
+
+- alleen het v1.0-endpoint; geen beta;
+- **beide** delegated scopes zijn vereist — `Files.Read.All` **én**
+  `Sites.Read.All` samen, niet één van beide. Dat is breder dan de
+  Microsoft Search-route uit #403/#405, waar één van de twee volstond:
+  [Copilot Retrieval API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/retrieval/copilotroot-retrieval);
+- `dataSource` staat vast op `sharePoint`; één databron per call, geen interleaving en geen
+  fallback naar een andere arm wanneer de route leeg of onbeschikbaar is;
+- `queryString` is één begrensde zin van maximaal 1.500 tekens, zonder stuurtekens;
+- `maximumNumberOfResults` is expliciet en wordt hard op 25 geclampt;
+- de `filterExpression` wordt volledig uit de opnieuw gelezen root opgebouwd. Hij wordt
+  getoetst op de **gedecodeerde** betekenis, niet alleen op de vorm: `new URL()` codeert een
+  aanhalingsteken stilzwijgend tot `%22`, wat aan de Microsoft-kant alsnog als quote kan
+  worden gelezen. Een pad met quote, backslash, wildcard, `%`, `#`, `?` of stuurteken wordt
+  geweigerd, waarna de scope opnieuw wordt gecodeerd vanuit de gecontroleerde vorm. Faalt de
+  toets, dan vertrekt er **geen** call;
+- een eigen lokaal requestbudget bovenop de Microsoft-grens van 200 requests per gebruiker
+  per uur. Dat budget begrenst de **feitelijke netwerkpogingen**, backoff-herhalingen
+  meegerekend: de standaard is 1, dus er vertrekt precies één request en een 429 is een
+  stopresultaat in plaats van een retry. Een aanroeper mag hooguit 3 vragen.
+
+### Waarom een Copilot-extract geen bewijs is
+
+De Retrieval API levert per hit een `webUrl` en `extracts` — geen DriveItem-id. De arm
+behandelt beide als onbetrouwbaar kandidaatsignaal en bewijst alles zelf:
+
+1. **locator-prefilter** — de hit-URL moet op de geconfigureerde host staan én binnen het pad
+   van de opnieuw gelezen root vallen. Alles daarbuiten valt af onder `root`, vóór élke
+   vervolgstap: geen registeropbouw, geen download, geen preview;
+2. **exacte match tegen het read-only locatorregister** — zie hieronder. Geen match is
+   `mapping`, en daar komt geen enkele netwerkcall aan te pas;
+3. **de bestaande, ongewijzigde keten** — actualiteitsbeleid, eerste bindings- en
+   rootcontrole, begrensde in-memory download met eigen extractie, tweede rechten-/binding-/
+   versiecontrole op dezelfde eTag/cTag, configherlezing en previewbewijs;
+4. **extractlokalisatie** — het Microsoft-extract wordt genormaliseerd (Unicode, witruimte,
+   typografische aanhalingstekens en streepjes) en moet **precies één keer** in onze eigen,
+   zojuist uitgelezen tekst voorkomen. Ontbrekend, te kort, gewijzigd of meervoudig
+   voorkomend: fail-closed onder de negende categorie `lokalisatie`.
+
+### Het locatorregister is read-only, en de richting is omgedraaid
+
+`POST /v1.0/copilot/retrieval` levert per hit een `webUrl` en `extracts` — geen
+DriveItem-id. De voor de hand liggende oplossing, `GET /shares/{token}/driveItem`, is
+**bewust verworpen**: Microsoft noemt daarvoor minimaal delegated `Files.ReadWrite`
+([shares: get](https://learn.microsoft.com/en-us/graph/api/shares-get?view=graph-rest-1.0)),
+en deze spike mag geen schrijfrecht nodig hebben.
+
+In plaats daarvan lezen we de items die al in het private fixture-register staan op hun
+vertrouwde item-id — een gewone `GET /drives/{drive}/items/{item}`, die met
+`Files.Read.All`/`Sites.Read.All` volstaat — en gebruiken we de door Graph zelf geleverde
+`webUrl` van elk item als sleutel. Een hit mag daar alleen **exact** op matchen, na
+canonicalisatie van host, codering en trailing slash.
+
+Daarmee bepalen wíj welke URL's bestaan. Een URL die wij niet zelf hebben opgehaald,
+bestaat voor deze arm niet. Het register wordt eenmalig per meting opgebouwd en pas
+wanneer er een hit binnen de root is, dus een 401/402/403/429 of timeout kost geen enkele
+item-read.
+
+Bekende beperking, bewust geaccepteerd: Word- en PowerPoint-weergave-URL's (`/:w:/…`,
+`/:p:/…`) volgen het bibliotheekpad niet en matchen dus niet. Ze vallen fail-closed af
+onder `mapping`. De teller laat dat zien; het is geen stille afwijzing.
+
+De passage die de arm oplevert komt altijd uit de eigen extractie, nooit uit de
+Microsoft-tekst. `lokalisatie` staat bewust naast `extractie`, zodat het rapport onderscheid
+maakt tussen "wij konden de tekst niet lezen" en "Microsoft bood iets aan dat niet in de
+actuele inhoud staat". Die negende categorie leeft alleen in de spike; de auditprojectie van
+de Preview-brug houdt exact de acht vaste platte `afwijzing_*`-velden.
+
+### De vergelijking (T2)
+
+`vergelijking.ts` draait vier armen op dezelfde vaste scenario's uit
+`vergelijking-scenarios.ts`: `drive_search_extract`, `microsoft_search`, `copilot_retrieval`
+en `candidate_union`. Die laatste is uitdrukkelijk **geen** vierde strategie maar een
+meetarm: zij verenigt centraal de kandidaatsets die de drie primaire armen al volledig
+fail-closed hebben geverifieerd, ontdubbelt op fixturecode en rangschikt deterministisch met
+reciprocal-rank fusion. De unie doet zelf geen enkele Graph-call; haar latency, calls,
+downloads en bytes zijn de som van de bijdragende armen.
+
+Gemeten worden: exacte bronset, recall, kandidaatprecision vóór verificatie, MRR, nDCG,
+locator-, passage-, versie-, preview- en extractlokalisatiedekking, actualiteitscorrectheid,
+mediaan/p95-latency, Graph-calls, downloads, bytes, throttles, retries en het afval per
+controle — inclusief `lokalisatie`.
+
+**Semantische winst** telt alleen zonder bronsetvervuiling: `bronsetvervuiling` telt de
+semantische runs waarin een arm iets toeliet dat niet exact de vooraf vastgelegde bronset
+was. Staat die teller niet op 0, dan is de winst voor het besluit waardeloos.
+
+> **Voorwaarde voor een live semantische meting.** De #385-fixtures zijn volledig rond unieke
+> canary-termen gebouwd; er staat geen parafrase- of synoniemtekst in. SEM01 en SEM02 zijn
+> daarom nu uitsluitend hermetisch meetbaar. Live meten vereist eerst twee nieuwe synthetische
+> fixtures (`PGB407-DOC-101`, `PGB407-DOC-102`) in het manifest én in SharePoint. Zie
+> `COPILOT-RETRIEVAL-407-LICENTIE-EN-CONSENT.md` §4.
+
+Let ook op: de eigen passagekeuze van de lexicale armen is puur lexicaal. Bij een semantische
+vraag scoort elk segment 0 en valt de kandidaat af onder `extractie`. Dat is geen defect maar
+precies het verschil dat #407 meet.
+
+### Draaien
+
+```bash
+cp scripts/spike/sharepoint-retrieval/vergelijking.example.json .m365-copilot-vergelijking.local.json
+chmod 600 .m365-copilot-vergelijking.local.json
+npm run spike:m365-copilot-vergelijking -- --config=.m365-copilot-vergelijking.local.json > .m365-copilot-vergelijking.local.result.json
+```
+
+Dezelfde harde grendel als de #353-runner: `M365_RETRIEVAL_SPIKE=local`, en weigeren in CI,
+Vercel en productie. De uitvoer bevat geen vraag, passage, extract, token, lokale ref of
+private site-/drive-/item-id.
+
+**Een live run mag pas na het expliciete licentie-, kosten- en consentbesluit.** Een
+weigering is niet zelf te duiden: 401 en 403 krijgen daarom de neutrale code
+`toestemming_geweigerd/copilot_toegang_geweigerd` — het kan een ontbrekende licentie zijn,
+maar net zo goed ontbrekend of ingetrokken consent. Alleen 402 (Payment Required) krijgt
+`copilot_licentie_of_billing`. Beide zijn stopresultaten, nooit een aanleiding om zelf
+scope of billing te zetten.
+
 ## Permission- en live-rungrens van #403
 
 Deze branch wijzigt geen Entra-appregistratie, OAuth-scope, tenantconsent of SharePoint-permission. De hermetische tests bewijzen de volledige route zonder netwerk. Een live `microsoft_search`- of `candidate_union`-run blijft geblokkeerd totdat afzonderlijk en expliciet is besloten welke minimaal noodzakelijke delegated scope wordt verleend. Een 401/403 is een stopresultaat, geen aanleiding voor automatische scopeverbreding. Na een eventuele proef moet hetzelfde consentbesluit ook het intrekkings- of terugbrengpad vastleggen.
@@ -105,5 +230,8 @@ npm run test:spike:m365-retrieval
 npm run typecheck
 npm run security:secrets
 ```
+
+`test:spike:m365-retrieval` draait sinds #407 zowel `prototype.test.ts` als
+`copilot-retrieval.test.ts`, gevolgd door de boundarygate.
 
 De hermetische suite gebruikt geen netwerk of database en dekt het echte adaptercontract, delegated proofvorm inclusief same-tenant/wrong-OID, handmatige tokenvrije contentredirect, abort-listener-opruiming, de inhoudsvrije permissionprobe, dubbele rechten-/versiecontrole, previewbewijs, echte DOCX-, PPTX- en PDF-extractie, actuele én historische toelating, uitsluiting van historie zonder content- of previewcall, exacte afwijscategorieën, status- en configuratiedrift, throttling, timeout, cancellation, vreemde identifiers, onveilige paginering, move-out, ontbrekende versie en intrekking. De timeout- en cancellationproeven bewijzen bovendien dat daarna geen nieuwe Graph-calls starten.

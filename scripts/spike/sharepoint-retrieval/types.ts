@@ -4,6 +4,15 @@
 import type { Bronresultaat, Toegangsbewijs } from "../../../core/lib/retrieval/contract";
 
 export type SpikeRoute = "microsoft_search" | "drive_search_extract" | "candidate_union";
+/**
+ * #407 — de Copilot Retrieval API is een vierde MEETARM, geen vierde waarde van
+ * `SpikeRoute`. `SpikeRoute` verbreden zou de typecheck van de Preview-brug
+ * breken (die geeft een `VeiligeMeetrij` terug als `SharePointRetrievalVeiligeMeting`
+ * met exact drie routes) en daarmee live-retrievalproductiecode raken. De
+ * vergelijkingslaag gebruikt daarom een eigen, bredere routeaanduiding.
+ */
+export type SpikeCopilotRoute = "copilot_retrieval";
+export type SpikeVergelijkRoute = SpikeRoute | SpikeCopilotRoute;
 export type MicrosoftSearchScope = "tenant" | "site_list" | "path";
 export type SpikeActualiteitsbeleid = "alleen_actueel" | "alleen_historisch" | "actueel_en_historisch";
 export type SpikeFixtureStatus = "actueel" | "historisch";
@@ -17,6 +26,12 @@ export const SPIKE_AFWIJSCATEGORIEEN = [
   "extractie",
   "preview",
   "actualiteit",
+  // #407 — negende categorie, uitsluitend bereikbaar via de Copilot-meetarm: een
+  // Microsoft-extract dat niet uniek in de eigen, actuele extractie terug te
+  // vinden is. De drie bestaande routes bieden geen extract aan en houden deze
+  // teller dus altijd op 0. De auditprojectie van de Preview-brug blijft de
+  // acht vaste platte `afwijzing_*`-velden gebruiken en verandert niet.
+  "lokalisatie",
 ] as const;
 export type SpikeAfwijscategorie = typeof SPIKE_AFWIJSCATEGORIEEN[number];
 export type SpikeAfwijzingen = Record<SpikeAfwijscategorie, number>;
@@ -57,7 +72,17 @@ export type SpikeFoutcode =
   | "ongeldige_graph_url"
   | "ongeldige_preview_url"
   | "onveilig_vervolgpad"
-  | "versie_ontbreekt";
+  | "versie_ontbreekt"
+  // #407 — Copilot Retrieval-meetarm.
+  | "copilot_filter_ongeldig"
+  | "copilot_budget_overschreden"
+  | "copilot_vraag_ongeldig"
+  // 401/403: NIET tot één oorzaak te herleiden — ontbrekend/ingetrokken consent
+  // óf een ontbrekende Copilot-licentie. Bewust neutraal.
+  | "copilot_toegang_geweigerd"
+  // Uitsluitend 402 (Payment Required): eenduidig licentie-/billingsignaal.
+  | "copilot_licentie_of_billing"
+  | "copilot_response";
 
 export class SpikeError extends Error {
   constructor(
@@ -135,8 +160,8 @@ export interface GraphMeting {
   retries: number;
 }
 
-export interface SpikeUitkomst {
-  route: SpikeRoute;
+export interface SpikeUitkomstBasis<R extends SpikeVergelijkRoute> {
+  route: R;
   searchScope: MicrosoftSearchScope | null;
   provider: "microsoft";
   methode: "sharepoint_live";
@@ -147,6 +172,21 @@ export interface SpikeUitkomst {
   foutcode?: SpikeFoutcode;
   afwijzingen: SpikeAfwijzingen;
   meting: GraphMeting;
+}
+
+export type SpikeUitkomst = SpikeUitkomstBasis<SpikeRoute>;
+
+/**
+ * #407 — uitkomst van de Copilot Retrieval-meetarm. Dezelfde vorm als de drie
+ * bestaande routes, aangevuld met uitsluitend inhoudsvrije extracttellingen.
+ * Extracttekst zelf verlaat de verificatieketen nooit.
+ */
+export interface SpikeCopilotUitkomst extends SpikeUitkomstBasis<SpikeCopilotRoute> {
+  searchScope: null;
+  /** Aantal extracts dat Microsoft aanbood voor hits die de root-prefilter haalden. */
+  aangebodenExtracts: number;
+  /** Aantal daarvan dat uniek in de eigen, actuele extractie is teruggevonden. */
+  gelokaliseerdeExtracts: number;
 }
 
 /** Uitsluitend inhoudsvrij bewijs voor de delegated permissionprobe. */
@@ -169,6 +209,17 @@ export interface SpikeVraag {
   /** Vaste, server-side varianten voor Microsoft Search. De vrije browserinvoer
    * kan deze lijst niet leveren of het KQL-pad wijzigen. */
   microsoftZoektermen?: readonly string[];
+  /**
+   * #407 — één vaste, server-side natuurlijke zin voor `POST /v1.0/copilot/retrieval`.
+   * Ontbreekt hij, dan gebruikt de meetarm `vraag`. Browserinvoer levert deze
+   * waarde nooit; de runner leest hem uit de vastgelegde scenarioset.
+   */
+  copilotVraag?: string;
+  /**
+   * #407 — server-side vastgelegd semantisch scenario: de doelpassage bevat geen
+   * letterlijke term uit de vraag. Wordt nooit uit de vraagtekst afgeleid.
+   */
+  semantisch?: boolean;
   verwachteFixtures: string[];
   /** Optionele vooraf vastgelegde primaire bron voor MRR/nDCG. */
   primaireFixture?: string;
@@ -176,10 +227,10 @@ export interface SpikeVraag {
 }
 
 /** Inhoudsvrije vorm die veilig als meetbewijs mag worden opgeslagen. */
-export interface VeiligeMeetrij {
+export interface VeiligeMeetrijBasis<R extends SpikeVergelijkRoute> {
   ronde: number;
   vraagcode: string;
-  route: SpikeRoute;
+  route: R;
   searchScope: MicrosoftSearchScope | null;
   resultaat: "geslaagd" | "geen_resultaten" | "mislukt";
   foutcategorie: SpikeFoutcategorie | "acceptatie_afwijking" | null;
@@ -212,4 +263,25 @@ export interface VeiligeMeetrij {
   afwijzingExtractie: number;
   afwijzingPreview: number;
   afwijzingActualiteit: number;
+}
+
+/**
+ * De bestaande meetrij, letterlijk ongewijzigd van vorm. De Preview-brug geeft
+ * deze terug als `SharePointRetrievalVeiligeMeting`; die toewijzing moet blijven
+ * werken, dus hier komt geen Copilot-route en geen extra verplicht veld bij.
+ */
+export type VeiligeMeetrij = VeiligeMeetrijBasis<SpikeRoute>;
+
+/**
+ * #407 — rij van de vergelijkingslaag. Bevat de vierde arm en de twee
+ * Copilot-specifieke, inhoudsvrije maten. Wordt nooit door de Preview-brug of
+ * de DB-auditprojectie gebruikt.
+ */
+export interface VeiligeVergelijkrij extends VeiligeMeetrijBasis<SpikeVergelijkRoute> {
+  /** Hits die op unieke extractlokalisatie zijn afgevallen; 0 voor de andere armen. */
+  afwijzingLokalisatie: number;
+  /** Aandeel toegelaten passages dat uit een gelokaliseerd Microsoft-extract komt. */
+  extractLokalisatieDekking: number;
+  /** Server-side vastgelegd: de vraag deelt geen letterlijke term met de doelpassage. */
+  semantisch: boolean;
 }

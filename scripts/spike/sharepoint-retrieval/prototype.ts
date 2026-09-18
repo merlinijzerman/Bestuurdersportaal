@@ -22,21 +22,24 @@ import type {
   SpikeFase,
   SpikeRoute,
   SpikeUitkomst,
+  SpikeUitkomstBasis,
+  SpikeVergelijkRoute,
   SpikeVraag,
   VeiligeMeetrij,
+  VeiligeMeetrijBasis,
 } from "./types";
 import { SpikeError } from "./types";
 
-const GRAPH_BASIS = "https://graph.microsoft.com/v1.0";
-const MAX_JSON_BYTES = 5 * 1024 * 1024;
-const MAX_CONTENT_BYTES = 25 * 1024 * 1024;
+export const GRAPH_BASIS = "https://graph.microsoft.com/v1.0";
+export const MAX_JSON_BYTES = 5 * 1024 * 1024;
+export const MAX_CONTENT_BYTES = 25 * 1024 * 1024;
 const MAX_PAGINAS = 3;
 const MAX_MICROSOFT_SEARCH_CALLS = 4;
-const MAX_CONCURRENCY = 3;
-const MAX_PASSAGE_TEKENS = 1_200;
+export const MAX_CONCURRENCY = 3;
+export const MAX_PASSAGE_TEKENS = 1_200;
 const MAX_RETRIES = 2;
 
-type FetchImpl = (input: string, init: RequestInit) => Promise<Response>;
+export type FetchImpl = (input: string, init: RequestInit) => Promise<Response>;
 export interface SpikeDependencies {
   leesBron: () => Promise<SpikeBronSnapshot>;
   delegatedToken: () => Promise<DelegatedToken>;
@@ -65,7 +68,7 @@ export interface PermissionProbeOpdracht {
   timeoutMs?: number;
 }
 
-type GraphDriveItem = {
+export type GraphDriveItem = {
   id?: string;
   name?: string;
   size?: number;
@@ -78,13 +81,13 @@ type GraphDriveItem = {
   parentReference?: { driveId?: string; id?: string; path?: string; siteId?: string } | null;
 };
 
-type ZoekHit = { itemId: string; positie: number; score: number | null };
+export type ZoekHit = { itemId: string; positie: number; score: number | null };
 
-function nieuweMeting(): GraphMeting {
+export function nieuweMeting(): GraphMeting {
   return { calls: 0, downloads: 0, responseBytes: 0, contentBytes: 0, throttles: 0, retries: 0 };
 }
 
-function nieuweAfwijzingen(): SpikeAfwijzingen {
+export function nieuweAfwijzingen(): SpikeAfwijzingen {
   return {
     mapping: 0,
     binding: 0,
@@ -94,10 +97,13 @@ function nieuweAfwijzingen(): SpikeAfwijzingen {
     extractie: 0,
     preview: 0,
     actualiteit: 0,
+    // Blijft 0 voor de drie bestaande routes: alleen de Copilot-meetarm biedt
+    // een extract aan dat gelokaliseerd moet worden.
+    lokalisatie: 0,
   };
 }
 
-function wijsKandidaatAf(afwijzingen: SpikeAfwijzingen, categorie: SpikeAfwijscategorie): null {
+export function wijsKandidaatAf(afwijzingen: SpikeAfwijzingen, categorie: SpikeAfwijscategorie): null {
   afwijzingen[categorie] += 1;
   return null;
 }
@@ -115,7 +121,7 @@ function veiligeGraphUrl(url: string): URL {
   return parsed;
 }
 
-function veiligeSharePointUrl(url: string | undefined, hostnaam: string): string | null {
+export function veiligeSharePointUrl(url: string | undefined, hostnaam: string): string | null {
   if (!url) return null;
   try {
     const parsed = new URL(url);
@@ -223,7 +229,17 @@ function normaliseerHttpFout(response: Response): SpikeError {
   return new SpikeError("providerfout", "graph_response");
 }
 
-class GraphClient {
+/**
+ * #407 — per-request opties. `maxPogingen` begrenst het feitelijke aantal
+ * netwerkpogingen (1 = géén retry); `foutVertaler` laat één aanroeper een eigen,
+ * statusbewuste foutvertaling geven zonder de gedeelde normalisatie te wijzigen.
+ */
+export interface GraphRequestOpties {
+  maxPogingen?: number;
+  foutVertaler?: (response: Response) => SpikeError | undefined;
+}
+
+export class GraphClient {
   readonly meting = nieuweMeting();
 
   constructor(
@@ -234,8 +250,18 @@ class GraphClient {
     private readonly wacht: (ms: number, signal: AbortSignal) => Promise<void>,
   ) {}
 
-  private async request(url: string, init: RequestInit, soort: "json" | "content_redirect"): Promise<Response> {
+  private async request(
+    url: string,
+    init: RequestInit,
+    soort: "json" | "content_redirect",
+    opties: GraphRequestOpties = {},
+  ): Promise<Response> {
     const veilig = veiligeGraphUrl(url).toString();
+    // #407 — harde bovengrens op het AANTAL FEITELIJKE POGINGEN, inclusief
+    // backoff-herhalingen. Zonder deze grens kon een aanroeper met "budget 1"
+    // alsnog drie requests laten vertrekken, omdat de retrylus alleen naar
+    // MAX_RETRIES keek. Voor de bestaande routes blijft de standaard gelijk.
+    const maxPogingen = Math.max(1, Math.min(opties.maxPogingen ?? MAX_RETRIES + 1, MAX_RETRIES + 1));
     for (let poging = 0; ; poging += 1) {
       if (this.signal.aborted) throw new SpikeError("annulering", "graph_annulering");
       const timeout = AbortSignal.timeout(this.timeoutMs);
@@ -261,20 +287,23 @@ class GraphClient {
         throw new SpikeError("providerfout", "graph_response", { cause });
       }
       if (response.status === 429) this.meting.throttles += 1;
-      if ((response.status === 429 || response.status === 503 || response.status === 504) && poging < MAX_RETRIES) {
+      if ((response.status === 429 || response.status === 503 || response.status === 504) && poging + 1 < maxPogingen) {
         this.meting.retries += 1;
         await this.wacht(retryNa(response), this.signal);
         continue;
       }
       if (soort === "content_redirect" && response.status === 302) return response;
-      if (!response.ok) throw normaliseerHttpFout(response);
+      // Alleen een expliciet meegegeven vertaler mag de standaardvertaling
+      // overrulen; de drie bestaande routes geven er geen mee en gedragen zich
+      // dus ongewijzigd.
+      if (!response.ok) throw opties.foutVertaler?.(response) ?? normaliseerHttpFout(response);
       if (soort === "content_redirect") throw new SpikeError("providerfout", "ongeldige_download_url");
       return response;
     }
   }
 
-  async json<T>(url: string, init: RequestInit = {}): Promise<T> {
-    const response = await this.request(url, init, "json");
+  async json<T>(url: string, init: RequestInit = {}, opties: GraphRequestOpties = {}): Promise<T> {
+    const response = await this.request(url, init, "json", opties);
     const bytes = await leesBegrensd(response, MAX_JSON_BYTES);
     this.meting.responseBytes += bytes.byteLength;
     try {
@@ -313,7 +342,7 @@ class GraphClient {
   }
 }
 
-function bronVingerafdruk(bron: SpikeBronSnapshot): string {
+export function bronVingerafdruk(bron: SpikeBronSnapshot): string {
   const docs = [...bron.documenten]
     .map((doc) => [doc.ref, doc.itemId, doc.fixtureCode, doc.titel, doc.bestandstype, doc.fixtureStatus, doc.geregistreerdMappad ?? "", doc.verwachteMappad ?? ""].join("\u0000"))
     .sort()
@@ -330,7 +359,7 @@ function valideerBron(bron: SpikeBronSnapshot): void {
   }
 }
 
-async function leesGeldigeBron(deps: SpikeDependencies): Promise<SpikeBronSnapshot> {
+export async function leesGeldigeBron(deps: SpikeDependencies): Promise<SpikeBronSnapshot> {
   try {
     const bron = await deps.leesBron();
     valideerBron(bron);
@@ -349,7 +378,7 @@ function eTagVan(item: GraphDriveItem): { soort: "etag" | "ctag"; waarde: string
   throw new SpikeError("versiebewijs_ontbreekt", "versie_ontbreekt");
 }
 
-function normaliseerGraphPad(pad: string | null | undefined): string | null {
+export function normaliseerGraphPad(pad: string | null | undefined): string | null {
   const waarde = pad?.trim();
   if (!waarde) return null;
   try {
@@ -360,20 +389,20 @@ function normaliseerGraphPad(pad: string | null | undefined): string | null {
   }
 }
 
-function graphPadVanRoot(root: GraphDriveItem): string | null {
+export function graphPadVanRoot(root: GraphDriveItem): string | null {
   const ouderPad = normaliseerGraphPad(root.parentReference?.path);
   const naam = root.name?.trim();
   if (!ouderPad || !naam || naam.includes("/") || naam.includes("\\")) return null;
   return normaliseerGraphPad(`${ouderPad}/${naam}`);
 }
 
-function graphPadIsGelijkOfOnder(pad: string, rootPad: string): boolean {
+export function graphPadIsGelijkOfOnder(pad: string, rootPad: string): boolean {
   const vergelijking = pad.toLocaleLowerCase("nl");
   const rootVergelijking = rootPad.toLocaleLowerCase("nl");
   return vergelijking === rootVergelijking || vergelijking.startsWith(`${rootVergelijking}/`);
 }
 
-function itemAfwijscategorie(
+export function itemAfwijscategorie(
   item: GraphDriveItem,
   bron: SpikeBronSnapshot,
   mapping: SpikeDocumentMapping,
@@ -394,7 +423,7 @@ function actualiteitToegestaan(mapping: SpikeDocumentMapping, vraag: SpikeVraag)
   return vraag.actualiteitsbeleid === "actueel_en_historisch";
 }
 
-function isFataleKandidaatFout(fout: unknown): boolean {
+export function isFataleKandidaatFout(fout: unknown): boolean {
   return fout instanceof SpikeError
     && (
       fout.categorie === "configuratiefout"
@@ -418,7 +447,7 @@ function mappadVanItem(item: GraphDriveItem, rootGraphPad: string): string {
   return ouderPad.slice(rootGraphPad.length + 1).slice(0, 1_000);
 }
 
-function escapeKql(waarde: string): string {
+export function escapeKql(waarde: string): string {
   return waarde.replace(/["\\]/g, (teken) => `\\${teken}`).replace(/[\u0000-\u001f\u007f]/g, " ").trim();
 }
 
@@ -469,7 +498,7 @@ function bestandstypeVoorExtractie(mapping: SpikeDocumentMapping): Bestandstype 
   throw new SpikeError("onondersteund_bestand", "extractie_leeg");
 }
 
-async function parallelBegrensd<T, R>(
+export async function parallelBegrensd<T, R>(
   items: T[],
   limiet: number,
   werk: (item: T) => Promise<R | null>,
@@ -523,7 +552,7 @@ async function microsoftSearchQueryTemplate(
   return `({searchTerms}) SiteID:"${siteCollectionId(bron.siteId)}" ListID:"${listId}" isDocument=true`;
 }
 
-async function zoekViaMicrosoftSearch(
+export async function zoekViaMicrosoftSearch(
   client: GraphClient,
   bron: SpikeBronSnapshot,
   vragen: readonly string[],
@@ -570,7 +599,7 @@ async function zoekViaMicrosoftSearch(
     .map(([itemId, score], index) => ({ itemId, positie: index + 1, score }));
 }
 
-async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vragen: readonly string[], maxKandidaten: number): Promise<ZoekHit[]> {
+export async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vragen: readonly string[], maxKandidaten: number): Promise<ZoekHit[]> {
   if (vragen.length < 1 || vragen.length > 4 || vragen.some((vraag) => !vraag.trim() || vraag.length > 120 || /[\u0000-\u001f\u007f]/.test(vraag))) {
     throw new SpikeError("configuratiefout", "configuratie_gewijzigd");
   }
@@ -603,18 +632,25 @@ async function zoekViaDrive(client: GraphClient, bron: SpikeBronSnapshot, vragen
   return hits.slice(0, maxKandidaten);
 }
 
-function verenigKandidaten(driveHits: ZoekHit[], microsoftHits: ZoekHit[], maxKandidaten: number): ZoekHit[] {
+/**
+ * Meetunie over N kandidaatlijsten. Sinds #407 kan de Copilot-arm als derde
+ * lijst meedoen; voor twee lijsten is de uitkomst bit-identiek aan #353.
+ */
+export function verenigKandidaten(...args: [...lijsten: ZoekHit[][], maxKandidaten: number]): ZoekHit[] {
+  const maxKandidaten = args[args.length - 1] as number;
+  const lijsten = args.slice(0, -1) as ZoekHit[][];
   const RRF_K = 60;
   const scores = new Map<string, number>();
-  for (const hit of driveHits) scores.set(hit.itemId, (scores.get(hit.itemId) ?? 0) + 1 / (RRF_K + hit.positie));
-  for (const hit of microsoftHits) scores.set(hit.itemId, (scores.get(hit.itemId) ?? 0) + 1 / (RRF_K + hit.positie));
+  for (const lijst of lijsten) {
+    for (const hit of lijst) scores.set(hit.itemId, (scores.get(hit.itemId) ?? 0) + 1 / (RRF_K + hit.positie));
+  }
   return [...scores.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, maxKandidaten)
     .map(([itemId, score], index) => ({ itemId, positie: index + 1, score }));
 }
 
-function itemUrl(bron: SpikeBronSnapshot, itemId: string): string {
+export function itemUrl(bron: SpikeBronSnapshot, itemId: string): string {
   return `${GRAPH_BASIS}/drives/${encodeURIComponent(bron.driveId)}/items/${encodeURIComponent(itemId)}?$select=id,name,size,file,folder,eTag,cTag,lastModifiedDateTime,parentReference,webUrl`;
 }
 
@@ -626,16 +662,44 @@ function previewUrl(bron: SpikeBronSnapshot, itemId: string): string {
   return `${GRAPH_BASIS}/drives/${encodeURIComponent(bron.driveId)}/items/${encodeURIComponent(itemId)}/preview`;
 }
 
-async function maakKandidaat(
+/**
+ * #407 — passagekeuze is pluggable geworden. De drie bestaande routes houden de
+ * lexicale keuze uit de eigen extractie; de Copilot-arm levert een strategie die
+ * het Microsoft-extract uniek in diezelfde eigen extractie moet lokaliseren.
+ * De strategie ziet uitsluitend de zelf uitgelezen segmenten en benoemt bij een
+ * mislukking zelf de afwijscategorie, zodat `lokalisatie` en `extractie` niet
+ * op één hoop belanden.
+ */
+export interface PassageStrategie {
+  kies(segmenten: TekstSegment[], vraag: SpikeVraag, mapping: SpikeDocumentMapping): {
+    passage: string;
+    pagina: number | null;
+    paragraaf: string | null;
+  } | null;
+  faalcategorie: SpikeAfwijscategorie;
+}
+
+const LEXICALE_PASSAGESTRATEGIE: PassageStrategie = {
+  kies: (segmenten, vraag) => passageUitSegmenten(segmenten, vraag.vraag),
+  faalcategorie: "extractie",
+};
+
+export interface KandidaatOpdracht {
+  vraag: SpikeVraag;
+  correlationId: string;
+}
+
+export async function maakKandidaat(
   client: GraphClient,
   deps: SpikeDependencies,
-  opdracht: SpikeOpdracht,
+  opdracht: KandidaatOpdracht,
   bronEerst: SpikeBronSnapshot,
   bronFingerprint: string,
   rootGraphPad: string,
   mapping: SpikeDocumentMapping,
   hit: ZoekHit,
   afwijzingen: SpikeAfwijzingen,
+  passageStrategie: PassageStrategie = LEXICALE_PASSAGESTRATEGIE,
 ): Promise<SpikeBronresultaat | null> {
   // Vaste fase 1: serververtrouwde fixturestatus. Historische of onbekende
   // status valt af vóór een content- of previewcall.
@@ -678,8 +742,8 @@ async function maakKandidaat(
   try {
     try {
       const extractie = await extractTekst(bytes, bestandstypeVoorExtractie(mapping));
-      const gevonden = passageUitSegmenten(extractie.segmenten, opdracht.vraag.vraag);
-      if (!gevonden) return wijsKandidaatAf(afwijzingen, "extractie");
+      const gevonden = passageStrategie.kies(extractie.segmenten, opdracht.vraag, mapping);
+      if (!gevonden) return wijsKandidaatAf(afwijzingen, passageStrategie.faalcategorie);
       ({ passage, pagina, paragraaf } = gevonden);
     } catch (fout) {
       if (isFataleKandidaatFout(fout)) throw fout;
@@ -779,7 +843,7 @@ async function maakKandidaat(
   };
 }
 
-function alsSpikeError(fout: unknown): SpikeErrorType {
+export function alsSpikeError(fout: unknown): SpikeErrorType {
   return fout instanceof SpikeError ? fout : new SpikeError("providerfout", "graph_response", { cause: fout });
 }
 
@@ -964,11 +1028,11 @@ export async function voerSharePointPermissionProbeUit(
   }
 }
 
-function verhouding(teller: number, noemer: number): number {
+export function verhouding(teller: number, noemer: number): number {
   return noemer === 0 ? 1 : Number(Math.min(1, teller / noemer).toFixed(3));
 }
 
-function rankingMetrieken(vraag: SpikeVraag, uitkomst: SpikeUitkomst): { mrr: number; ndcg: number } {
+function rankingMetrieken(vraag: SpikeVraag, uitkomst: SpikeUitkomstBasis<SpikeVergelijkRoute>): { mrr: number; ndcg: number } {
   const verwacht = new Set(vraag.verwachteFixtures);
   const primair = vraag.primaireFixture ?? vraag.verwachteFixtures[0];
   const primairePositie = uitkomst.kandidaten.find((kandidaat) => kandidaat.fixtureCode === primair)?.rang.positie ?? 0;
@@ -985,7 +1049,11 @@ function rankingMetrieken(vraag: SpikeVraag, uitkomst: SpikeUitkomst): { mrr: nu
 }
 
 /** Maakt uitsluitend inhoudsvrij, commitbaar meetbewijs. */
-export function maakVeiligeMeetrij(ronde: number, vraag: SpikeVraag, uitkomst: SpikeUitkomst): VeiligeMeetrij {
+export function maakVeiligeMeetrij<R extends SpikeVergelijkRoute>(
+  ronde: number,
+  vraag: SpikeVraag,
+  uitkomst: SpikeUitkomstBasis<R>,
+): VeiligeMeetrijBasis<R> {
   const gevonden = [...new Set(uitkomst.kandidaten.map((k) => k.fixtureCode))].sort();
   const verwacht = new Set(vraag.verwachteFixtures);
   const raak = gevonden.filter((code) => verwacht.has(code)).length;
@@ -1126,8 +1194,8 @@ export function maakSharePointSpikeContractAdapter(deps: SpikeDependencies, rout
   };
 }
 
-export function vatMetingenSamen(rijen: VeiligeMeetrij[]) {
-  const groepen = new Map<SpikeRoute, VeiligeMeetrij[]>();
+export function vatMetingenSamen<R extends SpikeVergelijkRoute>(rijen: readonly VeiligeMeetrijBasis<R>[]) {
+  const groepen = new Map<R, VeiligeMeetrijBasis<R>[]>();
   for (const rij of rijen) groepen.set(rij.route, [...(groepen.get(rij.route) ?? []), rij]);
   return [...groepen.entries()].map(([route, waarden]) => {
     const latencies = waarden.map((rij) => rij.latencyMs).sort((a, b) => a - b);

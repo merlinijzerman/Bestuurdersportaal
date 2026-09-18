@@ -24,6 +24,70 @@ PR #401 is als `1d9f5fc` in `preview` gemerged; alle mergechecks en beide Previe
 
 De afwijking heeft twee oorzaken. De veilige meetprojectie markeerde iedere niet-lege kandidaatset als `geslaagd` en berekende alleen recall, waardoor een foutpositief bij recall 1 groen leek. Daarnaast bevatte de zichtbare locatoruitleg in de PowerPoint-fixture zelf de unieke S02-term `Koraalmaat 47`. De correctie vereist voortaan exacte gelijkheid met de vooraf vastgelegde bronset en classificeert een ontbrekende of extra fixture als `acceptatie_afwijking/onverwachte_bronset`. De PowerPoint-fixture behoudt het eigen antwoordfeit `IJsvogelkompas 73`, maar noemt de S02-canary niet meer. Na deploy wordt uitsluitend S00 plus de korte Drive-reeks opnieuw uitgevoerd; de vervolgmetingen blijven tot een volledig groene inhoudscontrole buiten scope.
 
+## Aanvulling 18 september 2026 — issue #407, T0–T2 gebouwd (Copilot Retrieval als vierde meetarm)
+
+Het spikeharnas heeft een vierde meetarm gekregen: `POST /v1.0/copilot/retrieval` met
+`dataSource = sharePoint`. De arm is gebouwd, hermetisch getest en volledig geïsoleerd; hij
+heeft **geen serverbrug** en is alleen via de lokale CLI en de tests bereikbaar.
+
+In deze tranche is **niets** gewijzigd aan Microsoft-permissions, consent, billing,
+featureflags, migraties of productiecode voor live retrieval, en is **geen enkele live
+Graph-call** gedaan. T3 is niet gestart.
+
+De verificatieketen behandelt een Copilot-extract uitdrukkelijk als onbetrouwbaar
+kandidaatsignaal. De `webUrl` is uitsluitend een locator: hij wordt eerst tegen de opnieuw
+gelezen root geprefilterd en daarna exact gematcht tegen een **read-only** locatorregister
+dat wij zelf opbouwen uit de al geregistreerde DriveItems. Pas dan loopt de ongewijzigde
+#353-keten. Elk extract moet bovendien **uniek** in onze eigen, zojuist uitgelezen tekst
+terug te vinden zijn; ontbrekend, te kort, gewijzigd of meervoudig voorkomend valt
+fail-closed af onder de nieuwe categorie `lokalisatie`. De passage komt altijd uit de eigen
+extractie.
+
+Bij de reviewronde van 18 september is de oorspronkelijke `/shares`-resolver geschrapt:
+Microsoft noemt voor `GET /shares/{token}/driveItem` minimaal delegated `Files.ReadWrite`,
+en een read-only spike mag geen schrijfrecht vragen. Het locatorregister vervangt hem
+volledig en zonder extra permissie. Bewust geaccepteerd gevolg: Office-weergave-URL's
+(`/:w:/…`, `/:p:/…`) matchen niet op het bibliotheekpad en vallen zichtbaar af onder
+`mapping`.
+
+Eén securitybevinding kwam uit de eigen tests en is meteen verholpen: `new URL()` codeert een
+aanhalingsteken in een pad stilzwijgend tot `%22`. Een filter die er syntactisch schoon
+uitziet, kan daardoor aan de Microsoft-kant alsnog als quote worden gelezen en de scope
+openbreken — precies het risico dat #407 benoemt. De filterbouwer toetst nu de gedecodeerde
+betekenis en codeert opnieuw vanuit de gecontroleerde vorm.
+
+### Beslismatrix — stand per 18 september 2026
+
+| Criterium | Bewijsbron | Stand |
+|---|---|---|
+| Geen live permission-, consent- of billingwijziging in de voorbereiding | diff + boundarygate | **groen** |
+| Ongeldige filter kan nooit ongescoped vertrekken | hermetische test | **groen** |
+| Raw extract bereikt nooit context of citaat | hermetische test | **groen** |
+| Passage gelokaliseerd in actuele, dubbel versiegecontroleerde bron | hermetische test | **groen** |
+| Bestaande routes gedragsmatig ongewijzigd met de arm uit | regressietest | **groen** |
+| Type-, boundary-, secret-, security- en cross-tenantgates | `npm run gates` | **groen** (DB-laag niet gedraaid; geen DB-object geraakt) |
+| S02/S03/S04/S04H exacte bronset via Copilot | live meting | **niet uitgevoerd — T3** |
+| Twee semantische scenario's met aantoonbare recallwinst | live meting | **geblokkeerd** — fixtures ontbreken |
+| Kosten- en licentiemodel vastgesteld | besluit | **open — beslissing gevraagd** |
+| Tijdelijke brede grants aantoonbaar verwijderd | live rollback | **niet van toepassing — geen grant verleend** |
+
+### Twee harde voorwaarden vóór T3
+
+1. **Licentie, kosten en consent.** `POST /v1.0/copilot/retrieval` vereist een Microsoft 365
+   Copilot-add-on of pay-as-you-go Preview, plus delegated `Files.Read.All` **én**
+   `Sites.Read.All` samen — beide, niet één van de twee — voor uitsluitend de afgeschermde
+   PGB-testidentiteit. Dat is breder dan de Microsoft Search-route uit #403/#405. Zonder dat
+   besluit levert de arm `toestemming_geweigerd/copilot_toegang_geweigerd` (401/403, oorzaak
+   bewust niet zelf geduid) of `copilot_licentie_of_billing` (402) — beide stopresultaten.
+   Zie `COPILOT-RETRIEVAL-407-LICENTIE-EN-CONSENT.md`.
+2. **Semantische fixtures.** De #385-set is volledig rond unieke canary-termen gebouwd; de
+   generator zet canaryterm, vraag én antwoordfeit letterlijk in het document. Er is geen
+   parafrase- of synoniemtekst. De semantische scenario's SEM01 en SEM02 zijn daarom nu
+   uitsluitend hermetisch meetbaar. Live meten vereist eerst `PGB407-DOC-101` en
+   `PGB407-DOC-102` in het manifest én in SharePoint, en daarna indexgereedheid.
+
+De status blijft **NO-GO voor productiewiring**.
+
 ## Geanonimiseerd bewijs
 
 | Onderdeel | Waarneming | Status |

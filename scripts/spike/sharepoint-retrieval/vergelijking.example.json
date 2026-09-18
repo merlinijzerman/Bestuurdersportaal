@@ -1,0 +1,16 @@
+{
+  "_toelichting": "#407 T2 — kopieer naar .m365-copilot-vergelijking.local.json, vul de reeds bestaande lokale fonds-, gebruiker- en documentreferenties in en zet modus 0600. Dit bestand bevat geen private waarden en hoort in de repo; de kopie niet.",
+  "_voorwaarde": "Een LIVE run vereist eerst het expliciete licentie-, kosten- en consentbesluit (T3), met delegated Files.Read.All EN Sites.Read.All samen. Zonder dat levert de Copilot-arm toestemming_geweigerd/copilot_toegang_geweigerd (401/403) of copilot_licentie_of_billing (402).",
+  "doel": "PGB Preview-pilot",
+  "fondsId": "00000000-0000-4000-8000-000000000000",
+  "gebruikerId": "00000000-0000-4000-8000-000000000000",
+  "rondes": 2,
+  "armen": ["drive_search_extract", "microsoft_search", "copilot_retrieval", "candidate_union"],
+  "scenarios": ["S02", "S03", "S04", "S04H"],
+  "fixtures": [
+    { "fixtureCode": "PGB354-DOC-001", "ref": "00000000-0000-4000-8000-000000000000", "bestandstype": "docx", "verwachteMappad": "01 Vergaderstukken/2026-09 Bestuursvergadering" },
+    { "fixtureCode": "PGB354-PPT-001", "ref": "00000000-0000-4000-8000-000000000000", "bestandstype": "pptx", "verwachteMappad": "01 Vergaderstukken/2026-10 Bestuursvergadering" },
+    { "fixtureCode": "PGB354-PDF-001", "ref": "00000000-0000-4000-8000-000000000000", "bestandstype": "pdf", "verwachteMappad": "02 Beleid en reglementen" },
+    { "fixtureCode": "PGB354-PDF-002", "ref": "00000000-0000-4000-8000-000000000000", "bestandstype": "pdf", "verwachteMappad": "03 Historisch en vervallen" }
+  ]
+}
