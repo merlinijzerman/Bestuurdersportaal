@@ -1,6 +1,6 @@
 import "server-only";
 
-import { sharepointAccessToken } from "@/core/lib/microsoft-connector";
+import { sharepointAccessToken, sharepointSearchAccessToken } from "@/core/lib/microsoft-connector";
 import { sharepointDocumenten } from "@/core/lib/microsoft-sharepoint";
 import {
   SHAREPOINT_RETRIEVAL_FIXTURE_CODES,
@@ -186,7 +186,9 @@ export async function voerSharePointRetrievalPreviewSmokeUit(
   const vraag = sharePointRetrievalSmokeVraag(opdracht.scenario);
   const leesBron = await bouwBronlezer({ ctx, scenario: opdracht.scenario });
   const delegatedToken = async () => {
-    const token = await sharepointAccessToken({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId });
+    const token = await (opdracht.route === "drive_search_extract"
+      ? sharepointAccessToken({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId })
+      : sharepointSearchAccessToken({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId }));
     return { accessToken: token.accessToken, tenantId: token.tenantId, actorObjectId: token.objectId };
   };
 

@@ -29,6 +29,11 @@ set waarde = excluded.waarde, versie = public.fonds_feature_flags.versie + 1,
 
 1. Stel read-only vast dat de SharePoint-index gereed is: iedere fixture moet zowel op bestandsnaam als op de unieke inhoudsterm vindbaar zijn. Alleen een bestandsnaamtreffer is `index_niet_gereed`; stop dan zonder adapter- of rechtenconclusie.
 2. Leg vóór de eerste Microsoft Search-call een afzonderlijk consentbesluit vast. Deze code voegt geen scope of consent toe. Zonder dat besluit worden alleen S00 en de DriveItem-diagnostiek uitgevoerd.
+   Na deployment van #405 gebruikt de beheerder daarvoor uitsluitend de knop
+   **Tijdelijke Microsoft Search-toestemming verlenen** op deze pagina. De route
+   vraagt delegated `Files.Read.All` alleen achter alle Preview-/PGB-poorten en
+   keert terug naar dezelfde smoke-pagina. Kies de vastgelegde testidentiteit,
+   niet het tenantbeheeraccount.
 3. Open `/beheer/microsoft-sharepoint-retrieval` op de PGB Preview-host.
 4. Voer eerst S00 uit. Deze vaste inhoudsloze DriveItem-search onderscheidt een ongeldige Graph-vraag (`graph_bad_request`) van ontbrekende toestemming (`graph_toestemming`) en een toegestane zoekactie (`geslaagd`), zonder documenten te openen of downloaden.
 5. Controleer vóór én na de meetreeks expliciet dat `microsoft_sharepoint_retrieval_spike=false` is. Zet de vlag alleen voor de daadwerkelijke meetreeks aan en gebruik de geaudite beheerroute.
@@ -58,6 +63,11 @@ Laat de toegang ingetrokken en start S09 als nieuw verzoek. Verwacht opnieuw nul
 2. Wacht op Microsoft-propagatie en voer `S08R` uit. Verwacht `PGB354-DOC-005` als gevonden fixture.
 3. Zet de extra vlag direct uit met dezelfde geaudite wijzigingsroute (of bovenstaande upsert met `false`) en verifieer expliciet dat de effectieve waarde `false` is.
 4. Controleer `microsoft_private.audit_log`: alleen veilige meetcategorieën, aantallen, timing en bytes; nooit vraagtekst, passages, tokens, URL's of externe identifiers.
+5. Verwijder `Files.Read.All` uit appregistratie
+   `067351f2-693a-4bd9-ae00-6ff32bc49260`, trek de delegated grant van de
+   testidentiteit in en verleen daarna opnieuw de gewone SharePoint-toestemming.
+   Controleer dat de private scopes geen `Files.Read.All` meer bevatten en dat
+   S00 via `Sites.Selected` opnieuw slaagt.
 
 ## Stopcriteria en rollback
 

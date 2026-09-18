@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "../..");
 const lees = (pad: string) => readFileSync(resolve(root, pad), "utf8");
 const route = lees("app/api/microsoft/sharepoint/retrieval-smoke/route.ts");
+const consentRoute = lees("app/api/microsoft/sharepoint/retrieval-smoke/toestemming/route.ts");
 const brug = lees("core/lib/microsoft-sharepoint-retrieval-smoke.ts");
 const kern = lees("core/lib/microsoft-sharepoint-retrieval-smoke-core.ts");
 
@@ -16,6 +17,17 @@ test("#353 Preview-route is dubbel gegate, beheerder-only, hostgebonden en fail-
   assert.match(route, /rateLimit: "microsoft_sharepoint_retrieval_spike"/);
   assert.match(route, /sharePointRetrievalSmokeToegestaan/);
   assert.match(lees("core/lib/ratelimit-enforce.ts"), /"microsoft_sharepoint_retrieval_spike"/);
+});
+
+test("#405 brede Search-consentroute bestaat alleen achter dezelfde Preview-poort", () => {
+  assert.match(consentRoute, /capability: "login\.beleid\.manage"/);
+  assert.match(consentRoute, /requireCapability\(ctx\.gebruikerId, "login\.beleid\.manage"\)/);
+  assert.match(consentRoute, /hostGuard: "afdwingen"/);
+  assert.match(consentRoute, /rateLimit: "microsoft_sharepoint_retrieval_spike"/);
+  assert.match(consentRoute, /sharePointRetrievalSmokeToegestaan/);
+  assert.match(consentRoute, /startMicrosoftSearchSpikeToestemming/);
+  assert.match(consentRoute, /veiligeMicrosoftReturnUrl/);
+  assert.doesNotMatch(consentRoute, /Sites\.Read\.All|Sites\.FullControl|Files\.ReadWrite/);
 });
 
 test("#353 browserinvoer bevat uitsluitend vaste scenario-, route- en rondecodes", () => {
@@ -79,4 +91,6 @@ test("#353 fondsbron en gedelegeerde smoke-actor zijn afzonderlijk en tenantgebo
   assert.match(brug, /verbinding\.scopes\.includes\("Sites\.Selected"\)/);
   assert.match(brug, /verbinding\.tenant_id !== bron\.tenant_id/);
   assert.match(brug, /sharepointAccessToken\(\{ fondsId: ctx\.fondsId, gebruikerId: ctx\.gebruikerId \}\)/);
+  assert.match(brug, /opdracht\.route === "drive_search_extract"/);
+  assert.match(brug, /sharepointSearchAccessToken\(\{ fondsId: ctx\.fondsId, gebruikerId: ctx\.gebruikerId \}\)/);
 });
