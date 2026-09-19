@@ -23,6 +23,14 @@ test("#353-prototype is alleen bereikbaar via de ene Preview-only serverbrug", (
     const inhoud = readFileSync(resolve(root, bestand), "utf8");
     if (bestand === toegestaneBrug) continue;
     if (inhoud.includes(spikePad) || inhoud.includes("sharepoint-retrieval/prototype") || inhoud.includes("voerSharePointRetrievalSpikeUit")) directeImports.push(bestand);
+    // #407 — de Copilot-meetarm heeft GEEN serverbrug en mag dus door geen
+    // enkel app-, core-, platform- of fondsenbestand worden geïmporteerd.
+    if (
+      inhoud.includes("sharepoint-retrieval/copilot-retrieval")
+      || inhoud.includes("sharepoint-retrieval/vergelijking")
+      || inhoud.includes("voerCopilotRetrievalSpikeUit")
+      || inhoud.includes("copilot/retrieval")
+    ) directeImports.push(bestand);
   }
   assert.deepEqual(directeImports, [], `spike is buiten de serverbrug bereikbaar: ${directeImports.join(", ")}`);
 
@@ -37,6 +45,47 @@ test("#353-prototype is alleen bereikbaar via de ene Preview-only serverbrug", (
     if (inhoud.includes("microsoft-sharepoint-retrieval-smoke\"")) brugImports.push(bestand);
   }
   assert.deepEqual(brugImports, ["app/api/microsoft/sharepoint/retrieval-smoke/route.ts"]);
+});
+
+test("#407-Copilot-meetarm heeft geen serverbrug en is nergens vanuit de app bereikbaar", () => {
+  const spikeBestanden = [
+    "scripts/spike/sharepoint-retrieval/copilot-retrieval.ts",
+    "scripts/spike/sharepoint-retrieval/vergelijking.ts",
+    "scripts/spike/sharepoint-retrieval/vergelijking-scenarios.ts",
+    "scripts/spike/sharepoint-retrieval/run-vergelijking.ts",
+  ];
+  for (const bestand of spikeBestanden) {
+    assert.ok(readFileSync(resolve(root, bestand), "utf8").length > 0, `${bestand} ontbreekt`);
+  }
+
+  // #407 — /shares/{token}/driveItem vereist volgens Microsoft minimaal
+  // delegated Files.ReadWrite. De spike moet read-only blijven, dus die route
+  // mag nergens in het harnas terugkeren.
+  for (const bestand of spikeBestanden) {
+    const inhoud = readFileSync(resolve(root, bestand), "utf8");
+    assert.doesNotMatch(inhoud, /v1\.0\/shares\//, `${bestand} gebruikt /shares (schrijfpermission)`);
+    assert.doesNotMatch(inhoud, /sharingToken/, `${bestand} bouwt nog een sharing-token`);
+  }
+
+  // De enige bestaande serverbrug (#353) mag de Copilot-arm niet binnenhalen.
+  const brug = readFileSync(resolve(root, "core/lib/microsoft-sharepoint-retrieval-smoke.ts"), "utf8");
+  assert.doesNotMatch(brug, /copilot/i);
+
+  // En de browserveilige kern van de Preview-smoke kent de vierde route niet.
+  const kern = readFileSync(resolve(root, "core/lib/microsoft-sharepoint-retrieval-smoke-core.ts"), "utf8");
+  assert.doesNotMatch(kern, /copilot/i);
+  assert.doesNotMatch(kern, /lokalisatie/i, "de auditprojectie blijft op de acht vaste afwijzingsvelden");
+});
+
+test("#407-vergelijkingsrunner is een expliciet lokaal npm-script buiten build, start, gates en test", () => {
+  const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+  assert.match(pkg.scripts["spike:m365-copilot-vergelijking"], /M365_RETRIEVAL_SPIKE=local/);
+  assert.match(pkg.scripts["spike:m365-copilot-vergelijking"], /sharepoint-retrieval\/run-vergelijking\.ts/);
+  for (const naam of ["dev", "prebuild", "build", "start", "gates", "test", "test:unit", "test:component"]) {
+    assert.doesNotMatch(pkg.scripts[naam] ?? "", /spike:m365-copilot-vergelijking|sharepoint-retrieval\/run-vergelijking/);
+  }
+  // De hermetische Copilot-suite hangt wél aan de spike-testingang.
+  assert.match(pkg.scripts["test:spike:m365-retrieval"], /copilot-retrieval\.test\.ts/);
 });
 
 test("#353-runner is alleen een expliciet lokaal npm-script en hangt niet onder build, start, gates of test", () => {
@@ -70,5 +119,6 @@ test("#353-Previewbrug is niet bereikbaar vanuit chat, zoeken, vergelijken of de
     let inhoud = "";
     try { inhoud = readFileSync(resolve(root, bestand), "utf8"); } catch { continue; }
     assert.doesNotMatch(inhoud, /microsoft-sharepoint-retrieval-smoke|sharepoint-retrieval\/prototype/);
+    assert.doesNotMatch(inhoud, /sharepoint-retrieval\/copilot-retrieval|sharepoint-retrieval\/vergelijking|copilot\/retrieval/);
   }
 });
