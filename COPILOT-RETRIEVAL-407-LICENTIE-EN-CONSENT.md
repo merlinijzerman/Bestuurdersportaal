@@ -99,21 +99,36 @@ is geüpload kan nog niet geïndexeerd zijn. Een lege basisreeks is dan geen
 kwaliteitsoordeel maar een meetfout. Stel indexgereedheid daarom vóór de
 vergelijkingsreeks vast, net als bij #403.
 
-**C-2. De semantische scenario's zijn nu niet live meetbaar.** Het ticket eist
-minimaal twee scenario's waarin de relevante passage geen letterlijke term uit de
-vraag bevat. De #385-fixtures zijn juist volledig rond unieke canary-termen
-gebouwd: de generator zet de canaryterm, de vraag én het antwoordfeit letterlijk
-in het document. Er staat geen parafrase- of synoniemtekst in.
+**C-2. De semantische fixtures zijn gebouwd; uploaden en indexeren staat nog open.**
+Het ticket eist minimaal twee scenario's waarin de relevante passage geen
+letterlijke term uit de vraag bevat. De #385-fixtures konden dat niet leveren: de
+generator zet daar de canaryterm, de vraag én het antwoordfeit letterlijk in het
+document.
 
-SEM01 en SEM02 zijn daarom gebouwd en **hermetisch** getest, maar een live
-semantische meting vereist eerst twee nieuwe synthetische fixtures
-(`PGB407-DOC-101`, `PGB407-DOC-102`) met parafrasetekst, opgenomen in het
-#385-manifest én in SharePoint, en daarna geïndexeerd. Dat is fixture- en
-tenantwerk en hoort bij T3.
+`PGB407-DOC-101` en `PGB407-DOC-102` vullen dat gat. Ze staan in het manifest, hun
+bytes zijn gepind en drie guards bewaken op de **daadwerkelijk gegenereerde**
+DOCX-inhoud dat:
 
-Zonder C-2 kan acceptatiecriterium *"minimaal twee semantische scenario's tonen
-aantoonbare recallwinst"* niet worden afgevinkt — ook niet als alle andere
-metingen groen zijn.
+1. de body geen enkel token deelt met de vaste scenarioset (S02, S03, S04, S04H,
+   SEM01, SEM02), stopwoorden meegerekend;
+2. diezelfde tokens er ook niet als deelreeks in voorkomen — de lexicale
+   passagekeuze toetst met `includes()`, dus "geen" zou al op het vraagwoord "een"
+   scoren;
+3. er nergens een vraagregel in het document staat.
+
+Dat sluit **kunstmatige** lexicale lekkage uit. Het legt uitdrukkelijk niet vooraf
+vast dat DriveItem Search of Microsoft Search nul zal vinden: dat bepaalt de live
+meting. Exclusieve semantische recallwinst is pas aangetoond wanneer Copilot de
+exacte verwachte bron levert en de andere routes dat niet doen.
+
+Wat nog open staat vóór de live meting: de twee bestanden uploaden naar de
+PGB-bibliotheek volgens het resetrunbook, en indexgereedheid aantonen op de
+canaryterm (`Zandloperbaken 12`, `Nevelanker 30`). Die canaries dienen uitsluitend
+daarvoor en komen in geen enkele scenariovraag of zoekterm voor.
+
+Zolang die twee stappen openstaan, kan acceptatiecriterium *"minimaal twee
+semantische scenario's tonen aantoonbare recallwinst"* niet worden afgevinkt — ook
+niet als alle andere metingen groen zijn.
 
 ## 5. Wat ik nodig heb om T3 te starten
 
@@ -122,8 +137,9 @@ metingen groen zijn.
    gerichte grant van `Files.Read.All` **én** `Sites.Read.All` — beide zijn
    vereist, er valt hier niets te kiezen (§3). Inclusief de afspraak dat beide na
    het meetvenster aantoonbaar worden ingetrokken.
-3. **Fixtures:** akkoord om twee semantische fixtures toe te voegen aan de
-   #385-set en het resetrunbook (§4, C-2).
+3. **Fixtures:** de twee semantische fixtures zijn gebouwd en gepind. Wat nog
+   nodig is: uploaden naar de PGB-bibliotheek en indexgereedheid aantonen op de
+   canaryterm (§4, C-2).
 4. **Meetvenster:** wanneer de grants aan gaan en wanneer ze aantoonbaar weer weg
    zijn.
 

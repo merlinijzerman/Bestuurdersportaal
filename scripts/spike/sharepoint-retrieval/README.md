@@ -170,10 +170,11 @@ controle — inclusief `lokalisatie`.
 semantische runs waarin een arm iets toeliet dat niet exact de vooraf vastgelegde bronset
 was. Staat die teller niet op 0, dan is de winst voor het besluit waardeloos.
 
-> **Voorwaarde voor een live semantische meting.** De #385-fixtures zijn volledig rond unieke
-> canary-termen gebouwd; er staat geen parafrase- of synoniemtekst in. SEM01 en SEM02 zijn
-> daarom nu uitsluitend hermetisch meetbaar. Live meten vereist eerst twee nieuwe synthetische
-> fixtures (`PGB407-DOC-101`, `PGB407-DOC-102`) in het manifest én in SharePoint. Zie
+> **Stand van de semantische fixtures.** `PGB407-DOC-101` en `PGB407-DOC-102` zijn gebouwd,
+> gepind en opgenomen in het manifest en het spike-statusregister. Hun body deelt geen enkel
+> token met de vaste scenarioset — stopwoorden meegerekend, en ook niet als deelreeks — zodat
+> de lexicale arm er niet kunstmatig op kan scoren. Wat nog ontbreekt vóór een live semantische
+> meting: uploaden naar de PGB-bibliotheek en aantoonbare indexgereedheid op de canaryterm. Zie
 > `COPILOT-RETRIEVAL-407-LICENTIE-EN-CONSENT.md` §4.
 
 Let ook op: de eigen passagekeuze van de lexicale armen is puur lexicaal. Bij een semantische

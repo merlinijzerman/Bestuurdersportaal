@@ -88,6 +88,61 @@ test("#407-vergelijkingsrunner is een expliciet lokaal npm-script buiten build, 
   assert.match(pkg.scripts["test:spike:m365-retrieval"], /copilot-retrieval\.test\.ts/);
 });
 
+test("#407-fixturecontract is blokkerend in CI en draait via hetzelfde script als de spikesuite", () => {
+  const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+
+  // Eén script als enige ingang, zodat CI-dekking en lokale dekking niet uiteen
+  // kunnen lopen. Dit is de C-01-les: een geschreven controle die niet in de
+  // gate is aangesloten, draait niet.
+  assert.match(
+    pkg.scripts["test:spike-fixture-contract"],
+    /sharepoint-retrieval\/fixturestatus\.test\.ts/,
+    "het fixturecontract wijst niet naar fixturestatus.test.ts",
+  );
+  assert.match(
+    pkg.scripts["test:contract"],
+    /npm run test:spike-fixture-contract/,
+    "het fixturecontract is niet aangesloten op test:contract",
+  );
+
+  // En dit is wat het écht blokkerend maakt. Geen enkele CI-job roept
+  // `test:contract` als geheel aan: de workflow somt de subscripts los op.
+  // Aansluiten op test:contract alléén levert dus GEEN CI-dekking — dat gold
+  // ook voor test:spike-boundary, dat hier jarenlang buiten viel. De gate
+  // toetst daarom de workflow zelf, niet alleen de package.json-keten.
+  const workflow = readFileSync(resolve(root, ".github/workflows/security-baseline.yml"), "utf8");
+  assert.match(workflow, /name: Security baseline \(Sprint 1\)/, "de required jobnaam is gewijzigd");
+  for (const script of ["test:spike-boundary", "test:spike-fixture-contract"]) {
+    assert.match(
+      workflow,
+      new RegExp(`npm run ${script.replace(":", ":")}(?![\\w:-])`),
+      `${script} draait niet in de required CI-job en is dus niet blokkerend`,
+    );
+  }
+  assert.match(
+    pkg.scripts["test:spike:m365-retrieval"],
+    /npm run test:spike-fixture-contract/,
+    "de spikesuite draait het fixturecontract niet via hetzelfde script",
+  );
+  // Niet rechtstreeks óók nog als bestand meegeven: dan kan de ene ingang
+  // stilletjes een andere set draaien dan de andere.
+  assert.doesNotMatch(
+    pkg.scripts["test:spike:m365-retrieval"],
+    /--test[^"]*fixturestatus\.test\.ts/,
+    "fixturestatus.test.ts wordt zowel los als via het script gedraaid",
+  );
+
+  // De python-afhankelijke CLI-regressie hoort NIET in de CI-runtime.
+  for (const naam of ["test:contract", "test:ci", "test", "test:unit", "test:component", "gates"]) {
+    assert.doesNotMatch(
+      pkg.scripts[naam] ?? "",
+      /generator-cli/,
+      `${naam} trekt de python-docx-afhankelijke generator-cli-suite de CI in`,
+    );
+  }
+  assert.match(pkg.scripts["test:spike:m365-retrieval"], /generator-cli\.test\.ts/);
+});
+
 test("#353-runner is alleen een expliciet lokaal npm-script en hangt niet onder build, start, gates of test", () => {
   const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
   assert.match(pkg.scripts["spike:m365-retrieval"], /M365_RETRIEVAL_SPIKE=local/);

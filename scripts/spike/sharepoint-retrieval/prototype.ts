@@ -464,7 +464,12 @@ function veiligSearchFragment(waarde: string): string {
   return fragment;
 }
 
-function zoektermen(vraag: string): string[] {
+/**
+ * Tokenisering van de lexicale passagekeuze. Geëxporteerd sinds #407 zodat de
+ * contaminatieguard van de semantische fixtures exact deze functie gebruikt en
+ * niet een kopie die stilletjes uit de pas kan lopen.
+ */
+export function zoektermen(vraag: string): string[] {
   return [...new Set(vraag.toLocaleLowerCase("nl").normalize("NFKD").replace(/\p{M}/gu, "").match(/[\p{L}\p{N}]{3,}/gu) ?? [])];
 }
 
