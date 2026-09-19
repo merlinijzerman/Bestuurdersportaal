@@ -5,6 +5,7 @@ Gebruik de gebundelde Codex-Pythonruntime. De binaire uitvoer wordt in Git gepin
 dit script is de leesbare bron waarmee de inhoud gecontroleerd kan worden.
 """
 
+import sys
 from pathlib import Path
 
 from docx import Document
@@ -148,6 +149,8 @@ def save(doc: Document, path: Path) -> None:
 
 def make_doc_001() -> None:
     code = "PGB354-DOC-001"
+    if not _gevraagd(code):
+        return
     doc = Document()
     configure(doc, code, "Agenda en besluitpunten september")
     add_title(doc, "Agenda en besluitpunten september", code)
@@ -213,6 +216,8 @@ def make_doc_001() -> None:
 
 
 def make_simple_doc(code: str, title: str, heading: str, fact: str, canary: str, filename: str, folder: str) -> None:
+    if not _gevraagd(code):
+        return
     doc = Document()
     configure(doc, code, title)
     add_title(doc, title, code)
@@ -235,8 +240,93 @@ def make_simple_doc(code: str, title: str, heading: str, fact: str, canary: str,
     save(doc, LIBRARY / folder / filename)
 
 
+def add_semantic_title(doc: Document, title: str, code: str) -> None:
+    """Eigen kop voor de #407-fixtures.
+
+    De gedeelde add_title schrijft "... hebben geen betekenis ..." in de body.
+    Het woord "geen" bevat de letterreeks "een", en de lexicale passagekeuze
+    van de spike toetst met includes() in plaats van op hele woorden. Die ene
+    zin zou dus al lexicale score opleveren voor SEM01. Daarom een eigen,
+    woordbewuste variant; de contaminatieguard bewaakt dat dit zo blijft.
+    """
+    paragraph = doc.add_paragraph(style="Title")
+    paragraph.add_run(title)
+    subtitle = doc.add_paragraph()
+    subtitle.paragraph_format.space_after = Pt(14)
+    run = subtitle.add_run(f"Fixture {code}  |  reeks PGB Preview-pilot  |  eigenaar M365 pilotteam")
+    run.bold = True
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(70, 70, 70)
+    warning = doc.add_paragraph()
+    warning.add_run("Dit document bevat uitsluitend fictieve testgegevens.").bold = True
+    warning.add_run(" Alle cijfers, namen en uitspraken zijn bedacht.")
+
+
+def make_semantic_doc(
+    code: str,
+    title: str,
+    canary: str,
+    kader_kop: str,
+    feit_kop: str,
+    fact: str,
+    toelichting: str,
+    filename: str,
+    folder: str,
+) -> None:
+    """#407 — semantische fixture.
+
+    Twee harde eisen, bewaakt door de contaminatieguard in de spikesuite:
+
+    1. de volledige body deelt GEEN token met de vaste vergelijkingsscenario's
+       (S02, S03, S04, S04H, SEM01, SEM02), stopwoorden meegerekend. Daardoor
+       kan de lexicale arm hier niet kunstmatig scoren;
+    2. er staat nergens een vraagregel in het document. De gedeelde
+       make_simple_doc schrijft wel zo'n metadatatabel; die is hier bewust
+       niet hergebruikt.
+
+    De canaryterm dient uitsluitend als indexgereedheidsprobe en mag daarom in
+    geen enkele scenariovraag of zoekterm voorkomen.
+    """
+    if not _gevraagd(code):
+        return
+    doc = Document()
+    configure(doc, code, title)
+    add_semantic_title(doc, title, code)
+
+    doc.add_heading("1 Doel van dit dossier", level=1)
+    doc.add_paragraph(
+        "Deze notitie dient als oefenmateriaal binnen de fictieve PGB-bibliotheek. "
+        "Alle bedragen, namen en afspraken zijn bedacht."
+    )
+
+    doc.add_heading("2 " + kader_kop, level=1)
+    doc.add_heading("2.1 Afbakening", level=2)
+    doc.add_paragraph(
+        f"{canary} dient enkel als indexcontrole. Deze aanduiding hoort nergens in vraagstelling terug te keren."
+    )
+
+    doc.add_heading("2.2 " + feit_kop, level=2)
+    paragraph = doc.add_paragraph()
+    paragraph.add_run("Verwacht antwoordfeit. ").bold = True
+    paragraph.add_run(fact)
+    doc.add_paragraph(toelichting)
+
+    add_metadata_table(
+        doc,
+        [
+            ("Fixturecode", code),
+            ("Canaryterm", canary),
+            ("Reeks", "PGB Preview-pilot"),
+            ("Soort", "semantische proef"),
+        ],
+    )
+    save(doc, LIBRARY / folder / filename)
+
+
 def make_doc_004(path: Path, version: str, fact: str) -> None:
     code = "PGB354-DOC-004"
+    if not _gevraagd(code):
+        return
     doc = Document()
     configure(doc, code, "Inhoudsmutatie")
     add_title(doc, "Inhoudsmutatie", code)
@@ -260,7 +350,86 @@ def make_doc_004(path: Path, version: str, fact: str) -> None:
     save(doc, path)
 
 
+BEKENDE_FIXTURECODES = (
+    "PGB354-DOC-001",
+    "PGB354-DOC-002",
+    "PGB354-DOC-003",
+    "PGB354-DOC-004",
+    "PGB354-DOC-005",
+    "PGB407-DOC-101",
+    "PGB407-DOC-102",
+)
+
+# Standaard draait alles. main() vernauwt dit na validatie van --only.
+_GEVRAAGDE_CODES: tuple[str, ...] = BEKENDE_FIXTURECODES
+
+
+def bepaal_gevraagde_codes(argv: list[str]) -> tuple[str, ...]:
+    """Valideer --only FAIL-CLOSED en lever de exacte set codes die mag draaien.
+
+    Zonder --only draait alles. Met --only moet er een bruikbare waarde staan:
+    een ontbrekende, lege of onbekende waarde stopt het script met een foutmelding en een exitcode ongelijk 0
+    en schrijft geen enkel bestand. Dat is bewust streng — de vorige versie viel
+    in al die gevallen terug op "draai alles", en juist dán herschrijft de
+    generator de gepinde bestanden die je met --only wilde ontzien.
+
+        python3 genereer-docx.py                # alles
+        python3 genereer-docx.py --only PGB407  # alleen de #407-fixtures
+        python3 genereer-docx.py --only=PGB354-DOC-001
+    """
+    prefixen: list[str] = []
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        if arg.startswith("--only="):
+            prefixen.append(arg[len("--only="):])
+        elif arg == "--only":
+            volgende = argv[index + 1] if index + 1 < len(argv) else None
+            if volgende is None or volgende.startswith("-"):
+                raise SystemExit("fout: --only vereist een waarde, bijvoorbeeld --only PGB407")
+            prefixen.append(volgende)
+            index += 1
+        else:
+            raise SystemExit(f"fout: onbekend argument {arg!r}; gebruik --only <prefix>")
+        index += 1
+
+    if not prefixen:
+        return BEKENDE_FIXTURECODES
+
+    gekozen: list[str] = []
+    for prefix in prefixen:
+        if not prefix.strip():
+            raise SystemExit("fout: --only vereist een niet-lege waarde")
+        treffers = [code for code in BEKENDE_FIXTURECODES if code.startswith(prefix)]
+        if not treffers:
+            raise SystemExit(
+                f"fout: --only {prefix!r} past op geen enkele fixturecode; "
+                f"bekend zijn {', '.join(BEKENDE_FIXTURECODES)}"
+            )
+        gekozen.extend(treffers)
+    return tuple(dict.fromkeys(gekozen))
+
+
+def _gevraagd(code: str) -> bool:
+    """Draait deze fixture in deze aanroep mee?
+
+    python-docx schrijft een tijdstempel in docProps, dus twee runs leveren
+    nooit bit-identieke bytes. De binaire uitvoer is in Git gepind en de
+    manifestguard bewaakt die pins. Een kale run herschrijft daardoor ook de
+    bestaande bestanden en laat hun hashes driften terwijl er inhoudelijk niets
+    verandert. Gebruik daarom --only zodra je één fixture bijwerkt, en
+    regenereer daarna uitsluitend de gewijzigde checksumregels.
+    """
+    if code not in BEKENDE_FIXTURECODES:
+        raise SystemExit(f"fout: onbekende fixturecode {code!r} in de generator")
+    return code in _GEVRAAGDE_CODES
+
+
 def main() -> None:
+    global _GEVRAAGDE_CODES
+    # Eerst valideren, dan pas schrijven: een ongeldige --only mag nooit een
+    # half-gegenereerde bibliotheek achterlaten.
+    _GEVRAAGDE_CODES = bepaal_gevraagde_codes(sys.argv[1:])
     make_doc_001()
     make_simple_doc(
         "PGB354-DOC-002",
@@ -289,6 +458,28 @@ def main() -> None:
         MUTATIONS / "PGB354-DOC-004-Inhoudsmutatie-v2.docx",
         "2",
         "Na de mutatie valt het controlevenster voor Bronzenveer 52 op vrijdag om 10.35 uur.",
+    )
+    make_semantic_doc(
+        "PGB407-DOC-101",
+        "Zandloperbaken 12 hersteldossier",
+        "Zandloperbaken 12",
+        "Fictief herstelkader",
+        "Hersteldoorloop",
+        "Bij vastgestelde onderdekking beschikt dit fonds over negen kalenderdagen om herstel volledig af te ronden.",
+        "Deze doorloop start op de eerstvolgende bankwerkdag na vaststelling. Zaterdag en zondag tellen niet mee.",
+        "PGB407-DOC-101-Zandloperbaken-hersteldossier.docx",
+        "02 Beleid en reglementen",
+    )
+    make_semantic_doc(
+        "PGB407-DOC-102",
+        "Nevelanker 30 zittingsdossier",
+        "Nevelanker 30",
+        "Fictief zittingskader",
+        "Zittingsmoment",
+        "Op 12 november 2026 verzamelt dit college zich ter definitieve goedkeuring van deze oefenuitspraak.",
+        "Deze zitting rondt de proefronde af. Latere aanpassingen vallen buiten dit dossier.",
+        "PGB407-DOC-102-Nevelanker-zittingsdossier.docx",
+        "02 Beleid en reglementen",
     )
     make_simple_doc(
         "PGB354-DOC-005",

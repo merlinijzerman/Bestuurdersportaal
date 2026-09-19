@@ -33,7 +33,9 @@ test("PGB354 manifest bevat de vaste veilige setmetadata en mappen", () => {
 
 test("PGB354 corpus dekt Office, digitaal PDF, historie, mutaties, intrekking en moeilijke bestanden", () => {
   const fixtures = manifest.fixtures;
-  assert.equal(fixtures.length, 10);
+  // 10 fixtures uit #354/#385 plus de twee semantische fixtures uit #407.
+  assert.equal(fixtures.length, 12);
+  assert.equal(fixtures.filter((fixture) => fixture.semantisch === true).length, 2);
   assert.equal(new Set(fixtures.map((fixture) => fixture.code)).size, fixtures.length);
   assert.ok(fixtures.some((fixture) => fixture.file_type === "docx"));
   assert.ok(fixtures.some((fixture) => fixture.file_type === "pdf" && fixture.status === "actueel"));

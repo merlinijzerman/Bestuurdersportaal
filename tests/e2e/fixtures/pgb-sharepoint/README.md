@@ -31,3 +31,19 @@ npm run security:secrets
 `local-check` valideert alleen het schema en de bestandsrechten. `ready` is de harde live-runpoort en slaagt pas nadat de private site-, account-, item- en versievelden lokaal zijn ingevuld.
 
 De generators zijn niet nodig voor een testronde. Gebruik ze alleen om de corpus bewust te herzien; actualiseer daarna de checksums en laat alle visuele controles opnieuw lopen.
+
+> **Let op bij `genereer-docx.py`.** python-docx schrijft een tijdstempel in `docProps`, dus twee runs leveren nooit bit-identieke bytes. Een kale run herschrijft álle Word-fixtures en laat de gepinde hashes van bestanden driften waar inhoudelijk niets aan veranderde. Werk je één fixture bij, gebruik dan het filter en werk daarna uitsluitend de gewijzigde checksumregels bij:
+>
+> ```bash
+> python3 bron/genereer-docx.py --only PGB407
+> ```
+
+### Semantische fixtures (#407)
+
+`PGB407-DOC-101` en `PGB407-DOC-102` horen bij de semantische scenario's SEM01 en SEM02 van de Copilot Retrieval-meetarm. Ze wijken bewust af van de #354-opzet:
+
+- de body deelt **geen enkel token** met de vaste vergelijkingsscenario's (S02, S03, S04, S04H, SEM01, SEM02), stopwoorden meegerekend, en bevat die tokens ook niet als deelreeks. Zo kan de lexicale arm hier niet kunstmatig scoren;
+- er staat **geen vraagregel** in het document; de metadatatabel met de letterlijke vraag uit `make_simple_doc` is hier niet hergebruikt;
+- de canaryterm dient **uitsluitend** als indexgereedheidsprobe en komt in geen enkele scenariovraag of zoekterm voor.
+
+Dit is geen voorspelling dat DriveItem Search of Microsoft Search niets zal vinden — dat bepaalt de live meting. De fixtures sluiten alleen kunstmatige lexicale lekkage uit. `scripts/spike/sharepoint-retrieval/fixturestatus.test.ts` bewaakt alle drie de eigenschappen op de daadwerkelijk gegenereerde DOCX-inhoud.

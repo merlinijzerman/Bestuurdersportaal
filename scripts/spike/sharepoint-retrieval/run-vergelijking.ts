@@ -20,7 +20,7 @@ import { resolve, relative } from "node:path";
 import { stderr } from "node:process";
 import { maakKwaliteitsrapport, VERGELIJK_ARMEN, voerVergelijkingUit, type VergelijkArm } from "./vergelijking";
 import { VERGELIJK_SCENARIO_CODES, vergelijkScenario, type VergelijkScenario } from "./vergelijking-scenarios";
-import { sharePointRetrievalFixtureStatus } from "../../../core/lib/microsoft-sharepoint-retrieval-smoke-core";
+import { spikeFixtureStatus } from "./fixturestatus";
 import type { SpikeBronSnapshot, VeiligeVergelijkrij } from "./types";
 
 type ConfigFixture = {
@@ -95,7 +95,7 @@ async function main() {
       throw new Error("Microsoft-identiteit hoort niet bij de actuele SharePoint-bron");
     }
     const documenten = await Promise.all((config.fixtures ?? []).map(async (fixture) => {
-      const fixtureStatus = sharePointRetrievalFixtureStatus(fixture.fixtureCode);
+      const fixtureStatus = spikeFixtureStatus(fixture.fixtureCode);
       if (!fixtureStatus) throw new Error(`fixture ${fixture.fixtureCode} heeft geen serververtrouwde status`);
       const document = await vault.leesSharePointDocument(config.fondsId, fixture.ref);
       if (!document) throw new Error(`fixture ${fixture.fixtureCode} heeft geen actuele lokale ref`);

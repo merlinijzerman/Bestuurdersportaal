@@ -64,6 +64,8 @@ jobs:
           npm run test:e2e:guard
           npm run test:lint-quality-contract
           npm run test:ci-ownership-contract
+          npm run test:spike-boundary
+          npm run test:spike-fixture-contract
 
       - name: Vitest-workflowcontract
         run: npm run test:coverage-contract

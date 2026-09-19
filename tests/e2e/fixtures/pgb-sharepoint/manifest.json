@@ -210,6 +210,58 @@
       "retrieval_error": "bestandstype_niet_ondersteund",
       "version_behavior": "ongewijzigd tijdens de basisronde",
       "scenarios": ["S10"]
+    },
+    {
+      "code": "PGB407-DOC-101",
+      "title": "Zandloperbaken 12 hersteldossier",
+      "relative_path": "bibliotheek/02 Beleid en reglementen/PGB407-DOC-101-Zandloperbaken-hersteldossier.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "algemeen",
+      "search_terms": [
+        "Zandloperbaken 12"
+      ],
+      "expected_fact": "Bij vastgestelde onderdekking beschikt dit fonds over negen kalenderdagen om herstel volledig af te ronden.",
+      "expected_locator": "sectie 2.2",
+      "access": [
+        "rol_a",
+        "rol_b"
+      ],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": [
+        "SEM01"
+      ],
+      "scenario_bron": "scripts/spike/sharepoint-retrieval/vergelijking-scenarios.ts",
+      "semantisch": true,
+      "canary_doel": "uitsluitend indexgereedheid; komt in geen scenariovraag of zoekterm voor"
+    },
+    {
+      "code": "PGB407-DOC-102",
+      "title": "Nevelanker 30 zittingsdossier",
+      "relative_path": "bibliotheek/02 Beleid en reglementen/PGB407-DOC-102-Nevelanker-zittingsdossier.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "algemeen",
+      "search_terms": [
+        "Nevelanker 30"
+      ],
+      "expected_fact": "Op 12 november 2026 verzamelt dit college zich ter definitieve goedkeuring van deze oefenuitspraak.",
+      "expected_locator": "sectie 2.2",
+      "access": [
+        "rol_a",
+        "rol_b"
+      ],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": [
+        "SEM02"
+      ],
+      "scenario_bron": "scripts/spike/sharepoint-retrieval/vergelijking-scenarios.ts",
+      "semantisch": true,
+      "canary_doel": "uitsluitend indexgereedheid; komt in geen scenariovraag of zoekterm voor"
     }
   ],
   "scenarios": [

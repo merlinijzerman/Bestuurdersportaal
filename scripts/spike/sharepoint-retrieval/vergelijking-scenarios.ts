@@ -14,18 +14,20 @@
 import type { SpikeVraag } from "./types";
 
 /**
- * LET OP — voorwaarde voor een LIVE semantische meting.
+ * De twee fixtures achter SEM01 en SEM02.
  *
- * De #385-fixtures zijn volledig rond unieke canary-termen gebouwd: de
- * generator zet de canaryterm, de vraag én het antwoordfeit letterlijk in het
- * document (`tests/e2e/fixtures/pgb-sharepoint/bron/genereer-docx.py`). Er staat
- * geen parafrase- of synoniemtekst in. SEM01 en SEM02 zijn daarom in deze
- * tranche uitsluitend HERMETISCH meetbaar, met eigen gegenereerde bytes.
+ * De #385-set kon deze scenario's niet dragen: die generator zet de canaryterm,
+ * de vraag én het antwoordfeit letterlijk in het document. Daarom zijn er twee
+ * eigen fixtures met parafrasetekst gebouwd en gepind.
  *
- * Een live semantische meting vereist eerst twee nieuwe synthetische fixtures
- * met parafrasetekst in het manifest én in SharePoint. Dat is fixture- en
- * tenantwerk en hoort bij T3; het staat als expliciete voorwaarde in de
- * licentie-, kosten- en consentnotitie.
+ * `fixturestatus.test.ts` bewaakt op de DAADWERKELIJK gegenereerde DOCX-inhoud
+ * dat hun body geen enkel token uit deze scenarioset bevat — stopwoorden
+ * meegerekend, en ook niet als deelreeks, want de lexicale passagekeuze toetst
+ * met includes(). Dat sluit kunstmatige lexicale lekkage uit; het zegt NIET
+ * vooraf dat de lexicale routes niets zullen vinden. Dat bepaalt de live meting.
+ *
+ * Nog open vóór een live semantische meting: uploaden naar de PGB-bibliotheek en
+ * indexgereedheid aantonen op de canaryterm.
  */
 export const SEMANTISCHE_FIXTURES_VEREIST = ["PGB407-DOC-101", "PGB407-DOC-102"] as const;
 
