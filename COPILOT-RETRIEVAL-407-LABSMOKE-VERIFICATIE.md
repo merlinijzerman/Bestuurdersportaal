@@ -1,7 +1,7 @@
 # #407 — labsmokerunner Copilot Retrieval: lokaal verificatierapport
 
 - datum: 2026-09-20
-- branch: `codex/407-lab-smokerunner`, vertakt van `origin/preview` (`4bf7404`)
+- branch: `codex/407-lab-smokerunner`, herbaseerd op `origin/preview` na #416
 - retrievalprofiel: `pgb_m365_lab_copilot`
 - runner: `scripts/smoke/m365-copilot-lab/`
 
@@ -14,9 +14,10 @@ geverifieerd. Wat alleen live vast te stellen is, staat in §5 als openstaand.
 | bestand | rol |
 | --- | --- |
 | `registry.ts` | leest en valideert het labprofiel uit `bestuurdersportaal-integraties` |
-| `auth.ts` | delegated aanmelding via public-client-PKCE, zonder secret en zonder refresh token |
-| `graph.ts` | begrensde read-only Graph-laag met de twee stopregelscans |
+| `auth.ts` | delegated aanmelding via public-client-PKCE, zonder secret en zonder refresh token; het inwisselen van de code is afbreekbaar en heeft een eigen deadline |
+| `graph.ts` | begrensde read-only Graph-laag; zoekt het geregistreerde root-item op en scant uitsluitend daaronder |
 | `smoke.ts` | driftcontrole, de poort, de ene meting, rootfiltering en categorisering |
+| `orkestratie.ts` | de volgorde, met geïnjecteerde afhankelijkheden zodat ze te testen is |
 | `rapport.ts` | de enige uitvoerweg; draagt alleen categorieën, tellingen, latency en fixturecodes |
 | `run.ts` | CLI met lokale grendel en het expliciete akkoord vlak vóór de call |
 | `README.md` | uitvoerinstructie |
@@ -45,9 +46,9 @@ Alle suites lokaal gedraaid op 2026-09-20, Node v24.15.0.
 
 | suite | commando | uitslag |
 | --- | --- | --- |
-| labsmoke hermetisch | `npm run test:smoke-copilot-lab` | **43/43 pass** |
-| boundarygate | `npm run test:spike-boundary` | **13/13 pass** (was 9, nu 4 tests méér) |
-| volledige contractgate | `npm run test:contract` | **alle subsuites pass** (xtenant, seed-guard, nightly-fidelity 7, coverage-contract 4, e2e-guard 49, lint-quality 4, ci-ownership 6, spike-boundary 13, spike-fixture 14, labsmoke 43) |
+| labsmoke hermetisch | `npm run test:smoke-copilot-lab` | **62/62 pass** |
+| boundarygate | `npm run test:spike-boundary` | **14/14 pass** (was 9) |
+| volledige contractgate | `npm run test:contract` | **alle subsuites pass** (xtenant, seed-guard, nightly-fidelity 7, coverage-contract 4, e2e-guard 49, lint-quality 4, ci-ownership 6, spike-boundary 14, spike-fixture 14, labsmoke 62) |
 | typecheck | `npm run typecheck` | schoon |
 | grenslint | `npm run lint:boundaries` | schoon |
 | secretscan | `npm run security:secrets` | geen committed secrets |
@@ -80,6 +81,17 @@ Alle suites lokaal gedraaid op 2026-09-20, Node v24.15.0.
 - **Scanterm-hygiëne.** Een term met quote, wildcard, operator of regeleinde
   komt de OData-functie niet in; een sitepad met onverwachte tekens stopt vóór
   het netwerk.
+
+### 3.3 Reviewronde op PR #417 — drie correcties
+
+| bevinding | correctie | bewijs |
+| --- | --- | --- |
+| **P1** de bestandsnaamscan begon bij de drive-root; bij een bronroot die een submap is, leest de runner metadata buiten de toegestane bron | `leesRootItem()` zoekt het geregistreerde root-item op via pad-adressering en toetst dat de teruggegeven `webUrl` exact de registratie is. **Beide** scans beginnen daar — de inhoudscan is meteen server-side gescoped in plaats van drive-breed met nafiltering | 7 tests in `graph.test.ts` (submap, root buiten de bibliotheek, item dat elders heen wijst, geen map, onveilig pad) + 2 in `orkestratie.test.ts`; de boundarygate verbiedt de tekst `/root/children` en `/root/search` in `graph.ts` |
+| **P2** de tokenuitgifte had geen `AbortSignal` of timeout, dus de runner kon na de browseraanmelding onbeperkt hangen en reageerde niet op Ctrl-C | `wisselCodeIn()` combineert de run-afbreking met een eigen deadline van 30 s via `AbortSignal.any`, en houdt "afgebroken" en "timeout" als aparte codes uit elkaar | 4 tests in `auth.test.ts`, waaronder een `fetch` die uit zichzelf nooit antwoordt — zonder de deadline hangt die test |
+| **P3** de tests raakten `run.ts` niet; "dry-run doet geen call" was een belofte in een comment | de volgorde is verhuisd naar `orkestratie.ts` met geïnjecteerde afhankelijkheden; `run.ts` is nog alleen bedrading | 8 tests in `orkestratie.test.ts`, elk met een **open** poort. De dry-run-test stelt eerst vast dát de poort openstond en daarna dat er nul Retrieval-pogingen waren en geen akkoord is gevraagd |
+
+De dry-run-grendel staat nu bewust vóór de akkoordvraag: bij een dry-run valt er
+niets goed te keuren, dus wordt er ook niets gevraagd.
 
 ## 4. Wat er niet is aangeraakt
 

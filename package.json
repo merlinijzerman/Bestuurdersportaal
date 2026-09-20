@@ -33,7 +33,7 @@
     "test:ci-ownership-contract": "node --test scripts/ci-ownership-workflows.test.mjs",
     "test:spike-boundary": "node --test scripts/sharepoint-retrieval-spike-boundary.test.mjs",
     "test:spike-fixture-contract": "node --import tsx --test scripts/spike/sharepoint-retrieval/fixturestatus.test.ts scripts/spike/sharepoint-retrieval/vergelijking-profielen.test.ts",
-    "test:smoke-copilot-lab": "node --import tsx --test scripts/smoke/m365-copilot-lab/registry.test.ts scripts/smoke/m365-copilot-lab/graph.test.ts scripts/smoke/m365-copilot-lab/smoke.test.ts",
+    "test:smoke-copilot-lab": "node --import tsx --test scripts/smoke/m365-copilot-lab/registry.test.ts scripts/smoke/m365-copilot-lab/auth.test.ts scripts/smoke/m365-copilot-lab/graph.test.ts scripts/smoke/m365-copilot-lab/smoke.test.ts scripts/smoke/m365-copilot-lab/orkestratie.test.ts",
     "test:spike:m365-retrieval": "node --import tsx --test scripts/spike/sharepoint-retrieval/prototype.test.ts scripts/spike/sharepoint-retrieval/copilot-retrieval.test.ts scripts/spike/sharepoint-retrieval/generator-cli.test.ts && npm run test:spike-fixture-contract && npm run test:spike-boundary",
     "spike:m365-retrieval": "M365_RETRIEVAL_SPIKE=local tsx scripts/spike/sharepoint-retrieval/run.ts",
     "spike:m365-permission-probe": "M365_RETRIEVAL_SPIKE=local tsx scripts/spike/sharepoint-retrieval/run.ts --permission-probe",

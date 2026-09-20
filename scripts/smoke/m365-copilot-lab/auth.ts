@@ -28,6 +28,17 @@ import { AddressInfo } from "node:net";
 /** Hoe lang er op de browserstap gewacht wordt voordat de run stopt. */
 const STANDAARD_WACHT_MS = 300_000;
 
+/**
+ * Deadline op het inwisselen van de autorisatiecode.
+ *
+ * De browserstap heeft een ruim venster, want daar zit een mens met een
+ * authenticator-app. Het tokenendpoint heeft dat niet: dat is machine-tegen-
+ * machine en hoort in seconden te antwoorden. Zonder eigen deadline hangt een
+ * `fetch` op een niet-antwoordende host in principe onbeperkt — en dan lijkt de
+ * runner vastgelopen op een stap waar niets meer te wachten valt.
+ */
+const TOKEN_TIMEOUT_MS = 30_000;
+
 /** De redirect-URI die in de appregistratie moet staan (poort uitgezonderd). */
 export const VERWACHTE_REDIRECT_BASIS = "http://localhost";
 
@@ -68,9 +79,82 @@ export interface AanmeldOpdracht {
   loginHint: string;
   redirectUris: string[];
   wachtMs?: number;
+  /** Deadline op het inwisselen van de code; uitsluitend voor tests te verlagen. */
+  tokenTimeoutMs?: number;
   /** Wordt aangeroepen met de autorisatie-URL zodra die klaarstaat. */
   toonUrl: (url: string) => void;
   signal?: AbortSignal;
+  /** Uitsluitend voor tests; de flow gebruikt normaal de globale `fetch`. */
+  fetchImpl?: typeof fetch;
+}
+
+export interface CodeInwisselOpdracht {
+  autoriteit: string;
+  clientId: string;
+  code: string;
+  redirectUri: string;
+  verifier: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Wisselt de autorisatiecode in voor tokens — afbreekbaar, en met een eigen
+ * deadline.
+ *
+ * Apart van `meldAan()` omdat dit het enige stuk van de flow is dat zonder
+ * browser en zonder loopback-socket te testen valt, en het is precies het stuk
+ * waar de runner eerder onbeperkt kon blijven hangen: de browserstap heeft een
+ * ruim venster omdat daar een mens zit, maar hierna is het machine-tegen-
+ * machine en hoort er binnen seconden een antwoord te komen.
+ */
+export async function wisselCodeIn(opdracht: CodeInwisselOpdracht): Promise<Record<string, unknown>> {
+  const timeoutMs = opdracht.timeoutMs ?? TOKEN_TIMEOUT_MS;
+  // Twee redenen om te stoppen, één signaal. `AbortSignal.any` houdt Ctrl-C
+  // werkend tot in deze call — zonder dat bleef de runner na de browserstap
+  // hangen en deed de SIGINT-handler zichtbaar niets.
+  const afbreking = opdracht.signal
+    ? AbortSignal.any([opdracht.signal, AbortSignal.timeout(timeoutMs)])
+    : AbortSignal.timeout(timeoutMs);
+  const doeFetch = opdracht.fetchImpl ?? fetch;
+
+  let antwoord: Response;
+  try {
+    antwoord = await doeFetch(`${opdracht.autoriteit}/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: opdracht.clientId,
+        grant_type: "authorization_code",
+        code: opdracht.code,
+        redirect_uri: opdracht.redirectUri,
+        code_verifier: opdracht.verifier,
+      }),
+      redirect: "error",
+      signal: afbreking,
+    });
+  } catch (fout) {
+    // De twee afbrekingsgronden uit elkaar houden: een afgebroken run is iets
+    // anders dan een tokenendpoint dat niet antwoordt, en ze vragen om een
+    // andere vervolgstap.
+    if (opdracht.signal?.aborted) {
+      throw new AuthFout("aanmelding_afgebroken", "de run is afgebroken tijdens de tokenuitgifte");
+    }
+    const naam = (fout as Error)?.name;
+    if (naam === "TimeoutError" || naam === "AbortError") {
+      throw new AuthFout("tokenuitgifte_timeout", `tokenendpoint antwoordde niet binnen ${timeoutMs / 1000} s`);
+    }
+    // Geen providertekst: alleen de soort fout.
+    throw new AuthFout("tokenuitgifte_mislukt", `tokenendpoint onbereikbaar (${naam ?? "netwerkfout"})`);
+  }
+
+  if (!antwoord.ok) {
+    // Alleen de status. De body van een mislukte tokenrespons bevat standaard
+    // een correlatie-id en soms de UPN; die hoort niet in onze uitvoer.
+    throw new AuthFout("tokenuitgifte_mislukt", `tokenendpoint gaf HTTP ${antwoord.status}`);
+  }
+  return (await antwoord.json()) as Record<string, unknown>;
 }
 
 function base64url(buffer: Buffer): string {
@@ -278,26 +362,17 @@ export async function meldAan(opdracht: AanmeldOpdracht): Promise<Aanmelding> {
     await ontvanger.sluit();
   }
 
-  const antwoord = await fetch(`${autoriteit}/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: opdracht.clientId,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: verifier,
-    }),
-    redirect: "error",
+  const payload = await wisselCodeIn({
+    autoriteit,
+    clientId: opdracht.clientId,
+    code,
+    redirectUri,
+    verifier,
+    signal: opdracht.signal,
+    timeoutMs: opdracht.tokenTimeoutMs,
+    fetchImpl: opdracht.fetchImpl,
   });
 
-  if (!antwoord.ok) {
-    // Alleen de status. De body van een mislukte tokenrespons bevat standaard
-    // een correlatie-id en soms de UPN; die hoort niet in onze uitvoer.
-    throw new AuthFout("tokenuitgifte_mislukt", `tokenendpoint gaf HTTP ${antwoord.status}`);
-  }
-
-  const payload = (await antwoord.json()) as Record<string, unknown>;
   const accessToken = payload.access_token;
   const idToken = payload.id_token;
   if (typeof accessToken !== "string" || accessToken.length === 0) {

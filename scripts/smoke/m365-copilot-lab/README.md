@@ -14,11 +14,15 @@ Preview-app en raakt geen productiepad.
 | 1 | retrievalprofiel `pgb_m365_lab_copilot` lezen uit `bestuurdersportaal-integraties` | `registry.ts` |
 | 2 | delegated aanmelden via public-client-PKCE als de geregistreerde labidentiteit | `auth.ts` |
 | 3 | **driftcontrole** op tenant, actor, appregistratie en bronroot | `smoke.ts` |
-| 4 | twee read-only scans | `graph.ts` |
+| 4 | het **geregistreerde root-item** opzoeken en twee read-only scans | `graph.ts` |
 | 5 | **de stopregel** | `smoke.ts` |
 | 6 | expliciet akkoord vragen aan een mens | `run.ts` |
 | 7 | precies één `POST` naar de Retrieval API | `core/lib/microsoft-retrieval/client.ts` (#415) |
 | 8 | rootfiltering, categorisering, rapport | `smoke.ts` / `rapport.ts` |
+
+De volgorde zelf staat in `orkestratie.ts`, met geïnjecteerde afhankelijkheden,
+zodat hij hermetisch te testen is; `run.ts` is alleen nog de bedrading naar
+terminal en netwerk.
 
 Stap 3 en stap 5 zijn fail-closed: bij twijfel geen call.
 
@@ -31,6 +35,11 @@ verschillends:
   Nul betekent: de index kent de inhoud nog niet.
 - **bestandsnaamscan** op `PGB407-DOC-101*` — loopt de bibliotheek zélf af en
   raakt de index niet. Nul betekent: het bestand staat er niet.
+
+Beide beginnen bij het **geregistreerde root-item**, niet bij de drive-root. Dat
+is alleen toevallig hetzelfde zolang de bronroot de hele bibliotheek is; zodra
+een profiel een submap registreert (`sharepoint_library_root` doet dat), zou een
+scan vanaf de drive-root de metadata lezen van alles daarbuiten.
 
 Zolang één van beide nul treffers **binnen de geregistreerde bronroot** geeft,
 vertrekt er geen Retrieval-call. De twee nulgevallen krijgen een eigen code
@@ -54,6 +63,9 @@ volstrekt verschillends vragen: wachten op SharePoint, of uploaden.
   nergens meegeteld;
 - geen clientsecret, geen refresh token (`offline_access` wordt niet gevraagd),
   geen token op schijf of in een logregel;
+- het inwisselen van de autorisatiecode heeft een eigen deadline van 30 s en
+  luistert naar de afbreking van de run, zodat Ctrl-C ook ná de browserstap
+  werkt;
 - geen extract of documentinhoud verlaat het proces: het rapport draagt alleen
   categorieën, tellingen, latency en fixturecodes.
 
@@ -130,6 +142,17 @@ Negatieve tests die de opdracht expliciet vraagt:
 | redirect | `smoke.test.ts` en `graph.test.ts` — niet gevolgd, één poging |
 | te grote respons | `smoke.test.ts` en `graph.test.ts` — in bytes, lezen stopt |
 | tweede netwerkpoging | `smoke.test.ts` — grendel én budget van 1 |
+
+En op de volgorde zelf (`orkestratie.test.ts`), steeds met een **open** poort —
+de enige stand waarin die grendels iets betekenen:
+
+| geval | assertie |
+| --- | --- |
+| `--dry-run` | nul Retrieval-pogingen én geen akkoordvraag |
+| geen akkoord | wel gevraagd, geen call |
+| wel akkoord | precies één poging naar het vastgepinde endpoint |
+| drift | stopt vóór de scans en vóór het root-item; drie lezingen, geen scan |
+| scanstartpunt | beide scans adresseren het root-item, nooit de drive-root |
 
 De boundarygate (`npm run test:spike-boundary`) bewaakt daarnaast dat de runner
 onbereikbaar blijft vanuit `app`, `core`, `platform` en `fondsen`, dat hij onder

@@ -15,6 +15,7 @@ import {
   inhoudscan,
   leesActor,
   leesBron,
+  leesRootItem,
   maakLeesClient,
 } from "./graph";
 
@@ -164,17 +165,19 @@ test("de inhoudscan gaat door de zoekindex en telt apart wat binnen de root valt
         { id: "2", name: "elders.docx", webUrl: `https://${HOST}/sites/AndereSite/Shared%20Documents/elders.docx` },
       ],
     }));
-  const uitkomst = await inhoudscan(c, "drive-1", "Zandloperbaken 12", binnenRoot);
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", "Zandloperbaken 12", binnenRoot);
   assert.equal(uitkomst.treffers, 2);
   assert.equal(uitkomst.binnenRoot, 1);
-  assert.ok(gezien[0].includes("root/search(q='Zandloperbaken%2012')"));
+  // Server-side gescoped op het root-item, niet drive-breed.
+  assert.ok(gezien[0].includes("/items/root-item/search(q='Zandloperbaken%2012')"));
+  assert.ok(!gezien[0].includes("/root/search"), "de inhoudscan zocht drive-breed");
 });
 
 test("een scanterm met een quote of wildcard komt de OData-functie niet in", async () => {
   const { client: c, gezien } = client(() => json({ value: [] }));
   for (const term of ["Zandloper'baken", "Zandloperbaken*", "Zandloperbaken\"12", "a OR b\n"]) {
     await assert.rejects(
-      () => inhoudscan(c, "drive-1", term, binnenRoot),
+      () => inhoudscan(c, "drive-1", "root-item", term, binnenRoot),
       (fout: GraphFout) => fout.code === "scanterm_onveilig",
       `term ${JSON.stringify(term)} werd geaccepteerd`,
     );
@@ -184,7 +187,7 @@ test("een scanterm met een quote of wildcard komt de OData-functie niet in", asy
 
 test("de bestandsnaamscan loopt de bibliotheek af en raakt de zoekindex niet", async () => {
   const { client: c, gezien } = client((url) => {
-    if (url.includes("/root/children")) {
+    if (url.includes("/items/root-item/children")) {
       return json({
         value: [
           { id: "map-1", name: "02 Beleid en reglementen", folder: { childCount: 2 }, webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/02%20Beleid` },
@@ -209,7 +212,7 @@ test("de bestandsnaamscan loopt de bibliotheek af en raakt de zoekindex niet", a
       ],
     });
   });
-  const uitkomst = await bestandsnaamscan(c, "drive-1", "PGB407-DOC-101", binnenRoot);
+  const uitkomst = await bestandsnaamscan(c, "drive-1", "root-item", "PGB407-DOC-101", binnenRoot);
   assert.equal(uitkomst.treffers, 1, "alleen DOC-101 hoort op de prefix te matchen");
   assert.equal(uitkomst.bekeken, 4);
   assert.equal(uitkomst.afgekapt, false);
@@ -228,7 +231,7 @@ test("een naamtreffer buiten de bronroot telt niet mee", async () => {
         },
       ],
     }));
-  assert.equal((await bestandsnaamscan(c, "drive-1", "PGB407-DOC-101", binnenRoot)).treffers, 0);
+  assert.equal((await bestandsnaamscan(c, "drive-1", "root-item", "PGB407-DOC-101", binnenRoot)).treffers, 0);
 });
 
 test("de naamscan volgt alleen een nextLink binnen de v1.0-basis", async () => {
@@ -240,7 +243,87 @@ test("de naamscan volgt alleen een nextLink binnen de v1.0-basis", async () => {
     }
     return json({ value: [] });
   });
-  const uitkomst = await bestandsnaamscan(c, "drive-1", "PGB407-DOC-101", binnenRoot);
+  const uitkomst = await bestandsnaamscan(c, "drive-1", "root-item", "PGB407-DOC-101", binnenRoot);
   assert.equal(uitkomst.treffers, 0);
   assert.equal(gezien.length, 1, "een nextLink naar een andere host mag niet gevolgd worden");
+});
+
+// ---------------------------------------------------------------------------
+//  Het root-item — de scans mogen nooit bij de drive-root beginnen
+// ---------------------------------------------------------------------------
+
+const DRIVE_URL = `https://${HOST}${encodeURI(ROOT_PAD)}`;
+
+test("een bronroot die de hele bibliotheek is, levert het drive-root-item", async () => {
+  const { client: c, gezien } = client(() => json({ id: "root-0", webUrl: DRIVE_URL, folder: { childCount: 3 } }));
+  const root = await leesRootItem(c, "drive-1", DRIVE_URL, `https://${HOST}${ROOT_PAD}`);
+  assert.equal(root.rootItemId, "root-0");
+  assert.ok(gezien[0].includes("/drives/drive-1/root?"));
+});
+
+test("een bronroot die een SUBMAP is, wordt via pad-adressering opgezocht", async () => {
+  // Dit is het geval waarin een scan vanaf de drive-root metadata zou lezen van
+  // stukken die buiten de geregistreerde bron vallen.
+  const submap = `${ROOT_PAD}/Digital Twin Uitvoering`;
+  const { client: c, gezien } = client(() =>
+    json({ id: "root-sub", webUrl: `https://${HOST}${encodeURI(submap)}`, folder: { childCount: 6 } }));
+  const root = await leesRootItem(c, "drive-1", DRIVE_URL, `https://${HOST}${submap}`);
+  assert.equal(root.rootItemId, "root-sub");
+  assert.ok(
+    gezien[0].includes("/drives/drive-1/root:/Digital%20Twin%20Uitvoering?"),
+    `onverwachte adressering: ${gezien[0]}`,
+  );
+});
+
+test("beide scans beginnen bij het root-item van de submap, niet bij de drive-root", async () => {
+  const bezocht: string[] = [];
+  const { client: c } = client((url) => {
+    bezocht.push(url);
+    return json({ value: [] });
+  });
+  await inhoudscan(c, "drive-1", "root-sub", "Zandloperbaken 12", binnenRoot);
+  await bestandsnaamscan(c, "drive-1", "root-sub", "PGB407-DOC-101", binnenRoot);
+  assert.equal(bezocht.length, 2);
+  for (const url of bezocht) {
+    assert.ok(url.includes("/items/root-sub/"), `scan begon niet bij het root-item: ${url}`);
+    assert.ok(!url.includes("/root/"), `scan raakte de drive-root: ${url}`);
+    assert.ok(!url.includes("/root:"), `scan raakte de drive-root: ${url}`);
+  }
+});
+
+test("een root buiten de bibliotheek wordt geweigerd vóór het netwerk", async () => {
+  const { client: c, gezien } = client(() => json({}));
+  await assert.rejects(
+    () => leesRootItem(c, "drive-1", DRIVE_URL, `https://${HOST}/sites/PGBRetrievalLab/Andere%20Bibliotheek`),
+    (fout: GraphFout) => fout.code === "root_buiten_bibliotheek",
+  );
+  assert.equal(gezien.length, 0);
+});
+
+test("een opgezocht root-item dat ergens anders heen wijst, wordt geweigerd", async () => {
+  // Een hernoemde map of een snelkoppeling kan een pad naar een BREDERE scope
+  // laten wijzen; dan is de webUrl die terugkomt niet de geregistreerde root.
+  const { client: c } = client(() =>
+    json({ id: "root-x", webUrl: `https://${HOST}/sites/PGBRetrievalLab/Shared%20Documents`, folder: {} }));
+  await assert.rejects(
+    () => leesRootItem(c, "drive-1", DRIVE_URL, `https://${HOST}${ROOT_PAD}/Digital Twin Uitvoering`),
+    (fout: GraphFout) => fout.code === "root_wijst_elders",
+  );
+});
+
+test("een root-item dat geen map is, wordt geweigerd", async () => {
+  const { client: c } = client(() => json({ id: "root-f", webUrl: DRIVE_URL }));
+  await assert.rejects(
+    () => leesRootItem(c, "drive-1", DRIVE_URL, `https://${HOST}${ROOT_PAD}`),
+    (fout: GraphFout) => fout.code === "root_geen_map",
+  );
+});
+
+test("een rootpad met onverwachte tekens komt de pad-adressering niet in", async () => {
+  const { client: c, gezien } = client(() => json({}));
+  await assert.rejects(
+    () => leesRootItem(c, "drive-1", DRIVE_URL, `https://${HOST}${ROOT_PAD}/map%3Aiets`),
+    (fout: GraphFout) => fout.code === "root_pad_onveilig",
+  );
+  assert.equal(gezien.length, 0);
 });

@@ -4,7 +4,8 @@
 // ----------------------------------------------------------------------------
 //  Dit bestand doet drie dingen die de rest van de runner bewust NIET doet: het
 //  raakt het netwerk, het praat met de terminal, en het vraagt een mens om
-//  akkoord. Alle beslislogica staat in `smoke.ts` en is daar hermetisch getest.
+//  akkoord. De beslislogica staat in `smoke.ts`, de volgorde in
+//  `orkestratie.ts`; beide zijn daar hermetisch getest.
 //
 //  DE GRENDELS, van buiten naar binnen:
 //    • `M365_COPILOT_LAB_SMOKE=local` moet gezet zijn, en CI/Vercel/productie
@@ -24,20 +25,11 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { COPILOT_RETRIEVAL_ENDPOINT } from "../../../core/lib/microsoft-retrieval/endpoint";
 import { meldAan } from "./auth";
-import { bestandsnaamscan, inhoudscan, leesActor, leesBron, maakLeesClient } from "./graph";
+import { maakLeesClient } from "./graph";
+import { voerSmokeUit } from "./orkestratie";
 import { leesLabprofiel, registryMap, LAB_PROFIEL_ID } from "./registry";
-import { rapporteer, type Scanregel, type Smokerapport } from "./rapport";
-import {
-  BESTANDSNAAM_PREFIX,
-  INHOUDSCAN_TERM,
-  SCENARIO,
-  StopFail,
-  VERWACHTE_FIXTURE,
-  beoordeelPoort,
-  meet,
-  toetsDrift,
-} from "./smoke";
-import { hitUrlBinnenRoot } from "../../spike/sharepoint-retrieval/copilot-retrieval";
+import { rapporteer } from "./rapport";
+import { SCENARIO, StopFail, VERWACHTE_FIXTURE } from "./smoke";
 
 /** De zin die letterlijk getypt moet worden vóór de eerste live call. */
 const AKKOORDZIN = "JA, VOER DE RETRIEVAL-CALL UIT";
@@ -151,132 +143,25 @@ async function main(): Promise<number> {
   meld("");
   meld(`Aangemeld. Toegekende scopes: ${aanmelding.toegekendeScopes.join(", ") || "onbekend"}`);
 
-  const client = maakLeesClient({
-    accessToken: aanmelding.accessToken,
-    callBudget: GRAPH_CALLBUDGET,
+  const { rapport, exitcode } = await voerSmokeUit({
+    profiel,
+    aanmelden: async () => aanmelding,
+    maakClient: (accessToken) =>
+      maakLeesClient({ accessToken, callBudget: GRAPH_CALLBUDGET, signal: afbreker.signal }),
+    vraagAkkoord,
+    retrievalFetch: fetch,
     signal: afbreker.signal,
+    dryRun,
+    meld: (regel) => meld(`\n${regel}`),
   });
 
-  const actor = await leesActor(client);
-  const bron = await leesBron(client, profiel.siteHostnaam, profiel.siteRelatiefPad);
-
-  const drift = toetsDrift(profiel, aanmelding, actor, bron);
-  const basisrapport: Omit<Smokerapport, "eindstand" | "scans" | "poort" | "retrieval" | "graphCalls"> = {
-    uitgevoerdOp: new Date().toISOString(),
-    profielId: profiel.profielId,
-    tenantDomein: profiel.tenantDomein,
-    actorUpn: profiel.actorUpn,
-    siteHostnaam: profiel.siteHostnaam,
-    scenario: SCENARIO.code,
-    verwachteFixture: VERWACHTE_FIXTURE,
-    geregistreerdeIndexstand: profiel.indexStatus,
-    drift,
-    akkoordGevraagd: false,
-    akkoordGegeven: false,
-  };
-
-  const schrijfRapport = (rapport: Smokerapport): void => {
-    const tekst = rapporteer(rapport);
-    process.stdout.write(tekst);
-    if (rapportPad) {
-      writeFileSync(resolve(process.cwd(), rapportPad), tekst, "utf8");
-      meld(`Rapport geschreven naar ${rapportPad}`);
-    }
-  };
-
-  if (drift.length > 0) {
-    meld("");
-    meld("DRIFT VASTGESTELD — de run stopt fail-closed vóór elke scan.");
-    schrijfRapport({
-      ...basisrapport,
-      scans: [],
-      poort: { doorgelaten: false, code: "beide_nul" },
-      graphCalls: client.pogingen(),
-      retrieval: null,
-      eindstand: "gestopt_op_drift",
-    });
-    return 2;
+  const tekst = rapporteer(rapport);
+  process.stdout.write(tekst);
+  if (rapportPad) {
+    writeFileSync(resolve(process.cwd(), rapportPad), tekst, "utf8");
+    meld(`Rapport geschreven naar ${rapportPad}`);
   }
-
-  const binnenRoot = (webUrl: string | undefined) => hitUrlBinnenRoot(webUrl, profiel.rootUrl, profiel.siteHostnaam);
-
-  meld("");
-  meld(`Inhoudscan op "${INHOUDSCAN_TERM}" …`);
-  const inhoud = await inhoudscan(client, bron.driveId, INHOUDSCAN_TERM, binnenRoot);
-  meld(`  ${inhoud.treffers} treffer(s), ${inhoud.binnenRoot} binnen de bronroot`);
-
-  meld(`Bestandsnaamscan op "${BESTANDSNAAM_PREFIX}*" …`);
-  const naam = await bestandsnaamscan(client, bron.driveId, BESTANDSNAAM_PREFIX, binnenRoot);
-  meld(`  ${naam.treffers} treffer(s) binnen de bronroot, ${naam.bekeken} item(s) bekeken`);
-
-  const scans: Scanregel[] = [
-    { naam: "inhoudscan", sleutel: INHOUDSCAN_TERM, treffers: inhoud.treffers, binnenRoot: inhoud.binnenRoot },
-    { naam: "bestandsnaamscan", sleutel: BESTANDSNAAM_PREFIX, treffers: naam.treffers, binnenRoot: naam.treffers, afgekapt: naam.afgekapt },
-  ];
-  const poort = beoordeelPoort(inhoud, naam);
-
-  if (!poort.doorgelaten) {
-    meld("");
-    meld(`POORT DICHT (${poort.code}) — er wordt geen Retrieval-call uitgevoerd.`);
-    schrijfRapport({
-      ...basisrapport,
-      scans,
-      poort,
-      graphCalls: client.pogingen(),
-      retrieval: null,
-      eindstand: "gestopt_op_poort",
-    });
-    return 3;
-  }
-
-  if (dryRun) {
-    meld("");
-    meld("--dry-run: de poort staat open, maar er wordt geen live call gedaan.");
-    schrijfRapport({
-      ...basisrapport,
-      scans,
-      poort,
-      graphCalls: client.pogingen(),
-      retrieval: null,
-      eindstand: "gestopt_op_akkoord",
-    });
-    return 0;
-  }
-
-  const akkoord = await vraagAkkoord();
-  if (!akkoord) {
-    meld("Geen akkoord — de run stopt zonder Retrieval-call.");
-    schrijfRapport({
-      ...basisrapport,
-      akkoordGevraagd: true,
-      scans,
-      poort,
-      graphCalls: client.pogingen(),
-      retrieval: null,
-      eindstand: "gestopt_op_akkoord",
-    });
-    return 4;
-  }
-
-  meld("");
-  meld("Eén Retrieval-poging …");
-  const retrieval = await meet(profiel, {
-    accessToken: aanmelding.accessToken,
-    signal: afbreker.signal,
-    fetchImpl: fetch,
-  });
-
-  schrijfRapport({
-    ...basisrapport,
-    akkoordGevraagd: true,
-    akkoordGegeven: true,
-    scans,
-    poort,
-    graphCalls: client.pogingen(),
-    retrieval,
-    eindstand: "gemeten",
-  });
-  return 0;
+  return exitcode;
 }
 
 main()

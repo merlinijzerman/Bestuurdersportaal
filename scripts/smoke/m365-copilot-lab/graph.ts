@@ -197,6 +197,36 @@ export interface GraphBron {
   driveWebUrl: string;
 }
 
+export interface GraphRootItem {
+  /** Het item-id van de GEREGISTREERDE bronroot; startpunt van elke scan. */
+  rootItemId: string;
+  rootWebUrl: string;
+}
+
+/**
+ * Canonieke vergelijkingsvorm voor een SharePoint-URL: host in kleine letters,
+ * pad gedecodeerd en genormaliseerd, trailing slash weg.
+ *
+ * Staat hier en niet in `smoke.ts`, omdat deze laag hem zelf nodig heeft om het
+ * root-item te kunnen adresseren — en twee kopieën van een padvergelijking
+ * lopen vroeg of laat uiteen.
+ */
+export function canoniekPad(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:") return null;
+  try {
+    const pad = decodeURIComponent(parsed.pathname).normalize("NFC").replace(/\/+$/, "");
+    return `${parsed.hostname.toLowerCase()}${pad}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Zoekt site en documentbibliotheek op via het GEREGISTREERDE pad.
  *
@@ -230,6 +260,66 @@ export async function leesBron(client: LeesClient, hostnaam: string, siteRelatie
   return { siteId: site.id, siteWebUrl: site.webUrl, driveId: drive.id, driveWebUrl: drive.webUrl };
 }
 
+/**
+ * Zoekt het item op dat de GEREGISTREERDE bronroot is, en levert zijn item-id.
+ *
+ * Dit is geen formaliteit. Zonder deze stap zou elke scan bij de drive-root
+ * beginnen, en dat is alleen toevallig hetzelfde zolang de geregistreerde root
+ * de hele bibliotheek is. Zodra een profiel een SUBMAP als bronroot registreert
+ * — `sharepoint_library_root` doet dat — leest een scan die bij de drive-root
+ * begint de metadata van álles daarbuiten: namen, paden en mapstructuur van
+ * stukken die niet bij deze meting horen. Dat is precies de grens die dit
+ * ticket dichtzet.
+ *
+ * Het item-id komt uit een pad-adressering, niet uit een zoekopdracht, en de
+ * teruggegeven `webUrl` moet daarna alsnog exact de geregistreerde root zijn.
+ */
+export async function leesRootItem(
+  client: LeesClient,
+  driveId: string,
+  driveWebUrl: string,
+  geregistreerdeRootUrl: string,
+): Promise<GraphRootItem> {
+  const drivePad = canoniekPad(driveWebUrl);
+  const rootPad = canoniekPad(geregistreerdeRootUrl);
+  if (!drivePad || !rootPad) {
+    throw new GraphFout("root_url_onleesbaar", "bibliotheek- of root-URL is niet te canonicaliseren");
+  }
+
+  let pad: string;
+  if (rootPad.toLocaleLowerCase("nl") === drivePad.toLocaleLowerCase("nl")) {
+    // De bronroot ís de bibliotheek.
+    pad = `/drives/${encodeURIComponent(driveId)}/root?$select=id,webUrl,folder`;
+  } else if (rootPad.toLocaleLowerCase("nl").startsWith(`${drivePad.toLocaleLowerCase("nl")}/`)) {
+    const rest = rootPad.slice(drivePad.length + 1);
+    // Dezelfde allowlist als voor het sitepad: dit wordt pad-adressering in de
+    // Graph-URL, en een `:` of `?` erin zou de adressering laten kantelen.
+    if (!/^[A-Za-z0-9\-._~ ]+(?:\/[A-Za-z0-9\-._~ ]+)*$/.test(rest)) {
+      throw new GraphFout("root_pad_onveilig", "het geregistreerde rootpad bevat onverwachte tekens");
+    }
+    const gecodeerd = rest.split("/").map((deel) => encodeURIComponent(deel)).join("/");
+    pad = `/drives/${encodeURIComponent(driveId)}/root:/${gecodeerd}?$select=id,webUrl,folder`;
+  } else {
+    throw new GraphFout("root_buiten_bibliotheek", "de geregistreerde root ligt niet onder deze bibliotheek");
+  }
+
+  const item = await client.json<{ id?: string; webUrl?: string; folder?: unknown }>(pad);
+  if (typeof item.id !== "string" || typeof item.webUrl !== "string") {
+    throw new GraphFout("root_onleesbaar", "het root-item leverde geen id en webUrl");
+  }
+  if (!item.folder) {
+    throw new GraphFout("root_geen_map", "het geregistreerde rootpad wijst niet naar een map");
+  }
+  // Het item dat wij terugkrijgen MOET de root zijn die in de registratie staat.
+  // Een bibliotheek die een pad elders heen laat wijzen (een snelkoppeling, een
+  // hernoemde map) mag geen bredere of andere scope opleveren.
+  const gevonden = canoniekPad(item.webUrl);
+  if (!gevonden || gevonden.toLocaleLowerCase("nl") !== rootPad.toLocaleLowerCase("nl")) {
+    throw new GraphFout("root_wijst_elders", "het opgezochte root-item is niet de geregistreerde bronroot");
+  }
+  return { rootItemId: item.id, rootWebUrl: item.webUrl };
+}
+
 // ---------------------------------------------------------------------------
 //  Scan 1 — inhoudscan via de zoekindex
 // ---------------------------------------------------------------------------
@@ -258,6 +348,7 @@ export interface InhoudscanUitkomst {
 export async function inhoudscan(
   client: LeesClient,
   driveId: string,
+  rootItemId: string,
   term: string,
   binnenRoot: (webUrl: string | undefined) => string | null,
 ): Promise<InhoudscanUitkomst> {
@@ -268,8 +359,11 @@ export async function inhoudscan(
   // verdubbeld. De allowlist hierboven sluit ze al uit, dus dit is de tweede
   // grendel en niet de eerste.
   const gecodeerd = encodeURIComponent(term.replace(/'/g, "''"));
+  // Zoeken ONDER het geregistreerde root-item, niet drive-breed. Nafilteren op
+  // de root zou de telling wel kloppend maken, maar de metadata van alles
+  // daarbuiten hebben we dan al binnengehaald.
   const antwoord = await client.json<{ value?: unknown }>(
-    `/drives/${encodeURIComponent(driveId)}/root/search(q='${gecodeerd}')?$select=id,name,webUrl&$top=25`,
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/search(q='${gecodeerd}')?$select=id,name,webUrl&$top=25`,
   );
   const rijen = Array.isArray(antwoord.value) ? (antwoord.value as GraphItem[]) : [];
   const binnen: string[] = [];
@@ -303,6 +397,7 @@ export interface BestandsnaamscanUitkomst {
 export async function bestandsnaamscan(
   client: LeesClient,
   driveId: string,
+  rootItemId: string,
   prefix: string,
   binnenRoot: (webUrl: string | undefined) => string | null,
 ): Promise<BestandsnaamscanUitkomst> {
@@ -318,8 +413,10 @@ export async function bestandsnaamscan(
   // Breedte-eerst, met expliciete grenzen op items, mappen en diepte. Geen
   // recursie zonder plafond: een bibliotheek die groeit mag deze scan niet
   // stilletjes in een callbudget-fout laten eindigen.
+  // START BIJ HET GEREGISTREERDE ROOT-ITEM, niet bij de drive-root. Zodra de
+  // bronroot een submap is, zou dat laatste de hele bibliotheek aflopen.
   const wachtrij: Array<{ pad: string; diepte: number }> = [
-    { pad: `/drives/${encodeURIComponent(driveId)}/root/children`, diepte: 0 },
+    { pad: `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/children`, diepte: 0 },
   ];
 
   while (wachtrij.length > 0) {

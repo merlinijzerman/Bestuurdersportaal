@@ -315,7 +315,7 @@ test("#407-labsmokerunner draait alleen achter een expliciete lokale grendel", (
 
 test("#407-labsmoke — de hermetische suite is blokkerend in de required CI-job", () => {
   const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
-  for (const suite of ["registry.test.ts", "graph.test.ts", "smoke.test.ts"]) {
+  for (const suite of ["registry.test.ts", "auth.test.ts", "graph.test.ts", "smoke.test.ts", "orkestratie.test.ts"]) {
     assert.ok(
       pkg.scripts["test:smoke-copilot-lab"].includes(`${SMOKEPAD}/${suite}`),
       `${suite} hangt niet aan test:smoke-copilot-lab`,
@@ -331,6 +331,18 @@ test("#407-labsmoke — de hermetische suite is blokkerend in de required CI-job
     /npm run test:smoke-copilot-lab(?![\w:-])/,
     "test:smoke-copilot-lab draait niet in de required CI-job en is dus niet blokkerend",
   );
+});
+
+test("#407-labsmoke — de scans beginnen bij het geregistreerde root-item", () => {
+  // Een scan die bij de drive-root begint, leest metadata buiten de
+  // geregistreerde bron zodra die bron een submap is. De gate houdt de
+  // adressering daarom op itemniveau vast.
+  const graph = readFileSync(resolve(root, `${SMOKEPAD}/graph.ts`), "utf8");
+  assert.ok(
+    !/\/root\/(children|search)/.test(graph),
+    "een scan adresseert nog de drive-root in plaats van het geregistreerde root-item",
+  );
+  assert.match(graph, /export async function leesRootItem/);
 });
 
 test("#407-labsmoke — de runner houdt zich aan het ene scenario en de ene fixture", () => {
