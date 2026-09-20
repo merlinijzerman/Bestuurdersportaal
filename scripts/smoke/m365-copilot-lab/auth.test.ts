@@ -73,12 +73,24 @@ test("een tokenendpoint dat niet antwoordt, loopt op de eigen deadline en niet o
         // en dat is exact wat de runner eerder deed.
         fetchImpl: ((_invoer: any, init: any) =>
           new Promise<Response>((_, mislukt) => {
-            init.signal.addEventListener("abort", () => mislukt(init.signal.reason));
+            // Een echte `fetch` houdt een socket open en daarmee de event-loop
+            // wakker; deze stub houdt niets vast. En `AbortSignal.timeout()`
+            // gebruikt een UNREF'D timer, die een lege loop niet tegenhoudt.
+            // Zonder dit anker loopt de loop dus leeg vóór de deadline, settelt
+            // de promise nooit, en cancelt de testrunner de suite — precies wat
+            // er in CI gebeurde terwijl het lokaal toevallig goed ging.
+            const anker = setInterval(() => {}, 1_000);
+            init.signal.addEventListener("abort", () => {
+              clearInterval(anker);
+              mislukt(init.signal.reason);
+            });
           })) as unknown as typeof fetch,
       }),
     (fout: AuthFout) => fout.code === "tokenuitgifte_timeout",
   );
-  assert.ok(Date.now() - begin < 5_000, "de deadline greep niet in");
+  const verstreken = Date.now() - begin;
+  assert.ok(verstreken >= 50, `de call brak al na ${verstreken} ms af; dat is geen deadline`);
+  assert.ok(verstreken < 5_000, "de deadline greep niet in");
 });
 
 test("een mislukte tokenrespons geeft alleen de status door, geen providertekst", async () => {

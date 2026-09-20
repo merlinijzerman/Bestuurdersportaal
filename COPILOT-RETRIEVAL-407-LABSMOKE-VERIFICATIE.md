@@ -87,7 +87,15 @@ Alle suites lokaal gedraaid op 2026-09-20, Node v24.15.0.
 | bevinding | correctie | bewijs |
 | --- | --- | --- |
 | **P1** de bestandsnaamscan begon bij de drive-root; bij een bronroot die een submap is, leest de runner metadata buiten de toegestane bron | `leesRootItem()` zoekt het geregistreerde root-item op via pad-adressering en toetst dat de teruggegeven `webUrl` exact de registratie is. **Beide** scans beginnen daar — de inhoudscan is meteen server-side gescoped in plaats van drive-breed met nafiltering | 7 tests in `graph.test.ts` (submap, root buiten de bibliotheek, item dat elders heen wijst, geen map, onveilig pad) + 2 in `orkestratie.test.ts`; de boundarygate verbiedt de tekst `/root/children` en `/root/search` in `graph.ts` |
-| **P2** de tokenuitgifte had geen `AbortSignal` of timeout, dus de runner kon na de browseraanmelding onbeperkt hangen en reageerde niet op Ctrl-C | `wisselCodeIn()` combineert de run-afbreking met een eigen deadline van 30 s via `AbortSignal.any`, en houdt "afgebroken" en "timeout" als aparte codes uit elkaar | 4 tests in `auth.test.ts`, waaronder een `fetch` die uit zichzelf nooit antwoordt — zonder de deadline hangt die test |
+| **P2** de tokenuitgifte had geen `AbortSignal` of timeout, dus de runner kon na de browseraanmelding onbeperkt hangen en reageerde niet op Ctrl-C | `wisselCodeIn()` combineert de run-afbreking met een eigen deadline van 30 s via `AbortSignal.any`, en houdt "afgebroken" en "timeout" als aparte codes uit elkaar | 4 tests in `auth.test.ts`, waaronder een `fetch` die uit zichzelf nooit antwoordt — zonder de deadline hangt die test. De test meet ook dát er gewacht is (≥ 50 ms), zodat een call die meteen afbreekt niet als "deadline werkt" doorgaat |
+
+**Testles uit de eerste CI-ronde op deze correctie.** De deadlinetest liep lokaal
+goed en werd in CI *cancelled*: `Promise resolution is still pending but the
+event loop has already resolved`. Oorzaak: `AbortSignal.timeout()` gebruikt een
+**unref'd** timer, en de gestubde `fetch` hield — anders dan een echte — geen
+socket open. De loop liep dus leeg vóór de deadline. De stub houdt nu een anker
+vast dat bij `abort` wordt opgeruimd. Een test die op een timer wacht terwijl
+niets de loop wakker houdt, is geen trage test maar een test die nooit afloopt.
 | **P3** de tests raakten `run.ts` niet; "dry-run doet geen call" was een belofte in een comment | de volgorde is verhuisd naar `orkestratie.ts` met geïnjecteerde afhankelijkheden; `run.ts` is nog alleen bedrading | 8 tests in `orkestratie.test.ts`, elk met een **open** poort. De dry-run-test stelt eerst vast dát de poort openstond en daarna dat er nul Retrieval-pogingen waren en geen akkoord is gevraagd |
 
 De dry-run-grendel staat nu bewust vóór de akkoordvraag: bij een dry-run valt er
