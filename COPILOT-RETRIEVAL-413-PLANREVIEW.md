@@ -1,17 +1,16 @@
 # #413 — Planreview T4-A: Copilot Retrieval als productie-adapter achter inerte poorten
 
-Status: **planreview vóór productiecode** (tranche T4-A). Worktree
-`mvp-413-copilot-productie`, branch `codex/413-copilot-productie-adapter`, vertakt van
-`origin/preview` `1ddc705`.
+Status: **planreview vóór productiecode**, versie 2 — de vier reviewpunten van de
+opdrachtgever op PR #414 zijn verwerkt en de vijf beslispunten zijn vastgesteld (§8). De
+aansluiting oud→nieuw staat in §4.1. Worktree `mvp-413-copilot-productie`, branch
+`codex/413-copilot-productie-adapter`, vertakt van `origin/preview` `1ddc705`.
 
 Mandaat van deze tranche: uitsluitend ontwerp- en contractreview. Er is in deze tranche
 **geen regel productiecode gewijzigd** — dit document is de enige oplevering. Productiecode
-begint pas na akkoord op §4 en §8.
+begint met PR-A, volgens §4.
 
 Alle onderstaande vaststellingen komen uit de code en de migraties op `origin/preview`
 `1ddc705`, niet uit ontwerpdocumentatie.
-
----
 
 ## 1. Wat er al staat
 
@@ -43,20 +42,43 @@ Nummering is ticketlokaal.
 
 ### B-1 (blokkerend voor T4-E) — de orkestratie is structureel single-adapter
 
-`Orkestratieopdracht` draagt één `adapter` (`orkestratie.ts:72`). Daar hangen drie dingen aan
+`Orkestratieopdracht` draagt één `adapter` (`orkestratie.ts:72`). Daar hangen vier dingen aan
 vast die een tweede bron nú onmogelijk maken:
 
 * `perAdapter[i].naam = opdracht.adapter.naam` (r. 356) — élke spoorregel krijgt dezelfde naam;
 * `metaBasis.methode = uitkomsten[0].methode` en `diagnostiek = uitkomsten[0].diagnostiek` (r. 431-433) — spoor 0 bepaalt de audit voor de hele beurt;
-* `verifieerToelating(ctx, adapter, …)` leest **één** `capabilities()` en roept **één** paar hooks aan.
+* `verifieerToelating(ctx, adapter, …)` leest **één** `capabilities()` en roept **één** paar hooks aan;
+* `citeer(ctx, adapter, …)` (r. 526) roept **één** `verrijkWeergave()` aan over álle geselecteerde bronnen.
 
 Drie routes zijn overwogen:
 
 * **(a) Composite adapter** (één adapter die intern Supabase én Copilot bevraagt) — **verworpen, fail-open risico.** `AdapterCapabilities.permissionProof` is één boolean voor de hele uitkomst. Staat hij op `true`, dan worden alle Supabase-kandidaten geweigerd (`geen_bewijs`); staat hij op `false`, dan wordt het Microsoft-bewijs *niet getoetst* en is V1–V5 voor de Copilot-arm uitgeschakeld. Hetzelfde geldt voor `versiebeleid` en `ondersteundeFilters`. Een composite adapter kan zijn capabilities per definitie niet eerlijk declareren; het contract verbiedt dat terecht.
 * **(b) Tweede, losse `voerVolledigeRetrievalUit()`-aanroep** — **verworpen.** Twee aanroepen leveren twee sentinels, twee citaatnummeringen, twee `RetrievalMeta`'s en twee deadlines; de route zou ze moeten samenvoegen en daarmee precies de selectie-/citatielogica dupliceren die besluit 0213 centraliseerde.
-* **(c) Adapter per spoor (gekozen).** `Spoor` krijgt een optioneel `adapter`-veld; ontbreekt het, dan geldt `opdracht.adapter` — exact het huidige gedrag. De poort draait dan één keer per *adaptergroep*, met één gedeelde `poortNu` (nieuwe optionele parameter) zodat de "één beoordeling per verzoek"-regel intact blijft. `perAdapter[i].naam` wordt de naam van de adapter ván dat spoor; `metaBasis` blijft van spoor 0 (het primaire, eigen spoor).
+* **(c) Adapter per spoor (gekozen, D-1).** `Spoor` krijgt een optioneel `adapter`-veld; ontbreekt het, dan geldt `opdracht.adapter` — exact het huidige gedrag.
 
-Bewijslast bij (c): een karakteriseringstest die aantoont dat een opdracht **zonder** spoor-adapter byte-identieke `perAdapter`, `meta` en citaties oplevert als vandaag. Zonder dat bewijs is (c) niet acceptabel.
+De drie voorwaarden die de opdrachtgever aan D-1 heeft verbonden, en hoe ze worden ingelost:
+
+**(i) Herkomst wordt bijgehouden op spoorindex, niet op `ref`.** Twee adapters leiden hun
+opaque refs af uit verschillende namespaces, maar daar mag de orkestratie niet op steunen:
+een ref is een string en een botsing is niet uitgesloten. De orkestratie houdt daarom per
+spoor bij welke kandidaten eruit kwamen en draagt die herkomst door tot en met de
+samenvoeging en de dedup.
+
+**(ii) V5- en versieherlezing per unieke adapterbron.** De poort draait één keer per
+*adaptergroep*, met één gedeelde `poortNu` over de hele beurt (nieuwe optionele parameter op
+`verifieerToelating`). Elke groep krijgt een **eigen** `Map` van bronregistratie- en
+versiestanden; refs van verschillende adapters worden nooit in één map samengevoegd, juist
+omdat ze opaque en potentieel botsend zijn. Binnen een groep blijft de bestaande invariant
+overeind: één herlezing per unieke `bronregistratieRef`, nooit per spoor.
+
+**(iii) `verrijkWeergave()` per adapter.** `citeer()` groepeert de geselecteerde bronnen op
+hun herkomstadapter en roept per groep de bijbehorende hook aan. Eén adapter die de bronnen
+van een andere verrijkt, zou weergavemetadata van de verkeerde provider kunnen zetten — en
+dat is de laag die de citaten voedt.
+
+Bewijslast bij (c): een karakteriseringstest die aantoont dat een opdracht **zonder**
+spoor-adapter byte-identieke `perAdapter`, `meta` en citaties oplevert als vandaag. Zonder dat
+bewijs is (c) niet acceptabel.
 
 ### B-2 (blokkerend voor T4-B) — de bestaande boundarygate verbiedt exact wat #413 moet bouwen
 
@@ -71,7 +93,7 @@ De gate mag hierop **niet worden verzwakt**. Voorstel: de gate wordt omgedraaid 
 3. Nieuw: `/beta`, `sharePointEmbedded`, `/v1.0/shares/` en `sharingToken` zijn in de hele productieboom verboden (T4-G-eis, structureel in plaats van per review).
 4. De spike blijft bevroren bewijsmateriaal en wordt in #413 niet aangeraakt; productiecode importeert er niets uit (zie B-11).
 
-### B-3 (blokkerend voor T4-C) — de locator→DriveItem-stap vereist een migratie én een verse bevestiging
+### B-3 (blokkerend voor T4-C) — de locator→DriveItem-stap vereist een migratie, een exact-één-invariant én een verse bevestiging
 
 `POST /v1.0/copilot/retrieval` levert per hit een `webUrl`, geen DriveItem-id (#407 G-1). In
 #407 werd dat opgelost met een read-only register dat per meting uit Graph werd opgebouwd,
@@ -81,51 +103,71 @@ productieschaal niet houdbaar.
 
 `microsoft_private.sharepoint_documenten` bevat `web_url` (met een `https://….sharepoint.com/`
 CHECK), maar `sharepoint_lees_document()` geeft die kolom **niet** terug en er is geen
-opzoekfunctie op URL. Nodig is één nieuwe `security definer`-functie, met `grant execute` aan
-uitsluitend `microsoft_vault`:
+opzoekfunctie op URL.
+
+**Canonicalisering gebeurt op één plek, vóór opslag én lookup.** Twee keer dezelfde functie
+aanroepen is niet genoeg — dan kan een latere wijziging één van beide paden raken. Daarom:
+
+* `microsoft_private.sharepoint_canoniek_weburl(text) returns text`, `immutable`, `strict`: schema en host lowercase, default poort weg, query en fragment weg, trailing slash weg, padsegmenten byte-gelijk overgenomen (geen decode/re-encode — dat zou twee verschillende bestanden op elkaar kunnen afbeelden). Alles wat geen `https://<host>.sharepoint.com/…` is levert `null`;
+* `web_url_canoniek text generated always as (…) stored` op `sharepoint_documenten`. Opslag en lookup gebruiken daarmee per constructie dezelfde waarde, niet dezelfde intentie;
+* `create unique index … on sharepoint_documenten(bron_id, web_url_canoniek) where web_url_canoniek is not null` — de exact-één-invariant in het datamodel.
+
+**De migratie moet bestaande drift opruimen voordat die index kan ontstaan.** Binnen één bron
+kunnen vandaag twee rijen dezelfde canonieke URL dragen (rename-drift tussen twee listings).
+De migratie zet bij zo'n botsing `web_url` van álle betrokken rijen op `null` en telt ze. Die
+documenten vallen dan fail-closed af onder `mapping` tot de eerstvolgende listing ze bijwerkt
+— dat is de veilige kant, en het is zichtbaar in de teller.
+
+De opzoekfunctie, `security definer`, `grant execute` uitsluitend aan `microsoft_vault`:
 
 ```
 microsoft_private.sharepoint_zoek_document_op_weburl(p_fonds uuid, p_bron uuid, p_weburl text)
-  -> dezelfde kolomset als sharepoint_lees_document
+  -> dezelfde kolomset als sharepoint_lees_document, hoogstens één rij
 ```
 
-Exacte gelijkheid op een **genormaliseerde** sleutel (schema+host lowercase, geen query,
-geen fragment, padsegmenten onveranderd); geen `like`, geen prefix, geen trigram. Geen
-match = afwijzing `mapping`, zonder netwerkcall.
+Zij matcht op `web_url_canoniek = sharepoint_canoniek_weburl(p_weburl)` en dwingt **`count = 1`
+expliciet af**: nul rijen én meer dan één rij leveren geen resultaat. De unieke index maakt
+">1" onmogelijk; de functie controleert het alsnog, omdat de index alleen non-null-waarden
+dekt en een toekomstige indexwijziging anders stil een meervoudige match zou toelaten. Geen
+`like`, geen prefix, geen trigram. Geen match = afwijzing `mapping`, zonder netwerkcall.
 
-**Kritiek, en de reden dat de DB-lezing alléén niet volstaat:** `web_url` is een momentopname
-uit de laatste listing. Na een rename of verplaatsing kan een *andere* file de oude URL
-overnemen. Een zuivere DB-match zou dan een hit op document A aan document B koppelen.
-Daarom is de mapping pas geldig nadat de verse `GET /drives/{drive}/items/{item}` — die we
-voor rechten en versie tóch al doen — een `webUrl` teruggeeft die **exact gelijk** is aan de
-genormaliseerde hit-URL. De DB-lezing is dus een index, nooit een bewijs. Ongelijkheid =
-`mapping`, fail-closed, vóór elke download.
+**Een DB-match blijft een index, nooit een bewijs.** `web_url` is een momentopname uit de
+laatste listing; na een rename of verplaatsing kan een *andere* file de oude URL overnemen, en
+dan wijst een op zichzelf unieke match naar het verkeerde document. De mapping is daarom pas
+geldig nadat de verse `GET /drives/{drive}/items/{item}` — die we voor rechten en versie tóch
+al doen — een `webUrl` teruggeeft die na dezelfde canonicalisering **exact gelijk** is aan de
+hit-URL. Ongelijkheid = `mapping`, fail-closed, vóór elke download.
 
 Bewust geaccepteerd (overgenomen uit #407): Office-weergave-URL's (`/:w:/…`, `/:p:/…`) volgen
 het bibliotheekpad niet, matchen dus niet en vallen af onder `mapping`. Zichtbaar als teller.
 
-### B-4 (beslispunt voor de opdrachtgever) — `Sites.Read.All` raakt de scope-allowlist
+### B-4 (vastgesteld: OAuth blijft onbereikbaar in #413) — `Sites.Read.All` raakt de scope-allowlist
 
 `MICROSOFT_TOEGESTANE_SCOPES` (`microsoft-config.ts:17`) kent `Sites.Read.All` niet;
 `MICROSOFT_SEARCH_SPIKE_SCOPES` voegt alleen `Files.Read.All` toe, en alleen voor
 `doel = "retrieval_smoke"` én alleen in de Preview-omgeving (`toegestaneScopes()`,
 `microsoft-connector.ts:78-81`). `startKoppeling()` weigert elke scope buiten die verzameling.
 
-T4-D vraagt beide scopes voor te bereiden; de harde uitvoeringsgrens verbiedt consent
-"toevoegen of verbreden". Die twee botsen alleen schijnbaar: het verbod geldt de **tenant**
-(Entra-grant, admin consent) en elke **live** aanvraag. Een constante die zonder volledige
-readiness door geen enkel codepad bereikbaar is, verbreedt niets.
+De eerder voorgestelde variant — de scopes toelaten zodra de volledige readiness-conjunctie
+klopt — is **verworpen, en terecht**, om twee redenen:
 
-Voorstel — en dit is het scherpste punt van deze review, dus expliciet ter akkoord:
+1. **Circulariteit.** Die conjunctie bevat `consent_ontbreekt`. Consent zou dan pas
+   aanvraagbaar zijn als consent er al is; de poort kan per constructie nooit opengaan.
+2. **Verkeerde laag.** Welke OAuth-scopes een applicatie überhaupt mág vragen is een
+   statische, reviewbare eigenschap van de koppeling. Runtime-readiness (een vlag, een
+   billingstand, een fondsslug) hoort daar geen zeggenschap over te hebben; dat maakt van een
+   configuratiegrens een beslissing die per verzoek kan wisselen.
 
-* nieuw `doel: "copilot_retrieval"` met `MICROSOFT_COPILOT_RETRIEVAL_SCOPES = [...SHAREPOINT, Files.Read.All, Sites.Read.All]`;
-* `toegestaneScopes()` geeft die verzameling **alleen** terug bij Preview-omgeving ∧ globale kill switch uit ∧ fondsflag aan ∧ `fonds.slug = 'pgb'` — dezelfde conjunctie als de readinessbeslissing, niet een zwakkere;
-* er komt in deze tranche **geen route** die de consent start. De consentroute is stap 6 van de uitrolpoort en landt pas in de activeringstranche, als apart, afzonderlijk te reviewen bestand;
-* een hermetische test bewijst dat met flag uit (de enige stand die #413 oplevert) `toegestaneScopes("copilot_retrieval")` exact gelijk is aan de huidige verzameling.
+**Vastgestelde vorm voor #413:**
 
-Wie dit te ruim vindt, kan de constante ook volledig uit #413 houden; de adapter werkt dan
-in T4-G uitsluitend tegen gestubde tokens. Dat is de veiligere, maar ook de latere variant.
-**Keuze A of B in §8.**
+* er komt één nieuwe, puur declaratieve constante `COPILOT_RETRIEVAL_REQUIRED_SCOPES = ["Files.Read.All", "Sites.Read.All"]`, uitsluitend gebruikt voor (a) de claimcontrole — welke scopes draagt de verbinding werkelijk — en (b) de readinessstand `consent_ontbreekt`;
+* zij wordt **niet** toegevoegd aan `MICROSOFT_TOEGESTANE_SCOPES`, **niet** aan `toegestaneScopes()`, en er komt **geen** `doel`-waarde voor Copilot. `startKoppeling()` blijft de scopes dus weigeren, ongeacht vlag, omgeving of fonds;
+* de adapter krijgt zijn token **geïnjecteerd** (`tokenbron`-parameter). In #413 bestaat er geen productie-implementatie die zo'n token kan leveren: `sharepointAccessToken()` vraagt `Sites.Selected` en `sharepointSearchAccessToken()` alleen `Files.Read.All`. Zonder tokenbron faalt de adapter gesloten vóór elke netwerkpoging. Alle tests draaien op stubtokens;
+* het bereikbare consentpad — allowlist, `doel`, en de route die de consent start — landt als één afzonderlijk te reviewen wijziging in de activeringstranche, niet hier.
+
+Een hermetische test legt dit vast: `toegestaneScopes()` levert in élke omgeving en bij élke
+vlagstand exact de huidige verzameling, en `COPILOT_RETRIEVAL_REQUIRED_SCOPES` komt in geen
+enkel pad terecht dat een authorisatie-URL bouwt.
 
 ### B-5 (gunstig) — `bronsoort: "sharepoint"` is vandaag al een gesloten deur
 
@@ -202,14 +244,21 @@ karakterisering** — dezelfde invoerfixtures, dezelfde verwachte afwijzingen �
 gedrag een rode test is en geen ontdekking achteraf. De smokebrug en zijn 8 vaste
 auditafwijzingsvelden blijven letterlijk ongemoeid.
 
-### B-12 — `billing` is niet waarneembaar zonder een call
+### B-12 — `billing` is niet waarneembaar zonder een call, en een handmatige stand veroudert
 
 Er bestaat geen lees-API om vast te stellen of de PAYG-billingpolicy actief is; dat blijkt pas
 uit het uitblijven van een 402 op een echte call. `billing_ontbreekt` is daarom de
-**default­stand tot een expliciete, handmatige registratie** door platformbeheer, en een
-ontvangen 402 zet de stand terug naar `billing_ontbreekt` plus `tijdelijk_geblokkeerd` met een
-`geblokkeerd_tot`. De beheerpagina toont "onbekend/gereed" en nooit een geraden waarde
-(T4-B: "zonder consent/licentie zelf te raden").
+**defaultstand tot een expliciete, handmatige registratie** door platformbeheer.
+
+Zo'n handmatige stand is een bewering over een systeem dat wij niet beheren, en die veroudert:
+een policy kan worden ingetrokken, een subscription kan aflopen, de Copilot-add-on kan
+verdwijnen. De registratie krijgt daarom een **beperkte geldigheidsduur** (D-3):
+`billing_geldig_tot`, door de registratiefunctie afgedwongen op ten hoogste 30 dagen vanaf nu.
+Verlopen betekent terug naar `billing_ontbreekt` — dus dicht, zonder tussenkomst.
+
+Een ontvangen 402 zet de stand onmiddellijk terug naar `billing_ontbreekt` plus
+`tijdelijk_geblokkeerd` met een `geblokkeerd_tot`. De beheerpagina toont "onbekend/gereed" en
+nooit een geraden waarde (T4-B: "zonder consent/licentie zelf te raden").
 
 ---
 
@@ -237,11 +286,18 @@ verifieerBronregistratie() -> verse DB-stand van sharepoint_bronnen
 verrijkWeergave()          -> alleen documenttype/-datum; géén URL, géén pad
 ```
 
+De adapter wordt gebouwd met een **geïnjecteerde tokenbron** (B-4). Ontbreekt die — de enige
+stand die #413 oplevert — dan faalt elke aanroep gesloten vóór de eerste netwerkpoging.
+
 De poort wordt niet uitgebreid: alle #413-weigeringen vallen in bestaande gronden
 (`buiten_server_scope`, `geen_bewijs`, `v1..v5_*`, `versie_gewijzigd`, `versiestand_ontbreekt`).
 Adapter-eigen afwijzingen (`mapping`, `root`, `lokalisatie`, `extractie`) gebeuren vóór de
 poort, binnen `zoek()`, en verlaten de adapter uitsluitend als **tellers** in de diagnostiek.
 Zo blijft de poort providerneutraal — de eis uit de kopnoot van `toelatingspoort.ts`.
+
+Wat wél aan de centrale laag verandert, volgt uit B-1c en staat daar: adapter per spoor,
+gedeelde `poortNu` met per-adaptergroep gescheiden standenmappen, `verrijkWeergave()` per
+adapter, en centrale diagnostiekaggregatie (§3.6).
 
 ### 3.2 Gegevensstroom en eigenaarschap van cancellation/deadline
 
@@ -262,13 +318,16 @@ lokalisatie van het Microsoft-extract in de eigen extractie → `Bronresultaat` 
 
 ### 3.3 Private configuratie, tokenrollen, migratie en grants
 
-* Tokens: uitsluitend de bestaande kluis (`microsoft_private`, rol `microsoft_vault`, eigen `Pool`, TLS met vastgepinde CA). Geen service-role, geen Supabase-client voor deze data.
+* Tokens: uitsluitend de bestaande kluis (`microsoft_private`, rol `microsoft_vault`, eigen `Pool`, TLS met vastgepinde CA). Geen service-role, geen Supabase-client voor deze data. De adapter leest zelf geen token: hij krijgt er een geïnjecteerd, en in #413 bestaat er geen productiebron die er een kan leveren (B-4).
 * Nieuw in `microsoft_private`, alle `security definer` + `revoke … from public, anon, authenticated` + `grant execute … to microsoft_vault`:
-  * `sharepoint_zoek_document_op_weburl(uuid, uuid, text)` — B-3;
-  * `copilot_retrieval_lees_stand(uuid)` / `copilot_retrieval_registreer_uitkomst(uuid, uuid, text, uuid, jsonb)` — rolloutstand, 402-registratie, `geblokkeerd_tot`, inhoudsvrije telling.
-* Nieuwe tabel `microsoft_private.copilot_retrieval_stand` (fonds_id, billing_status, consent_bewijs_op, geblokkeerd_tot, laatst_foutcategorie, configuratieversie). Geen vraag, geen URL, geen pad, geen extract.
+  * `sharepoint_canoniek_weburl(text)` — `immutable`, `strict`; de enige canonicalisering, gebruikt door zowel de gegenereerde kolom als de lookup (B-3);
+  * `sharepoint_zoek_document_op_weburl(uuid, uuid, text)` — exact één rij of niets (B-3);
+  * `copilot_retrieval_lees_stand(uuid)` / `copilot_retrieval_registreer_uitkomst(uuid, uuid, text, uuid, jsonb)` — rolloutstand, 402-registratie, `geblokkeerd_tot`, inhoudsvrije telling;
+  * `copilot_retrieval_registreer_billing(uuid, timestamptz)` — handmatige billingstand, door de functie geklemd op ten hoogste 30 dagen (B-12).
+* Wijziging aan `sharepoint_documenten`: gegenereerde kolom `web_url_canoniek` + partiële unieke index op `(bron_id, web_url_canoniek)`, met opruiming van bestaande botsingen (B-3).
+* Nieuwe tabel `microsoft_private.copilot_retrieval_stand` (fonds_id, billing_status, `billing_geldig_tot`, consent_bewijs_op, geblokkeerd_tot, laatst_foutcategorie, configuratieversie). Geen vraag, geen URL, geen pad, geen extract.
 * `fonds_feature_flags.flag_key = 'microsoft_copilot_retrieval'` voor de fondsflag; schrijfpad uitsluitend platformbeheer (variant C), niet via een fondsroute.
-* Migraties worden per CLAUDE.md eerst in Supabase gedraaid en daarna pas code-deploy; de structurele gates (A–H) draaien na de grantwijziging.
+* Migraties worden per CLAUDE.md eerst in Supabase gedraaid en daarna pas code-deploy; de structurele gates (A–H) draaien na de grantwijziging. Bij elke migratie hoort een `supabase/rollbacks/…_ROLLBACK.sql`.
 
 ### 3.4 Rollouttoestanden en foutcategorieën
 
@@ -276,46 +335,80 @@ Readiness is een **conjunctie**; elke ontbrekende term levert een eigen, niet-gi
 
 | Stand | Voorwaarde | Gevolg |
 |---|---|---|
-| `uit` | globale kill switch aan, óf fondsflag uit, óf niet-Preview, óf fonds ≠ pgb | geen spoor, geen adapter, geen call |
-| `billing_ontbreekt` | geen registratie, of laatste uitkomst 402 | geen call |
-| `consent_ontbreekt` | verbinding mist `Files.Read.All` **of** `Sites.Read.All` | geen call |
-| `configuratie_ongeldig` | bron inactief, root/drive/site onvolledig, filter faalt vormvalidatie | geen call |
+| `uit` | globale kill switch aan, óf fondsflag uit, óf niet-Preview, óf fonds ≠ pgb | spoor wordt niet aangemaakt; geen adapter, geen call |
+| `billing_ontbreekt` | geen registratie, registratie verlopen (`billing_geldig_tot` ≤ nu), of laatste uitkomst 402 | geen call |
+| `consent_ontbreekt` | de verbinding draagt niet élke scope uit `COPILOT_RETRIEVAL_REQUIRED_SCOPES` | geen call |
+| `configuratie_ongeldig` | bron inactief, root/drive/site onvolledig, filter faalt vormvalidatie, geen tokenbron geïnjecteerd | geen call |
 | `tijdelijk_geblokkeerd` | `geblokkeerd_tot > now()` na 429/5xx/402 | geen call tot het venster verloopt |
 | `gereed` | alle bovenstaande in orde | het spoor mag draaien |
+
+De consentstand is een **claimcontrole op de bestaande verbinding** (`vault.leesVerbinding().scopes`),
+geen poort die bepaalt wat aangevraagd mag worden — zie B-4. In #413 staat `gereed` per
+constructie buiten bereik: er is geen tokenbron, dus de stand blijft `configuratie_ongeldig`
+zolang de activeringstranche niet heeft plaatsgevonden.
 
 Foutafbeelding op `RetrievalFoutcategorie`: 401 → `toestemming_geweigerd`; 402 →
 `configuratiefout` (+ stand `billing_ontbreekt`); 403 → `toestemming_geweigerd`; 429 →
 `rate_limit`; 5xx → `providerfout`; timeout → `timeout`; cancellation → `annulering`;
 onbekende responsevorm → `configuratiefout`. De adapter raadt nooit tussen consent en licentie
-— de HTTP-status is leidend en de stand volgt daaruit.
+— de HTTP-status is leidend en de stand volgt daaruit. Wat een provider- of readinessfout met
+de beurt doet, staat in §3.5.
 
 ### 3.5 Copilot-primair naast de bestaande routes, zonder fail-open
 
 In productie bestaat er vandaag **geen** tweede SharePoint-retrievalarm: DriveItem Search en
 Microsoft Search leven uitsluitend in het spikeharnas en achter de Preview-smokebrug. Er is
-dus niets om stil op terug te vallen, en dat blijft zo:
+dus niets om stil op terug te vallen binnen SharePoint, en dat blijft zo:
 
 * het Copilot-spoor is een **apart spoor met een eigen adapter** (B-1c), niet een tweede weg binnen één adapter;
-* bij mapping-, rechten-, versie- of lokalisatiefouten levert dat spoor simpelweg mínder of geen kandidaten. Er is geen OR-unie, geen providerwissel, geen tweede poging via een andere weg;
+* er is geen OR-unie, geen providerwissel, geen tweede poging via een andere weg;
 * de smokebrug, de documentenlijst en de preview-route blijven byte- en gedragsmatig ongewijzigd.
 
-Lege uitslag versus fout:
+**De stille degradatie naar de eigen bibliotheek is de werkelijke fail-open, en die wordt hier
+dichtgezet.** Zodra Copilot de primaire kandidaatbron is, is "de beurt gaat gewoon door zonder
+SharePoint" geen neutrale keuze meer: de gebruiker krijgt dan een volledig ogend antwoord dat
+op een kleinere verzameling bronnen berust dan hij mag aannemen. Dat is precies de impliciete
+fallback die dit ticket verbiedt. Drie gescheiden gevallen:
 
 | Uitkomst | Beurt | Verantwoording |
 |---|---|---|
-| `retrievalHits` leeg | gaat door | kwaliteitsuitkomst; teller `geen_resultaten` |
-| kandidaten afgewezen op mapping/root/versie/lokalisatie/permissie | gaat door | kwaliteitsuitkomst; inhoudsvrije tellers per grond |
-| 401/402/403/configuratie­fout | gaat door **zonder** SharePointbron, maar de meta markeert de bron expliciet als *niet geraadpleegd* | een stil weggevallen bron mag nooit op "er is niets gevonden" lijken |
-| 429 / 5xx | idem, plus `geblokkeerd_tot` | storing, geen uitspraak over rechten |
-| timeout / cancellation | **stopt de hele beurt** | bestaand gedrag van de grendel; geen terugval |
+| `retrievalHits` leeg | gaat door | geldige kwaliteitsuitkomst; teller `geen_resultaten` |
+| individuele kandidaat afgewezen op mapping/root/versie/lokalisatie/permissie | gaat door met de overige kandidaten | kwaliteitsuitkomst; inhoudsvrije tellers per grond |
+| provider- of readinessfout (401/402/403/429/5xx/configuratie/`uit`-stand die tijdens de beurt intreedt) | **stopt standaard de retrievalbeurt** | de bron is niet geraadpleegd; een volledig antwoord zou dat verzwijgen |
+| timeout / cancellation | stopt de hele beurt | bestaand gedrag van de grendel |
+
+Het spoor draagt daarvoor een expliciete stand: `bijBronfout: "stop"` (default voor het
+Copilot-spoor) of `"meld"`. `"meld"` is **alleen toegestaan wanneer de aanroepende route de
+status werkelijk toont**: `RetrievalUitkomst` krijgt een veld
+`bronstatus?: { bronsoort, status: "niet_geraadpleegd", categorie }[]`, en een route die dat
+veld negeert mag `"meld"` niet gebruiken. Een contracttest bewaakt dat: elke route die een
+spoor met `bijBronfout: "meld"` opvoert, moet `bronstatus` in haar respons doorgeven. Zolang
+die zichtbaarheid er niet is, is `"stop"` de enige beschikbare stand — en dat is de stand
+waarmee #413 landt.
+
+Een readinessfout vóór de beurt is iets anders dan een providerfout tijdens de beurt: staat de
+poort dicht (vlag uit, kill switch aan, consent of billing ontbreekt), dan wordt het
+Copilot-spoor **niet aangemaakt**. Er is dan geen bron die had moeten worden geraadpleegd, dus
+ook geen melding en geen afbreking — de beurt is dezelfde beurt als vandaag.
 
 ### 3.6 Auditprojectie en inhoudsvrije kostentellers
 
-Per beurt in `retrieval_meta` (via `diagnostiek`, met de twee allowlists uit B-8): fonds, actor
-en correlation-id staan er al; nieuw zijn uitsluitend **tellingen** — netwerkpogingen per
-soort, latency (mediaan/p95 per beurt is zinloos bij n=1: alleen `latencyMs`), downloads,
-bytes, throttles, retries, kandidaten vóór/na poort, afwijzingen per grond, resultaatcategorie
-en een kostenindicatie `calls × tarief` (tarief uit configuratie; observatie, geen factuurbron).
+`metaBasis.diagnostiek` komt uit spoor 0 (`orkestratie.ts:433`). Bleef dat de enige weg naar
+`retrieval_meta`, dan zou een Copilot-spoor op plek 1 zijn calls, kosten en afwijzingen
+**volledig verliezen** — het auditspoor zou dan een beurt beschrijven waarin de primaire
+kandidaatbron niet voorkomt. De aggregatie hoort dus centraal, in de orkestratie, en niet bij
+een adapter.
+
+Vorm:
+
+* `metaBasis` krijgt naast de bestaande `diagnostiek` (spoor 0, ongewijzigd — dat borgt de byte-identiteit van bestaande snapshots) een `perAdapterDiagnostiek`: per adapter uitsluitend veilige tellers, beurtbreed;
+* `bouwRetrievalMeta()` voegt die samen tot één nieuwe metasleutel `adapters`: per adapter `{ naam, methode, netwerkpogingen, latencyMs, downloads, bytes, throttles, retries, kandidaten_voor_poort, kandidaten_na_poort, afwijzingen: {grond: aantal}, kostenindicatie, resultaatcategorie }`;
+* **de selectiegebonden velden worden bij elke herbouw opnieuw berekend.** `bouwRetrievalMeta()` draait tweemaal: in fase 1 over de selectie, en in `citeer()` opnieuw over `c.opgenomen` — ná de contextafkapping. Het aantal werkelijk opgenomen passages en documenten per adapter komt dus uit die tweede berekening, precies zoals `meta.geselecteerd` en `bronversie_audit` dat al doen. Beurtbrede providertellers (calls, kosten, throttles) zijn per definitie onafhankelijk van de afkapping en reizen ongewijzigd mee;
+* de bestaande `toelating`-samenvatting blijft wat zij is: beurtbreed en providerneutraal. De per-adapter-afwijzingen staan náást haar, niet in plaats van.
+
+Eén nieuwe sleutel betekent één toevoeging in `META_BASIS` (`core/lib/audit-meta.ts`) **en**
+één in `public.meta_projectie()` (B-8), met een sanity-test die de twee lijsten tegen elkaar
+houdt.
 
 Verboden in browser, audit en telemetry: vraag, passage, extract, bestandsnaam, pad, `web_url`,
 `drive_id`, `item_id`, private bronref en elke ruwe Graph-response. De bestaande
@@ -323,16 +416,21 @@ Verboden in browser, audit en telemetry: vraag, passage, extract, bestandsnaam, 
 nieuwe registratiefunctie krijgt dezelfde grendel.
 
 Alarm-/dashboardcriteria: elke 401/402/403; 429-ratio boven drempel; budgetuitputting;
-mapping­afwijzingen boven drempel (duidt op drift tussen register en tenant); en een
-auditafronding waarin tellers niet optellen tot het aantal kandidaten.
+mappingafwijzingen boven drempel (duidt op drift tussen register en tenant); en een
+auditafronding waarin de tellers van een adapter niet optellen tot zijn kandidatenaantal.
 
 ### 3.7 Rollback- en activatievolgorde
 
-Activatie (na akkoord, ná terugkeer van de admin): migraties → code-deploy naar Preview met
-kill switch **aan** → readiness-pagina toont `uit` → PAYG/billing (stappen 1–5 van de
-uitrolpoort) → tijdelijke consent (stap 6) → nulstand en fixtures controleren (stap 7) →
+Activatie (na akkoord, ná terugkeer van de admin): migraties → code-deploy van #413 naar
+Preview met kill switch **aan** → readiness-pagina toont `uit` → PAYG/billing (stappen 1–5 van
+de uitrolpoort) → **activeringstranche**: het bereikbare consentpad (allowlist, `doel`,
+consentroute) plus de productie-tokenbron landen als één afzonderlijk te reviewen wijziging
+(B-4) → tijdelijke consent verlenen (stap 6) → nulstand en fixtures controleren (stap 7) →
 kill switch uit, fondsflag aan voor PGB Preview → `copilot_beslispoort_4` (max 4 calls) →
 flag uit, grants intrekken, herstel bewijzen (stap 10).
+
+De volgorde is niet vrij: zolang het consentpad niet is gedeployed, kan er geen token bestaan,
+en zonder token vertrekt er geen call. Dat is de inertie van #413, niet een procedureafspraak.
 
 Rollback is op elk moment één stap: de globale kill switch aan. Dat sluit vóór de
 tokenaanvraag, dus ook bij een halfvoltooide activering. Daarnaast: fondsflag uit, en als
@@ -346,22 +444,33 @@ worden: er wordt geen inhoud, chunk, extract of embedding opgeslagen.
 
 | Tranche | Bestanden (nieuw/gewijzigd) | PR |
 |---|---|---|
-| T4-B adapterclient | `core/lib/microsoft-retrieval/copilot-client.ts` (endpointpin, filteropbouw, vormvalidatie, budget, foutnormalisatie) | PR-A |
-| T4-C bewijsketen | `core/lib/microsoft-retrieval/keten.ts`, `…/mapping.ts`, `…/extractlokalisatie.ts` + migratie `sharepoint_zoek_document_op_weburl` | PR-A |
-| T4-D poorten en kluis | `core/lib/microsoft-retrieval/readiness.ts`, `microsoft-config.ts` (B-4, keuze A/B), migratie `copilot_retrieval_stand` | PR-B |
-| T4-E orkestratie | `core/lib/retrieval/contract.ts` (`Spoor.adapter`), `core/lib/retrieval/orkestratie.ts` (adapter per spoor, gedeelde `poortNu`), `core/lib/retrieval/toelatingspoort.ts` (optionele `poortNu`) | PR-C |
-| T4-F beheer/audit | readinessroute + beheerpaneel, `core/lib/audit-meta.ts`, migratie `meta_projectie`, `rate-limit.ts`, `ratelimit-enforce.ts` | PR-D |
-| T4-G verificatie | `tests/cross-tenant/copilot-retrieval-*.test.ts`, herschreven `scripts/sharepoint-retrieval-spike-boundary.test.mjs` (B-2) | in elke PR, gate-PR als sluitstuk |
+| T4-B adapterclient | `core/lib/microsoft-retrieval/copilot-client.ts` (endpointpin, filteropbouw, vormvalidatie, budget, foutnormalisatie, geïnjecteerde tokenbron) | PR-A |
+| T4-C bewijsketen | `core/lib/microsoft-retrieval/keten.ts`, `…/mapping.ts`, `…/extractlokalisatie.ts` + migratie `sharepoint_canoniek_weburl`, `web_url_canoniek`, unieke index, `sharepoint_zoek_document_op_weburl` | PR-A |
+| T4-D poorten en kluis | `core/lib/microsoft-retrieval/readiness.ts`, `COPILOT_RETRIEVAL_REQUIRED_SCOPES` (declaratief, buiten elke consentweg), migratie `copilot_retrieval_stand` incl. `billing_geldig_tot` | PR-B |
+| T4-E orkestratie | `core/lib/retrieval/contract.ts` (`Spoor.adapter`, `Spoor.bijBronfout`, `RetrievalUitkomst.bronstatus`), `core/lib/retrieval/orkestratie.ts` (adapter per spoor, herkomst op spoorindex, `verrijkWeergave` per adapter, diagnostiekaggregatie, stoppen bij bronfout), `core/lib/retrieval/toelatingspoort.ts` (optionele gedeelde `poortNu`, standenmap per adaptergroep) | PR-C |
+| T4-F beheer/audit | readinessroute + beheerpaneel, `core/lib/audit-meta.ts` (`adapters`-sleutel), migratie `meta_projectie`, `rate-limit.ts`, `ratelimit-enforce.ts` | PR-D |
+| T4-G verificatie | `tests/cross-tenant/copilot-retrieval-*.test.ts`, herschreven `scripts/sharepoint-retrieval-spike-boundary.test.mjs` (B-2), byte-identiteitstest voor de ongewijzigde opdracht (B-1c), scope-onbereikbaarheidstest (B-4), contracttest route↔`bronstatus` (§3.5) | in elke PR, gate-PR als sluitstuk |
 
-Niets uit het ticket valt buiten deze tabel; de uitrolpoort (stappen 1–10) is bewust géén
-tranche van #413 en krijgt een eigen ticket.
+Niets uit het ticket valt buiten deze tabel; de uitrolpoort (stappen 1–10) en het bereikbare
+consentpad zijn bewust géén tranche van #413 en krijgen een eigen ticket.
 
----
+### 4.1 Verwerking van de reviewronde op #414
+
+| Reviewpunt | Verwerkt in |
+|---|---|
+| R-1 — auditmetadata van het Copilot-spoor gaat verloren; centraal aggregeren ná definitieve selectie en afkapping | §3.6 (nieuw), B-1(i), T4-E/T4-F in §4 |
+| R-2 — D-2 variant A is circulair en legt scopekeuze bij runtime-readiness; veilige tussenvorm | B-4 (herschreven), §3.1, T4-D in §4 |
+| R-3 — providerfout mag niet stil naar Supabase degraderen | §3.5 (herschreven), `Spoor.bijBronfout` + `RetrievalUitkomst.bronstatus` in §4 |
+| R-4 — URL-mapping exact één rij; canonicalisering identiek vóór opslag én lookup | B-3 (herschreven), §3.3, T4-C in §4 |
+| D-1 voorwaarde: V5-herlezing per unieke adapterbron | B-1(ii) |
+| D-3 voorwaarde: beperkte geldigheidsduur handmatige billingstand | B-12, §3.3, §3.4 |
 
 ## 5. Wat deze tranche expliciet NIET doet
 
 * Geen PAYG-, Azure- of billingconfiguratie; geen resource group; geen budgetmelding.
 * Geen Entra-permission, geen delegated consent, geen grant — en geen route die er één start.
+* Geen uitbreiding van `MICROSOFT_TOEGESTANE_SCOPES` of `toegestaneScopes()`, en geen nieuw consent`doel`; de nieuwe scopeconstante is puur declaratief (B-4).
+* Geen productie-tokenbron voor de adapter; hij is in deze tranche alleen met stubtokens aanroepbaar.
 * Geen enkele live `copilot/retrieval`-call; alle tests zijn hermetisch, zonder netwerk en zonder DB.
 * Geen Preview- of Productieflag geactiveerd; alles standaard uit en fail-closed.
 * Geen productie- of klantdocument; uitsluitend de #385-fixtures en gegenereerde bytes.
@@ -378,7 +487,9 @@ tranche van #413 en krijgt een eigen ticket.
 `npm run build`, plus de structurele DB-gates A–H na de grantwijziging.
 
 Karakteriseringsbewijs dat in elke PR meeloopt: de W322-goldens en de bestaande
-retrieval-snapshots blijven byte-identiek zolang de poorten uitstaan (B-1, B-5).
+retrieval-snapshots blijven byte-identiek zolang de poorten uitstaan (B-1, B-5). De nieuwe
+`adapters`-metasleutel verschijnt alleen wanneer er werkelijk een tweede adapter heeft
+gedraaid; bij een opdracht zonder spoor-adapter blijft `retrieval_meta` ongewijzigd (§3.6).
 
 ---
 
@@ -388,15 +499,18 @@ retrieval-snapshots blijven byte-identiek zolang de poorten uitstaan (B-1, B-5).
 2. **Duplicatie van veiligheidslogica** tussen spike en productie (B-11), gemitigeerd met gedeelde karakteriseringsfixtures.
 3. **Geen SLA op PAYG-preview** en propagatietijd tot ~2 uur: de eerste activering kan zonder fout van onze kant falen. Stopregel: geen verborgen retry, elke extra probe vereist apart akkoord (uitrolpoort stap 9).
 4. **B-1c raakt de kern van de orkestratie.** Het is additief en bewijsbaar inert, maar het is wel de meest ingrijpende wijziging van #413; PR-C verdient de zwaarste review.
+5. **Stoppen bij een providerfout kost beschikbaarheid.** Zodra de vlag ooit aan gaat, maakt een Microsoft-storing of een ingetrokken consent de assistent voor dat fonds tijdelijk onbruikbaar in plaats van stiller. Dat is de bewust gekozen kant (§3.5), maar het is een echte wissel: de uitweg is de fondsflag of de kill switch uit, niet een stille terugval. Zolang `"meld"` geen zichtbare UI heeft, is er geen tussenweg.
 
 ---
 
-## 8. Beslispunten — akkoord nodig vóór PR-A
+## 8. Beslissingen (vastgesteld door de opdrachtgever, 2026-09-20)
 
-| # | Vraag | Voorstel |
+| # | Onderwerp | Besluit |
 |---|---|---|
-| D-1 | Adapter per spoor (B-1c) in de kern van de orkestratie? | **Ja**, additief, met byte-identiteitstest. Alternatief (composite) is aantoonbaar fail-open. |
-| D-2 | Scope-constante `Sites.Read.All` nu voorbereiden (B-4)? | **Variant A**: constante nu, achter de volledige readiness-conjunctie, géén consentroute. **Variant B**: constante pas in de activeringstranche; #413 test uitsluitend tegen gestubde tokens. |
-| D-3 | Migratie `sharepoint_zoek_document_op_weburl` + tabel `copilot_retrieval_stand` in #413? | **Ja** — zonder migratie is er geen schaalbare locatorstap (B-3) en geen niet-gissende billingstand (B-12). |
-| D-4 | Boundarygate herschrijven (B-2)? | **Ja**, en strenger: één toegestane endpointplek, `/beta`/`sharePointEmbedded`/`/shares` structureel verboden in de hele productieboom. |
-| D-5 | Besluitnotitie? | Ja — `decisions/0214-copilot-retrieval-primaire-kandidaatbron.md`, te schrijven bij PR-A. |
+| D-1 | Adapter per spoor in de kern van de orkestratie | **Ja**, mits centrale diagnostiekaggregatie (§3.6) en V5-/versieherlezing per unieke adapterbron (B-1ii). `verrijkWeergave()` per adapter volgt uit dezelfde eis (B-1iii). |
+| D-2 | `Sites.Read.All` | **Veilige tussenvorm, feitelijk variant B voor OAuth**: `COPILOT_RETRIEVAL_REQUIRED_SCOPES` alleen voor claimcontrole en readiness; niet in `MICROSOFT_TOEGESTANE_SCOPES`, niet in `toegestaneScopes()`, geen consentdoel; uitsluitend geïnjecteerde/stubtokens. Het bereikbare consentpad komt in de activeringstranche. |
+| D-3 | Migratie locatoropzoeking + rolloutstand | **Ja**, met exact-één-mapping (B-3) en een beperkte geldigheidsduur voor handmatig geregistreerde billing-readiness (B-12). |
+| D-4 | Boundarygate herschrijven | **Ja**, en strenger: één toegestane endpointplek, `/beta`/`sharePointEmbedded`/`/shares` structureel verboden in de hele productieboom. |
+| D-5 | Besluitnotitie | **Ja** — `decisions/0214-copilot-retrieval-primaire-kandidaatbron.md`, te schrijven bij PR-A. |
+
+Met deze vijf besluiten en de verwerking in §4.1 is T4-A afgerond en mag PR-A starten.
