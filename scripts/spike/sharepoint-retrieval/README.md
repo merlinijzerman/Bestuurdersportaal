@@ -78,6 +78,10 @@ De uitvoer bevat geen zoekvraag, passage, token, accountgegevens, lokale refs of
 
 `scripts/spike/sharepoint-retrieval/copilot-retrieval.ts` voegt een vierde arm toe:
 `POST https://graph.microsoft.com/v1.0/copilot/retrieval` met `dataSource = sharePoint`.
+De Retrieval API zelf is sinds juli 2026 GA. Alleen pay-as-you-go voor gebruikers
+zonder Copilot-add-on blijft preview. Deze meetarm gebruikt uitsluitend `v1.0`;
+de niet voor productie ondersteunde `/beta`-variant en de preview-datasource
+`sharePointEmbedded` zijn uitgesloten.
 Deze arm heeft **geen serverbrug**. Hij is uitsluitend bereikbaar via de lokale CLI en de
 hermetische tests; de beheerpagina, de Preview-smoke en elk ander productiepad kennen hem
 niet, en de boundarygate faalt zodra dat verandert.
