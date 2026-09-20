@@ -100,6 +100,11 @@ test("#407-fixturecontract is blokkerend in CI en draait via hetzelfde script al
     "het fixturecontract wijst niet naar fixturestatus.test.ts",
   );
   assert.match(
+    pkg.scripts["test:spike-fixture-contract"],
+    /sharepoint-retrieval\/vergelijking-profielen\.test\.ts/,
+    "het kostengecontroleerde meetprofiel draait niet in de required contractgate",
+  );
+  assert.match(
     pkg.scripts["test:contract"],
     /npm run test:spike-fixture-contract/,
     "het fixturecontract is niet aangesloten op test:contract",

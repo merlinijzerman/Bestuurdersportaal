@@ -1,9 +1,12 @@
 # #407 — Licentie-, kosten- en consentbesluit vóór T3
 
-Status: **BESLISSING GEVRAAGD.** T0, T1 en T2 zijn gebouwd en groen. T3 (de live
-PGB-volgorde) is niet gestart en start niet zonder een expliciet akkoord op dit
-document. Er is in deze tranche geen permission, consent, billing, featureflag of
-live Graph-call aangeraakt.
+Status: **OPLOSSINGSRICHTING VASTGESTELD; COMMERCIEEL BESLUIT OPEN.** Copilot
+Retrieval wordt de primaire SharePoint-kandidaatbron. DriveItem blijft de
+vertrouwde verificatie-, versie- en downloadgrens; Microsoft-extracts gaan nooit
+rechtstreeks naar de assistent. T0, T1 en T2 zijn gebouwd en groen. T3 (de live
+PGB-volgorde) is niet gestart en start niet zonder een expliciet licentie-/kosten-
+en consentbesluit. Er is in deze tranche geen permission, consent, billing,
+featureflag of live Graph-call aangeraakt.
 
 ## 1. Waarom dit besluit nodig is vóór er ook maar één call vertrekt
 
@@ -31,7 +34,7 @@ Microsoft biedt twee wegen naar dezelfde API.
 | Wie heeft het nodig | De PGB-testidentiteit | Een gekoppeld Azure-abonnement met kostenplaats |
 | Vooraf te regelen | Licentietoewijzing in de tenant | Azure-abonnement, resourcekoppeling, budgetalarm |
 | Omkeerbaar | Ja, licentie intrekken | Ja, koppeling verbreken |
-| Kostenrisico bij de spike | Vast en vooraf bekend | Variabel; begrensd door onze eigen requestbudgetten |
+| Kostenrisico bij de spike | Geen extra kosten per Retrieval-call | $ 0,10 per API-call in de publieke preview (stand 20-09-2026) |
 | Past bij een tijdelijke proef | Matig — een volle maand voor enkele meetrondes | Beter — betaal alleen voor de uitgevoerde metingen |
 
 **Wat de spike zelf al begrenst**, ongeacht de gekozen weg:
@@ -45,9 +48,21 @@ Microsoft biedt twee wegen naar dezelfde API.
 * geen enkele extra call per hit: het locatorregister wordt read-only opgebouwd
   uit de al geregistreerde DriveItems, eenmalig per meting en pas wanneer er een
   hit bínnen de root is;
-* de volledige vergelijkingsreeks is 2 rondes × 4 scenario's × 1 Copilot-call = **8 Copilot-calls**,
-  plus 8 als de semantische scenario's live meedraaien. De orde van grootte is
-  tientallen calls, geen duizenden.
+* het nieuwe profiel `copilot_beslispoort_4` draait uitsluitend SEM01 en SEM02,
+  twee rondes, met precies één Copilot-poging per meting: **maximaal 4 calls**.
+  Het profiel staat in code en weigert overrides vanuit het lokale JSON-bestand;
+* de drie overige meetarmen lopen in hetzelfde profiel mee. Ze leveren de
+  lexicale referentie en meetunie, maar voegen geen Copilot Retrieval-call toe;
+* de volledige vaste scenarioset is in de huidige code 2 rondes × 6 scenario's
+  × 1 Copilot-poging = **12 calls**. De eerdere notitie van 16 calls was een
+  rekenfout en is geen uitvoeringscontract;
+* bij pay-as-you-go is het harde prijsplafond van de minimale beslispoort op basis
+  van de publieke-previewprijs dus **$ 0,40**. Bij een toegewezen Copilot-add-on
+  rekent Microsoft geen aanvullende Retrieval-callkosten. Prijzen en
+  previewvoorwaarden moeten vlak vóór activering opnieuw worden gecontroleerd.
+
+Bronnen: [Retrieval API-overzicht](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/retrieval/overview) en
+[pay-as-you-go (preview)](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/retrieval/paygo-retrieval).
 
 **Wat moet worden vastgesteld vóór T3:**
 
@@ -142,6 +157,23 @@ niet als alle andere metingen groen zijn.
    canaryterm (§4, C-2).
 4. **Meetvenster:** wanneer de grants aan gaan en wanneer ze aantoonbaar weer weg
    zijn.
+
+### 5a. Gefaseerde uitvoering na het commerciële besluit
+
+De eerste live stap is niet de volledige reeks maar `copilot_beslispoort_4`:
+
+1. SEM01 en SEM02, elk twee keer, met alle vier meetarmen;
+2. maximaal vier Copilot Retrieval-POST-pogingen en geen retry bij 429;
+3. fail-fast op een echte Copilot-fout of onverwachte bronset; `geen_resultaten`
+   blijft een geldige kwaliteitsuitkomst, zodat het tweede semantische scenario
+   nog wordt gemeten;
+4. alleen bij twee correcte bronsets, nul bronsetvervuiling en volledige eigen
+   DriveItem-/versie-/extractverificatie volgt de volledige reeks.
+
+De negatieve root-, actor-, versie- en configuratiescenario's blijven in de
+hermetische blokkende suite. Ze opnieuw als betaalde Retrieval-call uitvoeren
+levert voor deze eerste kostenbeslissing minder informatie op dan een tweede
+semantische meting.
 
 Zonder 1 en 2 kan T3 niet draaien. Zonder 3 draait T3 wel, maar levert hij geen
 antwoord op de semantische vraag — en juist die vraag is de reden dat #407 naast

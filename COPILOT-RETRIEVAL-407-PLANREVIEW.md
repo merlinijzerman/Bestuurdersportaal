@@ -139,7 +139,7 @@ dezelfde deterministische RRF-ordening. Bestaand gedrag voor twee lijsten blijft
 * Stubs/fixtures voor `retrievalHits`, extracts, leeg, 401/403/429/5xx, timeout, cancellation.
 
 **T1 — bewijs- en veiligheidsketen**
-* URL-prefiltering op de herlezen root → `/shares`-resolutie → registercheck →
+* URL-prefiltering op de herlezen root → read-only locatorregister → registercheck →
   de bestaande, ongewijzigde DriveItem-/versie-/preview-keten.
 * Normalisatie en **unieke** lokalisatie van elk extract in de eigen extractie; niet-uniek,
   ontbrekend of gewijzigd = fail-closed onder `lokalisatie`.

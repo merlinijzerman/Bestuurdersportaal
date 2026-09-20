@@ -18,8 +18,14 @@ import { randomUUID } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { resolve, relative } from "node:path";
 import { stderr } from "node:process";
-import { maakKwaliteitsrapport, VERGELIJK_ARMEN, voerVergelijkingUit, type VergelijkArm } from "./vergelijking";
-import { VERGELIJK_SCENARIO_CODES, vergelijkScenario, type VergelijkScenario } from "./vergelijking-scenarios";
+import { maakKwaliteitsrapport, voerVergelijkingUit, type VergelijkArm } from "./vergelijking";
+import { vergelijkScenario, type VergelijkScenario } from "./vergelijking-scenarios";
+import {
+  fataleCopilotRij,
+  geplandeCopilotCalls,
+  maakVergelijkMeetplan,
+  type VergelijkProfiel,
+} from "./vergelijking-profielen";
 import { spikeFixtureStatus } from "./fixturestatus";
 import type { SpikeBronSnapshot, VeiligeVergelijkrij } from "./types";
 
@@ -34,6 +40,7 @@ type Config = {
   doel: "PGB Preview-pilot";
   fondsId: string;
   gebruikerId: string;
+  profiel?: VergelijkProfiel;
   rondes?: number;
   armen?: VergelijkArm[];
   scenarios?: VergelijkScenario[];
@@ -62,15 +69,8 @@ async function leesLokaleConfig(pad: string): Promise<Config> {
   if (config.doel !== "PGB Preview-pilot" || !uuid.test(config.fondsId) || !uuid.test(config.gebruikerId)) {
     throw new Error("doel, fondsId of gebruikerId is ongeldig");
   }
-  if (typeof config.rondes !== "number" || !Number.isInteger(config.rondes) || config.rondes < 2 || config.rondes > 10) {
-    throw new Error("rondes moet tussen 2 en 10 liggen");
-  }
-  if (config.armen !== undefined && (!Array.isArray(config.armen) || config.armen.length === 0 || config.armen.some((arm) => !VERGELIJK_ARMEN.includes(arm)))) {
-    throw new Error("armen is ongeldig");
-  }
-  if (config.scenarios !== undefined && (!Array.isArray(config.scenarios) || config.scenarios.length === 0 || config.scenarios.some((code) => !VERGELIJK_SCENARIO_CODES.includes(code)))) {
-    throw new Error("scenarios is ongeldig");
-  }
+  // Valideert ook dat een benoemd profiel niet via JSON kan worden verruimd.
+  maakVergelijkMeetplan(config);
   if (!Array.isArray(config.fixtures) || config.fixtures.length === 0 || config.fixtures.some((fixture) => !fixture.fixtureCode || !uuid.test(fixture.ref))) {
     throw new Error("fixtures ontbreken of bevatten ongeldige lokale refs");
   }
@@ -80,6 +80,7 @@ async function leesLokaleConfig(pad: string): Promise<Config> {
 async function main() {
   hardeLokaleGrendel();
   const config = await leesLokaleConfig(configPadUitArgv());
+  const meetplan = maakVergelijkMeetplan(config);
   const connector = await import("../../../core/lib/microsoft-connector");
   const vault = await import("../../../core/lib/microsoft-vault");
   const context = { fondsId: config.fondsId, gebruikerId: config.gebruikerId };
@@ -141,26 +142,41 @@ async function main() {
     return { accessToken: token.accessToken, tenantId: token.tenantId, actorObjectId: token.objectId };
   };
 
-  const armen = config.armen ?? [...VERGELIJK_ARMEN];
-  const scenarios = config.scenarios ?? VERGELIJK_SCENARIO_CODES;
+  const armen = meetplan.armen;
+  const scenarios = meetplan.scenarios;
+  const gepland = geplandeCopilotCalls(meetplan);
+  if (gepland > meetplan.maxCopilotCalls) throw new Error("gepland Copilot-callvolume overschrijdt het profielplafond");
   const rijen: VeiligeVergelijkrij[] = [];
-  for (let ronde = 1; ronde <= config.rondes!; ronde += 1) {
+  let gereserveerdeCopilotCalls = 0;
+  for (let ronde = 1; ronde <= meetplan.rondes; ronde += 1) {
     for (const code of scenarios) {
-      rijen.push(...await voerVergelijkingUit({ leesBron, delegatedToken }, {
+      if (armen.includes("copilot_retrieval")) {
+        gereserveerdeCopilotCalls += meetplan.copilotRequestBudget;
+        if (gereserveerdeCopilotCalls > meetplan.maxCopilotCalls) {
+          throw new Error("Copilot-callplafond bereikt vóór de volgende meting");
+        }
+      }
+      const nieuweRijen = await voerVergelijkingUit({ leesBron, delegatedToken }, {
         ronde,
         vraag: vergelijkScenario(code),
         armen,
         correlationId: () => randomUUID(),
         timeoutMs: 20_000,
         concurrency: 3,
-      }));
+        copilotRequestBudget: meetplan.copilotRequestBudget,
+      });
+      rijen.push(...nieuweRijen);
+      const fataal = meetplan.stopNaCopilotFout ? fataleCopilotRij(nieuweRijen) : null;
+      if (fataal) {
+        throw new Error(`minimale Copilot-beslispoort gestopt: ${fataal.foutcategorie ?? "onbekende_fout"}`);
+      }
     }
   }
 
   process.stdout.write(`${JSON.stringify(maakKwaliteitsrapport({
     doel: config.doel,
     gemetenOp: new Date().toISOString(),
-    rondes: config.rondes!,
+    rondes: meetplan.rondes,
     armen,
     rijen,
   }), null, 2)}\n`);
