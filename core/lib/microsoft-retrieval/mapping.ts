@@ -26,9 +26,24 @@
 //  mapping (zichtbaar in de teller) en nooit tot een verkeerde.
 // ============================================================================
 
-/** Waarom een kandidaat vóór de netwerkcall afvalt. Inhoudsvrij; gaat als
- *  telling naar de diagnostiek, nooit met een URL erbij. */
-export type MappingAfwijzing = "root" | "mapping" | "quarantaine";
+/**
+ * Waarom een kandidaat vóór de netwerkcall afvalt. Inhoudsvrij; gaat als telling
+ * naar de diagnostiek, nooit met een URL erbij.
+ *
+ * BEWUST GEEN APARTE `quarantaine`-CATEGORIE. Die stond hier eerst, maar zij was
+ * onbereikbaar: de registerfunctie verbergt rijen in quarantaine, geeft dan niets
+ * terug, en dat is voor deze laag niet te onderscheiden van een onbekende URL.
+ * Een categorie die nooit kan worden geretourneerd is een belofte zonder dekking.
+ *
+ * De informatie zelf gaat niet verloren, maar hoort op een andere plek: hoeveel
+ * rijen er in quarantaine staan is een EIGENSCHAP VAN HET REGISTER, niet van een
+ * verzoek. Eén telling per bron in de beheerstand (T4-F, en vandaag al in
+ * `supabase/checks/2026_09_20_413_weburl_verificatie.sql` als
+ * `e_rijen_in_quarantaine`) is goedkoper én betrouwbaarder dan een extra
+ * database-rondgang per gemiste hit — die zou bovendien alleen iets zeggen over
+ * de hits die wij toevallig kregen.
+ */
+export type MappingAfwijzing = "root" | "mapping";
 
 /**
  * De canonieke vergelijkingsvorm, of `null` als de URL er geen kan hebben.
@@ -109,9 +124,9 @@ export type MappingUitkomst =
  *
  * QUARANTAINE IS GEEN FOUT VAN DIT VERZOEK. Zes Preview-rijen staan er sinds de
  * migratie in; ze komen pas terug zodra een volgende listing de botsing oplost.
- * Voor de locator bestaan ze niet, en dat is de bedoeling — maar het verdient
- * een eigen teller, want "de bron is er wel maar is ambigu" is iets anders dan
- * "de bron is onbekend".
+ * Voor de locator bestaan ze niet — en hij kan ze ook niet van een onbekende URL
+ * onderscheiden, want de registerfunctie geeft in beide gevallen niets terug.
+ * Beide tellen daarom als `mapping`; zie de noot bij `MappingAfwijzing`.
  */
 export async function zoekBronreferentie(
   hitWebUrl: string,

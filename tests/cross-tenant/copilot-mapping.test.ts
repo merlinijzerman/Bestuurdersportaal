@@ -130,6 +130,9 @@ test("de opzoeking gebruikt de CANONIEKE vorm, niet de ruwe hit-URL", async () =
 test("geen registratie, quarantaine of ambiguïteit: allemaal fail-closed", async () => {
   // De DB-functie geeft in al deze gevallen niets terug (count = 1 en alleen
   // actieve rijen); de adapter ziet dan hetzelfde als bij een onbekende URL.
+  // Deze samenvoeging is de reden dat er GEEN aparte `quarantaine`-categorie is:
+  // die zou nooit kunnen worden geretourneerd. Hoeveel rijen in quarantaine
+  // staan is een eigenschap van het register en wordt daar geteld.
   const uitkomst = await zoekBronreferentie(`${ROOT}/A.docx`, ROOT, async () => undefined);
   assert.equal(uitkomst.ok, false);
   assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "mapping");
