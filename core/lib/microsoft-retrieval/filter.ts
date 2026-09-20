@@ -50,6 +50,38 @@ const FILTER_VORM = /^path:"https:\/\/[a-z0-9-]+\.sharepoint\.com(?:\/(?:[A-Za-z
 const KQL_BETEKENISVOL = /["\\*?()\[\]{}<>:~^]/;
 
 /**
+ * Een punt- of dubbelepuntsegment in de RUWE URL. Net als bij een backslash
+ * herschrijft de WHATWG-parser dit in stilte: `/sites/pgb/../ander` én
+ * `/sites/pgb/%2e%2e/ander` worden allebei `/sites/ander`. Wie pas ná het
+ * parsen kijkt, ziet een keurig pad dat een ANDERE bibliotheek aanwijst dan in
+ * de registratie staat — een scopewijziging zonder spoor.
+ *
+ * De vergelijking gebeurt op het één keer gedecodeerde segment, want `%2e` en
+ * `%2E` zijn voor de parser gelijk aan `.`. Dubbel gecodeerde vormen (`%252e`)
+ * laat de parser juist staan; die stranden verderop op de padallowlist, die
+ * geen `%` toelaat.
+ */
+function bevatPuntsegment(ruweUrl: string): boolean {
+  const naSchema = ruweUrl.indexOf("://");
+  const rest = naSchema === -1 ? ruweUrl : ruweUrl.slice(naSchema + 3);
+  const eerste = rest.indexOf("/");
+  if (eerste === -1) return false;
+  const pad = rest.slice(eerste).split("?")[0].split("#")[0];
+  for (const segment of pad.split("/")) {
+    let gedecodeerd: string;
+    try {
+      gedecodeerd = decodeURIComponent(segment);
+    } catch {
+      // Onleesbare codering: dan kunnen we niet vaststellen wat het segment
+      // betekent, en dus weigeren we het.
+      return true;
+    }
+    if (gedecodeerd === "." || gedecodeerd === "..") return true;
+  }
+  return false;
+}
+
+/**
  * Bouwt de padscope uit de root-URL van de geregistreerde bron.
  *
  * `verwachteHost` komt uit dezelfde bronregistratie en wordt apart meegegeven:
@@ -60,12 +92,14 @@ const KQL_BETEKENISVOL = /["\\*?()\[\]{}<>:~^]/;
  */
 export function bouwFilterExpression(rootWebUrl: string, verwachteHost: string): FilterResultaat {
   // VÓÓR het parsen, want de URL-parser HERSCHRIJFT deze tekens in stilte: bij
-  // een https-URL wordt een backslash een padscheiding (`/a\b` → `/a/b`) en
-  // worden tab, CR en LF simpelweg verwijderd (`/si<tab>te` → `/site`). De
-  // scope die wij versturen zou dan een andere zijn dan die in de registratie
-  // staat — geen verbreding, maar wel een stille herinterpretatie, en die mag
-  // niet langs een controle glippen die pas ná het parsen kijkt.
+  // een https-URL wordt een backslash een padscheiding (`/a\b` → `/a/b`),
+  // worden tab, CR en LF simpelweg verwijderd (`/si<tab>te` → `/site`) en
+  // worden punt- en dubbelepuntsegmenten weggerekend (`/sites/pgb/../ander` →
+  // `/sites/ander`). De scope die wij versturen zou dan een andere zijn dan die
+  // in de registratie staat — soms zelfs een BREDERE — en dat mag niet langs
+  // een controle glippen die pas ná het parsen kijkt.
   if (/[\\\u0000-\u001f\u007f]/.test(rootWebUrl)) return { ok: false, code: "root_pad_onveilig" };
+  if (bevatPuntsegment(rootWebUrl)) return { ok: false, code: "root_pad_onveilig" };
 
   let parsed: URL;
   try {
@@ -93,6 +127,14 @@ export function bouwFilterExpression(rootWebUrl: string, verwachteHost: string):
   }
   if (!gedecodeerd) return { ok: false, code: "root_pad_leeg" };
   if (!VEILIG_GEDECODEERD_PAD.test(gedecodeerd)) return { ok: false, code: "root_pad_onveilig" };
+  // NOG EEN KEER, nu op de GEDECODEERDE vorm. De controle vóór het parsen vangt
+  // wat de parser zelf wegrekent; dit vangt het omgekeerde geval: `..%2fander`
+  // laat de parser ongemoeid (`%2f` blijft staan), maar na decodering staat er
+  // `../ander` — en die punt­segmenten zouden dan in de UITGAANDE filter belanden,
+  // waar Microsoft ze naar eigen inzicht mag interpreteren.
+  if (gedecodeerd.split("/").some((deel) => deel === "." || deel === "..")) {
+    return { ok: false, code: "root_pad_onveilig" };
+  }
   // Dubbele grendel: de allowlist hierboven sluit deze tekens al uit. Blijft
   // hier toch iets hangen, dan is de allowlist verruimd zonder dat iemand deze
   // regel heeft herzien — en dan stopt de call alsnog.

@@ -53,6 +53,41 @@ test("injectiepogingen in de root vertrekken niet", () => {
   }
 });
 
+test("puntsegmenten wijzigen de scope stil en worden daarom geweigerd", () => {
+  // De WHATWG-parser rekent deze segmenten weg VOORDAT een controle op
+  // `pathname` iets kan zien: `/sites/pgb/../ander` is dan al `/sites/ander`.
+  // Zonder deze grendel zou een root uit de registratie een ANDERE bibliotheek
+  // aanwijzen dan de registratie beschrijft — en meestal een bredere.
+  const verschoven = [
+    `https://${HOST}/sites/pgb/../ander`,
+    `https://${HOST}/sites/pgb/%2e%2e/ander`,
+    `https://${HOST}/sites/pgb/%2E%2E/ander`,
+    `https://${HOST}/sites/pgb/..%2fander`,
+    `https://${HOST}/sites/pgb/./ander`,
+    `https://${HOST}/sites/pgb/%2e/ander`,
+    `https://${HOST}/sites/pgb/..`,
+    `https://${HOST}/..`,
+  ];
+  for (const root of verschoven) {
+    const uitkomst = bouwFilterExpression(root, HOST);
+    assert.equal(uitkomst.ok, false, root);
+    assert.equal(uitkomst.ok === false && uitkomst.code, "root_pad_onveilig", root);
+  }
+
+  // Bewijs dat de grendel nodig is: de parser verschuift deze paden werkelijk.
+  assert.equal(new URL(`https://${HOST}/sites/pgb/../ander`).pathname, "/sites/ander");
+  assert.equal(new URL(`https://${HOST}/sites/pgb/%2e%2e/ander`).pathname, "/sites/ander");
+});
+
+test("een punt BINNEN een segment blijft gewoon toegestaan", () => {
+  const uitkomst = bouwFilterExpression(`https://${HOST}/sites/pgb/Beleid.v2.docx`, HOST);
+  assert.ok(uitkomst.ok);
+  assert.equal(
+    uitkomst.filterExpression,
+    'path:"https://contoso.sharepoint.com/sites/pgb/Beleid.v2.docx"',
+  );
+});
+
 test("een root buiten de geregistreerde host of buiten https valt af", () => {
   for (const [root, host, code] of [
     [`http://${HOST}/sites/pgb`, HOST, "root_geen_https"],
