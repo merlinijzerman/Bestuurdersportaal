@@ -23,13 +23,14 @@ test("#353-prototype is alleen bereikbaar via de ene Preview-only serverbrug", (
     const inhoud = readFileSync(resolve(root, bestand), "utf8");
     if (bestand === toegestaneBrug) continue;
     if (inhoud.includes(spikePad) || inhoud.includes("sharepoint-retrieval/prototype") || inhoud.includes("voerSharePointRetrievalSpikeUit")) directeImports.push(bestand);
-    // #407 — de Copilot-meetarm heeft GEEN serverbrug en mag dus door geen
+    // #407 — de Copilot-MEETARM heeft GEEN serverbrug en mag dus door geen
     // enkel app-, core-, platform- of fondsenbestand worden geïmporteerd.
+    // #413 heeft daar een eigen productie-adapter naast gezet; die deelt geen
+    // regel code met de spike, en de spike blijft bevroren bewijsmateriaal.
     if (
       inhoud.includes("sharepoint-retrieval/copilot-retrieval")
       || inhoud.includes("sharepoint-retrieval/vergelijking")
       || inhoud.includes("voerCopilotRetrievalSpikeUit")
-      || inhoud.includes("copilot/retrieval")
     ) directeImports.push(bestand);
   }
   assert.deepEqual(directeImports, [], `spike is buiten de serverbrug bereikbaar: ${directeImports.join(", ")}`);
@@ -181,4 +182,74 @@ test("#353-Previewbrug is niet bereikbaar vanuit chat, zoeken, vergelijken of de
     assert.doesNotMatch(inhoud, /microsoft-sharepoint-retrieval-smoke|sharepoint-retrieval\/prototype/);
     assert.doesNotMatch(inhoud, /sharepoint-retrieval\/copilot-retrieval|sharepoint-retrieval\/vergelijking|copilot\/retrieval/);
   }
+});
+
+// ---------------------------------------------------------------------------
+//  #413 — het PRODUCTIE-oppervlak bij Microsoft
+// ---------------------------------------------------------------------------
+//  Tot #413 verbood deze gate de tekst `copilot/retrieval` overal in de
+//  productieboom. Dat kon niet blijven: de productie-adapter bevat die tekst per
+//  definitie. De gate is daarom niet verzwakt maar OMGEDRAAID — van "nergens"
+//  naar "op precies één plek, en verder nergens" — en uitgebreid met de drie
+//  oppervlakken die #413 structureel verbiedt in plaats van per review.
+
+/** De enige plek waar het endpoint als letterlijke string mag staan. */
+const ENDPOINTPIN = "core/lib/microsoft-retrieval/endpoint.ts";
+const ENDPOINT = "https://graph.microsoft.com/v1.0/copilot/retrieval";
+
+/**
+ * Oppervlakken die deze productieroute nooit mag raken. Deze lijst staat
+ * bewust TWEEMAAL — hier en in `endpoint.ts`. Eén lijst die zichzelf bewaakt is
+ * geen bewaking; de laatste assertie van deze test houdt de twee gelijk.
+ */
+const VERBODEN = ["graph.microsoft.com/beta", "/beta/", "sharePointEmbedded", "/v1.0/shares/", "sharingToken"];
+
+test("#413-endpointpin staat op precies één plek in de productieboom", () => {
+  const productiebestanden = [
+    ...bronbestanden("app"),
+    ...bronbestanden("core"),
+    ...bronbestanden("platform"),
+    ...bronbestanden("fondsen"),
+  ];
+
+  const pin = productiebestanden.filter(
+    (bestand) => readFileSync(resolve(root, bestand), "utf8").includes("copilot/retrieval"),
+  );
+  assert.deepEqual(
+    pin,
+    [ENDPOINTPIN],
+    `het retrieval-endpoint hoort uitsluitend in ${ENDPOINTPIN} te staan`,
+  );
+
+  const inhoud = readFileSync(resolve(root, ENDPOINTPIN), "utf8");
+  assert.ok(
+    inhoud.includes(`"${ENDPOINT}"`),
+    "de endpointpin bevat niet exact de v1.0-GA-URL",
+  );
+});
+
+test("#413-verboden Microsoft-oppervlakken komen nergens in de productieboom voor", () => {
+  const overtredingen = [];
+  for (const bestand of [
+    ...bronbestanden("app"),
+    ...bronbestanden("core"),
+    ...bronbestanden("platform"),
+    ...bronbestanden("fondsen"),
+  ]) {
+    // De pin is de plek waar de verbodslijst zelf wordt gedefinieerd; daar
+    // staan de termen dus per definitie in.
+    if (bestand === ENDPOINTPIN) continue;
+    const inhoud = readFileSync(resolve(root, bestand), "utf8");
+    for (const term of VERBODEN) if (inhoud.includes(term)) overtredingen.push(`${bestand}: ${term}`);
+  }
+  assert.deepEqual(overtredingen, [], `verboden Microsoft-oppervlak in productiecode: ${overtredingen.join(", ")}`);
+
+  // De twee lijsten moeten identiek blijven: een term die alleen hier staat
+  // wordt niet door de adapter geweigerd, en een term die alleen daar staat
+  // wordt niet door deze gate bewaakt.
+  const pin = readFileSync(resolve(root, ENDPOINTPIN), "utf8");
+  const lijst = pin.match(/const VERBODEN_OPPERVLAK = \[([^\]]*)\]/);
+  assert.ok(lijst, "VERBODEN_OPPERVLAK is niet als array-literal in de endpointpin te vinden");
+  const inPin = [...lijst[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(inPin, VERBODEN, "de verbodslijst in de gate en in endpoint.ts lopen uiteen");
 });
