@@ -208,6 +208,12 @@ SQL_M365F3A="supabase/checks/2026_09_04_microsoft_sharepoint_fase3.sql"
 # Microsoft 365 fase 3B (#321) — documentregister zonder inhoud, één referentie
 # per item, fondsgebonden opzoeking en audit-poort tegen URL's/externe id's.
 SQL_M365F3B="supabase/checks/2026_09_04_microsoft_sharepoint_fase3b_documenten.sql"
+# #413 T4-C — de canonieke webUrl-locator met quarantaine. Deze suite hoort in de
+# gate en niet in een scratchpad: de migratie raakt een BESTAAND schrijfpad (de
+# documentenlijst), en juist de gevallen waarin een unieke index daarop stukloopt
+# — omwisseling van twee URL's binnen één listing, een botsing met een rij buiten
+# de listing, gelijktijdige listings — vallen in een review niet op.
+SQL_M365_WEBURL="supabase/checks/2026_09_20_413_weburl_gedrag.sql"
 # Microsoft-login fase 1B (#335, T1, besluit 0211) — privaat schema login_private,
 # minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
 # SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
@@ -423,6 +429,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F2A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL"
 echo
 echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
