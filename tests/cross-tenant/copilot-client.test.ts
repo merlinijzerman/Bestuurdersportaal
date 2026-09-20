@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { roepCopilotRetrievalAan } from "../../core/lib/microsoft-retrieval/client";
 import { CopilotFout } from "../../core/lib/microsoft-retrieval/fouten";
 import { COPILOT_RETRIEVAL_ENDPOINT } from "../../core/lib/microsoft-retrieval/endpoint";
+import { COPILOT_MAX_RESPONSE_BYTES } from "../../core/lib/microsoft-retrieval/client";
 import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
 
 const HOST = "contoso.sharepoint.com";
@@ -197,7 +198,7 @@ test("het aantal kandidaten blijft binnen het gevraagde plafond", async () => {
   assert.equal(uitkomst.kandidaten.length, 5);
 });
 
-test("een te groot antwoord wordt niet verwerkt", async () => {
+test("een te groot antwoord wordt geweigerd op content-length, zonder te lezen", async () => {
   const { impl } = stubFetch([
     json({ retrievalHits: [] }, 200, { "content-length": String(3 * 1024 * 1024) }),
   ]);
@@ -205,6 +206,68 @@ test("een te groot antwoord wordt niet verwerkt", async () => {
     () => roepCopilotRetrievalAan(basis({ fetchImpl: impl })),
     (e: unknown) => e instanceof CopilotFout && e.code === "copilot_responsvorm",
   );
+});
+
+test("de grens telt ONTVANGEN BYTES, niet tekens, en stopt het lezen", async () => {
+  // Het geval dat de oude implementatie doorliet: chunked (dus geen
+  // content-length), drie bytes per teken. 900.105 tekens halen elke
+  // tekengrens, maar zijn 2.700.315 bytes.
+  const chunk = new TextEncoder().encode("€".repeat(15_000)); // 45.000 bytes
+  const nodig = 60; // 2.700.000 bytes — ruim boven 2 MiB
+  let gepulld = 0;
+  let geannuleerd = false;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (gepulld >= nodig) {
+        controller.close();
+        return;
+      }
+      gepulld++;
+      controller.enqueue(chunk);
+    },
+    cancel() {
+      geannuleerd = true;
+    },
+  });
+  const { impl } = stubFetch([new Response(stream, { status: 200, headers: { "content-type": "application/json" } })]);
+
+  await assert.rejects(
+    () => roepCopilotRetrievalAan(basis({ fetchImpl: impl, requestBudget: 3 })),
+    (e: unknown) => e instanceof CopilotFout && e.code === "copilot_responsvorm",
+  );
+
+  // De stream mag vooruitlezen (de queuing strategy vraagt een chunk zodra er
+  // ruimte is), dus de marge is twee chunks. Wat telt: het lezen stopt vlak na
+  // de grens in plaats van de hele body binnen te halen.
+  const gelezenBytes = gepulld * chunk.byteLength;
+  assert.ok(
+    gelezenBytes <= COPILOT_MAX_RESPONSE_BYTES + 2 * chunk.byteLength,
+    `er is doorgelezen tot ${gelezenBytes} bytes; de grens is ${COPILOT_MAX_RESPONSE_BYTES}`,
+  );
+  assert.ok(gepulld < nodig, "de hele body is alsnog binnengehaald");
+  assert.ok(geannuleerd, "de reader is niet geannuleerd");
+});
+
+test("een multibyte antwoord binnen de grens wordt correct gedecodeerd over chunkgrenzen", async () => {
+  // De splitsing valt midden in een driebyteteken; zonder `stream: true` op de
+  // decoder levert dat een vervangingsteken op in plaats van de tekst.
+  const payload = JSON.stringify({
+    retrievalHits: [{ webUrl: `https://${HOST}/sites/pgb/€éü.docx`, extracts: [{ text: "één passage — met streepje" }] }],
+  });
+  const bytes = new TextEncoder().encode(payload);
+  const knip = 40;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes.slice(0, knip));
+      controller.enqueue(bytes.slice(knip));
+      controller.close();
+    },
+  });
+  const { impl } = stubFetch([new Response(stream, { status: 200, headers: { "content-type": "application/json" } })]);
+  const uitkomst = await roepCopilotRetrievalAan(basis({ fetchImpl: impl }));
+  assert.deepEqual(uitkomst.kandidaten, [
+    { webUrl: `https://${HOST}/sites/pgb/€éü.docx`, extracts: ["één passage — met streepje"] },
+  ]);
 });
 
 test("een omleiding wordt niet gevolgd maar als fout behandeld", async () => {

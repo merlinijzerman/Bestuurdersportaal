@@ -34,7 +34,7 @@ import { bouwFilterExpression, bouwQueryString } from "./filter";
 import { CopilotFout, foutVoorHttpStatus, normaliseerCopilotFout } from "./fouten";
 import { slaapMetSignaal } from "../retrieval/afbreken";
 
-/** Harde bovengrens op de responsomvang; een grotere body wordt niet gelezen. */
+/** Harde bovengrens op ONTVANGEN BYTES; daarboven stopt het lezen. */
 export const COPILOT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 /** Backoff tussen pogingen, in volgorde. Kort, en altijd onderbreekbaar. */
@@ -119,18 +119,65 @@ function leesKandidaten(payload: unknown, max: number): CopilotKandidaat[] {
   return kandidaten;
 }
 
+/**
+ * Leest het antwoord met een grens op ONTVANGEN BYTES, incrementeel.
+ *
+ * Twee dingen gingen hier eerder mis, en ze versterkten elkaar. `response.text()`
+ * buffert de héle body voordat er iets te meten valt — bij een chunked antwoord
+ * zonder `content-length` is de grens dan pas bereikt als het geheugen al
+ * gevuld is. En `tekst.length` telt UTF-16-code-units, geen bytes: een
+ * UTF-8-antwoord van 2.700.105 bytes aan driebytetekens telt 900.105 "tekens"
+ * en kwam zo onder elke grens door.
+ *
+ * Nu wordt er per chunk geteld op `byteLength` en wordt de reader geannuleerd
+ * zodra de grens wordt overschreden — de rest van de body komt dan niet meer
+ * binnen. De `content-length`-controle blijft ervóór staan: die weigert een te
+ * groot antwoord zonder er ook maar één byte van te lezen.
+ */
 async function leesBegrensdeTekst(response: Response): Promise<string> {
   const lengte = Number(response.headers.get("content-length"));
   if (Number.isFinite(lengte) && lengte > COPILOT_MAX_RESPONSE_BYTES) {
     throw new CopilotFout("copilot_responsvorm", "configuratiefout");
   }
-  const tekst = await response.text();
-  // Ook zonder `content-length` (chunked) blijft er een grens: een antwoord dat
-  // deze omvang haalt, is geen retrievalantwoord meer.
-  if (tekst.length > COPILOT_MAX_RESPONSE_BYTES) {
-    throw new CopilotFout("copilot_responsvorm", "configuratiefout");
+
+  const body = response.body;
+  if (!body) {
+    // Geen stream (een body-loos antwoord): dan is er niets meer te begrenzen,
+    // maar meet wél in bytes in plaats van in tekens.
+    const tekst = await response.text();
+    if (new TextEncoder().encode(tekst).byteLength > COPILOT_MAX_RESPONSE_BYTES) {
+      throw new CopilotFout("copilot_responsvorm", "configuratiefout");
+    }
+    return tekst;
   }
-  return tekst;
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let bytes = 0;
+  let tekst = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > COPILOT_MAX_RESPONSE_BYTES) {
+        // Annuleren, niet doorlezen: de rest van de body hoeft niet meer te
+        // worden ontvangen en al helemaal niet gedecodeerd.
+        await reader.cancel().catch(() => {});
+        throw new CopilotFout("copilot_responsvorm", "configuratiefout");
+      }
+      // `stream: true` houdt een multibyte teken heel dat over twee chunks valt.
+      tekst += decoder.decode(value, { stream: true });
+    }
+    return tekst + decoder.decode();
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Een reader die al geannuleerd is, laat zich niet vrijgeven; dat is geen
+      // fout en mag de eigenlijke uitkomst niet overschrijven.
+    }
+  }
 }
 
 /**
