@@ -189,6 +189,22 @@ chmod 600 .m365-copilot-vergelijking.local.json
 npm run spike:m365-copilot-vergelijking -- --config=.m365-copilot-vergelijking.local.json > .m365-copilot-vergelijking.local.result.json
 ```
 
+Voor de eerste, kostengecontroleerde live beslissing gebruikt u het vaste
+vier-callsprofiel:
+
+```bash
+cp scripts/spike/sharepoint-retrieval/vergelijking-minimaal.example.json .m365-copilot-minimaal.local.json
+chmod 600 .m365-copilot-minimaal.local.json
+npm run spike:m365-copilot-vergelijking -- --config=.m365-copilot-minimaal.local.json > .m365-copilot-minimaal.local.result.json
+```
+
+`copilot_beslispoort_4` is codevast: SEM01 en SEM02, twee rondes, alle vier
+meetarmen, requestbudget 1 en maximaal vier Copilot Retrieval-POST-pogingen.
+`rondes`, `armen` of `scenarios` toevoegen aan de lokale config wordt geweigerd.
+Een echte Copilot-fout stopt de reeks direct; `geen_resultaten` is een
+kwaliteitsuitkomst en stopt de tweede semantische meting niet. De overige armen
+leveren in dezelfde run de lexicale referentie zonder extra Copilot-call.
+
 Dezelfde harde grendel als de #353-runner: `M365_RETRIEVAL_SPIKE=local`, en weigeren in CI,
 Vercel en productie. De uitvoer bevat geen vraag, passage, extract, token, lokale ref of
 private site-/drive-/item-id.

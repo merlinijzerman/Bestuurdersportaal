@@ -47,6 +47,8 @@ export interface VergelijkOpdracht {
   signal?: AbortSignal;
   timeoutMs?: number;
   concurrency?: number;
+  /** Feitelijke Copilot-POST-pogingen voor deze meting; standaard en minimum 1. */
+  copilotRequestBudget?: number;
 }
 
 function leeg(): number {
@@ -83,6 +85,7 @@ export async function voerArmUit(
       signal: opdracht.signal,
       timeoutMs: opdracht.timeoutMs,
       concurrency: opdracht.concurrency,
+      requestBudget: opdracht.copilotRequestBudget,
     });
     const rij = verrijk(maakVeiligeMeetrij(opdracht.ronde, opdracht.vraag, uitkomst), opdracht.vraag, {
       afwijzingLokalisatie: uitkomst.afwijzingen.lokalisatie,
