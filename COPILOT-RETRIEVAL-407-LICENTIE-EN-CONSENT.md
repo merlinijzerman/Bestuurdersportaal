@@ -8,6 +8,13 @@ PGB-volgorde) is niet gestart en start niet zonder een expliciet licentie-/koste
 en consentbesluit. Er is in deze tranche geen permission, consent, billing,
 featureflag of live Graph-call aangeraakt.
 
+Productstatus (stand 20-09-2026): de **Microsoft 365 Copilot Retrieval API zelf
+is GA**. Alleen de pay-as-you-go-toegang voor gebruikers zonder Copilot-add-on
+is nog preview, zonder SLA. De meetimplementatie gebruikt uitsluitend
+`POST /v1.0/copilot/retrieval`; ook eventuele productiewiring mag `/beta` niet
+gebruiken. De eveneens preview zijnde datasource `sharePointEmbedded` valt
+buiten deze PGB-proef, die `dataSource = sharePoint` gebruikt.
+
 ## 1. Waarom dit besluit nodig is vóór er ook maar één call vertrekt
 
 `POST /v1.0/copilot/retrieval` is geen gewone Graph-route. Hij is gebonden aan een
@@ -34,7 +41,7 @@ Microsoft biedt twee wegen naar dezelfde API.
 | Wie heeft het nodig | De PGB-testidentiteit | Een gekoppeld Azure-abonnement met kostenplaats |
 | Vooraf te regelen | Licentietoewijzing in de tenant | Azure-abonnement, resourcekoppeling, budgetalarm |
 | Omkeerbaar | Ja, licentie intrekken | Ja, koppeling verbreken |
-| Kostenrisico bij de spike | Geen extra kosten per Retrieval-call | $ 0,10 per API-call in de publieke preview (stand 20-09-2026) |
+| Kostenrisico bij de spike | Geen extra kosten per Retrieval-call | $ 0,10 per API-call in de PAYG-preview (stand 20-09-2026) |
 | Past bij een tijdelijke proef | Matig — een volle maand voor enkele meetrondes | Beter — betaal alleen voor de uitgevoerde metingen |
 
 **Wat de spike zelf al begrenst**, ongeacht de gekozen weg:
@@ -57,11 +64,13 @@ Microsoft biedt twee wegen naar dezelfde API.
   × 1 Copilot-poging = **12 calls**. De eerdere notitie van 16 calls was een
   rekenfout en is geen uitvoeringscontract;
 * bij pay-as-you-go is het harde prijsplafond van de minimale beslispoort op basis
-  van de publieke-previewprijs dus **$ 0,40**. Bij een toegewezen Copilot-add-on
+  van de PAYG-previewprijs dus **$ 0,40**. Bij een toegewezen Copilot-add-on
   rekent Microsoft geen aanvullende Retrieval-callkosten. Prijzen en
   previewvoorwaarden moeten vlak vóór activering opnieuw worden gecontroleerd.
 
-Bronnen: [Retrieval API-overzicht](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/retrieval/overview) en
+Bronnen: [GA-aankondiging juli 2026](https://learn.microsoft.com/en-us/sharepoint/dev/embedded/whats-new),
+[Retrieval API-overzicht](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/retrieval/overview),
+[v1.0-endpointdocumentatie](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/retrieval/copilotroot-retrieval) en
 [pay-as-you-go (preview)](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/retrieval/paygo-retrieval).
 
 **Wat moet worden vastgesteld vóór T3:**
