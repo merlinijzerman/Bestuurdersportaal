@@ -24,6 +24,8 @@
 //  bepaalt wat er daarna moet gebeuren.
 // ============================================================================
 
+import { graphPadIsGelijkOfOnder, normaliseerGraphPad } from "../../spike/sharepoint-retrieval/prototype";
+
 const GRAPH_BASIS = "https://graph.microsoft.com/v1.0";
 
 /** Bytegrens per Graph-antwoord. Ruim voor metadata, krap voor een verrassing. */
@@ -51,6 +53,8 @@ export interface GraphItem {
   webUrl?: string;
   folder?: { childCount?: number };
   file?: { mimeType?: string };
+  parentReference?: { driveId?: string; path?: string };
+  remoteItem?: unknown;
 }
 
 export interface LeesClient {
@@ -201,6 +205,7 @@ export interface GraphRootItem {
   /** Het item-id van de GEREGISTREERDE bronroot; startpunt van elke scan. */
   rootItemId: string;
   rootWebUrl: string;
+  rootGraphPad: string;
 }
 
 /**
@@ -287,9 +292,11 @@ export async function leesRootItem(
   }
 
   let pad: string;
+  let rootGraphPad: string;
   if (rootPad.toLocaleLowerCase("nl") === drivePad.toLocaleLowerCase("nl")) {
     // De bronroot ís de bibliotheek.
     pad = `/drives/${encodeURIComponent(driveId)}/root?$select=id,webUrl,folder`;
+    rootGraphPad = `/drives/${driveId}/root:`;
   } else if (rootPad.toLocaleLowerCase("nl").startsWith(`${drivePad.toLocaleLowerCase("nl")}/`)) {
     const rest = rootPad.slice(drivePad.length + 1);
     // Dezelfde allowlist als voor het sitepad: dit wordt pad-adressering in de
@@ -299,6 +306,7 @@ export async function leesRootItem(
     }
     const gecodeerd = rest.split("/").map((deel) => encodeURIComponent(deel)).join("/");
     pad = `/drives/${encodeURIComponent(driveId)}/root:/${gecodeerd}?$select=id,webUrl,folder`;
+    rootGraphPad = `/drives/${driveId}/root:/${rest}`;
   } else {
     throw new GraphFout("root_buiten_bibliotheek", "de geregistreerde root ligt niet onder deze bibliotheek");
   }
@@ -317,7 +325,18 @@ export async function leesRootItem(
   if (!gevonden || gevonden.toLocaleLowerCase("nl") !== rootPad.toLocaleLowerCase("nl")) {
     throw new GraphFout("root_wijst_elders", "het opgezochte root-item is niet de geregistreerde bronroot");
   }
-  return { rootItemId: item.id, rootWebUrl: item.webUrl };
+  const genormaliseerdGraphPad = normaliseerGraphPad(rootGraphPad);
+  if (!genormaliseerdGraphPad) {
+    throw new GraphFout("root_graphpad_onleesbaar", "het Graph-pad van de bronroot is niet te canonicaliseren");
+  }
+  return { rootItemId: item.id, rootWebUrl: item.webUrl, rootGraphPad: genormaliseerdGraphPad };
+}
+
+function itemBinnenGraphRoot(item: GraphItem, driveId: string, rootGraphPad: string): boolean {
+  if (item.remoteItem) return false;
+  if (item.parentReference?.driveId !== driveId) return false;
+  const ouderPad = normaliseerGraphPad(item.parentReference.path);
+  return ouderPad !== null && graphPadIsGelijkOfOnder(ouderPad, rootGraphPad);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,8 +368,8 @@ export async function inhoudscan(
   client: LeesClient,
   driveId: string,
   rootItemId: string,
+  rootGraphPad: string,
   term: string,
-  binnenRoot: (webUrl: string | undefined) => string | null,
 ): Promise<InhoudscanUitkomst> {
   if (!VEILIGE_SCANTERM.test(term)) {
     throw new GraphFout("scanterm_onveilig", "de inhoudscanterm bevat onverwachte tekens");
@@ -363,13 +382,12 @@ export async function inhoudscan(
   // de root zou de telling wel kloppend maken, maar de metadata van alles
   // daarbuiten hebben we dan al binnengehaald.
   const antwoord = await client.json<{ value?: unknown }>(
-    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/search(q='${gecodeerd}')?$select=id,name,webUrl&$top=25`,
+    `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/search(q='${gecodeerd}')?$select=id,name,webUrl,parentReference,remoteItem&$top=25`,
   );
   const rijen = Array.isArray(antwoord.value) ? (antwoord.value as GraphItem[]) : [];
   const binnen: string[] = [];
   for (const rij of rijen) {
-    const veilig = binnenRoot(rij.webUrl);
-    if (veilig) binnen.push(veilig);
+    if (itemBinnenGraphRoot(rij, driveId, rootGraphPad) && typeof rij.webUrl === "string") binnen.push(rij.webUrl);
   }
   return { term, treffers: rijen.length, binnenRoot: binnen.length, webUrls: binnen };
 }
@@ -398,8 +416,8 @@ export async function bestandsnaamscan(
   client: LeesClient,
   driveId: string,
   rootItemId: string,
+  rootGraphPad: string,
   prefix: string,
-  binnenRoot: (webUrl: string | undefined) => string | null,
 ): Promise<BestandsnaamscanUitkomst> {
   if (!/^[A-Za-z0-9][A-Za-z0-9.\-_]{0,63}$/.test(prefix)) {
     throw new GraphFout("scanprefix_onveilig", "de bestandsnaamprefix bevat onverwachte tekens");
@@ -421,7 +439,7 @@ export async function bestandsnaamscan(
 
   while (wachtrij.length > 0) {
     const huidig = wachtrij.shift()!;
-    let volgende: string | null = `${huidig.pad}?$select=id,name,webUrl,folder,file&$top=200`;
+    let volgende: string | null = `${huidig.pad}?$select=id,name,webUrl,folder,file,parentReference,remoteItem&$top=200`;
     while (volgende) {
       const antwoord: { value?: unknown; "@odata.nextLink"?: unknown } = await client.json(volgende);
       const rijen = Array.isArray(antwoord.value) ? (antwoord.value as GraphItem[]) : [];
@@ -432,6 +450,7 @@ export async function bestandsnaamscan(
           break;
         }
         if (rij.folder) {
+          if (!itemBinnenGraphRoot(rij, driveId, rootGraphPad)) continue;
           if (huidig.diepte + 1 > MAX_SCAN_DIEPTE || mappen >= MAX_SCAN_MAPPEN) {
             afgekapt = true;
             continue;
@@ -446,10 +465,12 @@ export async function bestandsnaamscan(
         }
         if (!rij.file || typeof rij.name !== "string") continue;
         if (!rij.name.toLocaleLowerCase("nl").startsWith(genormaliseerdePrefix)) continue;
-        // Ook een naamtreffer moet binnen de geregistreerde root liggen: een
-        // gedeelde map kan een gelijknamig bestand van elders binnenhalen.
-        const veilig = binnenRoot(rij.webUrl);
-        if (veilig) treffers.push(veilig);
+        // `driveItem.webUrl` mag een Office-weergavelink (`/:w:/r/...`) zijn
+        // en is daarom geen padbewijs. De parentReference hoort bij dezelfde
+        // structureel gescopete traversal. Shortcuts (`remoteItem`) en een
+        // ander drive-id vallen hier fail-closed af.
+        if (!itemBinnenGraphRoot(rij, driveId, rootGraphPad)) continue;
+        if (typeof rij.webUrl === "string") treffers.push(rij.webUrl);
       }
       if (afgekapt) break;
       const link = antwoord["@odata.nextLink"];

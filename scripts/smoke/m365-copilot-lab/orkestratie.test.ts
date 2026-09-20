@@ -22,6 +22,7 @@ const HOST = "bestuurdersportaaltest.sharepoint.com";
 const SITE = `https://${HOST}/sites/PGBRetrievalLab`;
 const ROOT_PAD = "/sites/PGBRetrievalLab/Shared Documents";
 const ROOT = `https://${HOST}${ROOT_PAD}`;
+const ROOT_GRAPH_PAD = "/drives/drive-1/root:";
 const TENANT = "77358864-32ba-454f-9e48-cf3356d115dd";
 const ACTOR_OID = "076ce16f-74a2-4cc7-874b-7761e7747708";
 const ACTOR_UPN = "pgb-test@Bestuurdersportaaltest.onmicrosoft.com";
@@ -84,13 +85,16 @@ function graphStub(opties: { inhoudTreffers?: number; bestandAanwezig?: boolean 
           id: `hit-${i}`,
           name: FIXTUREBESTAND,
           webUrl: FIXTURE_URL,
+          parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
         })),
       });
     }
     if (url.includes("/children")) {
       const aanwezig = opties.bestandAanwezig ?? true;
       return json({
-        value: aanwezig ? [{ id: "f-1", name: FIXTUREBESTAND, file: {}, webUrl: FIXTURE_URL }] : [],
+        value: aanwezig
+          ? [{ id: "f-1", name: FIXTUREBESTAND, file: {}, webUrl: FIXTURE_URL, parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` } }]
+          : [],
       });
     }
     throw new Error(`onverwachte Graph-call in de stub: ${url}`);
