@@ -66,6 +66,7 @@ jobs:
           npm run test:ci-ownership-contract
           npm run test:spike-boundary
           npm run test:spike-fixture-contract
+          npm run test:smoke-copilot-lab
 
       - name: Vitest-workflowcontract
         run: npm run test:coverage-contract

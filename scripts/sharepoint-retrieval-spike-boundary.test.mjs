@@ -253,3 +253,106 @@ test("#413-verboden Microsoft-oppervlakken komen nergens in de productieboom voo
   const inPin = [...lijst[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(inPin, VERBODEN, "de verbodslijst in de gate en in endpoint.ts lopen uiteen");
 });
+
+// ---------------------------------------------------------------------------
+//  #407 labsmoke — de één-call-smokerunner
+// ---------------------------------------------------------------------------
+//  De runner leent de client van #413 en de rootregel van #407, maar hij is
+//  geen van beide: hij is een LOKAAL gereedschap dat live verkeer naar een
+//  betaalde API kan veroorzaken. Daarom staat hij onder dezelfde soort
+//  grendels als het spikeharnas — en bewaakt deze gate ze.
+
+const SMOKEPAD = "scripts/smoke/m365-copilot-lab";
+
+test("#407-labsmokerunner is nergens vanuit de applicatie bereikbaar", () => {
+  const overtredingen = [];
+  for (const bestand of [
+    ...bronbestanden("app"),
+    ...bronbestanden("core"),
+    ...bronbestanden("platform"),
+    ...bronbestanden("fondsen"),
+  ]) {
+    const inhoud = readFileSync(resolve(root, bestand), "utf8");
+    if (inhoud.includes(SMOKEPAD) || inhoud.includes("m365-copilot-lab")) overtredingen.push(bestand);
+  }
+  assert.deepEqual(overtredingen, [], `de labsmokerunner is vanuit de productieboom bereikbaar: ${overtredingen.join(", ")}`);
+
+  // De runner mag niet als build- of runtime-entrypoint worden geëxporteerd.
+  for (const bestand of ["next.config.ts", "tsconfig.json", "middleware.ts"]) {
+    let inhoud = "";
+    try { inhoud = readFileSync(resolve(root, bestand), "utf8"); } catch { continue; }
+    assert.doesNotMatch(inhoud, /scripts\/smoke\/m365-copilot-lab/);
+  }
+});
+
+test("#407-labsmokerunner draait alleen achter een expliciete lokale grendel", () => {
+  const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+  assert.match(pkg.scripts["smoke:m365-copilot-lab"], /M365_COPILOT_LAB_SMOKE=local/);
+  assert.match(pkg.scripts["smoke:m365-copilot-lab"], /scripts\/smoke\/m365-copilot-lab\/run\.ts/);
+  // De live runner hangt onder GEEN automatische keten. Wat hier per ongeluk
+  // bij komt te staan, doet betaalde calls in CI.
+  for (const naam of ["dev", "prebuild", "build", "start", "gates", "test", "test:unit", "test:component", "test:contract", "test:ci"]) {
+    assert.doesNotMatch(
+      pkg.scripts[naam] ?? "",
+      /smoke:m365-copilot-lab|smoke\/m365-copilot-lab\/run/,
+      `${naam} trekt de live labsmoke een automatische keten in`,
+    );
+  }
+
+  // De runner bevat de grendel ook zélf: een npm-script is te omzeilen door
+  // `tsx run.ts` rechtstreeks aan te roepen.
+  const runner = readFileSync(resolve(root, `${SMOKEPAD}/run.ts`), "utf8");
+  assert.match(runner, /M365_COPILOT_LAB_SMOKE/);
+  assert.match(runner, /process\.env\.CI/);
+
+  // Het endpoint staat ook in de runner niet overgetypt: hij leent de pin.
+  assert.ok(
+    !runner.includes("copilot/retrieval"),
+    "de runner typt het retrieval-endpoint over in plaats van de endpointpin te gebruiken",
+  );
+  assert.match(runner, /COPILOT_RETRIEVAL_ENDPOINT/);
+});
+
+test("#407-labsmoke — de hermetische suite is blokkerend in de required CI-job", () => {
+  const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+  for (const suite of ["registry.test.ts", "auth.test.ts", "graph.test.ts", "smoke.test.ts", "orkestratie.test.ts"]) {
+    assert.ok(
+      pkg.scripts["test:smoke-copilot-lab"].includes(`${SMOKEPAD}/${suite}`),
+      `${suite} hangt niet aan test:smoke-copilot-lab`,
+    );
+  }
+  assert.match(pkg.scripts["test:contract"], /npm run test:smoke-copilot-lab/);
+
+  // Dezelfde les als bij test:spike-boundary: geen CI-job roept `test:contract`
+  // als geheel aan, dus aansluiten op die keten alléén levert geen dekking.
+  const workflow = readFileSync(resolve(root, ".github/workflows/security-baseline.yml"), "utf8");
+  assert.match(
+    workflow,
+    /npm run test:smoke-copilot-lab(?![\w:-])/,
+    "test:smoke-copilot-lab draait niet in de required CI-job en is dus niet blokkerend",
+  );
+});
+
+test("#407-labsmoke — de scans beginnen bij het geregistreerde root-item", () => {
+  // Een scan die bij de drive-root begint, leest metadata buiten de
+  // geregistreerde bron zodra die bron een submap is. De gate houdt de
+  // adressering daarom op itemniveau vast.
+  const graph = readFileSync(resolve(root, `${SMOKEPAD}/graph.ts`), "utf8");
+  assert.ok(
+    !/\/root\/(children|search)/.test(graph),
+    "een scan adresseert nog de drive-root in plaats van het geregistreerde root-item",
+  );
+  assert.match(graph, /export async function leesRootItem/);
+});
+
+test("#407-labsmoke — de runner houdt zich aan het ene scenario en de ene fixture", () => {
+  const smoke = readFileSync(resolve(root, `${SMOKEPAD}/smoke.ts`), "utf8");
+  // Scenario en fixture worden OVERGENOMEN uit de vastgestelde #407-set, niet
+  // opnieuw gedefinieerd; anders kan die set wijzigen zonder dat het hier opvalt.
+  assert.match(smoke, /VERGELIJK_SCENARIOS\.SEM01/);
+  assert.match(smoke, /VERWACHTE_FIXTURE = "PGB407-DOC-101"/);
+  assert.match(smoke, /RETRIEVAL_REQUESTBUDGET = 1/);
+  for (const anderScenario of ["SEM02", "S04H"]) {
+    assert.ok(!smoke.includes(anderScenario), `de runner noemt scenario ${anderScenario}`);
+  }
+});
