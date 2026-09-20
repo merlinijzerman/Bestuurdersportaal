@@ -12,7 +12,8 @@ import {
   type BronSnapshot,
 } from "../../core/lib/microsoft-retrieval/driveitem";
 import type { GeregistreerdDocument } from "../../core/lib/microsoft-retrieval/mapping";
-import type { GraphDriveItem } from "../../core/lib/microsoft-sharepoint-graph-core";
+import { SharePointGraphError, type GraphDriveItem } from "../../core/lib/microsoft-sharepoint-graph-core";
+import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
 
 const HOST = "check.sharepoint.com";
 const DRIVE = "drive-1";
@@ -69,7 +70,9 @@ function rootItem(extra: Partial<GraphDriveItem> = {}): GraphDriveItem {
 }
 
 const lees = (i: GraphDriveItem) => async () => i;
-const faalt = async () => { throw new Error("graph 403"); };
+/** 404/403: gaat over DIT document en is dus een kandidaatweigering. */
+const faalt = async (): Promise<GraphDriveItem> => { throw new SharePointGraphError("niet_gevonden"); };
+const geenToegang = async (): Promise<GraphDriveItem> => { throw new SharePointGraphError("toestemming_of_token"); };
 
 test("de root levert de autoritatieve webUrl en het Graph-pad", async () => {
   const uitkomst = await leesRoot(BRON, lees(rootItem()));
@@ -86,12 +89,22 @@ test("een root die niet klopt levert geen scope op", async () => {
     ["geen webUrl", rootItem({ webUrl: undefined }), BRON],
     ["niet-sharepoint webUrl", rootItem({ webUrl: "https://evil.test/x" }), BRON],
     ["bron niet actief", rootItem(), { ...BRON, status: "ontkoppeld" }],
-    ["graph faalt", null, BRON],
   ];
   for (const [waarom, graphItem, bron] of gevallen) {
-    const uitkomst = await leesRoot(bron, graphItem ? lees(graphItem) : faalt);
+    const uitkomst = await leesRoot(bron, graphItem ? lees(graphItem!) : faalt);
     assert.equal(uitkomst.ok, false, waarom);
     assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "rechten_configuratie", waarom);
+  }
+});
+
+test("een falende ROOTLEZING stopt de beurt en wordt nooit een weigering", async () => {
+  // De root is de scope zelf. Kan die niet worden vastgesteld, dan is er niets
+  // te doorzoeken — en dan mag de beurt niet stil doorgaan op eigen bronnen.
+  // Dit is ook de scheiding die 401 van 403 onderscheidbaar maakt: graphJson
+  // kan ze niet uit elkaar houden, maar een kapot token sneuvelt hier al, vóór
+  // er ook maar één kandidaat wordt beoordeeld.
+  for (const bron of [faalt, geenToegang, async (): Promise<GraphDriveItem> => { throw new SharePointGraphError("graph_ratelimit"); }]) {
+    await assert.rejects(() => leesRoot(BRON, bron), (e: unknown) => e instanceof SharePointGraphError);
   }
 });
 
@@ -171,13 +184,100 @@ test("een configuratiewijziging TIJDENS het verzoek faalt gesloten", async () =>
   assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "rechten_configuratie");
 });
 
-test("een ingetrokken recht tijdens het verzoek levert geen kandidaat", async () => {
-  const uitkomst = await bevestigKandidaatItem(
-    { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
-    faalt,
+test("404 en 403 op een ITEM zijn kandidaatweigeringen", async () => {
+  for (const bron of [faalt, geenToegang]) {
+    const uitkomst = await bevestigKandidaatItem(
+      { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+      bron,
+    );
+    assert.equal(uitkomst.ok, false);
+    assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "rechten_configuratie");
+  }
+});
+
+test("een AFBREKING wordt doorgegooid, niet tot een weigering gereduceerd", async () => {
+  // Zonder deze regel wordt een geannuleerde of verlopen beurt een gewone
+  // kandidaatweigering, en gaat de assistent stil door met minder bronnen.
+  for (const reden of ["annulering", "timeout"] as const) {
+    const afbreking = new RetrievalAfgebroken(reden);
+    await assert.rejects(
+      () => bevestigKandidaatItem(
+        { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+        async () => { throw afbreking; },
+      ),
+      (e: unknown) => e === afbreking,
+      reden,
+    );
+  }
+});
+
+test("een PROVIDERSTORING wordt doorgegooid, niet tot een weigering gereduceerd", async () => {
+  // 429, 5xx, timeout, onleesbaar antwoord en onbekende fouten zeggen niets over
+  // dit document; ze zijn een storing en horen de beurt te stoppen.
+  const storingen = [
+    new SharePointGraphError("graph_ratelimit"),
+    new SharePointGraphError("graph_timeout"),
+    new SharePointGraphError("graph_response"),
+    new SharePointGraphError("onverwachte_fout"),
+    new TypeError("fetch failed"),
+  ];
+  for (const storing of storingen) {
+    await assert.rejects(
+      () => bevestigKandidaatItem(
+        { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+        async () => { throw storing; },
+      ),
+      (e: unknown) => e === storing,
+      String(storing),
+    );
+  }
+});
+
+test("een lezing die SLAAGT terwijl het signaal al af is, telt niet mee", async () => {
+  // De afbreking viel terwijl de call onderweg was. Zonder een tweede bewaking
+  // ná de I/O zou dit antwoord alsnog een kandidaat opleveren.
+  const controller = new AbortController();
+  const afbreking = new RetrievalAfgebroken("annulering");
+  await assert.rejects(
+    () => bevestigKandidaatItem(
+      { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, signal: controller.signal },
+      async () => { controller.abort(afbreking); return item(); },
+    ),
+    (e: unknown) => e === afbreking,
   );
-  assert.equal(uitkomst.ok, false);
-  assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "rechten_configuratie");
+
+  // Hetzelfde voor de tweede versielezing en voor de root.
+  const controller2 = new AbortController();
+  const afbreking2 = new RetrievalAfgebroken("timeout");
+  await assert.rejects(
+    () => bevestigVersieOngewijzigd(
+      { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' }, signal: controller2.signal },
+      async () => { controller2.abort(afbreking2); return item(); },
+    ),
+    (e: unknown) => e === afbreking2,
+  );
+
+  const controller3 = new AbortController();
+  const afbreking3 = new RetrievalAfgebroken("annulering");
+  await assert.rejects(
+    () => leesRoot(BRON, async () => { controller3.abort(afbreking3); return rootItem(); }, controller3.signal),
+    (e: unknown) => e === afbreking3,
+  );
+});
+
+test("een al afgebroken beurt kost geen enkele lezing", async () => {
+  const controller = new AbortController();
+  const afbreking = new RetrievalAfgebroken("annulering");
+  controller.abort(afbreking);
+  let gelezen = 0;
+  await assert.rejects(
+    () => bevestigKandidaatItem(
+      { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, signal: controller.signal },
+      async () => { gelezen++; return item(); },
+    ),
+    (e: unknown) => e === afbreking,
+  );
+  assert.equal(gelezen, 0, "er is toch een Graph-lezing gedaan");
 });
 
 test("een item buiten de root, een map of een verwisseld id valt af", async () => {
@@ -229,6 +329,15 @@ test("een verdwenen of verwisseld item bij de tweede lezing faalt gesloten", asy
   const verdwenen = await bevestigVersieOngewijzigd(
     { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
     faalt,
+  );
+  // En een storing bij de tweede lezing stopt de beurt in plaats van de
+  // kandidaat stil te laten vallen.
+  await assert.rejects(
+    () => bevestigVersieOngewijzigd(
+      { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+      async () => { throw new SharePointGraphError("graph_timeout"); },
+    ),
+    (e: unknown) => e instanceof SharePointGraphError,
   );
   assert.equal(verdwenen.ok, false);
   assert.equal(verdwenen.ok === false && verdwenen.afwijzing, "rechten_configuratie");
