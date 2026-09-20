@@ -154,6 +154,17 @@ export async function leesSharePointDocument(fondsId: string, ref: string): Prom
   const r = await db().query("select * from microsoft_private.sharepoint_lees_document($1,$2)", [fondsId, ref]);
   return r.rows[0] as SharePointDocument | undefined;
 }
+/**
+ * #413 — locatoropzoeking voor de Copilot-arm: van een canonieke webUrl naar
+ * HOOGSTENS ÉÉN geregistreerd document. De DB-functie dwingt `count = 1` af en
+ * negeert rijen in quarantaine (`mapping_status <> 'actief'`), dus een URL die
+ * bij twee documenten hoort levert niets op. De canonicalisering gebeurt in de
+ * database, met exact de functie die ook de gegenereerde kolom voedt.
+ */
+export async function zoekSharePointDocumentOpWebUrl(fondsId: string, bronId: string, webUrl: string): Promise<SharePointDocument | undefined> {
+  const r = await db().query("select * from microsoft_private.sharepoint_zoek_document_op_weburl($1,$2,$3)", [fondsId, bronId, webUrl]);
+  return r.rows[0] as SharePointDocument | undefined;
+}
 export async function markeerSharePointDocument(fondsId: string, ref: string, status: "gezien" | "verwijderd" | "ontoegankelijk") {
   await db().query("select microsoft_private.sharepoint_markeer_document($1,$2,$3)", [fondsId, ref, status]);
 }
