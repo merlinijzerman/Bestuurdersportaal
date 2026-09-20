@@ -104,6 +104,7 @@ create unique index if not exists sharepoint_documenten_weburl_canoniek_uniek
 -- blast radius dan de Copilot-arm die de index beschermt.
 --
 -- Daarom in drie stappen:
+--   0. een advisory lock PER BRON serialiseert gelijktijdige listings;
 --   a. alles wat deze listing aanraakt gaat eerst de index UIT (status
 --      'botsing'). Daarmee kan geen enkele tussenstand van de upsert — ook een
 --      omwisseling van twee URL's niet — de index schenden;
@@ -111,6 +112,16 @@ create unique index if not exists sharepoint_documenten_weburl_canoniek_uniek
 --   c. één herclassificatie over de hele bron: uniek = 'actief', anders
 --      'botsing'. Dit statement kan de index niet schenden, want twee rijen met
 --      dezelfde canonieke URL krijgen allebei 'botsing'.
+--
+-- WAAROM STAP 0 NODIG IS. Stappen a-c zijn samen alleen correct als niemand er
+-- tussendoor schrijft. Draaien twee listings van dezelfde bron gelijktijdig, dan
+-- ziet de herclassificatie van de eerste transactie de rijen van de tweede niet
+-- (snapshot per statement), en kunnen twee rijen met dezelfde canonieke URL
+-- allebei op 'actief' eindigen — of loopt de ene transactie op de unieke index
+-- van de andere stuk. Beide uitkomsten zijn onacceptabel: de eerste breekt de
+-- exact-één-invariant, de tweede de documentenlijst. De lock is transactie-
+-- gebonden (valt vanzelf vrij) en per bron, zodat listings van verschillende
+-- fondsen onverminderd parallel lopen.
 create or replace function microsoft_private.sharepoint_upsert_documenten(p_fonds uuid, p_bron uuid, p_versie integer, p_items jsonb)
 returns table(ref uuid, extern_item_id text) language plpgsql security definer set search_path = microsoft_private, public, pg_temp as $$
 #variable_conflict use_column
@@ -123,6 +134,10 @@ begin
   if v_bron.id is null then raise exception 'sharepoint bron hoort niet bij dit fonds of is niet actief'; end if;
   if p_versie <> v_bron.configuratieversie then raise exception 'verouderde sharepoint configuratieversie'; end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 5000 then raise exception 'ongeldige documentenlijst'; end if;
+
+  -- (0) serialiseer per bron. Twee int4-sleutels: een vaste namespace plus de
+  -- bron, zodat deze lock niet botst met andere advisory locks in de applicatie.
+  perform pg_advisory_xact_lock(hashtext('microsoft_private.sharepoint_documenten'), hashtext(v_bron.id::text));
 
   -- (a) uit de index met alles wat deze listing aanraakt.
   update sharepoint_documenten

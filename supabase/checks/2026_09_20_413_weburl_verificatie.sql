@@ -5,6 +5,12 @@
 -- Deze query leest alleen en toont uitsluitend aantallen en vlaggen — geen URL,
 -- pad of identifier. Draai hem op Preview én Productie en bewaar de uitslag.
 --
+-- DIT IS DE STANDCONTROLE, GEEN GEDRAGSBEWIJS. Het gedrag van de locator en de
+-- quarantaine (canonicalisering, omwisseling binnen één listing, botsing met een
+-- rij buiten de listing, herstel, cross-tenant, fail-closed opzoeking) staat in
+-- supabase/checks/2026_09_20_413_weburl_gedrag.sql en draait blokkerend mee in
+-- scripts/cross-tenant-ci.sh.
+--
 -- Verwacht na een geslaagde migratie:
 --   A objecten_aanwezig      = t
 --   B index_partieel         = t
