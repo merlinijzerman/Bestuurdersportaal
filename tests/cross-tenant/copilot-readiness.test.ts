@@ -543,16 +543,16 @@ test("de rollbackbestanden zijn plakbaar in de Supabase SQL Editor", () => {
   }
 });
 
-test("elke rollbackfase controleert het auditslot echt, niet op tekst", () => {
+test("elke rollbackfase bewijst dat het auditslot append-only IS", () => {
   // CLAUDE.md stelt append-only audit als niet-onderhandelbaar. Een rollback is
   // geen vrijbrief om stilletjes te wissen wie de rem wanneer en waarom bediende.
   //
   // Deze test zoekt bewust NIET naar de naam `copilot_operator_log`: die komt ook
   // voor in een uitzonderingsclausule en in een succesmelding, en dan lijkt een
-  // fase gecontroleerd terwijl zij niets toetst. Dat was precies de bevinding op
-  // PR #425. Er moet een echte pg_class- én pg_trigger-controle staan,
-  // schemagekwalificeerd, met `not tgisinternal` zodat een systeemtrigger (een
-  // foreign key bijvoorbeeld) niet voor het append-only slot doorgaat.
+  // fase gecontroleerd terwijl zij niets toetst. Even belangrijk: het bestaan van
+  // "een niet-interne trigger" bewijst niets. Een uitgeschakelde trigger, een die
+  // alleen op INSERT vuurt, of een onschuldige dummy met een andere functie
+  // eronder laat het spoor gewoon muteerbaar.
   for (const fase of ROLLBACKFASEN) {
     const sql = zonderCommentaar(rollbackBestand(fase));
 
@@ -567,16 +567,35 @@ test("elke rollbackfase controleert het auditslot echt, niet op tekst", () => {
     );
     assert.match(sql, tabelcontrole, `fase ${fase} toetst het bestaan van de auditTABEL niet`);
 
+    // De trigger wordt opgezocht op naam, mét de functie eronder.
     assert.match(
       sql,
-      /from pg_trigger t[\s\S]{0,400}?c\.relname = 'copilot_operator_log'[\s\S]{0,200}?not t\.tgisinternal/,
-      `fase ${fase} toetst de append-only TRIGGER niet`,
+      /from pg_trigger t[\s\S]{0,600}?join pg_proc fn on fn\.oid = t\.tgfoid[\s\S]{0,600}?not t\.tgisinternal[\s\S]{0,200}?t\.tgname = 'trg_copilot_operator_log_append_only'/,
+      `fase ${fase} zoekt de append-only trigger niet op naam én functie`,
     );
 
+    // Vier eigenschappen, elk met een eigen weigering.
+    const eigenschappen: [RegExp, string][] = [
+      [/v_fnnaam <> 'copilot_log_append_only'/, "de functie onder de trigger"],
+      [/v_tgenabled not in \('O', 'A'\)/, "de enabled-status"],
+      [/\(v_tgtype & 16\) = 0 or \(v_tgtype & 8\) = 0/, "de UPDATE/DELETE-dekking"],
+      [/\(v_tgtype & 1\) = 0 or \(v_tgtype & 2\) = 0/, "BEFORE ... FOR EACH ROW"],
+    ];
+    for (const [patroon, wat] of eigenschappen) {
+      assert.match(sql, patroon, `fase ${fase} toetst ${wat} niet`);
+    }
+
+    // En het sluitende bewijs: één echte mutatiepoging. Metadata kan kloppen
+    // terwijl de functie eronder een lege `return new` is.
     assert.match(
       sql,
-      /raise exception 'FASE \d mislukt: de append-only trigger op copilot_operator_log ontbreekt/,
-      `fase ${fase} faalt niet op een ontbrekend auditslot`,
+      /update microsoft_private\.copilot_operator_log set reden = reden/,
+      `fase ${fase} probeert het slot niet werkelijk uit`,
+    );
+    assert.match(
+      sql,
+      /raise exception 'FASE \d mislukt: een UPDATE op copilot_operator_log werd NIET geblokkeerd/,
+      `fase ${fase} faalt niet wanneer de mutatie doorgaat`,
     );
   }
 });
@@ -598,6 +617,17 @@ test("de deploycontrole meet vanaf het waargenomen deploymoment", () => {
     // De handmatige bevestiging blijft daarnaast staan.
     assert.match(sql, /t4d\.oude_code_gedeployd/, `fase ${fase} vraagt geen deploybevestiging`);
   }
+
+  // Het runbook moet meebewegen: een runbook dat een andere grens beschrijft dan
+  // de SQL afdwingt, stuurt de operator precies op het verkeerde moment mis.
+  const runbook = readFileSync(
+    resolve(import.meta.dirname, "../..", "security/COPILOT-T4D-RUNBOOK.md"),
+    "utf8",
+  );
+  assert.match(runbook, /set_config\('t4d\.oude_code_gedeployd', 'ja', true\)/);
+  assert.match(runbook, /set_config\('t4d\.deploy_moment',/);
+  assert.match(runbook, /ná het opgegeven\s+deploymoment/, "het runbook beschrijft de controle niet als 'ná het deploymoment'");
+  assert.ok(!/laatste\s+uur/.test(runbook), "het runbook spreekt nog over het laatste uur");
 });
 
 test("het runbook blokkeert activering tot #428 is ingericht", () => {

@@ -174,21 +174,40 @@ select set_config('t4d.actor', 'jouw-naam', true),
        set_config('t4d.reden', 'waarom je dit doet', true);
 ```
 
-Een onbewerkt bestand weigert zichzelf — `VUL_IN` is geen geldige waarde. Fase 3
-en 4 vragen op dezelfde manier om `set_config('t4d.oude_code_gedeployd', 'ja', true)`.
+Een onbewerkt bestand weigert zichzelf — `VUL_IN` is geen geldige waarde.
+
+Fase 3 en 4 vragen **twee** waarden, geen één:
+
+```sql
+select set_config('t4d.oude_code_gedeployd', 'ja', true),
+       set_config('t4d.deploy_moment', '2026-09-21T14:05:00+02:00', true);
+```
 
 #### Fase 3 en 4 vragen twee bewijzen
 
 Beide fasen zijn in de praktijk onomkeerbaar (fase 4 letterlijk: de kolomwaarden
 zijn erna weg). Daarom is één bewijs er één te weinig:
 
-1. **Gegevens** — geen verse koppeling met een gevulde `client_id` in het laatste
-   uur. Schrijft er nog iets, dan draait de nieuwe code nog.
-2. **Verklaring** — `set_config('t4d.oude_code_gedeployd', 'ja', true)`.
+1. **Gegevens** — geen koppeling met een gevulde `client_id` **ná het opgegeven
+   deploymoment**. Schrijft er nog iets, dan draait de nieuwe code nog.
+2. **Verklaring** — `t4d.oude_code_gedeployd` op `'ja'`.
 
 Het eerste is stil groen op een omgeving waar toevallig niemand koppelt; het
 tweede dwingt af dat iemand heeft gekeken. Andersom vangt het eerste een
 verklaring die te goeder trouw maar onjuist is.
+
+`t4d.deploy_moment` is het **waargenomen** moment van de terugdraai-deploy, als
+tijdstempel met tijdzone. Het is bewust geen vast venster: koppelingen van vóór
+die deploy zijn terecht geschreven door code die toen nog draaide, en zouden een
+correcte rollback anders onnodig tegenhouden. Alleen writes ná dat moment zeggen
+iets over de huidige stand.
+
+Twee wachten op die waarde:
+
+- een moment **in de toekomst** wordt geweigerd — dan meet de controle een leeg
+  venster en stelt zij niets vast;
+- een moment van **minder dan twee minuten geleden** geeft een waarschuwing: neem
+  de deploy eerst werkelijk waar, anders meet de controle nog niets.
 
 #### De generator
 
@@ -210,6 +229,15 @@ append-only trigger. Dat is auditdata — wie de rem wanneer en waarom bediende 
 en append-only audit is niet-onderhandelbaar. Wil je die tabel tóch kwijt, dan is
 dat een aparte bewuste handeling: eerst exporteren, dan expliciet akkoord op het
 auditverlies, dan handmatig droppen. Geen rollbackbestand doet het voor je.
+
+Elke fase toetst dat slot ook werkelijk, niet alleen "er staat een trigger":
+naam `trg_copilot_operator_log_append_only`, de functie
+`microsoft_private.copilot_log_append_only` eronder, de enabled-status, en dekking
+op zowel `UPDATE` als `DELETE` (`BEFORE ... FOR EACH ROW`). Daarna volgt één echte
+mutatiepoging, want metadata kan kloppen terwijl de functie eronder niets doet.
+Faalt een van die controles, dan rolt de hele fase terug — inclusief wat zij al
+had gedaan. Breng het slot dan eerst in orde; zie de noodroute bij fase 1 als de
+arm intussen écht uit moet.
 
 ## 4. Wat deze poorten niet doen
 

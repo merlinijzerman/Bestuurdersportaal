@@ -99,7 +99,7 @@ drop table if exists microsoft_private.copilot_rollout;
 
 -- ── Eindcontrole ────────────────────────────────────────────────────────────
 do $$
-declare v_rest text;
+declare v_rest text; v_tgnaam text; v_tgenabled text; v_tgtype integer; v_fnnaam text; v_fnschema text; v_muteerbaar boolean;
 begin
   select string_agg(naam, ', ') into v_rest from (
     select c.relname as naam
@@ -116,11 +116,15 @@ begin
     raise exception 'FASE 3 mislukt: deze copilot-objecten staan er nog: %', v_rest;
   end if;
 
-  -- ── Auditslot: tabel ÉN de append-only trigger ──────────────────────────
-  -- Een append-only tabel zonder haar trigger is geen append-only tabel. Een
-  -- destructieve rollback voortzetten terwijl het operatorspoor onbeschermd is,
-  -- is precies het moment waarop je moet stoppen. Schemagekwalificeerd, want
-  -- `relname` alleen kan een gelijknamige tabel in een ander schema treffen.
+  -- ── Auditslot: de tabel ÉN een trigger die werkelijk append-only afdwingt ──
+  -- Het bestaan van "een" niet-interne trigger bewijst niets. Een uitgeschakelde
+  -- trigger, een trigger die alleen op INSERT vuurt, of een onschuldige dummy met
+  -- een andere functie eronder laat het spoor gewoon muteerbaar. Daarom naam,
+  -- functie, status én dekking — en daarna een echte mutatiepoging, want alleen
+  -- die bewijst dat het slot ook werkelijk dichtvalt.
+  --
+  --   tgtype-bits: 1 = ROW, 2 = BEFORE, 8 = DELETE, 16 = UPDATE.
+  --   tgenabled:   'O' origin, 'A' always, 'R' alleen replica, 'D' uitgeschakeld.
   if not exists (
     select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'microsoft_private' and c.relname = 'copilot_operator_log'
@@ -128,14 +132,49 @@ begin
   ) then
     raise exception 'FASE 3 mislukt: copilot_operator_log ontbreekt in microsoft_private; dat is auditdata en hoort te blijven staan';
   end if;
-  if not exists (
-    select 1 from pg_trigger t
-      join pg_class c on c.oid = t.tgrelid
-      join pg_namespace n on n.oid = c.relnamespace
-     where n.nspname = 'microsoft_private' and c.relname = 'copilot_operator_log'
-       and not t.tgisinternal
-  ) then
-    raise exception 'FASE 3 mislukt: de append-only trigger op copilot_operator_log ontbreekt; het auditspoor is muteerbaar';
+
+  select t.tgname, t.tgenabled::text, t.tgtype::integer, fn.proname, fnn.nspname
+    into v_tgnaam, v_tgenabled, v_tgtype, v_fnnaam, v_fnschema
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    join pg_proc fn on fn.oid = t.tgfoid
+    join pg_namespace fnn on fnn.oid = fn.pronamespace
+   where n.nspname = 'microsoft_private'
+     and c.relname = 'copilot_operator_log'
+     and not t.tgisinternal
+     and t.tgname = 'trg_copilot_operator_log_append_only';
+
+  if v_tgnaam is null then
+    raise exception 'FASE 3 mislukt: de trigger trg_copilot_operator_log_append_only ontbreekt op copilot_operator_log';
+  end if;
+  if v_fnschema <> 'microsoft_private' or v_fnnaam <> 'copilot_log_append_only' then
+    raise exception 'FASE 3 mislukt: het auditslot hangt aan %.% in plaats van microsoft_private.copilot_log_append_only', v_fnschema, v_fnnaam;
+  end if;
+  if v_tgenabled not in ('O', 'A') then
+    raise exception 'FASE 3 mislukt: het auditslot staat uit of vuurt alleen op een replica (tgenabled = %)', v_tgenabled;
+  end if;
+  if (v_tgtype & 16) = 0 or (v_tgtype & 8) = 0 then
+    raise exception 'FASE 3 mislukt: het auditslot dekt niet zowel UPDATE als DELETE (tgtype = %)', v_tgtype;
+  end if;
+  if (v_tgtype & 1) = 0 or (v_tgtype & 2) = 0 then
+    raise exception 'FASE 3 mislukt: het auditslot is niet BEFORE ... FOR EACH ROW (tgtype = %)', v_tgtype;
+  end if;
+
+  -- De metadata kan kloppen terwijl de functie eronder niets doet. Eén echte
+  -- poging is het enige sluitende bewijs. Op een lege tabel vuurt een ROW-trigger
+  -- niet, dus dan zegt de poging niets en slaan we haar over — de controles
+  -- hierboven blijven staan.
+  if exists (select 1 from microsoft_private.copilot_operator_log) then
+    v_muteerbaar := true;
+    begin
+      update microsoft_private.copilot_operator_log set reden = reden;
+    exception when others then
+      v_muteerbaar := false;
+    end;
+    if v_muteerbaar then
+      raise exception 'FASE 3 mislukt: een UPDATE op copilot_operator_log werd NIET geblokkeerd; het slot staat er wel maar werkt niet';
+    end if;
   end if;
 
   -- De generator uit fase 2 moet blijven: fase 4 heeft haar nodig.
