@@ -67,7 +67,7 @@ export const MARKETING_HOME_PAD = "/home";
 export type Surface = "marketing" | "app" | "platform";
 import {
   leesHostConfiguratie,
-  normaliseerExacteHost,
+  normaliseerHostVoorRoutering,
   normaliseerMarketingHost,
 } from "./host-validatie";
 
@@ -78,7 +78,7 @@ export function isPlatformHost(
   platformHost: string | null | undefined,
   lokaalToegestaan = false
 ): boolean {
-  const h = normaliseerExacteHost(host, { lokaalToegestaan });
+  const h = normaliseerHostVoorRoutering(host, { lokaalToegestaan });
   if (!h) return false;
   return leesHostConfiguratie({
     naam: "PLATFORM_HOST",
@@ -100,7 +100,7 @@ export function bepaalSurface(args: {
   lokaalToegestaan?: boolean;
 }): Surface | null {
   const lokaalToegestaan = args.lokaalToegestaan ?? false;
-  const h = normaliseerExacteHost(args.host, { lokaalToegestaan });
+  const h = normaliseerHostVoorRoutering(args.host, { lokaalToegestaan });
   if (!h) return null;
 
   const platform = leesHostConfiguratie({ naam: "PLATFORM_HOST", waarde: args.platformHost, type: "exact", lokaalToegestaan });

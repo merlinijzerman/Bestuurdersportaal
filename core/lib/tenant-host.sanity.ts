@@ -78,7 +78,7 @@ test("poort op niet-lokale tenanthost wordt geweigerd", () => {
 });
 
 test("lokale poort werkt uitsluitend na expliciete lokale toestemming", () => {
-  const lokaal = [{ host: "fonds.localhost:3000", fondsId: FONDS_A, actief: true }];
+  const lokaal = [{ host: "fonds.localhost", fondsId: FONDS_A, actief: true }];
   assert.deepEqual(bepaalFondsContext({ host: "fonds.localhost:3000", domains: lokaal }), { type: "onbekend" });
   assert.deepEqual(bepaalFondsContext({ host: "fonds.localhost:3000", domains: lokaal, lokaalToegestaan: true }), {
     type: "gevonden", fondsId: FONDS_A,

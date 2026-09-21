@@ -45,13 +45,25 @@ export function normaliseerMarketingHost(
   ruw: string | null | undefined,
   opties: { lokaalToegestaan: boolean }
 ): string | null {
+  const hostnaam = normaliseerHostVoorRoutering(ruw, opties);
+  if (!hostnaam) return null;
+  return hostnaam.startsWith("www.") ? hostnaam.slice(4) : hostnaam;
+}
+
+/**
+ * Strikte routeringssleutel. Alleen een reeds toegestane lokale poort wordt na
+ * validatie verwijderd: tenant_domains en *_HOST bevatten hostnamen, terwijl
+ * de lokale HTTP-origin noodzakelijk een poort draagt. Voor echte hosts is een
+ * poort al door normaliseerExacteHost geweigerd.
+ */
+export function normaliseerHostVoorRoutering(
+  ruw: string | null | undefined,
+  opties: { lokaalToegestaan: boolean }
+): string | null {
   const exact = normaliseerExacteHost(ruw, opties);
   if (!exact) return null;
   const scheiding = exact.lastIndexOf(":");
-  const heeftLokalePoort = scheiding > -1;
-  const hostnaam = heeftLokalePoort ? exact.slice(0, scheiding) : exact;
-  const poort = heeftLokalePoort ? exact.slice(scheiding) : "";
-  return `${hostnaam.startsWith("www.") ? hostnaam.slice(4) : hostnaam}${poort}`;
+  return scheiding === -1 ? exact : exact.slice(0, scheiding);
 }
 
 export function leesHostConfiguratie(args: {
@@ -61,7 +73,7 @@ export function leesHostConfiguratie(args: {
   lokaalToegestaan: boolean;
 }): Set<string> {
   if (args.waarde === null || args.waarde === undefined) return new Set();
-  const normaliseer = args.type === "marketing" ? normaliseerMarketingHost : normaliseerExacteHost;
+  const normaliseer = args.type === "marketing" ? normaliseerMarketingHost : normaliseerHostVoorRoutering;
   const resultaat = new Set<string>();
   for (const deel of args.waarde.split(",")) {
     const host = normaliseer(deel, { lokaalToegestaan: args.lokaalToegestaan });

@@ -4,6 +4,7 @@ import {
   leesHostConfiguratie,
   lokaleHostmodus,
   normaliseerExacteHost,
+  normaliseerHostVoorRoutering,
   normaliseerMarketingHost,
 } from "./host-validatie";
 
@@ -27,6 +28,7 @@ for (const host of [
 
 assert.equal(normaliseerExacteHost("fonds.localhost:3000", productie), null);
 assert.equal(normaliseerExacteHost("fonds.localhost:3000", { lokaalToegestaan: true }), "fonds.localhost:3000");
+assert.equal(normaliseerHostVoorRoutering("fonds.localhost:3000", { lokaalToegestaan: true }), "fonds.localhost");
 assert.equal(normaliseerExacteHost("example.test:3000", { lokaalToegestaan: true }), null);
 
 assert.deepEqual(

@@ -14,7 +14,7 @@
 //  (huispatroon 0039: RLS = fonds-isolatie, code = rolgate).
 // ============================================================================
 
-import { normaliseerExacteHost } from "./host-validatie";
+import { normaliseerHostVoorRoutering } from "./host-validatie";
 
 /** Eén host→fonds-mappingrij, aangeleverd door de caller (T1.2 haalt deze via de
  *  service-role uit public.tenant_domains). `host` is reeds genormaliseerd. */
@@ -39,7 +39,7 @@ export function bepaalFondsContext(args: {
   domains: ReadonlyArray<TenantDomain>;
   lokaalToegestaan?: boolean;
 }): FondsResolutie {
-  const h = normaliseerExacteHost(args.host, {
+  const h = normaliseerHostVoorRoutering(args.host, {
     lokaalToegestaan: args.lokaalToegestaan ?? false,
   });
   if (!h) return { type: "onbekend" };
