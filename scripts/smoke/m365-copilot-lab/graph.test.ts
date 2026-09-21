@@ -21,18 +21,7 @@ import {
 
 const HOST = "bestuurdersportaaltest.sharepoint.com";
 const ROOT_PAD = "/sites/PGBRetrievalLab/Shared Documents";
-
-/** Laat alles binnen de root toe; de rootregel zelf wordt in smoke.test.ts getoetst. */
-const binnenRoot = (webUrl: string | undefined): string | null => {
-  if (!webUrl) return null;
-  try {
-    const parsed = new URL(webUrl);
-    const pad = decodeURIComponent(parsed.pathname);
-    return parsed.hostname === HOST && (pad === ROOT_PAD || pad.startsWith(`${ROOT_PAD}/`)) ? webUrl : null;
-  } catch {
-    return null;
-  }
-};
+const ROOT_GRAPH_PAD = "/drives/drive-1/root:";
 
 function client(afhandel: (url: string) => Response | Promise<Response>, callBudget = 40) {
   const gezien: string[] = [];
@@ -161,11 +150,11 @@ test("de inhoudscan gaat door de zoekindex en telt apart wat binnen de root valt
   const { client: c, gezien } = client(() =>
     json({
       value: [
-        { id: "1", name: "PGB407-DOC-101-a.docx", webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/02/PGB407-DOC-101-a.docx` },
-        { id: "2", name: "elders.docx", webUrl: `https://${HOST}/sites/AndereSite/Shared%20Documents/elders.docx` },
+        { id: "1", name: "PGB407-DOC-101-a.docx", webUrl: `https://${HOST}/:w:/r${encodeURI(ROOT_PAD)}/02/PGB407-DOC-101-a.docx`, parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02` } },
+        { id: "2", name: "elders.docx", webUrl: `https://${HOST}/sites/AndereSite/Shared%20Documents/elders.docx`, parentReference: { driveId: "drive-2", path: "/drives/drive-2/root:" } },
       ],
     }));
-  const uitkomst = await inhoudscan(c, "drive-1", "root-item", "Zandloperbaken 12", binnenRoot);
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
   assert.equal(uitkomst.treffers, 2);
   assert.equal(uitkomst.binnenRoot, 1);
   // Server-side gescoped op het root-item, niet drive-breed.
@@ -177,7 +166,7 @@ test("een scanterm met een quote of wildcard komt de OData-functie niet in", asy
   const { client: c, gezien } = client(() => json({ value: [] }));
   for (const term of ["Zandloper'baken", "Zandloperbaken*", "Zandloperbaken\"12", "a OR b\n"]) {
     await assert.rejects(
-      () => inhoudscan(c, "drive-1", "root-item", term, binnenRoot),
+      () => inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, term),
       (fout: GraphFout) => fout.code === "scanterm_onveilig",
       `term ${JSON.stringify(term)} werd geaccepteerd`,
     );
@@ -190,8 +179,8 @@ test("de bestandsnaamscan loopt de bibliotheek af en raakt de zoekindex niet", a
     if (url.includes("/items/root-item/children")) {
       return json({
         value: [
-          { id: "map-1", name: "02 Beleid en reglementen", folder: { childCount: 2 }, webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/02%20Beleid` },
-          { id: "f-0", name: "leeswijzer.docx", file: {}, webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/leeswijzer.docx` },
+          { id: "map-1", name: "02 Beleid en reglementen", folder: { childCount: 2 }, webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/02%20Beleid`, parentReference: { driveId: "drive-1", path: ROOT_GRAPH_PAD } },
+          { id: "f-0", name: "leeswijzer.docx", file: {}, webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/leeswijzer.docx`, parentReference: { driveId: "drive-1", path: ROOT_GRAPH_PAD } },
         ],
       });
     }
@@ -201,18 +190,20 @@ test("de bestandsnaamscan loopt de bibliotheek af en raakt de zoekindex niet", a
           id: "f-1",
           name: "PGB407-DOC-101-Zandloperbaken-hersteldossier.docx",
           file: {},
-          webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/02%20Beleid/PGB407-DOC-101-Zandloperbaken-hersteldossier.docx`,
+          webUrl: `https://${HOST}/:w:/r${encodeURI(ROOT_PAD)}/02%20Beleid/PGB407-DOC-101-Zandloperbaken-hersteldossier.docx`,
+          parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
         },
         {
           id: "f-2",
           name: "PGB407-DOC-102-Nevelanker.docx",
           file: {},
           webUrl: `https://${HOST}${encodeURI(ROOT_PAD)}/02%20Beleid/PGB407-DOC-102-Nevelanker.docx`,
+          parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
         },
       ],
     });
   });
-  const uitkomst = await bestandsnaamscan(c, "drive-1", "root-item", "PGB407-DOC-101", binnenRoot);
+  const uitkomst = await bestandsnaamscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "PGB407-DOC-101");
   assert.equal(uitkomst.treffers, 1, "alleen DOC-101 hoort op de prefix te matchen");
   assert.equal(uitkomst.bekeken, 4);
   assert.equal(uitkomst.afgekapt, false);
@@ -228,10 +219,28 @@ test("een naamtreffer buiten de bronroot telt niet mee", async () => {
           name: "PGB407-DOC-101-elders.docx",
           file: {},
           webUrl: `https://${HOST}/sites/AndereSite/Shared%20Documents/PGB407-DOC-101-elders.docx`,
+          parentReference: { driveId: "drive-2", path: "/drives/drive-2/root:" },
         },
       ],
     }));
-  assert.equal((await bestandsnaamscan(c, "drive-1", "root-item", "PGB407-DOC-101", binnenRoot)).treffers, 0);
+  assert.equal((await bestandsnaamscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "PGB407-DOC-101")).treffers, 0);
+});
+
+test("een shortcut naar een bestand elders telt niet mee, ook niet met een passend parent-pad", async () => {
+  const { client: c } = client(() =>
+    json({
+      value: [
+        {
+          id: "shortcut-1",
+          name: "PGB407-DOC-101-elders.docx",
+          file: {},
+          remoteItem: { id: "extern-1" },
+          webUrl: `https://${HOST}/:w:/r${encodeURI(ROOT_PAD)}/PGB407-DOC-101-elders.docx`,
+          parentReference: { driveId: "drive-1", path: ROOT_GRAPH_PAD },
+        },
+      ],
+    }));
+  assert.equal((await bestandsnaamscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "PGB407-DOC-101")).treffers, 0);
 });
 
 test("de naamscan volgt alleen een nextLink binnen de v1.0-basis", async () => {
@@ -243,7 +252,7 @@ test("de naamscan volgt alleen een nextLink binnen de v1.0-basis", async () => {
     }
     return json({ value: [] });
   });
-  const uitkomst = await bestandsnaamscan(c, "drive-1", "root-item", "PGB407-DOC-101", binnenRoot);
+  const uitkomst = await bestandsnaamscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "PGB407-DOC-101");
   assert.equal(uitkomst.treffers, 0);
   assert.equal(gezien.length, 1, "een nextLink naar een andere host mag niet gevolgd worden");
 });
@@ -281,8 +290,8 @@ test("beide scans beginnen bij het root-item van de submap, niet bij de drive-ro
     bezocht.push(url);
     return json({ value: [] });
   });
-  await inhoudscan(c, "drive-1", "root-sub", "Zandloperbaken 12", binnenRoot);
-  await bestandsnaamscan(c, "drive-1", "root-sub", "PGB407-DOC-101", binnenRoot);
+  await inhoudscan(c, "drive-1", "root-sub", `${ROOT_GRAPH_PAD}/Digital Twin Uitvoering`, "Zandloperbaken 12");
+  await bestandsnaamscan(c, "drive-1", "root-sub", `${ROOT_GRAPH_PAD}/Digital Twin Uitvoering`, "PGB407-DOC-101");
   assert.equal(bezocht.length, 2);
   for (const url of bezocht) {
     assert.ok(url.includes("/items/root-sub/"), `scan begon niet bij het root-item: ${url}`);
