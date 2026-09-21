@@ -338,8 +338,14 @@ export async function voerKetenUit(opdracht: KetenOpdracht): Promise<KetenResult
 
   const verlopen = new KetenDeadline();
   const eigenKlok = new AbortController();
+  // BEWUST GEEN `unref()`. Een niet-gerefereerde timer houdt de event-loop niet
+  // open, en dan mag Node het proces verlaten terwijl de keten nog op haar
+  // eigen klok wacht: de deadline vuurt niet, de keten levert niets op en er is
+  // geen fout. Gemeten: met `unref()` vertrok het proces na 2 ms bij een keten
+  // die 600 ms te gaan had. Een deadline die de runtime mag overslaan is geen
+  // deadline. Weglaten kost niets, want `clearTimeout` staat in de `finally`
+  // hieronder en de timer kan de keten dus nooit overleven.
   const timer = setTimeout(() => eigenKlok.abort(verlopen), grenzen.deadlineMs);
-  (timer as unknown as { unref?: () => void }).unref?.();
   const keten = opdracht.signal
     ? AbortSignal.any([opdracht.signal, eigenKlok.signal])
     : eigenKlok.signal;

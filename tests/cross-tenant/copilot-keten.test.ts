@@ -1186,3 +1186,39 @@ test("een deadline TIJDENS de registerfase laat de balans niet scheef staan", as
   assert.equal(resultaat.treffers.length, 0);
   controleerBalans(resultaat);
 });
+
+test("de ketendeadline houdt het PROCES open tot zij heeft gevuurd", async () => {
+  // Deze eigenschap is binnen `node:test` niet te meten: de runner houdt zelf
+  // handles open en maskeert het. Daarom een EIGEN proces, waarin de enige
+  // openstaande zaken de ketenklok en een hangende lezing zijn.
+  //
+  // Met `unref()` op die klok verliet Node het proces na 2 ms terwijl de keten
+  // 600 ms te gaan had: geen deadline, geen uitkomst, geen fout. In de
+  // CI-draai sloeg dat 14 tests over onder de kop "cancelled" — nul gefaald,
+  // dus stil.
+  const { execFileSync } = await import("node:child_process");
+  const script = [
+    'import { voerKetenUit } from "./core/lib/microsoft-retrieval/keten.ts";',
+    'const hangt = (s) => new Promise((_, rej) => s?.addEventListener("abort", () => rej(s.reason), { once: true }));',
+    'const t0 = Date.now();',
+    'voerKetenUit({',
+    '  bron: { id: "b", tenantId: "t", siteHostnaam: "h.sharepoint.com", driveId: "d", rootItemId: "r", configuratieversie: 1, status: "actief" },',
+    '  tokenTenantId: "t", accessToken: "x",',
+    '  leesItem: async (_id, signal) => hangt(signal),',
+    '  zoekRegister: async () => undefined,',
+    '  haalKandidaten: async () => [],',
+    '  grenzen: { deadlineMs: 400 },',
+    '}).then((r) => console.log("KLAAR", Date.now() - t0, r.telling.deadlineVerlopen));',
+  ].join("\n");
+
+  const uit = execFileSync(
+    process.execPath,
+    ["--import", "tsx", "--input-type=module", "-e", script],
+    { cwd: process.cwd(), encoding: "utf8", timeout: 20_000 },
+  );
+  const regel = uit.split("\n").find((r) => r.startsWith("KLAAR"));
+  assert.ok(regel, `de keten heeft het proces niet overleefd; uitvoer: ${JSON.stringify(uit)}`);
+  const [, msRuw, verlopen] = regel.split(" ");
+  assert.equal(verlopen, "true");
+  assert.ok(Number(msRuw) >= 350, `de deadline vuurde te vroeg: ${msRuw}ms`);
+});
