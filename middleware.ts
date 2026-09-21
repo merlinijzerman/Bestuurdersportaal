@@ -29,7 +29,7 @@ import { lokaleHostmodus } from "@/core/lib/host-validatie";
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host");
   const isDev = process.env.NODE_ENV !== "production";
-  const lokaalToegestaan = lokaleHostmodus({ nodeEnv: process.env.NODE_ENV, seedDoelomgeving: process.env.SEED_DOELOMGEVING });
+  const lokaalToegestaan = lokaleHostmodus({ seedDoelomgeving: process.env.SEED_DOELOMGEVING });
 
   // Dev-ergonomie: lokaal is /platform/* direct bereikbaar, zodat de
   // platform-surface zonder host-config te smoken is.

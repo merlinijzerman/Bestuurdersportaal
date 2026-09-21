@@ -25,7 +25,6 @@ const MARKETING_HOST = eersteGeconfigureerdeHost({
   waarde: process.env.MARKETING_HOST,
   type: "marketing",
   lokaalToegestaan: lokaleHostmodus({
-    nodeEnv: process.env.NODE_ENV,
     seedDoelomgeving: process.env.SEED_DOELOMGEVING,
   }),
 }) ?? "bestuurdersportaal.com";

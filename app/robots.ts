@@ -11,7 +11,7 @@ import { lokaleHostmodus } from "@/core/lib/host-validatie";
 //    zoekindex → alles uitsluiten.
 export default async function robots(): Promise<MetadataRoute.Robots> {
   const host = (await headers()).get("host");
-  const lokaalToegestaan = lokaleHostmodus({ nodeEnv: process.env.NODE_ENV, seedDoelomgeving: process.env.SEED_DOELOMGEVING });
+  const lokaalToegestaan = lokaleHostmodus({ seedDoelomgeving: process.env.SEED_DOELOMGEVING });
   const surface = bepaalSurface({
     host,
     marketingHost: process.env.MARKETING_HOST,

@@ -29,7 +29,6 @@ export async function haalFondsContext(
   host: string | null | undefined
 ): Promise<FondsResolutie> {
   const lokaalToegestaan = lokaleHostmodus({
-    nodeEnv: process.env.NODE_ENV,
     seedDoelomgeving: process.env.SEED_DOELOMGEVING,
   });
   const rij = await haalTenantDomainVoorHost(host, lokaalToegestaan);

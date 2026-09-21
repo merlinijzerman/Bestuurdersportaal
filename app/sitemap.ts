@@ -13,7 +13,7 @@ import { lokaleHostmodus } from "@/core/lib/host-validatie";
 // een sitemap die een noindex-pagina aanmeldt, geeft een tegenstrijdig signaal.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const host = (await headers()).get("host");
-  const lokaalToegestaan = lokaleHostmodus({ nodeEnv: process.env.NODE_ENV, seedDoelomgeving: process.env.SEED_DOELOMGEVING });
+  const lokaalToegestaan = lokaleHostmodus({ seedDoelomgeving: process.env.SEED_DOELOMGEVING });
   const surface = bepaalSurface({
     host,
     marketingHost: process.env.MARKETING_HOST,

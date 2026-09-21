@@ -59,7 +59,7 @@ function originToegestaan(req: NextRequest): boolean {
 
   if (isDev && /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return true;
 
-  const lokaalToegestaan = lokaleHostmodus({ nodeEnv: process.env.NODE_ENV, seedDoelomgeving: process.env.SEED_DOELOMGEVING });
+  const lokaalToegestaan = lokaleHostmodus({ seedDoelomgeving: process.env.SEED_DOELOMGEVING });
   const canoniek = normaliseerMarketingHost(host, { lokaalToegestaan });
   if (!canoniek) return false;
   return leesHostConfiguratie({

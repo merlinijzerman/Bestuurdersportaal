@@ -72,8 +72,10 @@ export function leesHostConfiguratie(args: {
 }
 
 export function lokaleHostmodus(args: {
-  nodeEnv?: string;
   seedDoelomgeving?: string;
 }): boolean {
-  return args.nodeEnv !== "production" && args.seedDoelomgeving === "local";
+  // `next start` draait ook voor de hermetische lokale acceptatiestack met
+  // NODE_ENV=production. De dubbele grendel is daarom: expliciete local-doelstand
+  // én (in normaliseerExacteHost) een echte loopback/*.localhost-host.
+  return args.seedDoelomgeving === "local";
 }

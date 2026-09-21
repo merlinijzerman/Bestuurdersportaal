@@ -45,8 +45,7 @@ for (const waarde of ["", "app.example,", "app.example, app2.example", "app.exam
   );
 }
 assert.deepEqual(leesHostConfiguratie({ naam: "APP_HOST", waarde: undefined, type: "exact", lokaalToegestaan: false }), new Set());
-assert.equal(lokaleHostmodus({ nodeEnv: "development", seedDoelomgeving: "local" }), true);
-assert.equal(lokaleHostmodus({ nodeEnv: "production", seedDoelomgeving: "local" }), false);
-assert.equal(lokaleHostmodus({ nodeEnv: "development", seedDoelomgeving: "preview" }), false);
+assert.equal(lokaleHostmodus({ seedDoelomgeving: "local" }), true);
+assert.equal(lokaleHostmodus({ seedDoelomgeving: "preview" }), false);
 
 console.log("host-validatie sanity-tests geslaagd.");
