@@ -6,6 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  DOWNLOAD_TIMEOUT_MS,
   MAX_DOWNLOAD_BYTES,
   contentUrl,
   downloadItem,
@@ -36,6 +37,23 @@ const omleiding = (locatie: string | null, status = 302) =>
 
 const bestand = (inhoud: Uint8Array | string, headers: Record<string, string> = {}) =>
   new Response(typeof inhoud === "string" ? inhoud : (inhoud.buffer as ArrayBuffer).slice(inhoud.byteOffset, inhoud.byteOffset + inhoud.byteLength), { status: 200, headers });
+
+/**
+ * Een fetch die blijft hangen tot het meegegeven signaal afgaat. Let op de
+ * eerste regel: een signaal dat AL is afgebroken vuurt geen event meer, en
+ * zonder die controle wacht de test eeuwig op iets dat allang gebeurd is.
+ */
+function hangendeFetch(voorafAan?: () => void) {
+  return (async (_url: string, init: RequestInit) => {
+    voorafAan?.();
+    const signaal = init.signal;
+    if (signaal?.aborted) throw signaal.reason;
+    await new Promise((_, reject) => {
+      signaal?.addEventListener("abort", () => reject(signaal.reason), { once: true });
+    });
+    throw new Error("onbereikbaar");
+  }) as (input: string, init: RequestInit) => Promise<Response>;
+}
 
 function opdracht(extra: Partial<Parameters<typeof downloadItem>[0]> = {}) {
   return { accessToken: "stub-token", driveId: DRIVE, itemId: ITEM, siteHostnaam: HOST, ...extra };
@@ -150,6 +168,47 @@ test("een afbreking wordt doorgegooid en kost geen tweede aanroep", async () => 
   await assert.rejects(
     () => downloadItem(opdracht({ fetchImpl: traag as never, signal: laat.signal })),
     (e: unknown) => e === afbreking2,
+  );
+});
+
+test("ÉÉN DEADLINE over de keten: stap 1 verbruikt de klok van stap 2", async () => {
+  // Eerst startte de deadline pas ná stap 1. Een trage omleiding plus een trage
+  // download kon zo ruim het dubbele van de grens duren — ten koste van de
+  // beurtdeadline die alle kandidaten samen delen.
+  //
+  // Beide stappen dragen nu hetzelfde signaal. Dat is hier direct zichtbaar:
+  // stap 1 en stap 2 krijgen exact dezelfde AbortSignal mee.
+  const { impl, aanroepen } = stub([omleiding(DOWNLOAD), bestand("hallo")]);
+  await downloadItem(opdracht({ fetchImpl: impl }));
+  assert.equal(aanroepen.length, 2);
+  assert.ok(aanroepen[0].init.signal, "stap 1 loopt zonder deadline");
+  assert.ok(aanroepen[1].init.signal, "stap 2 loopt zonder deadline");
+  assert.equal(aanroepen[0].init.signal, aanroepen[1].init.signal, "stap 1 en 2 hebben elk hun eigen klok");
+});
+
+test("een verlopen ketendeadline is een STORING, geen beurtafbreking", async () => {
+  // AbortSignal.timeout() zou een TimeoutError geven, en isAfbreking() leest
+  // die als "de beurt is afgebroken" — dan zou één traag document de hele
+  // beurt laten eindigen. Onze eigen klok houdt dat onderscheid vast.
+  const traag = hangendeFetch();
+
+  // De productieklok staat op 30 s; de test zet hem op 40 ms, anders wacht deze
+  // suite een halve minuut per geval.
+  assert.equal(DOWNLOAD_TIMEOUT_MS, 30_000, "de productiedeadline is gewijzigd");
+  await assert.rejects(
+    () => downloadItem(opdracht({ fetchImpl: traag, timeoutMs: 40 })),
+    (e: unknown) => e instanceof SharePointGraphError && !(e instanceof RetrievalAfgebroken),
+  );
+});
+
+test("de beurtafbreking wint van de eigen klok", async () => {
+  const afbreking = new RetrievalAfgebroken("timeout");
+  const controller = new AbortController();
+  const traag = hangendeFetch(() => controller.abort(afbreking));
+
+  await assert.rejects(
+    () => downloadItem(opdracht({ fetchImpl: traag, signal: controller.signal, timeoutMs: 5_000 })),
+    (e: unknown) => e === afbreking,
   );
 });
 

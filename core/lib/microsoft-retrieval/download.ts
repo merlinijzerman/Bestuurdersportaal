@@ -24,6 +24,19 @@
 //  te lezen. (Dezelfde les als bij de Copilot-client: `text().length` telt
 //  UTF-16-code-units en zegt niets over wat er binnenkomt.)
 //
+//  ── ÉÉN DEADLINE OVER DE HELE KETEN ────────────────────────────────────────
+//  Eerst gold de deadline alleen voor stap 2, en die begon pas te lopen NADAT
+//  stap 1 klaar was. De totale tijd kon daarmee ruim het dubbele worden van wat
+//  de grens suggereert — en dat gaat ten koste van de beurtdeadline, die alle
+//  kandidaten samen moeten delen. Nu start één klok vóór stap 1 en dekt die de
+//  omleiding, de download én het uitlezen van de body.
+//
+//  Die klok is een EIGEN controller en geen `AbortSignal.timeout()`. Die laatste
+//  levert een `TimeoutError`, en `isAfbreking()` leest dat als een afbreking van
+//  de BEURT — dan zou één traag document de hele beurt als geannuleerd laten
+//  eindigen. Met een eigen reden blijft het onderscheid zichtbaar: de beurt
+//  afgebroken is iets anders dan deze download te traag.
+//
 //  ── FOUTREGELS, GELIJK AAN DE ITEMLEZING ───────────────────────────────────
 //  Afbreking gaat er onmiddellijk doorheen en wordt na élke I/O opnieuw
 //  bewaakt; 404/403 is een kandidaatweigering; al het andere is een storing en
@@ -39,7 +52,7 @@ import { bewaakNaIO, isAfbreking } from "../retrieval/afbreken";
 /** Harde bovengrens op ONTVANGEN BYTES per document. */
 export const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 
-/** Deadline per download, los van de beurtdeadline die het signaal draagt. */
+/** Deadline over de VOLLEDIGE keten: omleiding, download en uitlezen samen. */
 export const DOWNLOAD_TIMEOUT_MS = 30_000;
 
 export type DownloadAfwijzing = "rechten_configuratie" | "download";
@@ -83,7 +96,7 @@ export function veiligeDownloadUrl(locatie: string | null, siteHostnaam: string)
   return parsed;
 }
 
-async function leesBegrensdeBytes(response: Response): Promise<Buffer | null> {
+async function leesBegrensdeBytes(response: Response, keten: AbortSignal): Promise<Buffer | null> {
   const lengte = Number(response.headers.get("content-length"));
   if (Number.isFinite(lengte) && lengte > MAX_DOWNLOAD_BYTES) return null;
 
@@ -98,6 +111,12 @@ async function leesBegrensdeBytes(response: Response): Promise<Buffer | null> {
   let bytes = 0;
   try {
     for (;;) {
+      // Het UITLEZEN valt onder dezelfde klok: een body die traag binnendruppelt
+      // zou anders buiten elke grens vallen.
+      if (keten.aborted) {
+        await reader.cancel().catch(() => {});
+        throw keten.reason ?? new SharePointGraphError("graph_timeout");
+      }
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
@@ -127,6 +146,11 @@ export interface DownloadOpdracht {
   signal?: AbortSignal;
   /** Uitsluitend voor tests; productie gebruikt de globale `fetch`. */
   fetchImpl?: GraphFetch;
+  /**
+   * Uitsluitend voor tests. Productie gebruikt `DOWNLOAD_TIMEOUT_MS`; een test
+   * die op de echte klok wacht, wacht dertig seconden per geval.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -136,6 +160,39 @@ export interface DownloadOpdracht {
 export async function downloadItem(opdracht: DownloadOpdracht): Promise<DownloadResultaat> {
   const doeFetch = opdracht.fetchImpl ?? ((input, init) => fetch(input, init));
 
+  // ÉÉN klok over de hele keten, gestart vóór de eerste aanroep. Een eigen
+  // controller met een eigen reden, zodat "deze download is te traag" niet als
+  // "de beurt is afgebroken" wordt gelezen.
+  const verlopen = new SharePointGraphError("graph_timeout");
+  const eigenKlok = new AbortController();
+  const timer = setTimeout(() => eigenKlok.abort(verlopen), opdracht.timeoutMs ?? DOWNLOAD_TIMEOUT_MS);
+  const keten = opdracht.signal
+    ? AbortSignal.any([opdracht.signal, eigenKlok.signal])
+    : eigenKlok.signal;
+
+  /** Beurtafbreking wint; daarna onze eigen klok; dan pas een providerfout. */
+  const vertaal = (fout: unknown): never => {
+    bewaakNaIO(opdracht.signal, fout);
+    if (isAfbreking(fout)) throw fout;
+    if (eigenKlok.signal.aborted) throw verlopen;
+    throw new SharePointGraphError("graph_response", fout);
+  };
+
+  try {
+    return await haalOp(opdracht, doeFetch, keten, vertaal);
+  } finally {
+    // Zonder dit blijft de timer het proces vasthouden nadat de download al
+    // lang klaar is.
+    clearTimeout(timer);
+  }
+}
+
+async function haalOp(
+  opdracht: DownloadOpdracht,
+  doeFetch: GraphFetch,
+  keten: AbortSignal,
+  vertaal: (fout: unknown) => never,
+): Promise<DownloadResultaat> {
   // ── Stap 1: de omleiding ophalen, MET token, naar graph.microsoft.com ──────
   bewaakNaIO(opdracht.signal);
   let omleiding: Response;
@@ -146,12 +203,10 @@ export async function downloadItem(opdracht: DownloadOpdracht): Promise<Download
       cache: "no-store",
       // NOOIT automatisch volgen: dan zou het token naar de redirecthost gaan.
       redirect: "manual",
-      signal: opdracht.signal,
+      signal: keten,
     });
   } catch (fout) {
-    bewaakNaIO(opdracht.signal, fout);
-    if (isAfbreking(fout)) throw fout;
-    throw new SharePointGraphError("graph_response", fout);
+    vertaal(fout);
   }
   bewaakNaIO(opdracht.signal);
 
@@ -169,8 +224,7 @@ export async function downloadItem(opdracht: DownloadOpdracht): Promise<Download
   if (!downloadUrl) return { ok: false, afwijzing: "download" };
 
   // ── Stap 2: de bytes, ZONDER token ────────────────────────────────────────
-  const eigenDeadline = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
-  const signaal = opdracht.signal ? AbortSignal.any([opdracht.signal, eigenDeadline]) : eigenDeadline;
+  // Dezelfde klok als stap 1: de deadline geldt de KETEN, niet elke stap apart.
   let inhoud: Response;
   try {
     inhoud = await doeFetch(downloadUrl.toString(), {
@@ -180,12 +234,10 @@ export async function downloadItem(opdracht: DownloadOpdracht): Promise<Download
       headers: { Accept: "application/octet-stream" },
       cache: "no-store",
       redirect: "error",
-      signal: signaal,
+      signal: keten,
     });
   } catch (fout) {
-    bewaakNaIO(opdracht.signal, fout);
-    if (isAfbreking(fout)) throw fout;
-    throw new SharePointGraphError("graph_response", fout);
+    vertaal(fout);
   }
   bewaakNaIO(opdracht.signal);
 
@@ -196,7 +248,7 @@ export async function downloadItem(opdracht: DownloadOpdracht): Promise<Download
     throw new SharePointGraphError("graph_response");
   }
 
-  const bytes = await leesBegrensdeBytes(inhoud);
+  const bytes = await leesBegrensdeBytes(inhoud, keten).catch(vertaal);
   bewaakNaIO(opdracht.signal);
   // Te groot is geen storing en geen rechtenkwestie: dit document doet niet mee.
   if (!bytes || bytes.byteLength === 0) return { ok: false, afwijzing: "download" };
