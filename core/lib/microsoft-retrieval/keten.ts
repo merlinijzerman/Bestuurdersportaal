@@ -48,7 +48,7 @@
 // ============================================================================
 import type { Bestandstype, ExtractieResultaat } from "../document-extractie";
 import { extractTekst } from "../document-extractie";
-import { bewaakNaIO } from "../retrieval/afbreken";
+import { TIMEOUT_DEFAULT_MS, TIMEOUT_MAX_MS, bewaakNaIO } from "../retrieval/afbreken";
 import type { CopilotKandidaat } from "./client";
 import {
   MAX_DOWNLOAD_BYTES,
@@ -128,17 +128,34 @@ export interface KetenGrenzen {
 }
 
 /**
- * Bewust krappe defaults. De keten draait binnen een beurt die zelf al een
- * budget heeft (`TIMEOUT_DEFAULT_MS` is 20 s voor de hele retrieval), dus een
- * ruime default hier zou betekenen dat de beurt eerder omvalt dan de keten —
- * en dan bepaalt niet dit budget maar het toeval welk document nog is verwerkt.
+ * De ketendeadline is AFGELEID van het beurtbudget en niet los gekozen.
+ *
+ * Een eerdere versie zette hier 45 s terwijl de hele retrievalbeurt op
+ * `TIMEOUT_DEFAULT_MS` (20 s) staat. Dat is geen krappe of ruime keuze maar een
+ * onmogelijke: de beurt valt dan altijd eerder om dan de keten, het ketenbudget
+ * bindt nooit, en welk document nog net is verwerkt hangt af van het toeval in
+ * plaats van van deze grens. De tellers zouden bovendien `deadlineVerlopen:
+ * false` melden terwijl de arm wel degelijk is afgekapt — door de beurt.
+ *
+ * Driekwart van het beurtbudget laat ruimte voor de rest van de beurt: de
+ * andere sporen, het samenvoegen en de generatie. Deze arm mag de beurt niet
+ * alleen opeten.
+ */
+export const KETEN_DEADLINE_MS = Math.floor(TIMEOUT_DEFAULT_MS * 0.75);
+
+/** Absolute bovengrens: de keten kan nooit langer lopen dan een beurt mág duren. */
+export const KETEN_DEADLINE_MAX_MS = TIMEOUT_MAX_MS;
+
+/**
+ * Bewust krappe defaults. Een aanroeper die zijn RESTERENDE beurtbudget kent,
+ * geeft dat mee; de default is wat geldt zolang niemand dat doet.
  */
 export const KETEN_GRENZEN: KetenGrenzen = {
   maxKandidaten: 25,
   maxDocumenten: 6,
   maxTotaalBytes: 60 * 1024 * 1024,
   maxExtractieTekens: 4_000_000,
-  deadlineMs: 45_000,
+  deadlineMs: KETEN_DEADLINE_MS,
   maxExtractsPerDocument: 8,
 };
 
@@ -153,7 +170,9 @@ function grenzenVan(gedeeltelijk: Partial<KetenGrenzen> | undefined): KetenGrenz
     maxDocumenten: gezond(samen.maxDocumenten, KETEN_GRENZEN.maxDocumenten),
     maxTotaalBytes: gezond(samen.maxTotaalBytes, KETEN_GRENZEN.maxTotaalBytes),
     maxExtractieTekens: gezond(samen.maxExtractieTekens, KETEN_GRENZEN.maxExtractieTekens),
-    deadlineMs: gezond(samen.deadlineMs, KETEN_GRENZEN.deadlineMs),
+    // Ook een MEEGEGEVEN deadline wordt geklemd: een aanroeper die meer vraagt
+    // dan een beurt mag duren, vraagt om een budget dat toch niet bindt.
+    deadlineMs: Math.min(KETEN_DEADLINE_MAX_MS, gezond(samen.deadlineMs, KETEN_GRENZEN.deadlineMs)),
     maxExtractsPerDocument: gezond(samen.maxExtractsPerDocument, KETEN_GRENZEN.maxExtractsPerDocument),
   };
 }
@@ -763,34 +782,22 @@ async function verwerkDocument(
     return { ok: false, verbruikt: true, afwijzing: "grens" };
   }
 
-  // ── DE GRONDSLAG, opnieuw vastgesteld vlak vóór toelating ─────────────────
-  // Tussen de eerste momentopname en dit punt zit alles: de rootlezing, de
-  // kandidatenronde, de registeropzoekingen, een download en een extractie. In
-  // dat venster kan de bron zijn ingetrokken of opnieuw geconfigureerd, en kan
-  // de root zijn verplaatst of hernoemd. Beide maken de scope waaronder wij tot
-  // hier redeneerden ongeldig — en geen van beide is te zien aan het DOCUMENT.
-  const bronNu = await metDeadline(opdracht.herleesBron());
-  bewaak();
-  if (!bronNu || !bronOngewijzigd(bron, bronNu)) {
-    return { ok: false, verbruikt: true, afwijzing: "rechten_configuratie", grondslagWeg: true };
-  }
-  const rootNu = await leesRoot(bronNu, leesItem, keten);
-  bewaak();
-  if (!rootNu.ok || rootNu.rootWebUrl !== root.rootWebUrl || rootNu.rootGraphPad !== root.rootGraphPad) {
-    return { ok: false, verbruikt: true, afwijzing: "rechten_configuratie", grondslagWeg: true };
-  }
-
   // ── De TWEEDE lezing: volledige scope ÉN versie, ná de bytes ──────────────
   // Bewust vóór de lokalisatie. Is het bestand in het downloadvenster gewijzigd
   // of verplaatst, dan is de grond `versie` of `binding` — niet `lokalisatie`.
   // Andersom zou een gewijzigd bestand als "extract niet teruggevonden" worden
   // geboekt, en dan wijst de teller de verkeerde oorzaak aan.
+  //
+  // Deze controle draait tegen de root van het BEGIN van de beurt. Dat mag,
+  // omdat de grondslagcontrole hieronder als laatste komt: blijkt de root daar
+  // verplaatst, dan valt de hele beurt weg en doet de uitkomst van deze stap er
+  // niet meer toe. Blijkt hij onveranderd, dan was het pad hier al het juiste.
   const onveranderd = await bevestigVersieOngewijzigd(
     {
-      bron: bronNu,
+      bron,
       document,
       hitCanoniek: groep.canoniek,
-      rootGraphPad: rootNu.rootGraphPad,
+      rootGraphPad,
       versieVoor: bevestigd.versie,
       signal: keten,
     },
@@ -803,11 +810,36 @@ async function verwerkDocument(
   const lokalisatie = lokaliseerEersteBruikbare(segmenten, groep.extracts);
   if (!lokalisatie.ok) return { ok: false, verbruikt: true, afwijzing: lokalisatie.afwijzing };
 
-  // DE LAATSTE POORT. De lokalisatie hierboven is SYNCHROON en kan op een groot
-  // document lang blokkeren; zonder deze controle zou een treffer worden
-  // toegelaten die pas ná de deadline is vastgesteld. `bewaak()` kijkt naar de
-  // wandklok en niet alleen naar de timervlag, juist omdat die vlag na
-  // blokkerend werk nog niet gezet hoeft te zijn.
+  // ── DE GRONDSLAG, ALS LAATSTE EXTERNE CONTROLE VÓÓR TOELATING ─────────────
+  // Deze twee stonden eerder vóór de tweede DriveItem-lezing en de lokalisatie.
+  // Dat liet precies het venster open dat zij moeten dekken: een intrekking
+  // tijdens die laatste stappen werd niet meer gezien, en de passage ging er
+  // alsnog uit. Wat na deze controle nog komt is uitsluitend LOKAAL werk.
+  //
+  // Waarom dit ook met terugwerkende kracht geldt: als de registratie en de
+  // root hier onveranderd blijken, dan golden ze ook op elk eerder moment in
+  // dit document — en rustten alle voorgaande controles dus op de juiste
+  // scope. Blijken ze wél gewijzigd, dan wordt niets van deze beurt toegelaten
+  // en doen die voorgaande uitkomsten er niet meer toe. In beide gevallen is
+  // één controle op dit punt voldoende, en twee zou alleen extra werk zijn.
+  const rootNu = await leesRoot(bron, leesItem, keten);
+  bewaak();
+  if (!rootNu.ok || rootNu.rootWebUrl !== root.rootWebUrl || rootNu.rootGraphPad !== root.rootGraphPad) {
+    return { ok: false, verbruikt: true, afwijzing: "rechten_configuratie", grondslagWeg: true };
+  }
+
+  // De autoritatieve registratie komt HIER, als allerlaatste externe lezing.
+  const bronNu = await metDeadline(opdracht.herleesBron());
+  if (!bronNu || !bronOngewijzigd(bron, bronNu)) {
+    return { ok: false, verbruikt: true, afwijzing: "rechten_configuratie", grondslagWeg: true };
+  }
+
+  // DE LAATSTE POORT, en bewust ná de grondslag: dit is een LOKALE controle op
+  // onze eigen klok, geen externe lezing. De lokalisatie hierboven is synchroon
+  // en kan op een groot document lang blokkeren; zonder deze controle zou een
+  // treffer worden toegelaten die pas ná de deadline is vastgesteld. `bewaak()`
+  // kijkt naar de wandklok en niet alleen naar de timervlag, juist omdat die
+  // vlag na blokkerend werk nog niet gezet hoeft te zijn.
   bewaak();
 
   return {

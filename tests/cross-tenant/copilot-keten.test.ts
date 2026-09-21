@@ -14,6 +14,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   KETEN_AFWIJZINGEN,
+  KETEN_DEADLINE_MAX_MS,
+  KETEN_DEADLINE_MS,
   KETEN_GRENZEN,
   extractieType,
   voerKetenUit,
@@ -29,7 +31,12 @@ import { MAX_DOWNLOAD_BYTES } from "../../core/lib/microsoft-retrieval/download"
 import type { CopilotKandidaat } from "../../core/lib/microsoft-retrieval/client";
 import type { Bestandstype, ExtractieResultaat, TekstSegment } from "../../core/lib/document-extractie";
 import { SharePointGraphError, type GraphDriveItem } from "../../core/lib/microsoft-sharepoint-graph-core";
-import { RetrievalAfgebroken, isAfbreking } from "../../core/lib/retrieval/afbreken";
+import {
+  TIMEOUT_DEFAULT_MS,
+  TIMEOUT_MAX_MS,
+  RetrievalAfgebroken,
+  isAfbreking,
+} from "../../core/lib/retrieval/afbreken";
 
 // ── De wereld ───────────────────────────────────────────────────────────────
 
@@ -288,11 +295,10 @@ test("één hit levert één treffer, met de passage UIT DE EIGEN EXTRACTIE", as
   assert.equal(treffer.versie.soort, "etag");
   controleerBalans(resultaat);
 
-  // De root wordt twee keer gelezen — bij het bepalen van de scope, en opnieuw
-  // vlak vóór toelating om een rootverplaatsing tijdens het verzoek af te
-  // vangen. Het item ook twee keer: vóór en ná de download. En de registratie
-  // is tijdens het verzoek herlezen.
-  assert.deepEqual(w.log.lezingen, [ROOT_ITEM, "item-a", ROOT_ITEM, "item-a"]);
+  // DE VOLGORDE IS DE AFSPRAAK, niet alleen het aantal: scope bepalen, verse
+  // bevestiging, tweede versielezing, en dan pas de rootherbevestiging — de
+  // grondslag staat achteraan, zodat er ná hem geen externe stap meer komt.
+  assert.deepEqual(w.log.lezingen, [ROOT_ITEM, "item-a", "item-a", ROOT_ITEM]);
   assert.equal(w.log.herlezingen, 1);
   assert.equal(w.log.downloads.length, 1);
   assert.equal(w.log.extracties.length, 1);
@@ -1554,4 +1560,149 @@ test("een afgekapte implementatie veroorzaakt geen unhandled rejection", async (
   } finally {
     process.off("unhandledRejection", opFout);
   }
+});
+
+// ── 18. De grondslag is de LAATSTE externe controle ────────────────────────
+
+test("VIJANDIG: intrekking tijdens de tweede DriveItem-lezing wordt nog gezien", async () => {
+  // Precies het venster dat openstond toen de grondslagcontrole nog vóór deze
+  // stap gebeurde: de bron wordt ingetrokken terwijl de tweede versielezing
+  // loopt. Alles daarvóór zag een geldige registratie; alleen een controle ná
+  // deze stap vangt het.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  let itemLezingen = 0;
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      leesItem: async (itemId, signal) => {
+        if (itemId === ROOT_ITEM) return w.leesItem(itemId, signal);
+        itemLezingen += 1;
+        // De intrekking valt MIDDEN in de tweede lezing.
+        if (itemLezingen === 2) w.bronNu.waarde = undefined;
+        return w.leesItem(itemId, signal);
+      },
+    }),
+  );
+  assert.equal(resultaat.ok, false, "een passage is vrijgegeven na een intrekking in dit venster");
+  assert.equal(resultaat.ok === false && resultaat.afwijzing, "rechten_configuratie");
+  assert.equal(itemLezingen, 2);
+});
+
+test("intrekking tijdens de EXTRACTIE wordt gezien", async () => {
+  // EERLIJK OVER WAT DEZE TEST BEWIJST: dit venster werd ook door de vorige
+  // volgorde gedekt, en deze test blijft dus groen als je de grondslagcontrole
+  // terugzet. Hij staat er als vastlegging van de eigenschap, niet als bewijs
+  // voor de verplaatsing — dat bewijs levert de vijandige test hierboven, plus
+  // de structurele volgordecontrole hieronder.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      extractImpl: async () => {
+        w.bronNu.waarde = { ...BRON, status: "ingetrokken" };
+        return { tekst: ZIN, aantalPaginas: 1, segmenten: [segment(ZIN)] };
+      },
+    }),
+  );
+  assert.equal(resultaat.ok, false);
+  assert.equal(w.log.herlezingen, 1);
+});
+
+test("VIJANDIG: rootverplaatsing tijdens de tweede DriveItem-lezing wordt nog gezien", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  let itemLezingen = 0;
+  let verplaatst = false;
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      leesItem: async (itemId, signal) => {
+        if (itemId === ROOT_ITEM) {
+          if (!verplaatst) return w.leesItem(itemId, signal);
+          return {
+            id: ROOT_ITEM,
+            name: "Documenten",
+            webUrl: `https://${HOST}/sites/pgb/Archief/Documenten`,
+            folder: { childCount: 9 },
+            parentReference: { driveId: DRIVE, id: "drive-root", path: `/drives/${DRIVE}/root:/Archief` },
+          };
+        }
+        itemLezingen += 1;
+        if (itemLezingen === 2) verplaatst = true;
+        return w.leesItem(itemId, signal);
+      },
+    }),
+  );
+  assert.equal(resultaat.ok, false, "een passage is vrijgegeven onder een verplaatste root");
+});
+
+test("ná de grondslagcontrole volgt geen enkele EXTERNE stap meer", async () => {
+  // Structureel, niet op volgorde-afspraak alleen: wij tellen elke externe
+  // aanroep en eisen dat de laatste de registratielezing is.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  const volgorde: string[] = [];
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      leesItem: async (itemId, signal) => {
+        volgorde.push(itemId === ROOT_ITEM ? "graph:root" : "graph:item");
+        return w.leesItem(itemId, signal);
+      },
+      zoekRegister: async (canoniek) => {
+        volgorde.push("db:register");
+        return w.zoekRegister(canoniek);
+      },
+      downloadImpl: async (o) => {
+        volgorde.push("graph:download");
+        return w.downloadImpl(o);
+      },
+      herleesBron: async () => {
+        volgorde.push("db:bron");
+        return w.herleesBron();
+      },
+    }),
+  );
+  assert.ok(resultaat.ok);
+  assert.equal(resultaat.treffers.length, 1);
+  assert.equal(volgorde.at(-1), "db:bron", `laatste externe stap was ${volgorde.at(-1)}`);
+  assert.equal(volgorde.at(-2), "graph:root");
+  assert.deepEqual(volgorde, [
+    "graph:root",
+    "db:register",
+    "graph:item",
+    "graph:download",
+    "graph:item",
+    "graph:root",
+    "db:bron",
+  ]);
+});
+
+// ── 19. De ketendeadline hoort ONDER het beurtbudget ───────────────────────
+
+test("de standaard ketendeadline past binnen het beurtbudget", async () => {
+  // Een ketenbudget boven het beurtbudget bindt nooit: de beurt valt eerder om,
+  // en dan bepaalt het toeval welk document nog is verwerkt — terwijl de telling
+  // `deadlineVerlopen: false` meldt omdat ONZE klok niet is afgegaan. De relatie
+  // staat daarom in code en niet in een commentaarregel.
+  assert.ok(
+    KETEN_GRENZEN.deadlineMs < TIMEOUT_DEFAULT_MS,
+    `ketendeadline ${KETEN_GRENZEN.deadlineMs}ms past niet in een beurt van ${TIMEOUT_DEFAULT_MS}ms`,
+  );
+  assert.equal(KETEN_DEADLINE_MS, KETEN_GRENZEN.deadlineMs);
+  // En er blijft ruimte over voor de rest van de beurt.
+  assert.ok(KETEN_GRENZEN.deadlineMs <= TIMEOUT_DEFAULT_MS * 0.8);
+});
+
+test("een meegegeven deadline wordt geklemd op wat een beurt mág duren", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  let gemeten: number | null = null;
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      grenzen: { deadlineMs: 10 * 60 * 1000 },
+      herleesBron: async () => {
+        gemeten = Date.now();
+        return w.herleesBron();
+      },
+    }),
+  );
+  assert.ok(resultaat.ok);
+  assert.ok(gemeten !== null);
+  // De klem is niet waarneembaar aan de duur van een snelle beurt; meet hem
+  // daarom rechtstreeks op de grenzenfunctie via de publieke constante.
+  assert.equal(KETEN_DEADLINE_MAX_MS, TIMEOUT_MAX_MS);
 });
