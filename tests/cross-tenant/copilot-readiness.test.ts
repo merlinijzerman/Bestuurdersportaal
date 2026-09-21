@@ -5,7 +5,7 @@
 //  live Retrieval-call. Elke tokenbron in dit bestand is een tellende stub.
 // ============================================================================
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
@@ -435,22 +435,76 @@ test("de leesfunctie belooft altijd één rij, mét fondsflag en blokkade", () =
   assert.ok(!/\bfrom verbindingen v\b/.test(fn), "de leesfunctie staat weer op een inner join");
 });
 
-test("de rollback herstelt de oude signatuur als uitgevoerde SQL", () => {
+test("de rollback is per fase apart uitvoerbaar en weigert zonder voorwaarde", () => {
+  // Eén plakbaar bestand met B, C en D achter elkaar is geen gefaseerde
+  // rollback: tussen het herstellen van de DB-signatuur, het terugzetten van de
+  // oude code en het droppen van de kolommen hoort een deploy te zitten. Het
+  // GEDRAG (weigeren, doorlaten, terugbouwen) is op een wegwerp-DB bewezen;
+  // deze test bewaakt dat de fasen niet stilletjes weer samensmelten.
+  const map = resolve(import.meta.dirname, "../..", "supabase/rollbacks");
+  const basis = "2026_09_21_423_t4d_copilot_fase";
+  const fasen = [
+    { bestand: `${basis}A_killswitch_ROLLBACK.sql`, eist: /copilot_zet_rollout/ },
+    { bestand: `${basis}B_poorten_ROLLBACK.sql`, eist: /FASE B geweigerd/ },
+    { bestand: `${basis}C_signatuur_ROLLBACK.sql`, eist: /FASE C geweigerd/ },
+    { bestand: `${basis}D_kolommen_ROLLBACK.sql`, eist: /FASE D geweigerd/ },
+  ];
+
+  for (const { bestand, eist } of fasen) {
+    const inhoud = readFileSync(resolve(map, bestand), "utf8");
+    const uitvoerbaar = inhoud
+      .split("\n")
+      .filter((regel) => !regel.trimStart().startsWith("--"))
+      .join("\n");
+    assert.match(uitvoerbaar, eist, `${bestand} mist zijn preflight`);
+    assert.match(uitvoerbaar, /raise notice 'FASE [A-D] geslaagd/, `${bestand} mist zijn eindcontrole`);
+  }
+
+  // Het oude gecombineerde bestand mag niet terugkomen.
+  assert.ok(
+    !existsSync(resolve(map, "2026_09_21_423_t4d_copilot_rollout_ROLLBACK.sql")),
+    "het gecombineerde rollbackbestand is terug; dan is de fasering weer plakbaar",
+  );
+});
+
+test("fase C herstelt de oude signatuur als uitgevoerde SQL", () => {
   // Een uitgecommentarieerd skelet zou betekenen dat na een volledige rollback
   // geen `bewaar_koppeling` meer bestaat — precies wanneer je hem nodig hebt.
-  const rollback = readFileSync(
-    resolve(import.meta.dirname, "../..", "supabase/rollbacks/2026_09_21_423_t4d_copilot_rollout_ROLLBACK.sql"),
-    "utf8",
-  );
-  const uitvoerbaar = rollback
-    .split("\n")
-    .filter((regel) => !regel.trimStart().startsWith("--"))
-    .join("\n");
-  assert.match(uitvoerbaar, /create or replace function microsoft_private\.copilot_rollback_herstel_bewaar_koppeling/);
-  assert.match(uitvoerbaar, /create or replace function microsoft_private\.bewaar_koppeling/);
-  assert.match(uitvoerbaar, /grant execute on function microsoft_private\.bewaar_koppeling\(uuid,uuid,text,text,text,text,text,text\[\],integer,text,text,text\) to microsoft_vault/);
+  const map = resolve(import.meta.dirname, "../..", "supabase/rollbacks");
+  const c = readFileSync(resolve(map, "2026_09_21_423_t4d_copilot_faseC_signatuur_ROLLBACK.sql"), "utf8")
+    .split("\n").filter((r) => !r.trimStart().startsWith("--")).join("\n");
+  assert.match(c, /create or replace function microsoft_private\.copilot_rollback_herstel_bewaar_koppeling/);
+  assert.match(c, /create or replace function microsoft_private\.bewaar_koppeling/);
+  assert.match(c, /grant execute on function microsoft_private\.bewaar_koppeling\(uuid,uuid,text,text,text,text,text,text\[\],integer,text,text,text\) to microsoft_vault/);
+  assert.match(c, /select microsoft_private\.copilot_rollback_herstel_bewaar_koppeling\(\)/);
+
   // Fase D dropt de kolommen; de generator moet dáárna opnieuw draaien, anders
   // verwijst de herstelde body naar kolommen die niet meer bestaan.
-  const aanroepen = uitvoerbaar.match(/select microsoft_private\.copilot_rollback_herstel_bewaar_koppeling\(\)/g) ?? [];
-  assert.equal(aanroepen.length, 2, "de generator draait niet zowel in fase C als na fase D");
+  const d = readFileSync(resolve(map, "2026_09_21_423_t4d_copilot_faseD_kolommen_ROLLBACK.sql"), "utf8")
+    .split("\n").filter((r) => !r.trimStart().startsWith("--")).join("\n");
+  const volgorde = [
+    d.indexOf("drop column if exists client_id"),
+    d.indexOf("select microsoft_private.copilot_rollback_herstel_bewaar_koppeling()"),
+    d.indexOf("drop function microsoft_private.copilot_rollback_herstel_bewaar_koppeling()"),
+  ];
+  assert.ok(volgorde.every((i) => i >= 0), "fase D mist het droppen of het hergenereren");
+  assert.deepEqual([...volgorde].sort((a, b) => a - b), volgorde, "fase D hergenereert niet ná het droppen");
+});
+
+test("de rollback wist het operatorauditspoor niet", () => {
+  // CLAUDE.md stelt append-only audit als niet-onderhandelbaar. Een rollback is
+  // geen vrijbrief om stilletjes te wissen wie de rem wanneer en waarom bediende.
+  const map = resolve(import.meta.dirname, "../..", "supabase/rollbacks");
+  for (const bestand of [
+    "2026_09_21_423_t4d_copilot_faseB_poorten_ROLLBACK.sql",
+    "2026_09_21_423_t4d_copilot_faseD_kolommen_ROLLBACK.sql",
+  ]) {
+    const inhoud = readFileSync(resolve(map, bestand), "utf8")
+      .split("\n").filter((r) => !r.trimStart().startsWith("--")).join("\n");
+    assert.ok(
+      !/drop table[^;]*copilot_operator_log/i.test(inhoud),
+      `${bestand} dropt het auditspoor`,
+    );
+    assert.match(inhoud, /copilot_operator_log/, `${bestand} controleert het auditspoor niet`);
+  }
 });

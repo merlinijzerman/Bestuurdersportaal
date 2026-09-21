@@ -85,8 +85,11 @@ select microsoft_private.copilot_zet_rollout(false, '<actor>', '<reden>');
 
 ### Vensterblokkade
 
-Een weigering of een 429 zet de arm voor een venster stil. De applicatierol
-registreert dat zelf:
+Een weigering of een 429 zet de arm voor een venster stil. **Het schrijven van
+`copilot_blokkade` is belegd bij T4-E (#426)**, voor de 429 en de daarvoor
+aangewezen toegangsweigering; tot die adapter er is blijft
+`tijdelijk_geblokkeerd` altijd `false` en is dit pad alleen handmatig te
+gebruiken. De applicatierol mag het zelf registreren:
 
 ```sql
 select microsoft_private.copilot_registreer_blokkade(
@@ -103,17 +106,46 @@ Dat is het hele herstelpad voor een incident. Daarna is de arm inert, ongeacht
 fondsflag, billing of consent — daarom staat de kill switch vooraan in de
 evaluatievolgorde en niet achteraan.
 
-De volledige terugbouw (fasen B tot en met D) staat in
-`supabase/rollbacks/2026_09_21_423_t4d_copilot_rollout_ROLLBACK.sql`. Fase C
-**voert** het herstel van de twaalf-parametersignatuur uit — het is geen
-aanwijzing in commentaar. Draai fase C vóórdat de oude applicatiecode terugkomt:
+### De vier rollbackfasen
+
+Elke fase is een **apart bestand** met een eigen preflight en eindcontrole, en
+weigert te draaien tot haar voorwaarde aantoonbaar is vervuld. Dat is geen
+formaliteit: één plakbaar bestand zou B, C en D binnen een seconde achter elkaar
+uitvoeren, en dan veroorzaakt de rollback precies de storing die de fasering moet
+voorkomen.
+
+| Fase | Bestand (`supabase/rollbacks/2026_09_21_423_t4d_copilot_…`) | Voorwaarde | Tussenstap erna |
+|---|---|---|---|
+| A | `faseA_killswitch_ROLLBACK.sql` | geen | — (hier stopt een incident) |
+| B | `faseB_poorten_ROLLBACK.sql` | kill switch staat uit | oude applicatiecode klaarzetten |
+| C | `faseC_signatuur_ROLLBACK.sql` | fase B gedraaid | **deployen en waarnemen** |
+| D | `faseD_kolommen_ROLLBACK.sql` | fase C gedraaid, deploy bevestigd | — |
+
+```bash
+psql "$DB" -v ON_ERROR_STOP=1 -v actor='<naam>' -v reden='<incident>' \
+     -f supabase/rollbacks/2026_09_21_423_t4d_copilot_faseA_killswitch_ROLLBACK.sql
+```
+
+Fase C **voert** het herstel van de twaalf-parametersignatuur uit — het is geen
+aanwijzing in commentaar. Zij draait vóórdat de oude applicatiecode terugkomt:
 andersom roept de teruggezette code een functie aan die niet meer bestaat.
 
 Fase C bouwt de body op de kolommen zoals ze op dát moment zijn, en fase D
-verandert die. Daarom roept fase D de generator nog één keer aan voordat zij hem
-opruimt. Sla die stap niet over: zonder de tweede aanroep verwijst de herstelde
-functie naar `client_id`, die dan net is gedropt, en breekt de eerste
-koppelpoging. Een slotcontrole in hetzelfde bestand weigert stil te slagen.
+verandert die. Fase D roept de generator daarom nog één keer aan voordat zij hem
+opruimt; zonder die tweede aanroep verwijst de herstelde functie naar `client_id`
+die dan net is gedropt, en breekt de eerste koppelpoging.
+
+Fase D is **onomkeerbaar** en vraagt twee bewijzen: geen verse koppeling met een
+gevulde `client_id` in het laatste uur (gegevens), én een expliciete bevestiging
+`-v oude_code_gedeployd=ja` (verklaring). Het eerste is stil groen op een
+omgeving waar toevallig niemand koppelt; het tweede dwingt af dat iemand heeft
+gekeken.
+
+`microsoft_private.copilot_operator_log` blijft in **alle** fasen staan, met zijn
+append-only trigger. Dat is auditdata — wie de rem wanneer en waarom bediende —
+en append-only audit is niet-onderhandelbaar. Wil je die tabel tóch kwijt, dan is
+dat een aparte bewuste handeling: eerst exporteren, dan expliciet akkoord op het
+auditverlies, dan handmatig droppen. Geen rollbackbestand doet het voor je.
 
 ## 4. Wat deze poorten niet doen
 

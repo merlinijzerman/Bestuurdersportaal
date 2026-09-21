@@ -112,7 +112,7 @@ create unique index if not exists copilot_blokkade_fonds_gebruiker_uniek
   on microsoft_private.copilot_blokkade (fonds_id, gebruiker_id) where gebruiker_id is not null;
 
 comment on table microsoft_private.copilot_blokkade is
-  '#423: vensterblokkade per fonds (gebruiker_id null) of per actor. Alleen te VERLENGEN; er is bewust geen applicatiepad om een rem eerder op te heffen. Een blokkade verloopt vanzelf.';
+  '#423: vensterblokkade per fonds (gebruiker_id null) of per actor. Alleen te VERLENGEN; er is bewust geen applicatiepad om een rem eerder op te heffen. Een blokkade verloopt vanzelf. Het SCHRIJVEN is belegd bij T4-E (#426): 429 en de daarvoor aangewezen toegangsweigering. Tot die adapter er is blijft tijdelijk_geblokkeerd altijd false.';
 
 -- Append-only. Geen update, geen delete; de trigger hieronder blokkeert beide.
 create table if not exists microsoft_private.copilot_operator_log (
