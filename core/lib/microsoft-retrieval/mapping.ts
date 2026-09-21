@@ -24,6 +24,21 @@
 //  wordt genormaliseerd: schema, host, poort, query, fragment, trailing slash.
 //  Een encodingverschil tussen Copilot en de listing leidt zo tot een GEMISTE
 //  mapping (zichtbaar in de teller) en nooit tot een verkeerde.
+//
+//  ── DE OFFICE-WEERGAVE-URL ─────────────────────────────────────────────────
+//  Graph levert voor Word-, Excel- en PowerPointbestanden vaak niet het
+//  bibliotheekpad maar een VIEWER-URL: `https://host/:w:/r/sites/…/a.docx`.
+//  De labscan van #419 stelde dat live vast, en onze eigen listing slaat die
+//  vorm onveranderd op in `web_url` — terwijl een MAP wél het gewone pad krijgt.
+//  Zonder normalisatie vergelijkt de rootgrens dus `/:w:/r/sites/…` met
+//  `/sites/…`, en valt élk Word- en PowerPointdocument af onder `root`: precies
+//  de twee bestandstypen waar de fixtures uit bestaan.
+//
+//  De vier viewerprefixen `/:w:/r/`, `/:x:/r/`, `/:p:/r/` en `/:b:/r/` worden
+//  daarom weggestreken; wat erachter staat ís het serverrelatieve pad. EXACT
+//  deze vier, en niets anders: een SHARINGLINK (`/:w:/s/<token>`) draagt geen
+//  pad maar een token, en die hoort fail-closed af te vallen in plaats van op
+//  goed geluk ergens op te matchen.
 // ============================================================================
 
 /**
@@ -72,7 +87,11 @@ export function canoniekeWebUrl(url: string | null | undefined): string | null {
   const host = authority.toLowerCase().replace(/:443$/, "");
   if (!/^[a-z0-9][a-z0-9.-]*\.sharepoint\.com$/.test(host)) return null;
 
-  const pad = ruwPad.replace(/\/+$/, "");
+  const zonderSlash = ruwPad.replace(/\/+$/, "");
+  // `/r` = "resource": het deel erna is het serverrelatieve pad. `/s` (sharing)
+  // heeft die eigenschap NIET en wordt bewust niet aangeraakt.
+  const viewer = /^\/:[wxpb]:\/r(\/.*)$/.exec(zonderSlash);
+  const pad = viewer ? viewer[1] : zonderSlash;
   if (pad === "") return null;
   return `https://${host}${pad}`;
 }

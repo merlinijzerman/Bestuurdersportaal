@@ -31,6 +31,16 @@ begin
     ('https://check.sharepoint.com/sites/pgb/map%2FX.docx', 'https://check.sharepoint.com/sites/pgb/map%2FX.docx'),
     ('https://check.sharepoint.com/sites/pgb/map/X.docx', 'https://check.sharepoint.com/sites/pgb/map/X.docx'),
     ('https://check.sharepoint.com/sites/pgb/Gedeelde%20documenten/X.docx', 'https://check.sharepoint.com/sites/pgb/Gedeelde%20documenten/X.docx'),
+    ('https://check.sharepoint.com/:w:/r/sites/pgb/Beleid.docx', 'https://check.sharepoint.com/sites/pgb/Beleid.docx'),
+    ('https://check.sharepoint.com/:x:/r/sites/pgb/Cijfers.xlsx', 'https://check.sharepoint.com/sites/pgb/Cijfers.xlsx'),
+    ('https://check.sharepoint.com/:p:/r/sites/pgb/Presentatie.pptx', 'https://check.sharepoint.com/sites/pgb/Presentatie.pptx'),
+    ('https://check.sharepoint.com/:b:/r/sites/pgb/Rapport.pdf', 'https://check.sharepoint.com/sites/pgb/Rapport.pdf'),
+    ('https://check.sharepoint.com/:w:/r/sites/pgb/Beleid.docx?web=1', 'https://check.sharepoint.com/sites/pgb/Beleid.docx'),
+    ('https://check.sharepoint.com/:w:/r/sites/pgb/Gedeelde%20documenten/A.docx', 'https://check.sharepoint.com/sites/pgb/Gedeelde%20documenten/A.docx'),
+    ('https://check.sharepoint.com/:w:/s/abc123', 'https://check.sharepoint.com/:w:/s/abc123'),
+    ('https://check.sharepoint.com/:w:/g/personal/x/EaBc', 'https://check.sharepoint.com/:w:/g/personal/x/EaBc'),
+    ('https://check.sharepoint.com/:w:/r', 'https://check.sharepoint.com/:w:/r'),
+    ('https://check.sharepoint.com/:W:/R/sites/pgb/Beleid.docx', 'https://check.sharepoint.com/:W:/R/sites/pgb/Beleid.docx'),
     ('http://check.sharepoint.com/sites/pgb/Beleid.docx', null),
     ('https://user@check.sharepoint.com/sites/pgb/Beleid.docx', null),
     ('https://check.example.com/sites/pgb/Beleid.docx', null),
@@ -48,8 +58,8 @@ begin
     end if;
   end loop;
 
-  if v_aantal <> 18 then
-    fouten := fouten || format(E'\n- verwacht 18 vectoren, gevonden %s', v_aantal);
+  if v_aantal <> 28 then
+    fouten := fouten || format(E'\n- verwacht 28 vectoren, gevonden %s', v_aantal);
   end if;
   if fouten <> '' then raise exception '#413 canonicalisering SQL/TS loopt uiteen:%', fouten; end if;
   raise notice '#413 canonicalisering OK: % vectoren gelijk aan de TypeScript-implementatie.', v_aantal;

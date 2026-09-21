@@ -38,6 +38,23 @@ export const VECTOREN: [string, string | null][] = [
   [`https://${HOST}/sites/pgb/map%2FX.docx`, `https://${HOST}/sites/pgb/map%2FX.docx`],
   [`https://${HOST}/sites/pgb/map/X.docx`, `https://${HOST}/sites/pgb/map/X.docx`],
   [`https://${HOST}/sites/pgb/Gedeelde%20documenten/X.docx`, `https://${HOST}/sites/pgb/Gedeelde%20documenten/X.docx`],
+  // Office-weergave-URL's: `/r` draagt het serverrelatieve pad, en die vier
+  // prefixen worden weggestreken zodat viewer- en bibliotheekvorm samenvallen.
+  [`https://${HOST}/:w:/r/sites/pgb/Beleid.docx`, `https://${HOST}/sites/pgb/Beleid.docx`],
+  [`https://${HOST}/:x:/r/sites/pgb/Cijfers.xlsx`, `https://${HOST}/sites/pgb/Cijfers.xlsx`],
+  [`https://${HOST}/:p:/r/sites/pgb/Presentatie.pptx`, `https://${HOST}/sites/pgb/Presentatie.pptx`],
+  [`https://${HOST}/:b:/r/sites/pgb/Rapport.pdf`, `https://${HOST}/sites/pgb/Rapport.pdf`],
+  [`https://${HOST}/:w:/r/sites/pgb/Beleid.docx?web=1`, `https://${HOST}/sites/pgb/Beleid.docx`],
+  [`https://${HOST}/:w:/r/sites/pgb/Gedeelde%20documenten/A.docx`, `https://${HOST}/sites/pgb/Gedeelde%20documenten/A.docx`],
+  // SHARINGLINKS dragen een token en geen pad: niet normaliseren, want dan zou
+  // een token als bibliotheekpad worden gelezen. Ze houden hun eigen vorm en
+  // matchen dus nergens — fail-closed.
+  [`https://${HOST}/:w:/s/abc123`, `https://${HOST}/:w:/s/abc123`],
+  [`https://${HOST}/:w:/g/personal/x/EaBc`, `https://${HOST}/:w:/g/personal/x/EaBc`],
+  // Een viewerprefix zonder pad erachter blijft staan en matcht nergens.
+  [`https://${HOST}/:w:/r`, `https://${HOST}/:w:/r`],
+  // Hoofdletters zijn GEEN erkende viewerprefix; alleen de exacte vier tellen.
+  [`https://${HOST}/:W:/R/sites/pgb/Beleid.docx`, `https://${HOST}/:W:/R/sites/pgb/Beleid.docx`],
   // Alles wat geen https-SharePoint-URL met pad is, heeft geen canonieke vorm.
   [`http://${HOST}/sites/pgb/Beleid.docx`, null],
   [`https://user@${HOST}/sites/pgb/Beleid.docx`, null],
