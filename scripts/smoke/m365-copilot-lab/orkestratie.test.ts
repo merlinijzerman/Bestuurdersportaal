@@ -394,3 +394,98 @@ test("het rapport draagt de uitsplitsing als codes en tellingen, zonder pad of n
   assert.ok(!tekst.includes(".docx"), "een bestandsnaam lekte in het rapport");
   assert.ok(!tekst.includes("Elders"), "een pad lekte in het rapport");
 });
+
+// ---------------------------------------------------------------------------
+//  De afgewezen call levert óók bewijs (retry-voorbereiding)
+// ---------------------------------------------------------------------------
+//  Dit is het gat dat de labstand van 21-09 blootlegde: er was een
+//  Retrieval-call gedaan die fail-closed eindigde, en er stond nergens een
+//  rapport. Het ene toegestane verzoek was verbruikt zonder spoor.
+
+/** Een Retrieval-fetch die met een vaste HTTP-status antwoordt. */
+function afwijzendeRetrieval(status: number, teller: { n: number }) {
+  return (async () => {
+    teller.n++;
+    return new Response("{}", { status });
+  }) as unknown as typeof fetch;
+}
+
+test("een 403 op de Retrieval-call levert een rapport in plaats van een gesneuvelde run", async () => {
+  const teller = { n: 0 };
+  const { deps } = bouw({
+    vraagAkkoord: async () => true,
+    retrievalFetch: afwijzendeRetrieval(403, teller),
+  });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+
+  assert.equal(rapport.eindstand, "retrieval_afgewezen");
+  assert.equal(rapport.retrieval, null);
+  assert.deepEqual(rapport.retrievalFout, {
+    code: "copilot_toegang_geweigerd",
+    categorie: "toestemming_geweigerd",
+    httpStatus: 403,
+  });
+  // Het verzoek is verbruikt; dat moet het rapport kunnen zeggen.
+  assert.equal(rapport.retrievalPogingen, 1);
+  assert.equal(teller.n, 1);
+  assert.equal(exitcode, EXIT.retrievalAfgewezen);
+  assert.equal(rapport.akkoordGegeven, true);
+});
+
+test("een 402 wordt als billing gerapporteerd, niet als autorisatieweigering", async () => {
+  const teller = { n: 0 };
+  const { deps } = bouw({ vraagAkkoord: async () => true, retrievalFetch: afwijzendeRetrieval(402, teller) });
+  const { rapport } = await voerSmokeUit(deps);
+  assert.equal(rapport.retrievalFout?.code, "copilot_billing");
+  assert.equal(rapport.retrievalFout?.categorie, "configuratiefout");
+});
+
+test("het rapport van een afwijzing noemt de verbruikte poging en geen fixturecode", async () => {
+  const teller = { n: 0 };
+  const { deps } = bouw({ vraagAkkoord: async () => true, retrievalFetch: afwijzendeRetrieval(403, teller) });
+  const { rapport } = await voerSmokeUit(deps);
+  const tekst = rapporteer(rapport);
+
+  assert.match(tekst, /Retrieval API-netwerkpogingen: 1/);
+  assert.match(tekst, /`copilot_toegang_geweigerd`/);
+  assert.match(tekst, /Eindstand: `retrieval_afgewezen`/);
+  // Geen kandidaat beoordeeld, dus ook geen fixture-uitspraak.
+  assert.ok(!tekst.includes("verwachte fixture gevonden"), "een afwijzing doet een fixture-uitspraak");
+  assert.ok(!tekst.includes("https://"), "een URL lekte in het rapport");
+});
+
+test("een afbreking tijdens de Retrieval-call blijft een gestopte run, geen afwijzing", async () => {
+  // Zou dit als providerafwijzing worden geboekt, dan zag een Ctrl-C eruit als
+  // een meetuitkomst — en dat is precies de verwarring die #420 wegnam.
+  const afbreker = new AbortController();
+  const { deps } = bouw({
+    vraagAkkoord: async () => true,
+    signal: afbreker.signal,
+    retrievalFetch: (async () => {
+      afbreker.abort();
+      const fout = new Error("afgebroken");
+      fout.name = "AbortError";
+      throw fout;
+    }) as unknown as typeof fetch,
+  });
+  await assert.rejects(() => voerSmokeUit(deps));
+});
+
+test("een geslaagde meting noemt nu ook de feitelijke poging", async () => {
+  const { deps } = bouw({ vraagAkkoord: async () => true });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.equal(rapport.eindstand, "gemeten");
+  assert.equal(rapport.retrievalPogingen, 1);
+  assert.equal(rapport.retrievalFout, undefined);
+  assert.equal(exitcode, EXIT.klaar);
+});
+
+test("--dry-run raakt de tellende fetch niet en levert geen afwijzingsrapport", async () => {
+  const teller = { n: 0 };
+  const { deps, spionnen } = bouw({ dryRun: true, retrievalFetch: afwijzendeRetrieval(403, teller) });
+  const { rapport } = await voerSmokeUit(deps);
+  assert.equal(teller.n, 0);
+  assert.equal(rapport.retrievalFout, undefined);
+  assert.equal(rapport.retrievalPogingen, undefined);
+  assert.equal(spionnen.akkoordGevraagd, 0);
+});

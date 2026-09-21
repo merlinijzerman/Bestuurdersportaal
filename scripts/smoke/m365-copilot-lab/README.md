@@ -144,6 +144,18 @@ npm run smoke:m365-copilot-lab -- --rapport=VERIFICATIERAPPORT-labsmoke.md
 | `2` | gestopt op drift |
 | `3` | gestopt op de poort |
 | `4` | gestopt omdat er geen akkoord kwam |
+| `5` | de call is gedaan en fail-closed afgewezen — er is een rapport |
+
+### Een afgewezen call is ook bewijs
+
+Eindigt de Retrieval-call in een `CopilotFout` (401/403 geen toegang, 402
+billing, 429 rate limit, 5xx provider, vormfout), dan schrijft de runner alsnog
+een rapport met de vaste foutcode, de foutcategorie, de HTTP-status en het
+aantal **feitelijk verbruikte** netwerkpogingen. Dat laatste is de reden dat het
+moet: het ene toegestane verzoek is dan op, en zonder rapport staat dat nergens.
+
+Een afbreking (Ctrl-C, verlopen deadline) is géén afwijzing en levert geen
+rapport — die stopt de run, zoals eerder.
 
 ### Grendels op de omgeving
 

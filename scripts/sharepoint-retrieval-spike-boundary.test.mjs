@@ -366,6 +366,20 @@ test("#407-labsmoke — een nulstand in de inhoudscan is nooit één ongedeelde 
   assert.match(graph, /export async function beoordeelZoekresultaat/);
 });
 
+test("#407-labsmoke — een afgewezen Retrieval-call levert een rapport, geen gesneuvelde run", () => {
+  // Het ene toegestane verzoek mag nooit verbruikt worden zonder dat de uitkomst
+  // ergens staat. Die tak is makkelijk weg te refactoren, dus de gate bewaakt hem.
+  const ork = readFileSync(resolve(root, `${SMOKEPAD}/orkestratie.ts`), "utf8");
+  assert.match(ork, /retrievalAfgewezen: 5/);
+  assert.match(ork, /eindstand: "retrieval_afgewezen"/);
+  assert.match(ork, /instanceof CopilotFout/);
+  // En een afbreking blijft een gestopte run: die tak moet vóór de CopilotFout
+  // staan, anders wordt een Ctrl-C als providerafwijzing geboekt.
+  const afbreking = ork.indexOf("isAfbreking(fout)");
+  const copilot = ork.indexOf("instanceof CopilotFout");
+  assert.ok(afbreking !== -1 && afbreking < copilot, "de afbrekingstak staat niet vóór de CopilotFout-tak");
+});
+
 test("#407-labsmoke — de runner houdt zich aan het ene scenario en de ene fixture", () => {
   const smoke = readFileSync(resolve(root, `${SMOKEPAD}/smoke.ts`), "utf8");
   // Scenario en fixture worden OVERGENOMEN uit de vastgestelde #407-set, niet

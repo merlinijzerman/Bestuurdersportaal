@@ -13,6 +13,8 @@
 //  in de praktijk het lastigst te bereiken is — en dan vaststellen dat er
 //  ondanks die open poort nul Retrieval-pogingen vertrekken.
 // ============================================================================
+import { isAfbreking } from "../../../core/lib/retrieval/afbreken";
+import { CopilotFout } from "../../../core/lib/microsoft-retrieval/fouten";
 import type { Aanmelding } from "./auth";
 import { bestandsnaamscan, inhoudscan, leesActor, leesRootItem, leesBron, type LeesClient } from "./graph";
 import type { Labprofiel } from "./registry";
@@ -33,6 +35,8 @@ export const EXIT = {
   drift: 2,
   poort: 3,
   geenAkkoord: 4,
+  /** De call is gedaan en fail-closed afgewezen; er ís een meetuitkomst. */
+  retrievalAfgewezen: 5,
 } as const;
 
 export interface SmokeAfhankelijkheden {
@@ -177,22 +181,66 @@ export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUi
   }
 
   meld("Eén Retrieval-poging …");
-  const retrieval = await meet(profiel, {
-    accessToken: aanmelding.accessToken,
-    signal: deps.signal,
-    fetchImpl: deps.retrievalFetch,
-  });
+
+  // De pogingen worden BUITEN `meet()` geteld, op de grens waar het verkeer het
+  // proces verlaat. Bij een geslaagde call rapporteert de client zelf hoeveel
+  // pogingen hij deed; bij een afgewezen call komt die uitkomst er nooit uit, en
+  // dan is dit de enige plek die nog weet of het ene toegestane verzoek
+  // daadwerkelijk is verbruikt. Dat is precies wat het rapport moet vertellen.
+  let pogingen = 0;
+  const tellendeFetch = ((invoer: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    pogingen++;
+    return deps.retrievalFetch(invoer, init);
+  }) as typeof fetch;
+
+  const afgerond = {
+    ...basis,
+    akkoordGevraagd: true,
+    akkoordGegeven: true,
+    scans,
+    poort,
+  } as const;
+
+  let retrieval;
+  try {
+    retrieval = await meet(profiel, {
+      accessToken: aanmelding.accessToken,
+      signal: deps.signal,
+      fetchImpl: tellendeFetch,
+    });
+  } catch (fout) {
+    // EEN AFBREKING IS GEEN MEETUITKOMST. Een geannuleerde of verlopen beurt
+    // stopt de run en mag niet als providerafwijzing worden geboekt.
+    if (isAfbreking(fout)) throw fout;
+    if (!(fout instanceof CopilotFout)) throw fout;
+
+    // Hier zat het gat. Zonder deze tak gooide een fail-closed afwijzing de hele
+    // run omver en schreef de runner GEEN rapport — terwijl juist die uitkomst
+    // het duurste bewijs van de hele keten is: het ene toegestane verzoek is
+    // dan verbruikt en er is niets vastgelegd. `CopilotFout` draagt per
+    // constructie alleen een vaste code en een HTTP-status, dus dit kan zonder
+    // provider- of documentinhoud in het rapport.
+    meld(`Retrieval afgewezen (${fout.code}) — de uitkomst wordt vastgelegd.`);
+    return {
+      exitcode: EXIT.retrievalAfgewezen,
+      rapport: {
+        ...afgerond,
+        graphCalls: client.pogingen(),
+        retrieval: null,
+        retrievalFout: { code: fout.code, categorie: fout.categorie, httpStatus: fout.httpStatus },
+        retrievalPogingen: pogingen,
+        eindstand: "retrieval_afgewezen",
+      },
+    };
+  }
 
   return {
     exitcode: EXIT.klaar,
     rapport: {
-      ...basis,
-      akkoordGevraagd: true,
-      akkoordGegeven: true,
-      scans,
-      poort,
+      ...afgerond,
       graphCalls: client.pogingen(),
       retrieval,
+      retrievalPogingen: pogingen,
       eindstand: "gemeten",
     },
   };

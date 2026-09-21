@@ -12,6 +12,8 @@
 //  labachtige respons als invoer: een controle die alleen naar het type kijkt,
 //  merkt niets van een veld dat later wordt toegevoegd.
 // ============================================================================
+import type { RetrievalFoutcategorie } from "../../../core/lib/retrieval/contract";
+import type { CopilotFoutcode } from "../../../core/lib/microsoft-retrieval/fouten";
 import type { Driftbevinding, Hitcategorie, Poortoordeel, Retrievaluitslag } from "./smoke";
 
 export interface Scanregel {
@@ -49,11 +51,20 @@ export interface Smokerapport {
   akkoordGegeven: boolean;
   graphCalls: number;
   retrieval: Retrievaluitslag | null;
+  /**
+   * De fail-closed afwijzing van de Retrieval API, als die er was. Draagt per
+   * constructie alleen een vaste code en een HTTP-status — nooit een
+   * providerboodschap, body of identifier.
+   */
+  retrievalFout?: { code: CopilotFoutcode; categorie: RetrievalFoutcategorie; httpStatus: number | null };
+  /** Feitelijke netwerkpogingen naar de Retrieval API, ook als die faalden. */
+  retrievalPogingen?: number;
   /** Vaste eindcode; de enige plek waar de uitkomst van de run in één woord staat. */
   eindstand:
     | "gestopt_op_drift"
     | "gestopt_op_poort"
     | "gestopt_op_akkoord"
+    | "retrieval_afgewezen"
     | "gemeten";
 }
 
@@ -144,7 +155,19 @@ export function rapporteer(rapport: Smokerapport): string {
 
   regels.push("## Retrievalmeting");
   regels.push("");
-  if (!rapport.retrieval) {
+  if (rapport.retrievalFout) {
+    // De call IS gedaan. Dat hoort in het rapport te staan, ook — en juist —
+    // als hij is afgewezen: het ene toegestane verzoek is dan verbruikt.
+    regels.push(`- Retrieval API-netwerkpogingen: ${rapport.retrievalPogingen ?? 0}`);
+    regels.push(`- uitkomst: **afgewezen** — \`${rapport.retrievalFout.code}\``);
+    regels.push(`- foutcategorie: \`${rapport.retrievalFout.categorie}\``);
+    regels.push(`- HTTP-status: ${rapport.retrievalFout.httpStatus ?? "geen"}`);
+    regels.push("");
+    regels.push(
+      "Een afwijzing is geen kwaliteitsoordeel over de bron: er is geen kandidaat"
+      + " beoordeeld en geen fixturecode vastgesteld.",
+    );
+  } else if (!rapport.retrieval) {
     const reden = rapport.eindstand === "gestopt_op_drift"
       ? "de driftcontrole stopte de run vóór de poort"
       : rapport.eindstand === "gestopt_op_akkoord"
