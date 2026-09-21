@@ -176,7 +176,7 @@ export async function voltooiKoppeling(args: ConnectorContext & { state: string;
     if (!waarde.id) throw new Error("Graph /me-profiel is onvolledig.");
     return waarde;
   });
-  await koppelStap("vault_save", () => vault.bewaarKoppeling({ fonds_id: args.fondsId, gebruiker_id: args.gebruikerId, tenant_id: cfg.tenantId, microsoft_object_id: profiel.id!, home_account_id: result.account!.homeAccountId, display_name: profiel.displayName?.slice(0, 160) ?? null, masked_username: mask(profiel.userPrincipalName), scopes: geheim.scopes, cache: versleutelMicrosoftGeheim(msal.getTokenCache().serialize(), aad(args.fondsId,args.gebruikerId,"cache")) }));
+  await koppelStap("vault_save", () => vault.bewaarKoppeling({ fonds_id: args.fondsId, gebruiker_id: args.gebruikerId, tenant_id: cfg.tenantId, microsoft_object_id: profiel.id!, home_account_id: result.account!.homeAccountId, display_name: profiel.displayName?.slice(0, 160) ?? null, masked_username: mask(profiel.userPrincipalName), scopes: geheim.scopes, client_id: cfg.clientId, cache: versleutelMicrosoftGeheim(msal.getTokenCache().serialize(), aad(args.fondsId,args.gebruikerId,"cache")) }));
   return geheim.returnTo;
 }
 export async function testKoppeling(ctx: ConnectorContext) {

@@ -345,8 +345,10 @@ test("de kern doet zelf geen enkele Retrieval- of Graph-call", () => {
   }
 });
 
-test("de bestaande connectorfuncties zijn niet gewijzigd", () => {
-  // T4-D bouwt een eigen bron; sharepointAccessToken blijft van SharePoint.
+test("de tokenpaden van de connector zijn niet verbreed", () => {
+  // T4-D bouwt een eigen bron; sharepointAccessToken blijft van SharePoint. De
+  // koppelflow is wél aangeraakt — zie de client-id-test hieronder — maar geen
+  // enkele tokenaanvraag is met een Copilot-scope verbreed.
   const connector = readFileSync(
     resolve(import.meta.dirname, "../..", "core/lib/microsoft-connector.ts"),
     "utf8",
@@ -354,4 +356,101 @@ test("de bestaande connectorfuncties zijn niet gewijzigd", () => {
   assert.match(connector, /export async function sharepointAccessToken/);
   assert.match(connector, /return gedelegeerdToken\(ctx, "Sites\.Selected"\)/);
   assert.ok(!connector.includes("Sites.Read.All"), "de connector is verbreed met een Copilot-scope");
+});
+
+// ---------------------------------------------------------------------------
+//  Kapotte percent-codering in een scope-URI
+// ---------------------------------------------------------------------------
+
+test("een kapot percent-gecodeerde scope-URI levert null, geen worp", () => {
+  // `new URL()` accepteert deze vormen zonder klagen; pas decodeURIComponent
+  // struikelt erover. Zou die URIError ontsnappen, dan crasht de poort op een
+  // waarde die een aanvaller volledig in de hand heeft — en een crash is geen
+  // fail-closed weigering, want de aanroeper weet niet meer waar hij staat.
+  for (const kapot of [
+    "https://graph.microsoft.com/%",
+    "https://graph.microsoft.com/%E0%A4%A",
+    "https://graph.microsoft.com/%ZZ",
+    "https://graph.microsoft.com/Files.Read.All%",
+    "https://graph.microsoft.com/%C3%28",
+  ]) {
+    assert.doesNotThrow(() => normaliseerScope(kapot), `${kapot} wierp een fout`);
+    assert.equal(normaliseerScope(kapot), null, `${kapot} werd geaccepteerd`);
+  }
+});
+
+test("een kapotte scope tussen geldige scopes maakt de set niet stuk", () => {
+  // De aanvaller kan een extra scope meesturen. Die mag de beoordeling van de
+  // andere twee niet afbreken; hij hoort simpelweg niet mee te tellen.
+  const scopes = ["Files.Read.All", "https://graph.microsoft.com/%E0%A4%A", "Sites.Read.All"];
+  assert.doesNotThrow(() => heeftBeideScopes(scopes));
+  assert.equal(heeftBeideScopes(scopes), true);
+  assert.deepEqual(ontbrekendeScopes(["https://graph.microsoft.com/%"]), [...COPILOT_VEREISTE_SCOPES]);
+});
+
+// ---------------------------------------------------------------------------
+//  De koppelflow vult client_id werkelijk
+// ---------------------------------------------------------------------------
+
+test("de kluis roept de dertien-parametersignatuur aan en geeft client_id mee", () => {
+  // Zonder deze regel raakt client_id nooit gevuld, blijft readiness eeuwig
+  // `configuratie_ongeldig`, en breekt de contractmigratie de koppelflow zodra
+  // zij de twaalf-parametervorm dropt.
+  const root = resolve(import.meta.dirname, "../..");
+  const vault = readFileSync(resolve(root, "core/lib/microsoft-vault.ts"), "utf8");
+  assert.match(vault, /bewaar_koppeling\(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9,\$10,\$11,\$12,\$13\)/);
+  assert.match(vault, /args\.client_id/);
+  assert.ok(
+    !/bewaar_koppeling\(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9,\$10,\$11,\$12\)/.test(vault),
+    "de kluis roept nog de oude twaalf-parametersignatuur aan",
+  );
+
+  const connector = readFileSync(resolve(root, "core/lib/microsoft-connector.ts"), "utf8");
+  assert.match(connector, /client_id:\s*cfg\.clientId/);
+});
+
+// ---------------------------------------------------------------------------
+//  De databasepoort levert de volledige conjunctie uit één momentopname
+// ---------------------------------------------------------------------------
+
+test("de leesfunctie belooft altijd één rij, mét fondsflag en blokkade", () => {
+  // Het GEDRAG wordt in supabase/checks/2026_09_21_423_t4d_copilot_rollout.sql
+  // op een echte database bewezen (FOUT 18 t/m 27). Deze test bewaakt alleen dat
+  // de vorm niet stilletjes terugvalt naar de inner join, want dan levert een
+  // fonds zonder verbinding nul rijen en is 'geen consent' niet te onderscheiden
+  // van 'niet gelezen'.
+  const migratie = readFileSync(
+    resolve(import.meta.dirname, "../..", "supabase/migrations/2026_09_21_423a_t4d_copilot_rollout_expand.sql"),
+    "utf8",
+  );
+  const fn = migratie.slice(
+    migratie.indexOf("create function microsoft_private.copilot_lees_readiness"),
+    migratie.indexOf("create or replace function microsoft_private.copilot_registreer_blokkade"),
+  );
+  assert.ok(fn.length > 0, "de leesfunctie is niet gevonden");
+  for (const veld of ["globale_rollout_aan", "fondsflag_aan", "billing_geldig", "tijdelijk_geblokkeerd"]) {
+    assert.ok(fn.includes(veld), `de leesfunctie levert ${veld} niet`);
+  }
+  assert.match(fn, /left join verbindingen v/);
+  assert.ok(!/\bfrom verbindingen v\b/.test(fn), "de leesfunctie staat weer op een inner join");
+});
+
+test("de rollback herstelt de oude signatuur als uitgevoerde SQL", () => {
+  // Een uitgecommentarieerd skelet zou betekenen dat na een volledige rollback
+  // geen `bewaar_koppeling` meer bestaat — precies wanneer je hem nodig hebt.
+  const rollback = readFileSync(
+    resolve(import.meta.dirname, "../..", "supabase/rollbacks/2026_09_21_423_t4d_copilot_rollout_ROLLBACK.sql"),
+    "utf8",
+  );
+  const uitvoerbaar = rollback
+    .split("\n")
+    .filter((regel) => !regel.trimStart().startsWith("--"))
+    .join("\n");
+  assert.match(uitvoerbaar, /create or replace function microsoft_private\.copilot_rollback_herstel_bewaar_koppeling/);
+  assert.match(uitvoerbaar, /create or replace function microsoft_private\.bewaar_koppeling/);
+  assert.match(uitvoerbaar, /grant execute on function microsoft_private\.bewaar_koppeling\(uuid,uuid,text,text,text,text,text,text\[\],integer,text,text,text\) to microsoft_vault/);
+  // Fase D dropt de kolommen; de generator moet dáárna opnieuw draaien, anders
+  // verwijst de herstelde body naar kolommen die niet meer bestaan.
+  const aanroepen = uitvoerbaar.match(/select microsoft_private\.copilot_rollback_herstel_bewaar_koppeling\(\)/g) ?? [];
+  assert.equal(aanroepen.length, 2, "de generator draait niet zowel in fase C als na fase D");
 });

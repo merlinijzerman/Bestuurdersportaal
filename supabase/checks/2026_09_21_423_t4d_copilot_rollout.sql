@@ -13,7 +13,10 @@
 --    5. de rolscheiding: microsoft_vault mag de rem niet bedienen, en
 --       copilot_operator mag readiness niet lezen;
 --    6. de operatoraudit legt actor, reden ÉN session_user vast;
---    7. copilot_operator_log is append-only.
+--    7. copilot_operator_log is append-only;
+--    8. readiness levert ALTIJD precies één rij, ook zonder verbinding;
+--    9. de fondsflag telt alleen bij jsonb `true`, en de vensterblokkade werkt
+--       en is uitsluitend te VERLENGEN.
 --
 -- ROL: database-eigenaar/postgres. Deze suite meet bewust NIET als
 --   microsoft_vault of copilot_operator: zij roept de definers aan om hun
@@ -38,6 +41,13 @@ declare
   v_cacheversie integer;
   v_sessierol text;
   v_ok boolean;
+  v_rijen integer;
+  v_status text;
+  v_flag boolean;
+  v_blok boolean;
+  v_tot timestamptz;
+  v_leeg_fonds uuid := gen_random_uuid();
+  v_leeg_gebruiker uuid := gen_random_uuid();
 begin
   insert into public.fondsen(id, naam, slug) values (v_fonds, 'T4D Wegwerpfonds', 't4d-wegwerp-' || left(v_fonds::text, 8));
   insert into auth.users(id) values (v_gebruiker);
@@ -167,6 +177,94 @@ begin
     if sqlerrm like 'FOUT 11%' then raise; end if;
   end;
 
+  -- ── 9. Readiness levert ALTIJD precies één rij ───────────────────────────
+  -- Een fonds/gebruiker zonder enige verbinding. De oude vorm gaf hier nul rijen
+  -- terug, en dan is 'geen consent' niet te onderscheiden van 'niet gelezen'.
+  -- Stap 7 zette de globale schakelaar aan; die is niet fondsspecifiek, dus
+  -- eerst terug naar dicht — anders toetst de controle hieronder niets.
+  perform microsoft_private.copilot_zet_rollout(false, 'dba-01', 'terug naar dicht voor de leeg-fondscontrole');
+
+  insert into public.fondsen(id, naam, slug)
+    values (v_leeg_fonds, 'T4D Leeg fonds', 't4d-leeg-' || left(v_leeg_fonds::text, 8));
+  insert into auth.users(id) values (v_leeg_gebruiker);
+
+  select count(*) into v_rijen
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, v_leeg_gebruiker);
+  if v_rijen <> 1 then
+    raise exception 'FOUT 18: readiness gaf % rijen zonder verbinding, verwacht precies 1', v_rijen;
+  end if;
+
+  select status, globale_rollout_aan, fondsflag_aan, billing_geldig, tijdelijk_geblokkeerd
+    into v_status, v_rollout, v_flag, v_ok, v_blok
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, v_leeg_gebruiker);
+  if v_status is not null then
+    raise exception 'FOUT 19: zonder verbinding hoort status null te zijn, kreeg %', v_status;
+  end if;
+  if v_rollout or v_flag or v_ok or v_blok then
+    raise exception 'FOUT 20: de poorten staan niet allemaal dicht op een leeg fonds';
+  end if;
+
+  -- ── 10. De fondsflag telt alleen bij jsonb `true` ─────────────────────────
+  insert into public.fonds_feature_flags(fonds_id, flag_key, waarde)
+    values (v_leeg_fonds, 'microsoft_copilot_retrieval', '"true"'::jsonb);
+  select fondsflag_aan into v_flag
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, v_leeg_gebruiker);
+  if v_flag then
+    raise exception 'FOUT 21: de string "true" opende de fondsflag; alleen jsonb true mag tellen';
+  end if;
+
+  -- `versie` mee ophogen: fn_fonds_config_capture logt elke flagwijziging en
+  -- eist een unieke versie per sleutel.
+  update public.fonds_feature_flags set waarde = 'true'::jsonb, versie = versie + 1
+   where fonds_id = v_leeg_fonds and flag_key = 'microsoft_copilot_retrieval';
+  select fondsflag_aan into v_flag
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, v_leeg_gebruiker);
+  if not v_flag then
+    raise exception 'FOUT 22: jsonb true opende de fondsflag niet';
+  end if;
+
+  -- ── 11. Vensterblokkade: werkt, en is alleen te VERLENGEN ─────────────────
+  perform microsoft_private.copilot_registreer_blokkade(
+    v_leeg_fonds, v_leeg_gebruiker, now() + interval '10 minutes', '429 tijdens proef');
+  select tijdelijk_geblokkeerd into v_blok
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, v_leeg_gebruiker);
+  if not v_blok then
+    raise exception 'FOUT 23: een lopende blokkade werd niet gelezen';
+  end if;
+
+  -- Inkorten mag niet: de arm mag zijn eigen rem niet losdraaien.
+  perform microsoft_private.copilot_registreer_blokkade(
+    v_leeg_fonds, v_leeg_gebruiker, now() - interval '1 hour', 'poging tot inkorten');
+  select geblokkeerd_tot into v_tot from microsoft_private.copilot_blokkade
+   where fonds_id = v_leeg_fonds and gebruiker_id = v_leeg_gebruiker;
+  if v_tot <= now() then
+    raise exception 'FOUT 24: de blokkade werd ingekort tot %', v_tot;
+  end if;
+  select tijdelijk_geblokkeerd into v_blok
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, v_leeg_gebruiker);
+  if not v_blok then
+    raise exception 'FOUT 25: na een inkortpoging is de blokkade verdwenen';
+  end if;
+
+  -- Een fondsbrede blokkade (gebruiker_id null) raakt óók een andere actor.
+  perform microsoft_private.copilot_registreer_blokkade(
+    v_leeg_fonds, null, now() + interval '10 minutes', 'fondsbrede 429');
+  select tijdelijk_geblokkeerd into v_blok
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, gen_random_uuid());
+  if not v_blok then
+    raise exception 'FOUT 26: een fondsbrede blokkade raakte een andere actor niet';
+  end if;
+
+  -- Een verlopen blokkade blokkeert niet meer.
+  delete from microsoft_private.copilot_blokkade where fonds_id = v_leeg_fonds;
+  insert into microsoft_private.copilot_blokkade(fonds_id, gebruiker_id, geblokkeerd_tot, reden)
+    values (v_leeg_fonds, v_leeg_gebruiker, now() - interval '1 minute', 'verlopen');
+  select tijdelijk_geblokkeerd into v_blok
+    from microsoft_private.copilot_lees_readiness(v_leeg_fonds, v_leeg_gebruiker);
+  if v_blok then
+    raise exception 'FOUT 27: een verlopen blokkade blokkeert nog steeds';
+  end if;
+
   raise notice 'T4-D gedragssuite: alle gedragscontroles geslaagd.';
 end $$;
 
@@ -196,6 +294,15 @@ begin
     'microsoft_private.copilot_lees_readiness(uuid,uuid)', 'execute') into v_mag;
   if v_mag then raise exception 'FOUT 16: copilot_operator kan readiness lezen'; end if;
 
+  -- De arm mag zijn eigen rem AANZETTEN; de operator heeft daar niets te zoeken.
+  select has_function_privilege('microsoft_vault',
+    'microsoft_private.copilot_registreer_blokkade(uuid,uuid,timestamptz,text)', 'execute') into v_mag;
+  if not v_mag then raise exception 'FOUT 18b: microsoft_vault kan geen blokkade registreren'; end if;
+
+  select has_function_privilege('copilot_operator',
+    'microsoft_private.copilot_registreer_blokkade(uuid,uuid,timestamptz,text)', 'execute') into v_mag;
+  if v_mag then raise exception 'FOUT 18c: copilot_operator kan een blokkade registreren'; end if;
+
   -- Geen browser- of servicerol raakt iets van dit alles.
   for v_mag in
     select has_function_privilege(rol, fn, 'execute')
@@ -203,7 +310,8 @@ begin
            unnest(array[
              'microsoft_private.copilot_lees_readiness(uuid,uuid)',
              'microsoft_private.copilot_zet_rollout(boolean,text,text)',
-             'microsoft_private.copilot_zet_billingbewijs(uuid,boolean,text,text)'
+             'microsoft_private.copilot_zet_billingbewijs(uuid,boolean,text,text)',
+             'microsoft_private.copilot_registreer_blokkade(uuid,uuid,timestamptz,text)'
            ]) fn
   loop
     if v_mag then raise exception 'FOUT 17: een browser- of servicerol heeft execute op een copilot-functie'; end if;

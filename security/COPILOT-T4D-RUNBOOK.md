@@ -55,7 +55,16 @@ Uitsluitend na het licentie-, kosten- en consentbesluit uit
    select microsoft_private.copilot_zet_billingbewijs('<fonds-uuid>', true, '<actor>', '<reden>');
    ```
 3. **Fondsflag** `microsoft_copilot_retrieval` openzetten via de bestaande
-   configlaag (`fonds.config.manage`).
+   configlaag (`fonds.config.manage`). De readinesspoort telt **uitsluitend de
+   jsonb-waarde `true`**, niet de string `"true"` en niet `1`. De generieke
+   `flagAlsBoolean` van de applicatie is ruimer; voor deze poort is dat te ruim,
+   want een vlag die niet eenduidig aan staat hoort dicht te blijven. Controleer
+   dus na het zetten:
+   ```sql
+   select waarde, jsonb_typeof(waarde) from public.fonds_feature_flags
+    where fonds_id = '<fonds-uuid>' and flag_key = 'microsoft_copilot_retrieval';
+   ```
+   `jsonb_typeof` moet `boolean` geven, niet `string`.
 4. **Globale kill switch**:
    ```sql
    select microsoft_private.copilot_zet_rollout(true, '<actor>', '<reden>');
@@ -74,15 +83,37 @@ voor attributie, en een parameter zou vervalsbaar zijn.
 select microsoft_private.copilot_zet_rollout(false, '<actor>', '<reden>');
 ```
 
+### Vensterblokkade
+
+Een weigering of een 429 zet de arm voor een venster stil. De applicatierol
+registreert dat zelf:
+
+```sql
+select microsoft_private.copilot_registreer_blokkade(
+  '<fonds-uuid>', '<gebruiker-uuid of null>', now() + interval '15 minutes', '<reden>');
+```
+
+`gebruiker_id = null` blokkeert het hele fonds — passend bij een 429, die de
+appregistratie treft en dus iedereen raakt. De functie kan een blokkade alleen
+**verlengen**, nooit inkorten: de arm mag zijn eigen rem niet losdraaien. Er is
+bewust geen applicatiepad om een blokkade eerder op te heffen; zij verloopt
+vanzelf.
+
 Dat is het hele herstelpad voor een incident. Daarna is de arm inert, ongeacht
 fondsflag, billing of consent — daarom staat de kill switch vooraan in de
 evaluatievolgorde en niet achteraan.
 
 De volledige terugbouw (fasen B tot en met D) staat in
-`supabase/rollbacks/2026_09_21_423_t4d_copilot_rollout_ROLLBACK.sql`. Let op fase
-C: als de contract-stap al is gedraaid, moet de **oude signatuur eerst opnieuw
-bestaan** en pas daarna mag de oude applicatiecode terug. Andersom roept de
-teruggezette code een functie aan die niet meer bestaat.
+`supabase/rollbacks/2026_09_21_423_t4d_copilot_rollout_ROLLBACK.sql`. Fase C
+**voert** het herstel van de twaalf-parametersignatuur uit — het is geen
+aanwijzing in commentaar. Draai fase C vóórdat de oude applicatiecode terugkomt:
+andersom roept de teruggezette code een functie aan die niet meer bestaat.
+
+Fase C bouwt de body op de kolommen zoals ze op dát moment zijn, en fase D
+verandert die. Daarom roept fase D de generator nog één keer aan voordat zij hem
+opruimt. Sla die stap niet over: zonder de tweede aanroep verwijst de herstelde
+functie naar `client_id`, die dan net is gedropt, en breekt de eerste
+koppelpoging. Een slotcontrole in hetzelfde bestand weigert stil te slagen.
 
 ## 4. Wat deze poorten niet doen
 
@@ -92,4 +123,5 @@ teruggezette code een functie aan die niet meer bestaat.
 - geen billing of licentie regelen — het billingbewijs legt alleen vast dát het
   geregeld is;
 - geen Retrieval-call doen — `beoordeelToelating` levert hooguit een toegelaten
-  token op; wat daarmee gebeurt is aan de adapter.
+  token op; wat daarmee gebeurt is aan de adapter;
+- geen blokkade opheffen — `copilot_registreer_blokkade` kan alleen verlengen.

@@ -92,7 +92,16 @@ export function normaliseerScope(scope: string): string | null {
   // scope-URI die wij kennen, dus die accepteren we niet.
   const segmenten = parsed.pathname.split("/").filter((deel) => deel.length > 0);
   if (segmenten.length !== 1) return null;
-  const naam = decodeURIComponent(segmenten[0]);
+  // `new URL()` accepteert een kapotte percent-codering zoals `%E0%A4%A`; pas
+  // decodeURIComponent struikelt erover met een URIError. Die mag hier niet
+  // ontsnappen: een scope die we niet kunnen lezen is geen scope die we
+  // accepteren, dus fail-closed naar null in plaats van een worp.
+  let naam: string;
+  try {
+    naam = decodeURIComponent(segmenten[0]);
+  } catch {
+    return null;
+  }
   return /^[A-Za-z0-9._-]+$/.test(naam) ? naam.toLowerCase() : null;
 }
 
