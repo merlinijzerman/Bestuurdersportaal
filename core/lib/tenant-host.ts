@@ -14,7 +14,7 @@
 //  (huispatroon 0039: RLS = fonds-isolatie, code = rolgate).
 // ============================================================================
 
-import { normaliseerHost } from "./platform-host";
+import { normaliseerExacteHost } from "./host-validatie";
 
 /** Eén host→fonds-mappingrij, aangeleverd door de caller (T1.2 haalt deze via de
  *  service-role uit public.tenant_domains). `host` is reeds genormaliseerd. */
@@ -31,14 +31,17 @@ export type FondsResolutie =
 /** Vertaalt een request-host naar een fonds-context. Puur (geen I/O): de caller
  *  levert de mapping aan, net zoals bepaalSurface het env-contract krijgt.
  *
- *  Normaliseert de host (lowercase, poort weg, leidende `www.` weg — identiek
- *  aan platform-host) en zoekt een exacte match op een ACTIEVE rij. Geen match,
+ *  Valideert de exacte host (alleen lowercase-canonicalisatie; geen `www`- of
+ *  poortreparatie) en zoekt een exacte match op een ACTIEVE rij. Geen match,
  *  lege host of alleen inactieve rijen → `onbekend` (fail-closed). */
 export function bepaalFondsContext(args: {
   host: string | null | undefined;
   domains: ReadonlyArray<TenantDomain>;
+  lokaalToegestaan?: boolean;
 }): FondsResolutie {
-  const h = normaliseerHost(args.host);
+  const h = normaliseerExacteHost(args.host, {
+    lokaalToegestaan: args.lokaalToegestaan ?? false,
+  });
   if (!h) return { type: "onbekend" };
 
   const match = args.domains.find((d) => d.actief && d.host === h);

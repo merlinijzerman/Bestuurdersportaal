@@ -11,6 +11,7 @@
 // ============================================================================
 
 import { createHash, randomBytes } from "node:crypto";
+import { isLokaleTestHostnaam, normaliseerExacteHost } from "./host-validatie";
 
 export const TRANSACTIE_GELDIGHEID_MS = 10 * 60_000;
 
@@ -85,9 +86,9 @@ export const MICROSOFT_LOGIN_CALLBACK_PAD = "/auth/microsoft-login/callback";
 
 // ── Canonieke fondshost ──────────────────────────────────────────────────────
 //  Reviewbevinding PR #339 (ronde 2): een ruwe Host-header mag NOOIT in een URL
-//  terechtkomen. `pgb.example:443@evil.example` wordt door normaliseerHost() voor
-//  de fondscontrole tot `pgb.example` teruggebracht, maar als URL gelezen is het een
-//  redirect naar evil.example. Daarom één strikte canonicalisering die overal
+//  terechtkomen. De vroegere generieke hostnormalisatie kon een waarde zoals
+//  `pgb.example:443@evil.example` verkeerd repareren. Daarom één centrale,
+//  strikte canonicalisering die overal
 //  dezelfde waarde levert (fondscontrole, callback-URI, redirects, limietsleutel):
 //    • alleen kleine letters, cijfers, `-` en `.` in DNS-labelvorm; geen userinfo,
 //      geen pad, geen `?`/`#`, geen witruimte, geen `[`/`]`;
@@ -96,31 +97,13 @@ export const MICROSOFT_LOGIN_CALLBACK_PAD = "/auth/microsoft-login/callback";
 //      `localhost` of `127.0.0.1` — de expliciete lokale testhosts.
 //  Alles wat afwijkt is `null` → de route antwoordt met een neutrale 404.
 
-const HOSTNAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
-const POORT_RE = /^[1-9][0-9]{0,4}$/;
-
-function isLokaleTestHostnaam(hostnaam: string): boolean {
-  return hostnaam === "localhost" || hostnaam === "127.0.0.1" || hostnaam.endsWith(".localhost");
-}
-
 /**
  * Canonieke fondshost uit een ruwe Host-headerwaarde, of `null` als de waarde niet
  * exact een hostnaam (lokaal: optioneel met poort) is. Geen trim van binnenruimte,
  * geen "repareren": één afwijkend teken maakt de host ongeldig.
  */
 export function canoniekeFondsHost(ruw: string | null | undefined, opties: { lokaalToegestaan: boolean }): string | null {
-  if (typeof ruw !== "string") return null;
-  if (ruw !== ruw.trim() || ruw.length === 0 || /[\s@/\\?#\[\]]/.test(ruw)) return null;
-  const laag = ruw.toLowerCase();
-  const dubbelepunten = (laag.match(/:/g) ?? []).length;
-  if (dubbelepunten > 1) return null;
-  const [hostnaam, poort] = dubbelepunten === 1 ? laag.split(":") : [laag, undefined];
-  if (!hostnaam || !HOSTNAME_RE.test(hostnaam)) return null;
-  if (poort !== undefined) {
-    if (!opties.lokaalToegestaan || !isLokaleTestHostnaam(hostnaam) || !POORT_RE.test(poort) || Number(poort) > 65535) return null;
-    return `${hostnaam}:${poort}`;
-  }
-  return hostnaam;
+  return normaliseerExacteHost(ruw, opties);
 }
 
 function eisCanoniek(host: string, opties: { lokaalToegestaan: boolean }): string {

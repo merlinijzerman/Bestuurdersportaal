@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Newsreader, Inter } from "next/font/google";
 import { OPEN_GRAPH_IMAGE } from "./open-graph";
+import { eersteGeconfigureerdeHost } from "@/core/lib/platform-host";
+import { lokaleHostmodus } from "@/core/lib/host-validatie";
 import "./public.css";
 
 // Marketingtokens worden door deze fonts gevoed (--serif/--sans in public.css).
@@ -18,9 +20,16 @@ const inter = Inter({
   display: "swap",
 });
 
-const MARKETING_ORIGIN = `https://${
-  process.env.MARKETING_HOST?.split(",")[0]?.trim() || "bestuurdersportaal.com"
-}`;
+const MARKETING_HOST = eersteGeconfigureerdeHost({
+  naam: "MARKETING_HOST",
+  waarde: process.env.MARKETING_HOST,
+  type: "marketing",
+  lokaalToegestaan: lokaleHostmodus({
+    nodeEnv: process.env.NODE_ENV,
+    seedDoelomgeving: process.env.SEED_DOELOMGEVING,
+  }),
+}) ?? "bestuurdersportaal.com";
+const MARKETING_ORIGIN = `https://${MARKETING_HOST}`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(MARKETING_ORIGIN),

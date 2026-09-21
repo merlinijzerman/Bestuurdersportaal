@@ -19,9 +19,10 @@ function test(naam: string, fn: () => void) {
 console.log("platform-host sanity-tests:");
 
 // ── isPlatformHost (ongewijzigd, behouden) ─────────────────────────────────
-test("isPlatformHost matcht exact (poort genegeerd, case-insensitive)", () => {
+test("isPlatformHost matcht exact en case-insensitive", () => {
   assert.equal(isPlatformHost("beheer.fonds.nl", "beheer.fonds.nl"), true);
-  assert.equal(isPlatformHost("BEHEER.fonds.nl:443", "beheer.fonds.nl"), true);
+  assert.equal(isPlatformHost("BEHEER.fonds.nl", "beheer.fonds.nl"), true);
+  assert.equal(isPlatformHost("BEHEER.fonds.nl:443", "beheer.fonds.nl"), false);
   assert.equal(isPlatformHost("app.fonds.nl", "beheer.fonds.nl"), false);
 });
 
@@ -44,7 +45,8 @@ const env = { marketingHost: MARKETING, appHost: APP, platformHost: PLATFORM };
 test("surface: apex én www. → marketing", () => {
   assert.equal(bepaalSurface({ host: "bestuurdersportaal.com", ...env }), "marketing");
   assert.equal(bepaalSurface({ host: "www.bestuurdersportaal.com", ...env }), "marketing");
-  assert.equal(bepaalSurface({ host: "WWW.Bestuurdersportaal.com:443", ...env }), "marketing");
+  assert.equal(bepaalSurface({ host: "WWW.Bestuurdersportaal.com", ...env }), "marketing");
+  assert.equal(bepaalSurface({ host: "WWW.Bestuurdersportaal.com:443", ...env }), null);
 });
 
 test("surface: app-host → app, beheer-host → platform", () => {
@@ -74,15 +76,23 @@ test("surface: MARKETING_HOST mag een komma-lijst zijn (apex + www expliciet)", 
   const komma = { ...env, marketingHost: "bestuurdersportaal.com,www.bestuurdersportaal.com" };
   assert.equal(bepaalSurface({ host: "bestuurdersportaal.com", ...komma }), "marketing");
   assert.equal(bepaalSurface({ host: "www.bestuurdersportaal.com", ...komma }), "marketing");
-  // Spaties rond een komma-deel mogen niet breken.
+  // Config wordt niet stil gerepareerd: spaties zijn een configuratiefout.
   const metSpatie = { ...env, marketingHost: "bestuurdersportaal.com , www.bestuurdersportaal.com" };
-  assert.equal(bepaalSurface({ host: "www.bestuurdersportaal.com", ...metSpatie }), "marketing");
+  assert.throws(() => bepaalSurface({ host: "www.bestuurdersportaal.com", ...metSpatie }), /MARKETING_HOST bevat een ongeldige hostwaarde/);
 });
 
-test("surface: onbekende host → fail-safe 'app' (preview/lokaal)", () => {
+test("surface: geldige onbekende host → fail-safe 'app'; ongeldige host → null", () => {
   assert.equal(bepaalSurface({ host: "iets-anders.vercel.app", ...env }), "app");
-  assert.equal(bepaalSurface({ host: "localhost:3000", ...env }), "app");
-  assert.equal(bepaalSurface({ host: null, ...env }), "app");
+  assert.equal(bepaalSurface({ host: "localhost:3000", ...env }), null);
+  assert.equal(bepaalSurface({ host: null, ...env }), null);
+  for (const host of [
+    "app365.bestuurdersportaal.com:443@evil.test",
+    "user@app365.bestuurdersportaal.com",
+    "app365.bestuurdersportaal.com/path",
+    "app365.bestuurdersportaal.com\\evil",
+    "app365.bestuurdersportaal.com?x=1",
+    " app365.bestuurdersportaal.com",
+  ]) assert.equal(bepaalSurface({ host, ...env }), null, host);
 });
 
 test("surface: ontbrekend env-contract → 'app' (geen marketing/platform-lek)", () => {
@@ -96,30 +106,32 @@ test("surface: ontbrekend env-contract → 'app' (geen marketing/platform-lek)",
   assert.equal(bepaalSurface({ host: "beheer.bestuurdersportaal.com" }), "app");
 });
 
-test("surface: platform fail-closed — lege PLATFORM_HOST opent platform nooit", () => {
-  for (const ph of [undefined, "", null] as const) {
+test("surface: platform fail-closed — ontbrekende config opent platform nooit", () => {
+  for (const ph of [undefined, null] as const) {
     assert.equal(
       bepaalSurface({ host: "beheer.bestuurdersportaal.com", marketingHost: MARKETING, appHost: APP, platformHost: ph }),
       "app"
     );
   }
+  assert.throws(
+    () => bepaalSurface({ host: "beheer.bestuurdersportaal.com", ...env, platformHost: "" }),
+    /PLATFORM_HOST bevat een ongeldige hostwaarde/
+  );
 });
 
-test("surface: app-precedentie boven marketing voorkomt redirect-lus bij misconfig", () => {
-  // Als APP_HOST == MARKETING_HOST (foutconfig), wint 'app' → /login rendert,
-  // redirect niet → geen lus.
-  assert.equal(
-    bepaalSurface({ host: "bestuurdersportaal.com", marketingHost: MARKETING, appHost: MARKETING, platformHost: PLATFORM }),
-    "app"
+test("surface: overlap tussen surfaces is een harde configuratiefout", () => {
+  assert.throws(
+    () => bepaalSurface({ host: "bestuurdersportaal.com", marketingHost: MARKETING, appHost: MARKETING, platformHost: PLATFORM }),
+    /Hostconfiguratie overlapt/
   );
 });
 
 // Lokale hosts (variant B): app op localhost, platform op beheer.localhost.
 test("surface lokaal: localhost → app, beheer.localhost → platform", () => {
   const lokaal = { marketingHost: "marketing.localhost:3000", appHost: "localhost:3000", platformHost: "beheer.localhost:3000" };
-  assert.equal(bepaalSurface({ host: "localhost:3000", ...lokaal }), "app");
-  assert.equal(bepaalSurface({ host: "beheer.localhost:3000", ...lokaal }), "platform");
-  assert.equal(bepaalSurface({ host: "marketing.localhost:3000", ...lokaal }), "marketing");
+  assert.equal(bepaalSurface({ host: "localhost:3000", ...lokaal, lokaalToegestaan: true }), "app");
+  assert.equal(bepaalSurface({ host: "beheer.localhost:3000", ...lokaal, lokaalToegestaan: true }), "platform");
+  assert.equal(bepaalSurface({ host: "marketing.localhost:3000", ...lokaal, lokaalToegestaan: true }), "marketing");
 });
 
 // ── bepaalRoute: marketing-surface ─────────────────────────────────────────

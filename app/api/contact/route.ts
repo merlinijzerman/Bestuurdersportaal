@@ -23,6 +23,7 @@ import { createAnonSupabase } from "@/core/lib/supabase-anon";
 import { valideerContact } from "@/core/lib/contact-validatie";
 import { verstuurContactNotificatie } from "@/core/lib/email";
 import { badRequest, errorResponse, rateLimited } from "@/core/lib/api-errors";
+import { leesHostConfiguratie, lokaleHostmodus, normaliseerMarketingHost } from "@/core/lib/host-validatie";
 
 const LABEL = "contact.POST";
 
@@ -58,12 +59,15 @@ function originToegestaan(req: NextRequest): boolean {
 
   if (isDev && /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return true;
 
-  const toegestane = (process.env.MARKETING_HOST || "")
-    .split(",")
-    .map((h) => h.trim().toLowerCase())
-    .filter(Boolean);
-
-  return toegestane.includes(host.toLowerCase());
+  const lokaalToegestaan = lokaleHostmodus({ nodeEnv: process.env.NODE_ENV, seedDoelomgeving: process.env.SEED_DOELOMGEVING });
+  const canoniek = normaliseerMarketingHost(host, { lokaalToegestaan });
+  if (!canoniek) return false;
+  return leesHostConfiguratie({
+    naam: "MARKETING_HOST",
+    waarde: process.env.MARKETING_HOST,
+    type: "marketing",
+    lokaalToegestaan,
+  }).has(canoniek);
 }
 
 /** Gezouten sha256-hash van het IP. Null als er geen IP of salt is. */

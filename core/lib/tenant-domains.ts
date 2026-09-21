@@ -19,7 +19,7 @@
 
 import "server-only";
 import { createAnonSupabase } from "@/core/lib/supabase-anon";
-import { normaliseerHost } from "@/core/lib/platform-host";
+import { normaliseerExacteHost } from "@/core/lib/host-validatie";
 import { maakTenantDomainsCache } from "@/core/lib/tenant-domains-cache";
 import type { TenantDomain } from "@/core/lib/tenant-host";
 
@@ -56,9 +56,10 @@ const haalUitCache = maakTenantDomainsCache<TenantDomain | null>({
  *  gecachet per genormaliseerde host (~60 s). Vorm = input voor
  *  bepaalFondsContext (T1.1). Lege/ontbrekende host → null. */
 export async function haalTenantDomainVoorHost(
-  host: string | null | undefined
+  host: string | null | undefined,
+  lokaalToegestaan = false
 ): Promise<TenantDomain | null> {
-  const norm = normaliseerHost(host);
+  const norm = normaliseerExacteHost(host, { lokaalToegestaan });
   if (!norm) return null;
   return haalUitCache(norm);
 }

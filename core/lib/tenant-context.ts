@@ -19,6 +19,7 @@ import {
   tenantEnforceVoorOmgeving,
   type ToegangsOordeel,
 } from "@/core/lib/tenant-enforce";
+import { lokaleHostmodus } from "@/core/lib/host-validatie";
 
 /** Resolveert de fondscontext voor een request-host. `host` levert de caller aan
  *  uit de server-context (bv. `(await headers()).get("host")`). Fail-closed:
@@ -27,8 +28,12 @@ import {
 export async function haalFondsContext(
   host: string | null | undefined
 ): Promise<FondsResolutie> {
-  const rij = await haalTenantDomainVoorHost(host);
-  return bepaalFondsContext({ host, domains: rij ? [rij] : [] });
+  const lokaalToegestaan = lokaleHostmodus({
+    nodeEnv: process.env.NODE_ENV,
+    seedDoelomgeving: process.env.SEED_DOELOMGEVING,
+  });
+  const rij = await haalTenantDomainVoorHost(host, lokaalToegestaan);
+  return bepaalFondsContext({ host, domains: rij ? [rij] : [], lokaalToegestaan });
 }
 
 /** Fail-closed omgevingscontract. Productie en Preview kunnen de tenantgrens
