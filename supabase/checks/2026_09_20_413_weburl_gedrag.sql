@@ -132,10 +132,10 @@ begin
 
   -- 3. %2F mag NOOIT samenvallen met een echte padscheiding.
   perform microsoft_private.sharepoint_upsert_documenten('74130000-0000-4000-8000-000000000001', v_bron, 1,
-    format('[{"item_id":"p1","naam":"Map.docx","web_url":"%smap%%2FX.docx"},{"item_id":"p2","naam":"Map2.docx","web_url":"%smap/X.docx"}]', v_url, v_url)::jsonb);
+    format('[{"item_id":"p1","naam":"Map.docx","web_url":"%smap%sX.docx"},{"item_id":"p2","naam":"Map2.docx","web_url":"%smap/X.docx"}]', v_url, '%2F', v_url)::jsonb);
   select count(*) into v_aantal from microsoft_private.sharepoint_documenten
    where bron_id = v_bron and item_id in ('p1','p2') and mapping_status = 'actief';
-  if v_aantal <> 2 then raise exception 'FAALT: %%2F en een echte padscheiding vielen samen'; end if;
+  if v_aantal <> 2 then raise exception 'FAALT: % en een echte padscheiding vielen samen', '%2F'; end if;
 
   -- 4. Twee items met dezelfde canonieke URL: de upsert valt NIET om en beide
   --    belanden in quarantaine — met hun web_url intact.
