@@ -1,6 +1,6 @@
 # T4-E planreview — centrale orkestratie en adapter-per-spoor (#426)
 
-**Status:** versie 7, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 8, ter beoordeling. Geen productiecode geschreven.
 **Vertakt van:** `origin/preview` `b3961ba` (bevat #424 / T4-C volledig).
 **Datum:** 2026-09-21.
 
@@ -13,7 +13,8 @@ hun vervanger, waardoor het document zichzelf tegensprak.
 
 | Versie | Wat veranderde | Wat daarvan later is ingetrokken |
 |---|---|---|
-| **7** *(deze)* | De nul-chunkssemantiek van de Supabase-hook expliciet behouden: nul koppelingen ⇒ oorspronkelijke bronnen op alle posities; `null` alleen op ontbrekende posities; en `rang.positie` blijft een teller over de gekoppelde chunks (§2.4, tests 23-25). Test 16 herschreven naar het positionele contract, inclusief `undefined` en sparse array. | — |
+| **8** *(deze)* | De `WeakMap`-sleutel is niet langer het object van de adapter maar een verse instantie die de orkestratie per occurrence maakt — een hook mag hetzelfde object op twee posities teruggeven. De refcontrole draait tegen een snapshot van vóór de hook, zodat een in-place mutatie niet met zichzelf wordt vergeleken. Tests 26 en 27. | — |
+| 7 | De nul-chunkssemantiek van de Supabase-hook expliciet behouden: nul koppelingen ⇒ oorspronkelijke bronnen op alle posities; `null` alleen op ontbrekende posities; en `rang.positie` blijft een teller over de gekoppelde chunks (§2.4, tests 23-25). Test 16 herschreven naar het positionele contract, inclusief `undefined` en sparse array. | — |
 | 6 | `verrijkWeergave()` wordt **positioneel**: uitvoer even lang als de invoer, `null` voor een weggelaten bron. Herkomst wordt op **positie** toegekend, nooit op `ref`. Eigenaar en levensduur van de request-lokale herkomststaat vastgelegd (§2.2). §2.4 teruggebracht tot één algoritme. Tests 20 t/m 22. | — |
 | 5 | Herkomst van een ref-gebaseerde set naar een request-lokale `WeakMap` op de resultaat*instantie*; `primairPerGroep` vervallen; centrale deduplicatie ingetrokken. | **occurrence-toewijzing met een tweepuntersloop** — ambigu bij twee gelijke refs waarvan er één wegvalt; **contractregel "volgorde behouden"** — vervangen door de sterkere positionele regel |
 | 4 | `meta.adapters` niet meer door T4-E aangesloten; T4-F voegt typeveld, allowlist, projectie en route atomair toe. | **centrale exact-ref-deduplicatie** — veranderde één-adaptergedrag bij ≥3 sporen |
@@ -67,7 +68,7 @@ uitbreiding van T4-C is de Copilot-arm niet eerlijk aansluitbaar.
 |---|---|---|
 | T4-B (client, endpointpin, filter, fouten) | op `preview` | consumeren |
 | T4-C (mapping, DriveItem, download, extractie, keten) | op `preview` via #424 (`b3961ba`) | consumeren; **B-1 raakt dit** |
-| T4-D (readiness, tokeninterface, rolloutpoorten) | PR #425 op `27ad291a`, `OPEN`; nieuwe CI-ronde loopt. De drie rollbackbevindingen (B/C-volgorde, SQL-Editor-compatibiliteit, ontbrekende `PUBLIC`-revoke op de helperfunctie) zijn in bewerking | contract bekend, nog niet definitief — zie §7 |
+| T4-D (readiness, tokeninterface, rolloutpoorten) | PR #425, `OPEN` en in beweging. **Bewust geen SHA hier** — zie §7 | contract bekend, nog niet definitief |
 | T4-E | dit ticket | planreview nu, code ná merge van #424 + gecorrigeerde #425 |
 | T4-F (beheer, status, duurzame auditprojectie) | apart | **niet** stil meenemen |
 
@@ -225,6 +226,12 @@ Dat werkt omdat `bouwCitaties()` de objectreferenties **behoudt**: `opgenomen.pu
 zonder dat zij ergens in `RetrievalUitkomst` terechtkomt — een `WeakMap` is niet serialiseerbaar
 en kan dus ook niet per ongeluk meelekken naar de route of het auditspoor.
 
+**De sleutel is een instantie die de ORKESTRATIE zelf maakt**, niet het object dat de adapter
+teruggaf. Een hook mag namelijk hetzelfde object op twee posities teruggeven, en dan zou de
+tweede `set()` de herkomst van de eerste overschrijven. §2.4 stap 6 maakt daarom per occurrence
+een verse bovenste instantie. Zo rust de herkomst niet op adaptergedrag rond objectidentiteit —
+een eigenschap die je in een interface toch niet kunt afdwingen.
+
 **Eigenaar en levensduur, expliciet.** De herkomststaat wordt gemaakt door
 `voerVolledigeRetrievalUit()` — dezelfde eigenaar als de `Afbreekgrendel` — en via een **private
 parameter** uitgeleend aan beide fasen. Zij leeft precies zo lang als het verzoek.
@@ -340,6 +347,26 @@ verrijkWeergave?(
 //           Positie i in de uitvoer hoort bij positie i in de invoer, punt.
 ```
 
+**Nog één aanname die het contract niet dekt, en die de vorige versie stilzwijgend maakte.** Een
+`WeakMap<Bronresultaat, Herkomst>` werkt alleen als iedere occurrence een **eigen
+objectinstantie** is. Niets verplicht een hook daartoe:
+
+```js
+const gedeeld = { …ref: "R"… };
+return [gedeeld, gedeeld];        // lengte klopt, refs kloppen
+```
+
+De tweede `WeakMap.set()` overschrijft dan de herkomst van de eerste, en ná de citaatafkapping
+lijken beide occurrences uit dezelfde positie en groep te komen. De oplossing is niet een
+strengere eis aan de hook — objectidentiteit is geen eigenschap die je in een interface kunt
+afdwingen — maar het wegnemen van de afhankelijkheid: **de orkestratie maakt zelf een verse
+instantie per occurrence** en gebruikt díé als sleutel.
+
+**En de refcontrole moet tegen een SNAPSHOT van vóór de hook.** Muteert een hook een
+invoerobject in-place en geeft hij het terug, dan zijn `uitvoer[i].ref` en `invoer[i].ref`
+achteraf allebei de nieuwe waarde en vergelijkt de controle de mutatie met zichzelf. Zij ziet
+dan niets.
+
 Het algoritme, volledig:
 
 1. elk element van `tussen.geselecteerd` krijgt **vóór enige groepering** een herkomst
@@ -347,14 +374,37 @@ Het algoritme, volledig:
    en `primair` uit het spoor komt waaruit hij kwam;
 2. de selectie wordt per groep gesplitst; per groep houdt de orkestratie de herkomsten in
    dezelfde posities bij;
-3. `verrijkWeergave()` draait per groep, met uitsluitend de bronnen van die groep, en levert een
+3. **vóór de hook** legt de orkestratie `verwachteRefs = invoer.map((b) => b.ref)` vast — een
+   snapshot van primitieve strings, die geen enkele latere mutatie kan volgen;
+4. `verrijkWeergave()` draait per groep, met uitsluitend de bronnen van die groep, en levert een
    array van **gelijke lengte** terug;
-4. positie *i* in de uitvoer krijgt de herkomst van positie *i* in de invoer; een `null` valt
-   weg. **Er wordt nergens op `ref` gematcht** — de binding is positioneel en daarmee eenduidig,
-   ook bij identieke refs;
-5. de overlevenden van alle groepen gaan samen en worden **stabiel gesorteerd op ordinal**;
-6. elk toegewezen object komt in de `herkomst`-WeakMap uit §2.2, zodat de binding de
-   citaatafkapping overleeft.
+5. elke niet-`null` positie *i* wordt getoetst aan `verwachteRefs[i]`; een afwijking is een
+   configuratiefout. **Er wordt niet op `ref` gematcht om de positie te BEPALEN** — die is
+   positioneel — de ref dient uitsluitend als controle dat de hook de posities respecteerde;
+6. per niet-`null` occurrence maakt de orkestratie een **verse bovenste objectinstantie**
+   (`{ ...uitvoer[i] }`) en gebruikt die als WeakMap-sleutel. Daarmee is elke occurrence
+   gegarandeerd uniek, ongeacht wat de hook met objectidentiteit doet;
+7. die verse instantie krijgt de herkomst van positie *i*; een `null` valt weg;
+8. de overlevenden van alle groepen gaan samen en worden **stabiel gesorteerd op ordinal**;
+9. elke instantie staat in de `herkomst`-WeakMap uit §2.2, zodat de binding de citaatafkapping
+   overleeft.
+
+**Wat de verse instantie kost, en wat niet.** Een shallow copy heeft dezelfde eigen
+opsombare eigenschappen in dezelfde volgorde, dus `JSON.stringify` en `deepEqual` zijn
+identiek — de byte-identiteit blijft overeind. Alleen de referentie verschilt, en niets
+stroomafwaarts hangt daaraan: `bouwCitaties()` duwt door, en de Supabase-adapter koppelt intern
+op `ref` (`chunkPerRef`), niet op identiteit. Dat is een claim die de byte-identiteitstest moet
+bevestigen, niet iets om aan te nemen. De kopie gebeurt **altijd**, ook bij één adaptergroep:
+één codepad is beter dan een tak die alleen bij twee adapters wordt gedraaid en dus minder vaak
+wordt gedekt.
+
+**Wat deze twee maatregelen NIET dekken, eerlijk gezegd.** De snapshot beschermt de
+`ref`-binding. Een hook die andere velden in-place muteert — `documentIdentiteit.id`,
+`versie` — blijft onopgemerkt, en een shallow copy deelt bovendien de geneste objecten met het
+origineel. Dat is een contractschending die hier niet wordt gedetecteerd. Wie dat wél wil
+afvangen kan de invoerelementen vóór de hook `Object.freeze()`-en, zodat een in-place toewijzing
+in strict mode gooit in plaats van stil te slagen; ook dat is shallow, dus geen volledige
+garantie. Ik stel het voor als goedkope aanvulling, niet als sluitende maatregel.
 
 Voor `A1, B1, A2` levert dat weer `A1, B1, A2`. Valt `B1` weg, dan blijft `A1, A2`. Bij het
 vijandige geval hierboven is eenduidig welke occurrence overleefde. Bij één groep zijn de
@@ -765,6 +815,8 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 23 | *(toegevoegd)* **nul gekoppelde chunks** | geen enkele bron heeft een chunk → de hook levert de OORSPRONKELIJKE bronnen op alle posities, geen enkele `null`, en de uitkomst is gelijk aan die van `preview`. Negatieve controle: de naïeve omzetting (`null` per ontbrekende chunk) maakt hier alles leeg en wordt rood |
 | 24 | *(toegevoegd)* **gedeeltelijke koppeling** | `null` staat uitsluitend op de ontbrekende posities; de gekoppelde bronnen staan op hun oorspronkelijke positie, en ná het wegfilteren is de array identiek aan die van vandaag |
 | 25 | *(toegevoegd)* **`rang.positie` bij gedeeltelijke koppeling** | `positie` blijft de doorlopende teller over de GEKOPPELDE chunks, niet de index in de uitvoer-array. Meet met een selectie waarin de eerste bron geen chunk heeft: de tweede bron moet `positie: 0` houden, niet `1` |
+| 26 | *(toegevoegd)* **VIJANDIG: hook muteert `invoer[i].ref` in-place** | de hook wijzigt de ref van een invoerobject en geeft datzelfde object terug. De controle draait tegen `verwachteRefs` van vóór de hook en moet dit als configuratiefout melden. Negatieve controle: een implementatie die `uitvoer[i].ref` met `invoer[i].ref` vergelijkt, ziet twee gelijke (gemuteerde) waarden en wordt groen — dus rood zonder de snapshot |
+| 27 | *(toegevoegd)* **VIJANDIG: één gedeelde objectinstantie op twee posities** | de hook geeft `[gedeeld, gedeeld]` terug voor twee occurrences met dezelfde ref. Beide occurrences moeten hun **eigen** herkomst houden — verschillende ordinal, en de juiste primair-vlag — ook ná de citaatafkapping. Negatieve controle: zonder de verse instantie uit stap 6 overschrijft de tweede `WeakMap.set()` de eerste en wordt de test rood |
 
 Daarnaast: `tsc`, boundaries, secretscan, security-baseline, volledige cross-tenant inclusief
 DB-laag, karakterisering, E2E en productiebuild.
@@ -775,7 +827,9 @@ DB-laag, karakterisering, E2E en productiebuild.
 
 Eerlijkheidshalve, omdat een planreview die alleen zekerheden noemt een verkeerd beeld geeft:
 
-* **#425 is nog niet definitief, en beweegt sneller dan deze review.** Ik schreef tegen `31514ce`; daarna passeerden `0bc007c` en `57a1a83`, en de actuele head is `27ad291a` met een lopende CI-ronde waarin de drie rollbackbevindingen (B/C-volgorde, SQL-Editor-compatibiliteit, ontbrekende `PUBLIC`-revoke op de helperfunctie) worden verwerkt. Die laatste raakt precies de regel uit CLAUDE.md dat `revoke … from public` op Supabase niet genoeg is, omdat de default-ACL rechten expliciet aan `anon` en `authenticated` toekent. **Deze planreview moet ná het landen van #425 opnieuw worden herijkt op de gecombineerde `preview`** — stap 3 uit de merge-orde van #426, en geen formaliteit. De contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) zijn sinds `31514ce` niet opnieuw getoetst; dat hoort bij die herijking en niet bij deze ronde, anders loopt de review achter de PR aan.
+* **#425 is nog niet definitief, en beweegt sneller dan deze review kan bijhouden.** Ik schreef tegen `31514ce`; sindsdien passeerden `0bc007c`, `57a1a83`, `27ad291a` en `b6de123`. **Deze review noemt daarom bewust geen actuele SHA meer.** Elke ronde de head bijwerken is schijnprecisie: het getal is verouderd op het moment dat het wordt opgeschreven, en het suggereert een toetsing die niet heeft plaatsgevonden.
+  Wat wél geldt: de contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) zijn **sinds `31514ce` niet opnieuw getoetst**. De drie rollbackbevindingen — B/C-volgorde, SQL-Editor-compatibiliteit en de ontbrekende `PUBLIC`-revoke op de helperfunctie — waren bij het schrijven nog open; die laatste raakt precies de regel uit CLAUDE.md dat `revoke … from public` op Supabase niet volstaat, omdat de default-ACL rechten expliciet aan `anon` en `authenticated` toekent.
+  **De herijking gebeurt één keer, ná het landen van #425 en de rebase van #427 op de dan actuele `preview`** — stap 3 uit de merge-orde van #426, en geen formaliteit. Dan wordt de SHA van dát moment vastgelegd, met een werkelijke hercontrole erachter.
 * **De eerste structurele demoactivering verhuist naar `app365_m365_demo_copilot`** (ticket #428). Dat raakt T4-E niet: deze laag is en blijft fonds- en omgevingsneutraal — zij kent geen profiel, geen fonds en geen omgeving, alleen een adapter per spoor. De keuze wélke omgeving als eerste wordt geactiveerd hoort bij de activeringstranche.
 * **De PGB-registrydrift is daarmee een afzonderlijk historisch/labpunt.** `pgb_m365_lab_copilot` staat in de integratieregistry nog op `blocked_on_sharepoint_index`, terwijl de index gereed is en de feitelijke blokkade `copilot_toegang_geweigerd` is. Dat blokkeert deze planreview niet en het ligt niet meer op het pad van de eerste activering, maar het moet vóór een live labsmoke worden rechtgezet — anders stuurt de registry een volgende sessie naar het verkeerde probleem.
 * **Ik heb geen enkele Microsoft-call gedaan** en niets aan consent, scopes, billing, flags of kill switch geraakt.
