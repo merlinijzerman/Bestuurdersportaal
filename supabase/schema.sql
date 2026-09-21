@@ -2449,3 +2449,10 @@ create table if not exists public.procedure_afschriften (
 -- toetst count = 1 daarbovenop en negeert quarantainerijen. De upsert houdt de
 -- status zelf bij (uit de index vóór het schrijven, herclassificatie erna), zodat
 -- de index de documentenlijst nooit kan laten vallen.
+--
+-- #413 (21-09): de canonicalisering strijkt ook de vier Office-weergaveprefixen
+-- weg (/:w:/r/, /:x:/r/, /:p:/r/, /:b:/r/), want Graph levert voor Officebestanden
+-- zo'n viewer-URL terwijl een MAP het gewone pad krijgt. Sharinglinks
+-- (/:w:/s/<token>) dragen geen pad en blijven ongemoeid — fail-closed. Let op:
+-- web_url_canoniek is STORED, dus een functiewijziging herschrijft de kolom NIET
+-- vanzelf; de migratie bouwt de kolom daarom opnieuw op en herclassificeert.
