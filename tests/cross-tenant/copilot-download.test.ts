@@ -111,8 +111,8 @@ test("een omleiding naar een vreemde host levert geen download op", async () => 
   assert.equal(aanroepen.length, 1, "er is toch naar de vreemde host gegaan");
 });
 
-test("404/403/401 op een van beide stappen is een kandidaatweigering", async () => {
-  for (const status of [404, 403, 401]) {
+test("403/404 op een van beide stappen is een kandidaatweigering", async () => {
+  for (const status of [404, 403, 410]) {
     const eerste = stub([new Response(null, { status })]);
     const a = await downloadItem(opdracht({ fetchImpl: eerste.impl }));
     assert.equal(a.ok, false, `stap 1 status ${status}`);
@@ -123,6 +123,23 @@ test("404/403/401 op een van beide stappen is een kandidaatweigering", async () 
     assert.equal(b.ok, false, `stap 2 status ${status}`);
     assert.equal(b.ok === false && b.afwijzing, "rechten_configuratie");
   }
+});
+
+test("401 is BRONBREED en stopt de beurt, ook al lijkt het op een rechtenkwestie", async () => {
+  // Een ongeldig token geldt voor élke kandidaat van deze bron. Zou 401 hier
+  // als weigering eindigen, dan valt document na document stil af en levert de
+  // beurt een volledig ogend antwoord op een kleinere bronverzameling.
+  const eerste = stub([new Response(null, { status: 401 })]);
+  await assert.rejects(
+    () => downloadItem(opdracht({ fetchImpl: eerste.impl })),
+    (e: unknown) => e instanceof SharePointGraphError && e.categorie === "toestemming_of_token",
+  );
+
+  const tweede = stub([omleiding(DOWNLOAD), new Response(null, { status: 401 })]);
+  await assert.rejects(
+    () => downloadItem(opdracht({ fetchImpl: tweede.impl })),
+    (e: unknown) => e instanceof SharePointGraphError && e.categorie === "toestemming_of_token",
+  );
 });
 
 test("een storing stopt de beurt in plaats van de kandidaat te laten vallen", async () => {
@@ -169,6 +186,25 @@ test("een afbreking wordt doorgegooid en kost geen tweede aanroep", async () => 
     () => downloadItem(opdracht({ fetchImpl: traag as never, signal: laat.signal })),
     (e: unknown) => e === afbreking2,
   );
+});
+
+test("na het verstrijken van de ketendeadline vertrekt er GEEN tweede call", async () => {
+  // De reproductie uit de review: een fetch die het abortsignaal negeert en ná
+  // de deadline alsnog een 302 teruggeeft. Zonder een ketencontrole op het
+  // SUCCESPAD vertrok de download daarna gewoon — gemeten 2 calls in plaats
+  // van 1. De deadline was dan niet meer dan een belofte in een commentaarregel.
+  let calls = 0;
+  const negeertSignaal = (async (_url: string, _init: RequestInit) => {
+    calls++;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    return omleiding(DOWNLOAD);
+  }) as (input: string, init: RequestInit) => Promise<Response>;
+
+  await assert.rejects(
+    () => downloadItem(opdracht({ fetchImpl: negeertSignaal, timeoutMs: 20 })),
+    (e: unknown) => e instanceof SharePointGraphError && e.categorie === "graph_timeout",
+  );
+  assert.equal(calls, 1, `na de deadline vertrok er alsnog een call (${calls})`);
 });
 
 test("ÉÉN DEADLINE over de keten: stap 1 verbruikt de klok van stap 2", async () => {

@@ -137,6 +137,32 @@ async function leesBegrensdeBytes(response: Response, keten: AbortSignal): Promi
   return Buffer.concat(delen);
 }
 
+/**
+ * Vertaalt een HTTP-status naar "deze kandidaat valt af" of "dit is geen
+ * kandidaatoordeel" (dan werpt de aanroeper).
+ *
+ * 401 IS BRONBREED EN GEEN KANDIDAATWEIGERING. Het zegt dat ons token niet
+ * (meer) geldig is — dat geldt dan voor élke kandidaat van deze bron. Zou het
+ * hier als weigering eindigen, dan valt document na document stil af en levert
+ * de beurt een volledig ogend antwoord op een kleinere bronverzameling: precies
+ * de stille degradatie die §3.5 dichttimmert.
+ *
+ * 403 en 404 gaan wél over dit ene document: de actor mag het niet zien, of het
+ * bestaat niet meer.
+ *
+ * Let op het verschil met `driveitem.ts`: daar loopt de lezing via `graphJson`,
+ * dat 401 en 403 op één categorie samenvoegt en ze dus niet kán scheiden — daar
+ * vangt de rootlezing het tokengeval af. Hier zien wij de statuscode zelf, dus
+ * hier hoort het onderscheid gemaakt te worden.
+ */
+function beoordeelStatus(status: number): DownloadResultaat | null {
+  if (status === 401) return null; // bronbreed: de aanroeper werpt
+  if (status === 403 || status === 404 || status === 410) {
+    return { ok: false, afwijzing: "rechten_configuratie" };
+  }
+  return null;
+}
+
 export interface DownloadOpdracht {
   accessToken: string;
   driveId: string;
@@ -178,8 +204,20 @@ export async function downloadItem(opdracht: DownloadOpdracht): Promise<Download
     throw new SharePointGraphError("graph_response", fout);
   };
 
+  /**
+   * NA ELKE I/O, ook na een GESLAAGDE. `bewaakNaIO()` kent alleen het
+   * beurtsignaal; de ketenklok is van onszelf. Zonder deze controle kan een
+   * antwoord dat ná het verstrijken binnenkomt de volgende stap alsnog laten
+   * vertrekken — een `fetch` die zijn signaal negeert is genoeg, en dan doet de
+   * deadline niets meer dan een belofte in een commentaarregel.
+   */
+  const bewaakKeten = (): void => {
+    bewaakNaIO(opdracht.signal);
+    if (eigenKlok.signal.aborted) throw verlopen;
+  };
+
   try {
-    return await haalOp(opdracht, doeFetch, keten, vertaal);
+    return await haalOp(opdracht, doeFetch, keten, vertaal, bewaakKeten);
   } finally {
     // Zonder dit blijft de timer het proces vasthouden nadat de download al
     // lang klaar is.
@@ -192,9 +230,10 @@ async function haalOp(
   doeFetch: GraphFetch,
   keten: AbortSignal,
   vertaal: (fout: unknown) => never,
+  bewaakKeten: () => void,
 ): Promise<DownloadResultaat> {
   // ── Stap 1: de omleiding ophalen, MET token, naar graph.microsoft.com ──────
-  bewaakNaIO(opdracht.signal);
+  bewaakKeten();
   let omleiding: Response;
   try {
     omleiding = await doeFetch(contentUrl(opdracht.driveId, opdracht.itemId), {
@@ -208,14 +247,14 @@ async function haalOp(
   } catch (fout) {
     vertaal(fout);
   }
-  bewaakNaIO(opdracht.signal);
+  bewaakKeten();
 
   if (omleiding.status !== 302 && omleiding.status !== 301 && omleiding.status !== 307) {
-    // 404/403 gaan over dit ene document; al het andere is een storing.
-    if (omleiding.status === 404 || omleiding.status === 403 || omleiding.status === 401) {
-      return { ok: false, afwijzing: "rechten_configuratie" };
-    }
-    throw new SharePointGraphError("graph_response");
+    const uitkomst = beoordeelStatus(omleiding.status);
+    if (uitkomst) return uitkomst;
+    throw new SharePointGraphError(
+      omleiding.status === 401 ? "toestemming_of_token" : "graph_response",
+    );
   }
 
   const downloadUrl = veiligeDownloadUrl(omleiding.headers.get("location"), opdracht.siteHostnaam);
@@ -239,17 +278,18 @@ async function haalOp(
   } catch (fout) {
     vertaal(fout);
   }
-  bewaakNaIO(opdracht.signal);
+  bewaakKeten();
 
   if (!inhoud.ok) {
-    if (inhoud.status === 404 || inhoud.status === 403 || inhoud.status === 401) {
-      return { ok: false, afwijzing: "rechten_configuratie" };
-    }
-    throw new SharePointGraphError("graph_response");
+    const uitkomst = beoordeelStatus(inhoud.status);
+    if (uitkomst) return uitkomst;
+    throw new SharePointGraphError(
+      inhoud.status === 401 ? "toestemming_of_token" : "graph_response",
+    );
   }
 
   const bytes = await leesBegrensdeBytes(inhoud, keten).catch(vertaal);
-  bewaakNaIO(opdracht.signal);
+  bewaakKeten();
   // Te groot is geen storing en geen rechtenkwestie: dit document doet niet mee.
   if (!bytes || bytes.byteLength === 0) return { ok: false, afwijzing: "download" };
   return { ok: true, bytes };
