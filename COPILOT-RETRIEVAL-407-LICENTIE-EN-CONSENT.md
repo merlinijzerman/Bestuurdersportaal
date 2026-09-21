@@ -123,7 +123,7 @@ is geüpload kan nog niet geïndexeerd zijn. Een lege basisreeks is dan geen
 kwaliteitsoordeel maar een meetfout. Stel indexgereedheid daarom vóór de
 vergelijkingsreeks vast, net als bij #403.
 
-**C-2. De semantische fixtures zijn gebouwd; uploaden en indexeren staat nog open.**
+**C-2. De semantische fixtures zijn gebouwd, geüpload en geïndexeerd.**
 Het ticket eist minimaal twee scenario's waarin de relevante passage geen
 letterlijke term uit de vraag bevat. De #385-fixtures konden dat niet leveren: de
 generator zet daar de canaryterm, de vraag én het antwoordfeit letterlijk in het
@@ -145,14 +145,16 @@ vast dat DriveItem Search of Microsoft Search nul zal vinden: dat bepaalt de liv
 meting. Exclusieve semantische recallwinst is pas aangetoond wanneer Copilot de
 exacte verwachte bron levert en de andere routes dat niet doen.
 
-Wat nog open staat vóór de live meting: de twee bestanden uploaden naar de
-PGB-bibliotheek volgens het resetrunbook, en indexgereedheid aantonen op de
-canaryterm (`Zandloperbaken 12`, `Nevelanker 30`). Die canaries dienen uitsluitend
-daarvoor en komen in geen enkele scenariovraag of zoekterm voor.
+Op 20-09-2026 zijn beide bestanden met de gepinde bestandsnamen waargenomen in
+`PGB/02 Beleid en reglementen`. De read-only bibliotheekzoekopdracht op
+`Zandloperbaken 12` leverde uitsluitend `PGB407-DOC-101` op; `Nevelanker 30`
+leverde uitsluitend `PGB407-DOC-102` op. Daarmee is indexgereedheid voor de twee
+canaries aangetoond. Die canaries dienen uitsluitend hiervoor en komen in geen
+enkele scenariovraag of zoekterm voor.
 
-Zolang die twee stappen openstaan, kan acceptatiecriterium *"minimaal twee
-semantische scenario's tonen aantoonbare recallwinst"* niet worden afgevinkt — ook
-niet als alle andere metingen groen zijn.
+Dit bewijs zegt nog niets over semantische recallwinst. Dat wordt pas afgevinkt
+wanneer de live, codevast begrensde Copilot-meting de exacte verwachte bronsets
+levert zonder bronsetvervuiling.
 
 ## 5. Wat ik nodig heb om T3 te starten
 
@@ -161,9 +163,8 @@ niet als alle andere metingen groen zijn.
    gerichte grant van `Files.Read.All` **én** `Sites.Read.All` — beide zijn
    vereist, er valt hier niets te kiezen (§3). Inclusief de afspraak dat beide na
    het meetvenster aantoonbaar worden ingetrokken.
-3. **Fixtures:** de twee semantische fixtures zijn gebouwd en gepind. Wat nog
-   nodig is: uploaden naar de PGB-bibliotheek en indexgereedheid aantonen op de
-   canaryterm (§4, C-2).
+3. **Fixtures:** afgerond — gebouwd, gepind, geüpload en op beide canarytermen
+   indexgereed bevonden (§4, C-2).
 4. **Meetvenster:** wanneer de grants aan gaan en wanneer ze aantoonbaar weer weg
    zijn.
 
