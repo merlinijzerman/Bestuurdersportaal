@@ -1193,32 +1193,65 @@ test("de ketendeadline houdt het PROCES open tot zij heeft gevuurd", async () =>
   // openstaande zaken de ketenklok en een hangende lezing zijn.
   //
   // Met `unref()` op die klok verliet Node het proces na 2 ms terwijl de keten
-  // 600 ms te gaan had: geen deadline, geen uitkomst, geen fout. In de
-  // CI-draai sloeg dat 14 tests over onder de kop "cancelled" — nul gefaald,
-  // dus stil.
+  // 600 ms te gaan had: geen deadline, geen uitkomst, geen fout. In de CI-draai
+  // sloeg dat veertien tests over onder de kop "cancelled" — nul gefaald, dus
+  // volkomen stil.
+  //
+  // Het kindscript gaat naar een BESTAND en importeert de module via een
+  // absolute file-URL. Een `-e`-script heeft geen eigen pad, waardoor relatieve
+  // specifiers tegen de werkmap worden opgelost — en dat gedrag verschilt per
+  // Node-versie. Deze test draait op Node 22 in CI en op 24 lokaal; hij mag
+  // niet op dat verschil struikelen.
   const { execFileSync } = await import("node:child_process");
-  const script = [
-    'import { voerKetenUit } from "./core/lib/microsoft-retrieval/keten.ts";',
-    'const hangt = (s) => new Promise((_, rej) => s?.addEventListener("abort", () => rej(s.reason), { once: true }));',
-    'const t0 = Date.now();',
-    'voerKetenUit({',
-    '  bron: { id: "b", tenantId: "t", siteHostnaam: "h.sharepoint.com", driveId: "d", rootItemId: "r", configuratieversie: 1, status: "actief" },',
-    '  tokenTenantId: "t", accessToken: "x",',
-    '  leesItem: async (_id, signal) => hangt(signal),',
-    '  zoekRegister: async () => undefined,',
-    '  haalKandidaten: async () => [],',
-    '  grenzen: { deadlineMs: 400 },',
-    '}).then((r) => console.log("KLAAR", Date.now() - t0, r.telling.deadlineVerlopen));',
-  ].join("\n");
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath, pathToFileURL } = await import("node:url");
 
-  const uit = execFileSync(
-    process.execPath,
-    ["--import", "tsx", "--input-type=module", "-e", script],
-    { cwd: process.cwd(), encoding: "utf8", timeout: 20_000 },
-  );
-  const regel = uit.split("\n").find((r) => r.startsWith("KLAAR"));
-  assert.ok(regel, `de keten heeft het proces niet overleefd; uitvoer: ${JSON.stringify(uit)}`);
-  const [, msRuw, verlopen] = regel.split(" ");
-  assert.equal(verlopen, "true");
-  assert.ok(Number(msRuw) >= 350, `de deadline vuurde te vroeg: ${msRuw}ms`);
+  const hier = dirname(fileURLToPath(import.meta.url));
+  const moduleUrl = pathToFileURL(join(hier, "..", "..", "core", "lib", "microsoft-retrieval", "keten.ts")).href;
+  const map = mkdtempSync(join(tmpdir(), "keten-deadline-"));
+  const scriptPad = join(map, "proef.mts");
+
+  try {
+    writeFileSync(
+      scriptPad,
+      [
+        `import { voerKetenUit } from ${JSON.stringify(moduleUrl)};`,
+        'const hangt = (s) => new Promise((_, rej) => s?.addEventListener("abort", () => rej(s.reason), { once: true }));',
+        "const t0 = Date.now();",
+        "voerKetenUit({",
+        '  bron: { id: "b", tenantId: "t", siteHostnaam: "h.sharepoint.com", driveId: "d", rootItemId: "r", configuratieversie: 1, status: "actief" },',
+        '  tokenTenantId: "t", accessToken: "x",',
+        "  leesItem: async (_id, signal) => hangt(signal),",
+        "  zoekRegister: async () => undefined,",
+        "  haalKandidaten: async () => [],",
+        "  grenzen: { deadlineMs: 400 },",
+        '}).then((r) => console.log("KLAAR", Date.now() - t0, r.telling.deadlineVerlopen));',
+      ].join("\n"),
+      "utf8",
+    );
+
+    let uit = "";
+    try {
+      uit = execFileSync(process.execPath, ["--import", "tsx", scriptPad], {
+        cwd: join(hier, "..", ".."),
+        encoding: "utf8",
+        timeout: 60_000,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (fout) {
+      // Niet stil laten vallen: de uitvoer van het kind IS de diagnose.
+      const f = fout as { stdout?: string; stderr?: string; message?: string };
+      assert.fail(`kindproces faalde: ${f.message}\nstdout: ${f.stdout ?? ""}\nstderr: ${f.stderr ?? ""}`);
+    }
+
+    const regel = uit.split("\n").find((r) => r.startsWith("KLAAR"));
+    assert.ok(regel, `de keten heeft het proces niet overleefd; uitvoer: ${JSON.stringify(uit)}`);
+    const [, msRuw, verlopen] = regel.split(" ");
+    assert.equal(verlopen, "true");
+    assert.ok(Number(msRuw) >= 350, `de deadline vuurde te vroeg: ${msRuw}ms`);
+  } finally {
+    rmSync(map, { recursive: true, force: true });
+  }
 });
