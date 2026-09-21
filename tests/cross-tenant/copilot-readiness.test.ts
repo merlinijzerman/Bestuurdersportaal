@@ -454,6 +454,51 @@ function zonderCommentaar(sql: string): string {
   return sql.split("\n").filter((regel) => !regel.trimStart().startsWith("--")).join("\n");
 }
 
+test("pre-merge en post-contract hebben elk één ondubbelzinnige read-only stand", () => {
+  const root = resolve(import.meta.dirname, "../..");
+  const premerge = readFileSync(
+    resolve(root, "supabase/checks/2026_09_21_423_t4d_premerge_readonly.sql"),
+    "utf8",
+  );
+  const postcontract = readFileSync(
+    resolve(root, "supabase/checks/2026_09_21_423_t4d_postcontract_readonly.sql"),
+    "utf8",
+  );
+
+  // De pre-mergecheck is het eenmalige bewijs dat 423a niets heeft gebackfilld.
+  // Zij mag de post-contractstand niet langer als geldige tweede tak accepteren.
+  assert.match(premerge, /er hoort NIET gebackfild te worden/);
+  assert.match(premerge, /deze eenmalige controle verwacht exact 2/);
+  assert.match(premerge, /p\.pronargs=12/);
+  assert.match(premerge, /p\.pronargs=13/);
+  assert.ok(!/elsif v_n = 1/.test(premerge), "de pre-mergecheck accepteert nog een post-contracttak");
+
+  // Na 423b is een client_id juist bewijs van een verse koppeling. De blijvende
+  // controle mag hem tellen en rapporteren, maar nooit als backfill afwijzen.
+  assert.match(postcontract, /post-contract verwacht exact één dertien-parametervorm/);
+  assert.match(postcontract, /p\.pronargs=13/);
+  assert.match(postcontract, /v_client_ids/);
+  assert.ok(
+    !/er hoort NIET gebackfild te worden/.test(postcontract),
+    "de post-contractcheck wijst een legitieme client_id nog als backfill af",
+  );
+
+  // Beide operationele bestanden blijven SQL-editorvast en strikt read-only.
+  for (const [naam, sql] of [["pre-merge", premerge], ["post-contract", postcontract]] as const) {
+    const uitvoerbaar = zonderCommentaar(sql);
+    assert.ok(
+      !/^\s*(insert|update|delete|create|alter|drop|grant|revoke)\b/im.test(uitvoerbaar),
+      `${naam} bevat een schrijvend of structureel statement`,
+    );
+    assert.ok(!/^\s*\\[a-z]/im.test(uitvoerbaar), `${naam} bevat een psql-metacommando`);
+  }
+
+  const ci = readFileSync(resolve(root, "scripts/cross-tenant-ci.sh"), "utf8");
+  assert.match(ci, /SQL_T4D_POSTCONTRACT=/);
+  assert.match(ci, /SQL_T4D_POSTCONTRACT_KOPPELING=/);
+  assert.ok(!/SQL_T4D_PREMERGE=/.test(ci), "CI draait nog de eenmalige pre-mergecheck");
+});
+
 test("de rollback is per fase apart uitvoerbaar en weigert zonder voorwaarde", () => {
   // Eén plakbaar bestand met alle fasen achter elkaar is geen gefaseerde
   // rollback: tussen het herstellen van de DB-signatuur, het terugzetten van de

@@ -1,7 +1,8 @@
 # T4-D runbook — Copilot-rolloutpoorten (#423)
 
-Niets in dit runbook is uitgevoerd. Het beschrijft wat een mens moet doen; de
-code en de migraties staan klaar en zijn inert.
+Op `portal_preview` zijn stap 0 t/m 5 op 21 september 2026 uitgevoerd. De
+rollout- en fondsflag bleven dicht; de Retrieval-arm is inert. Voor Productie
+beschrijft dit document nog steeds wat een mens moet doen.
 
 ## 0. Vooraf: `copilot_operator` provisionen
 
@@ -27,16 +28,25 @@ lidmaatschap van.
 | 4 | verifiëren dat het oude pad niet meer schrijft | zie query hieronder |
 | 5 | `supabase/migrations/2026_09_21_423b_t4d_copilot_rollout_contract.sql` | stap 4 is aangetoond |
 
-Tussen stap 1 en 2 hoort de read-only pre-mergecontrole hieronder groen te zijn.
-
-Bij stap 2 hoort de **read-only pre-mergecontrole**:
+Tussen stap 1 en 2 hoort de **eenmalige read-only pre-mergecontrole** groen te
+zijn:
 `supabase/checks/2026_09_21_423_t4d_premerge_readonly.sql`. Plakbaar in de
 Supabase SQL Editor, en strikt read-only: geen insert, update, delete of DDL. Zij
 stelt vast dat 423a correct is geland — kolommen aanwezig en nullable, geen
 backfill, poorten dicht, readiness levert één volledig dichte rij, het auditslot
 staat met de juiste configuratie, en de rolscheiding en bevinding H-18 zijn in
-orde. Zij herkent beide standen (expand-venster en post-contract) en zegt in haar
-melding welke zij heeft gemeten.
+orde. Zij verwacht exact het expand-venster met de twaalf- én
+dertien-parametersignatuur en géén gevulde `client_id`. Na een verse koppeling
+of 423b is dat laatste geen geldige invariant meer en mag deze controle niet
+opnieuw worden gebruikt.
+
+Na stap 5 hoort de herhaalbare **read-only post-contractcontrole** groen te zijn:
+`supabase/checks/2026_09_21_423_t4d_postcontract_readonly.sql`. Zij verwacht
+exact één dertien-parametersignatuur en accepteert legitiem gevulde
+`client_id`-waarden. Alle overige waarborgen blijven gelijk: kolommen nullable,
+poorten dicht, volledig dichte readiness voor een onbekend fonds, het exacte
+auditslot, rolscheiding en H-18. Dit is voortaan de operationele standcontrole
+voor een omgeving waarop 423b is toegepast.
 
 Gebruik daarvoor **niet** de DB-gedragssuite
 `2026_09_21_423_t4d_copilot_rollout.sql`: die bewijst gedrag door te schrijven

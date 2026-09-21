@@ -21,11 +21,15 @@
 --    werkelijke grants toetst voor microsoft_vault, copilot_operator, anon,
 --    authenticated en service_role tegelijk.
 --
---  TWEE STANDEN, allebei geldig, allebei asserterend:
+--  EXACT ÉÉN STAND:
 --    * expand-venster (alleen 423a): twee bewaar_koppeling-signaturen, 12 en 13
---      parameters. Dit is de stand waarin de pre-mergecontrole hoort te draaien.
---    * post-contract (423a + 423b): exact één signatuur, met client_id.
---  Er wordt nooit stil overgeslagen; de melding zegt welke tak is gemeten.
+--      parameters, en nog geen enkele client_id. Alleen in dit venster bewijst
+--      "geen client_id" dat migratie 423a geen bestaande koppeling heeft
+--      gebackfilld.
+--
+--  Na een verse koppeling of migratie 423b is deze controle bewust ongeschikt.
+--  Gebruik dan 2026_09_21_423_t4d_postcontract_readonly.sql: een legitieme
+--  koppeling hoort client_id juist te vullen.
 -- ============================================================================
 do $$
 declare
@@ -97,24 +101,17 @@ begin
     end if;
   end loop;
 
+  v_tak := 'pre-merge expand-venster (alleen 423a)';
   select count(*) into v_n from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='microsoft_private' and p.proname='bewaar_koppeling';
-  if v_n = 2 then
-    v_tak := 'expand-venster (alleen 423a)';
-    if not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-                    where n.nspname='microsoft_private' and p.proname='bewaar_koppeling' and p.pronargs=12)
-       or not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-                    where n.nspname='microsoft_private' and p.proname='bewaar_koppeling' and p.pronargs=13) then
-      v_fout := v_fout || E'\n  - twee bewaar_koppeling-signaturen, maar niet de vormen met 12 en 13 parameters';
-    end if;
-  elsif v_n = 1 then
-    v_tak := 'post-contract (423a + 423b)';
-    if not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-                    where n.nspname='microsoft_private' and p.proname='bewaar_koppeling' and p.pronargs=13) then
-      v_fout := v_fout || E'\n  - na de contract-stap hoort de overgebleven signatuur de dertien-parametervorm te zijn';
-    end if;
-  else
-    v_fout := v_fout || E'\n  - bewaar_koppeling heeft ' || v_n || ' signatuur(en); verwacht 2 (expand-venster) of 1 (post-contract)';
+  if v_n <> 2 then
+    v_fout := v_fout || E'\n  - bewaar_koppeling heeft ' || v_n ||
+      ' signatuur(en); deze eenmalige controle verwacht exact 2. Gebruik na 423b de post-contractcontrole';
+  elsif not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                     where n.nspname='microsoft_private' and p.proname='bewaar_koppeling' and p.pronargs=12)
+     or not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                     where n.nspname='microsoft_private' and p.proname='bewaar_koppeling' and p.pronargs=13) then
+    v_fout := v_fout || E'\n  - twee bewaar_koppeling-signaturen, maar niet de vormen met 12 en 13 parameters';
   end if;
 
   -- ── 7. Readiness levert ALTIJD één rij, en die is volledig dicht ─────────
