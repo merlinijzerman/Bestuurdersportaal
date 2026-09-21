@@ -1,10 +1,17 @@
 # T4-E planreview — centrale orkestratie en adapter-per-spoor (#426)
 
-**Status:** versie 2, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 3, ter beoordeling. Geen productiecode geschreven.
 **Vertakt van:** `origin/preview` `b3961ba` (bevat #424 / T4-C volledig).
 **Datum:** 2026-09-21.
 
-**Wijzigingen t.o.v. versie 1:** twee ontwerpblockers uit de review verwerkt (§2.2 en §2.1),
+**Wijzigingen t.o.v. versie 2:** de groepsgewijze aaneenschakeling in §2.4 vervangen door
+globale ordinals die vóór de groepering worden vastgelegd en erna hersteld (die aaneenschakeling
+verànderde de bronvolgorde — een regressie die versie 2 introduceerde); `equivalentieSleutel`
+vervangen door een inerte `equivalentieClaim` die nooit op zichzelf tot deduplicatie leidt;
+A-1 aangescherpt tot een aansluitverbod; §7 bijgewerkt naar `57a1a83` met de drie open
+rollbackbevindingen; vier tests toegevoegd (14 t/m 17).
+
+**Wijzigingen in versie 2 t.o.v. versie 1:** twee ontwerpblockers uit de review verwerkt (§2.2 en §2.1),
 de vijf besluiten D-1 t/m D-5 verwerkt (§4), twee harde activeringsvoorwaarden toegevoegd (§5),
 en de stand van #425 en de integratieregistry geactualiseerd (§7).
 
@@ -32,6 +39,13 @@ beurtbrede sleutelruimte wordt genest per groep.**
 Bij het uitwerken daarvan kwamen twee feiten boven die versie 1 niet had: `verrijkWeergave()`
 van de Supabase-adapter **laat bronnen vallen** die hij niet herkent, en `metaBasis.primaireRefs`
 is een derde beurtbrede ref-sleutelruimte. Beide staan hieronder.
+
+Versie 2 introduceerde vervolgens zelf een regressie: de groepen werden ná verrijking
+*aaneengeschakeld*, en dat verandert de bronvolgorde zodra twee adapters elkaars resultaten
+afwisselen (`A1, B1, A2` → `A1, A2, B1`). Die fout kwam voort uit dezelfde neiging als de eerste:
+een deelprobleem oplossen — "welke hook krijgt welke bronnen" — en de eigenschap die daarbij
+moest blijven gelden — "de volgorde ligt al vast" — niet expliciet maken. §2.4 doet dat nu wél,
+met een globale ordinal die vóór de groepering wordt vastgelegd.
 
 **Het zwaarste punt vooraf (B-1):** `KetenTreffer` uit #424 draagt geen bewijsmoment, geen
 bronconfiguratieversie en geen bronregistratiereferentie. `Toegangsbewijs` eist die drie. T4-E
@@ -254,19 +268,46 @@ Een bron die de adapter niet herkent **verdwijnt**. Positioneel terugkoppelen zo
 weergavemetadata aan de verkeerde bron hangen, en een strikte lengte-invariant zou de bestaande
 adapter breken.
 
-**Het voorstel, zonder de signatuur van `citeer()` te breken:**
+**Het voorstel, zonder de signatuur van `citeer()` te breken.**
 
-* `RetrievalTussenresultaat` krijgt intern `spoorNaarGroep` en `adapters` (de groepenlijst), plus — alleen bij meer dan één groep — de indeling van `geselecteerd` over groepen;
-* `citeer()` verdeelt `tussen.geselecteerd` over de groepen **met behoud van de onderlinge volgorde binnen elke groep**, roept per groep de bijbehorende hook aan met uitsluitend die bronnen, en neemt het teruggegeven array **als de nieuwe set voor die groep** — inclusief eventueel weggevallen bronnen, precies zoals vandaag;
-* de groepen worden daarna **aaneengeschakeld in volgorde van eerste voorkomen** in `tussen.geselecteerd`. Bij één groep is dat letterlijk de huidige aanroep met de huidige uitkomst — byte-identiek, zonder speciale tak;
-* ontbreekt de groepsindeling (elke bestaande aanroeper), dan valt `citeer()` terug op de meegegeven `adapter` over alle bronnen: het huidige pad.
+Versie 2 stelde hier voor de groepen ná verrijking *aaneen te schakelen* in volgorde van eerste
+voorkomen. Dat is fout, en de review wees het terecht aan: bij een selectie `A1, B1, A2` levert
+concatenatie `A1, A2, B1`. De relevantievolgorde en daarmee de bronnummering veranderen dan
+zodra een tweede adapter meedoet — precies wat T4-E niet mag doen.
 
-**De bronnummering volgt die aaneenschakeling.** Dat is een keuze met gevolgen: bij twee
-adapters bepaalt de groepsvolgorde welke bronnen de lage nummers krijgen. Zij is deterministisch
-(eerste voorkomen in de selectie) en daarmee reproduceerbaar, maar zij is niet hetzelfde als
-"op relevantie door elkaar". Dat laatste zou een centrale herweging over adapters heen vereisen,
-en daar bestaat geen gedeelde score voor — de rangschikking van twee providers is niet
-vergelijkbaar. Ik stel de aaneenschakeling voor en benoem de beperking expliciet in §5.
+De volgorde moet dus **vóór** de groepering worden vastgelegd en **erna** worden hersteld:
+
+1. elk element van `tussen.geselecteerd` krijgt een **globale ordinal** — zijn index in de
+   samengevoegde selectie, vastgesteld vóór enige groepering;
+2. die ordinals gaan in `ordinalPerGroep: Map<Adaptergroep, Map<ref, number>>` — dezelfde
+   genestte sleutel uit §2.2, dus botsingsvrij;
+3. de selectie wordt per groep gesplitst, met behoud van de onderlinge volgorde;
+4. `verrijkWeergave()` draait per groep, met uitsluitend de bronnen van die groep;
+5. elk teruggegeven resultaat krijgt zijn ordinal terug via `(groep, ref)`;
+6. alles wordt samengevoegd en **stabiel gesorteerd op ordinal**.
+
+Voor `A1, B1, A2` levert dat weer `A1, B1, A2`. Valt `B1` in de hook weg, dan blijft
+`A1, A2` — met hun oorspronkelijke onderlinge volgorde, want de ordinals van de overlevenden
+veranderen niet. Bij één groep zijn de ordinals `0..n-1` in dezelfde volgorde en is de sortering
+een no-op: byte-identiek aan vandaag, zonder aparte tak.
+
+**Twee contractregels die hierbij horen** — de eerste is een eis aan `verrijkWeergave()` die
+vandaag impliciet al geldt, de tweede is nieuw:
+
+* **een hook mag resultaten WEGLATEN maar mag een `ref` niet WIJZIGEN.** De Supabase-adapter
+  voldoet hieraan: `behoudIdentiteit()` (`supabase-adapter.ts:87`) zoekt op `bron.ref` en de
+  herbouwde resultaten dragen de ref van hun chunk. Zonder deze regel is er geen enkele
+  betrouwbare terugkoppeling — noch op ref, noch positioneel, noch op objectidentiteit;
+* **een teruggegeven resultaat waarvan `(groep, ref)` onbekend is, is een configuratiefout.**
+  Niet stil achteraan plakken: dan zou een bron die wij nooit hebben aangeboden op een
+  willekeurige plek in de citatenstroom belanden, ongerangschikt en ongetoetst door de
+  toelatingspoort. Fail-closed is hier de enige verdedigbare uitkomst.
+
+**Wat dit wél verandert bij twee adapters.** De bronnummering volgt nu de gezamenlijke selectie-
+volgorde, en die komt uit de bestaande samenvoeging: eerst het primaire spoor, dan de aanvullende
+sporen. Dat is geen gedeelde relevantieweging over providers heen — die bestaat niet, want de
+scores van twee providers zijn niet vergelijkbaar. Het is wel deterministisch, reproduceerbaar
+en identiek aan wat de selectie al bepaalde. Zie A-4.
 
 ### 2.5 Gedrag per situatie
 
@@ -331,8 +372,9 @@ Twee regels uit eerdere rondes die hier gelden:
 **Bij T4-F blijft:** de beheerpagina, de statusroute, de duurzame auditprojectie en de migratie
 op `public.meta_projectie()`. T4-E schrijft de sleutel `adapters` wél in `RetrievalMeta`, maar
 voegt **geen** databaseobject toe en past `meta_projectie()` niet aan. Dat is een bewuste knip —
-zie B-4 en de harde activeringsvoorwaarde **A-1** in §5: tot T4-F de projectie heeft toegevoegd,
-mag `adapters` niet operationeel worden gebruikt.
+zie B-4 en de harde activeringsvoorwaarde **A-1** in §5: tot T4-F de projectie ondersteunt, mag
+`adapters` niet op de route en niet op het auditpad worden aangesloten. De sleutel wordt intern
+opgebouwd en blijft binnen de orkestratie.
 
 ### 2.8 Deadlines, annulering en resource-eigenaarschap
 
@@ -430,31 +472,52 @@ zowel in Supabase is geïndexeerd als via Copilot terugkomt, krijgt dus twee ver
 identiteiten en wordt twee keer geciteerd — met mogelijk twee verschillende passages uit
 hetzelfde stuk. Het antwoord oogt daardoor rijker in plaats van dubbel.
 
-**Besluit D-2: een optionele, providerneutrale opaque equivalentiesleutel.**
+**Besluit D-2, aangescherpt na de tweede reviewronde: deduplicatie mag nooit op een
+ONBEVESTIGDE adapterclaim rusten.**
+
+Versie 2 stelde een `equivalentieSleutel` voor met "onderdrukking wordt geteld" als mitigatie.
+Dat is geen mitigatie maar een logregel: een geteld verlies is nog steeds een verlies, en de
+verdwenen bron komt er niet mee terug. Een adapter zou zo de bron van een andere adapter uit het
+antwoord kunnen duwen — precies het soort macht dat het providerneutrale contract elders
+zorgvuldig wegneemt.
+
+De vorm wordt daarom een **claim**, en een claim is inert:
 
 ```ts
 // Bronresultaat
 /**
- * OPTIONEEL en OPAQUE. Twee resultaten met dezelfde waarde beschrijven hetzelfde
- * onderliggende document. De orkestratie kent er geen betekenis aan toe, leidt er
- * niets uit af en logt hem niet — zij vergelijkt hem alleen op gelijkheid.
+ * Een BEWERING van de adapter dat dit resultaat hetzelfde onderliggende
+ * document beschrijft als een ander resultaat met dezelfde waarde. Opaque en
+ * providerneutraal.
+ *
+ * DIT VELD ALLEEN LEIDT NOOIT TOT DEDUPLICATIE. Het is een aanwijzing, geen
+ * bewijs — dezelfde rol die het Microsoft-extract in T4-C speelt. Zou de
+ * orkestratie erop dedupliceren, dan kan adapter A de bron van adapter B laten
+ * verdwijnen door diens waarde te claimen.
  */
-equivalentieSleutel?: string;
+equivalentieClaim?: string;
 ```
 
-Dedupregel over groepen heen: bij gelijke sleutel blijft de **eerste in spoorvolgorde** staan en
-vervalt de latere. Deterministisch, en bij één adaptergroep verandert er niets.
+**De voorwaarde waaronder dedup wél mag.** Twee kandidaten mogen pas als één document gelden als
+de orkestratie dat **onafhankelijk van beide adapters** heeft vastgesteld: beide kandidaten zijn
+gebonden aan dezelfde vertrouwde bronregistratie/documentbinding, langs het pad dat de poort
+toch al verifieert (`bronregistratieRef` + een geslaagde V5-herlezing), en die binding komt uit
+server-side gegevens waar geen adapter invloed op heeft.
 
-**Het restrisico dat hierbij hoort en dat ik niet wegschrijf:** de sleutel komt van een adapter.
-Een adapter in een vroeger spoor kan er in theorie een zetten die gelijk is aan die van een
-latere adapter, en zo diens bron onderdrukken. De mitigatie is zichtbaarheid, niet preventie:
-elke onderdrukking wordt geteld in `adapters[].onderdrukt_duplicaat`, zodat een arm die
-stelselmatig een andere wegdrukt in het auditspoor opvalt. Volledige preventie zou een centrale,
-providerneutrale documentidentiteit vereisen, en die bestaat niet zonder providerkennis in de
-orkestratie te trekken.
+**Die binding bestaat vandaag niet.** Supabase en Microsoft kennen geen gedeelde
+documentregistratie; hun `bronregistratieRef`-waarden zitten in gescheiden namespaces. **Dus
+dedupliceert T4-E niet, door constructie — niet door een uitgeschakelde vlag.** Beide bronnen
+blijven staan. De claim wordt wel vervoerd en geteld, zodat zichtbaar is hoe vaak de situatie
+zich voordoet en of een centrale binding de moeite waard is.
 
-**Zolang geen enkele adapter de sleutel levert, blijven beide bronnen staan.** Dat is een
-expliciete tijdelijke beperking, geen eindtoestand — zie §5.
+Wat er nodig zou zijn om dit op te heffen hoort niet in T4-E: een server-side binding tussen de
+twee registraties, opgebouwd uit gegevens die de adapters niet leveren. Dat is een eigen tranche
+met een eigen afweging.
+
+**Vijandige test (vereist):** adapter B geeft een resultaat terug met de `equivalentieClaim` van
+een bron van adapter A. De bron van A **moet blijven staan**, met zijn eigen bronnummer en zijn
+eigen weergavemetadata. De beperking A-2 blijft daarmee wat zij is: dubbele citaten zijn
+mogelijk, en dat is de veilige kant van deze afweging.
 
 ### B-3 — `"meld"` is pas veilig als de route de bronstatus werkelijk toont
 
@@ -504,7 +567,7 @@ maar dan staat de rekensom op twee plekken (**D-5**).
 | # | Besluit | Verwerking |
 |---|---|---|
 | **D-1** | De orkestratie moet **beide** spoorvolgordes ondersteunen; Copilot bij de eerste activering aanvullend, maar niet hardgecodeerd. | §2.9 punt 1. `metaBasis.methode`/`diagnostiek` blijven uit spoor 0, wélk spoor dat ook is. De laag kent geen "Copilot-spoor". De volgordekeuze verhuist naar de activeringstranche. |
-| **D-2** | Dubbele citaten niet als eindoplossing; optionele providerneutrale opaque equivalentiesleutel; zolang die ontbreekt blijven beide bronnen staan als expliciete tijdelijke beperking. | B-2 herschreven; `Bronresultaat.equivalentieSleutel?` toegevoegd, dedup op eerste-in-spoorvolgorde, onderdrukking geteld in `adapters[]`. Beperking vastgelegd in §5. |
+| **D-2** | Dubbele citaten niet als eindoplossing; providerneutrale equivalentiesleutel — en ná de tweede ronde: **dedup alleen bij een centraal bevestigde documentidentiteit**, niet op een adapterclaim. | B-2 herschreven. Het veld heet nu `equivalentieClaim` en is **inert**: het leidt nooit op zichzelf tot dedup. Dedup vereist dat de orkestratie de binding onafhankelijk van beide adapters vaststelt; die binding bestaat vandaag niet, dus T4-E dedupliceert niet — door constructie, niet door een vlag. Vijandige test vereist (nr. 15). Beperking A-2 in §5. |
 | **D-3** | `"meld"` bouwen maar niet gebruiken tot route en UI de status aantoonbaar tonen. | B-3 ongewijzigd; elk spoor dat T4-E aanmaakt staat op `"stop"`. Contracttest: `"meld"` zonder gezette `bronstatus` is onmogelijk. |
 | **D-4** | `KetenTreffer` uitbreiden met grondslaggegevens, vastgelegd bij de **laatste geslaagde** grondslagcontrole. | B-1; de formulering "laatste geslaagde" is overgenomen in het voorstel, want juist dát moment is wat V4 toetst. |
 | **D-5** | Eén `resterendMs()` op de bestaande afbreekgrendel. | B-5; additief op `maakAfbreekgrendel()`, geen gedragswijziging voor bestaande gebruikers. |
@@ -523,10 +586,10 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 
 | # | Voorwaarde / beperking | Opgeheven door |
 |---|---|---|
-| **A-1** | `meta.adapters` mag **niet operationeel worden gebruikt** — niet voor beheer, alarmering, facturering of rapportage — zolang T4-F de duurzame projectie niet heeft toegevoegd. Tot dan bestaat de sleutel in het geheugen en in de route-respons, maar niet in het auditspoor: elke conclusie eruit zou berusten op data die per beurt verdwijnt. | T4-F: migratie op `public.meta_projectie()` + toevoeging in `META_BASIS` (`core/lib/audit-meta.ts`), met de sanity-test die beide lijsten tegen elkaar houdt. |
-| **A-2** | **Dubbele citaten van hetzelfde document over twee adapters heen blijven mogelijk** zolang geen adapter een `equivalentieSleutel` levert. Expliciete tijdelijke beperking, geen eindtoestand. | Beide adapters leveren de sleutel; daarna dedupliceert de orkestratie erop. |
+| **A-1** | `meta.adapters` **mag niet worden aangesloten op de route of op het auditpad** zolang T4-F de duurzame projectie niet ondersteunt. Niet doorgeven in een routerespons, niet naar `governance_events`, niet naar telemetrie. De sleutel wordt intern opgebouwd en blijft binnen de orkestratie. "Niet operationeel gebruiken" was te vrijblijvend: een veld dat de route al verlaat, wordt gebruikt — dat is precies hoe een tussenstand een afhankelijkheid wordt. Een contracttest bewaakt dat `adapters` niet in de routerespons voorkomt. | T4-F: migratie op `public.meta_projectie()` + toevoeging in `META_BASIS` (`core/lib/audit-meta.ts`), met de sanity-test die beide lijsten tegen elkaar houdt. |
+| **A-2** | **Dubbele citaten van hetzelfde document over twee adapters heen blijven mogelijk.** T4-E dedupliceert niet over adaptergroepen heen, door constructie: een `equivalentieClaim` is een adapterbewering en mag nooit leiden tot het verdwijnen van een bron van een ándere adapter. Expliciete tijdelijke beperking, en bewust de veilige kant. | Een server-side documentbinding waarmee de orkestratie **onafhankelijk van beide adapters** kan vaststellen dat twee kandidaten hetzelfde document zijn. Eigen tranche, niet T4-E. |
 | **A-3** | **`bijBronfout: "meld"` blijft ongebruikt** tot route én UI de `bronstatus` aantoonbaar tonen. Tot dan is elk spoor `"stop"`. | De UI-tranche, met een waarneembare weergave. |
-| **A-4** | **De bronnummering bij twee adapters volgt de groepsvolgorde**, niet een gedeelde relevantie. Er bestaat geen vergelijkbare score over providers heen. | Een expliciet ontwerp voor cross-provider weging, als dat ooit gewenst is. Niet T4-E. |
+| **A-4** | **De bronnummering bij twee adapters volgt de gezamenlijke SELECTIEvolgorde** (primair spoor eerst, dan de aanvullende), vastgelegd in globale ordinals vóór de groepering. Dat is geen gedeelde relevantieweging over providers heen — die bestaat niet, want de scores van twee providers zijn niet vergelijkbaar. | Een expliciet ontwerp voor cross-provider weging, als dat ooit gewenst is. Niet T4-E. |
 
 ---
 
@@ -546,7 +609,10 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 10 | contextafkapping herbouwt per-adapter metadata uit werkelijk opgenomen bronnen | kleine `maxContextTekens`; `adapters[].opgenomen` telt alleen wat in `contextTekst` staat |
 | 11 | diagnostiek inhouds- en identifiervrij, alle getallen finite | recursieve scan over `meta.adapters`: elke string moet in een enum zitten, elk getal `Number.isFinite` |
 | 13 | *(toegevoegd)* gemengde `bijBronfout` binnen één adaptergroep | opdracht met twee sporen op dezelfde adapter en verschillende standen → configuratiefout vóór elke adapter-, token- of netwerkcall |
-| 14 | *(toegevoegd)* `verrijkWeergave` die bronnen laat vallen | groep A laat er één vallen; de overige bronnen behouden hun eigen weergavemetadata en de citaatnummering blijft deterministisch |
+| 14 | *(toegevoegd)* **VERWEVEN GROEPEN, mét een weggevallen bron** | selectie `A1, B1, A2, B2`; groep B laat `B1` vallen in `verrijkWeergave`. Verwacht: `A1, A2, B2` in díé volgorde, met de bronnummers die de globale ordinals voorschrijven. Een implementatie die per groep aaneenschakelt levert `A1, A2, B2` óók — daarom draait de test bovendien het spiegelgeval `B1, A1, B2` zonder uitval, waar concatenatie `B1, B2, A1` zou geven en de ordinalherstelling `B1, A1, B2` |
+| 15 | *(toegevoegd)* **VIJANDIG: geclaimde equivalentie** | adapter B geeft een resultaat terug met de `equivalentieClaim` van een bron van adapter A. De bron van A blijft staan, met eigen bronnummer en eigen weergavemetadata; er verdwijnt niets |
+| 16 | *(toegevoegd)* onbekende `(groep, ref)` uit een hook | `verrijkWeergave` geeft een resultaat terug dat niet is aangeboden → configuratiefout, geen stille toevoeging aan de citatenstroom |
+| 17 | *(toegevoegd)* A-1 | `meta.adapters` komt niet voor in de routerespons en niet in het auditpad |
 | 12 | goldens alleen na goedgekeurde semantische diff | karakterisering draait ongewijzigd; een verschil is een blokker, geen update |
 
 Daarnaast: `tsc`, boundaries, secretscan, security-baseline, volledige cross-tenant inclusief
@@ -558,7 +624,7 @@ DB-laag, karakterisering, E2E en productiebuild.
 
 Eerlijkheidshalve, omdat een planreview die alleen zekerheden noemt een verkeerd beeld geeft:
 
-* **#425 is nog niet definitief.** Deze review is geschreven tegen het T4-D-contract op `31514ce`. De PR staat inmiddels op `0bc007c`, `CLEAN` en 12/12 groen, en niet meer `BEHIND` — maar er staat nog een rollbackcorrectie open. **Deze planreview moet daarom ná die correctie opnieuw worden herijkt op de gecombineerde `preview`**, en dat is stap 3 uit de merge-orde van #426, geen formaliteit. Ik heb de contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) niet opnieuw tegen `0bc007c` gelegd; dat hoort bij die herijking.
+* **#425 is nog niet definitief.** Deze review is geschreven tegen het T4-D-contract op `31514ce`. De PR staat inmiddels op `57a1a83` en `CLEAN`, maar heeft nog **drie open rollbackbevindingen**: de B/C-volgorde, de SQL-Editor-compatibiliteit en een ontbrekende `PUBLIC`-revoke op de helperfunctie. Die laatste raakt precies de regel uit CLAUDE.md dat `revoke … from public` op Supabase niet genoeg is, omdat de default-ACL rechten expliciet aan `anon` en `authenticated` toekent. **Deze planreview moet daarom ná die drie correcties opnieuw worden herijkt op de gecombineerde `preview`** — stap 3 uit de merge-orde van #426, en geen formaliteit. Ik heb de contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) niet opnieuw tegen `57a1a83` gelegd; dat hoort bij die herijking.
 * **De integratieregistry loopt achter op de werkelijkheid.** `pgb_m365_lab_copilot` staat daar op `blocked_on_sharepoint_index`, terwijl de index gereed is en de feitelijke blokkade Copilot-toegang is (`copilot_toegang_geweigerd`). Dat blokkeert deze planreview niet — T4-E doet geen live call — maar het moet vóór een live smoke worden rechtgezet, anders stuurt de registry een volgende sessie naar het verkeerde probleem. Genoteerd als vervolgpunt, buiten de scope van dit ticket.
 * **Ik heb geen enkele Microsoft-call gedaan** en niets aan consent, scopes, billing, flags of kill switch geraakt.
 * **`bronsoort: "sharepoint"` staat in geen enkel productie-bronbeleid.** Ook met T4-E volledig gebouwd levert de Copilot-arm dus niets, totdat een fonds die bronsoort krijgt. Dat is een bestaande inerte laag en T4-E verandert hem niet — maar het betekent ook dat "het werkt" pas in de activeringstranche aantoonbaar is.
