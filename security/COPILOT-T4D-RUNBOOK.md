@@ -27,6 +27,22 @@ lidmaatschap van.
 | 4 | verifiëren dat het oude pad niet meer schrijft | zie query hieronder |
 | 5 | `supabase/migrations/2026_09_21_423b_t4d_copilot_rollout_contract.sql` | stap 4 is aangetoond |
 
+Tussen stap 1 en 2 hoort de read-only pre-mergecontrole hieronder groen te zijn.
+
+Bij stap 2 hoort de **read-only pre-mergecontrole**:
+`supabase/checks/2026_09_21_423_t4d_premerge_readonly.sql`. Plakbaar in de
+Supabase SQL Editor, en strikt read-only: geen insert, update, delete of DDL. Zij
+stelt vast dat 423a correct is geland — kolommen aanwezig en nullable, geen
+backfill, poorten dicht, readiness levert één volledig dichte rij, het auditslot
+staat met de juiste configuratie, en de rolscheiding en bevinding H-18 zijn in
+orde. Zij herkent beide standen (expand-venster en post-contract) en zegt in haar
+melding welke zij heeft gemeten.
+
+Gebruik daarvoor **niet** de DB-gedragssuite
+`2026_09_21_423_t4d_copilot_rollout.sql`: die bewijst gedrag door te schrijven
+binnen een transactie die terugrolt, en gebruikt een psql-metacommando. Prima
+voor een wegwerp-DB en voor CI, niet voor een echte omgeving.
+
 Verificatie bij stap 4 — een verse koppeling moet een client-id opleveren:
 
 ```sql
