@@ -1,14 +1,16 @@
 # #428 — Planreview M365-demo op `app365.bestuurdersportaal.com`
 
-**Status:** versie 2 ter akkoord; uitsluitend analyse en ontwerp.
+**Status:** versie 3 ter akkoord; uitsluitend analyse en ontwerp.
 **Basis:** `origin/preview` op `b3961ba` (bevat T4-C via #424).  
 **Datum:** 2026-09-21.  
 **Nog niet uitgevoerd:** DNS, Vercel, Supabase, Auth, Entra, SharePoint,
 integratieregistry, accounts, featureflags en live Retrieval.
 
-**Verwerkt in versie 2:** een blijvende Preview-acceptatietenant, exacte
-tenant-/apphostnormalisatie, environment-specifieke provisioning, eigenaar,
-herbeoordelingsdatum, kostenlimiet en `generatie_timeout_ms`.
+**Verwerkt in versie 3:** strikte fail-closed hostparsing, afzonderlijke
+Preview- en Productie-retrievalprofielen, DNS-eerst-providerrollback en een
+afzonderlijk uitvoeringsakkoord vóór iedere Previewmutatie. Versie 2 voegde al
+de blijvende Preview-acceptatietenant, environment-specifieke provisioning,
+eigenaar, herbeoordelingsdatum, kostenlimiet en `generatie_timeout_ms` toe.
 
 ## 0. Besluit in één oogopslag
 
@@ -68,7 +70,10 @@ duurzame inrichting aan de registry toegevoegd:
 - appregistratie voor de productieroute:
   `entra_app_portal_copilot_app365`;
 - bron: `sharepoint_app365_demo_retrieval_lab`;
-- retrievalprofiel: `app365_m365_demo_copilot`.
+- Preview-retrievalprofiel: `app365_preview_m365_demo_copilot`, met
+  `environment_id=portal_preview`;
+- Productie-retrievalprofiel: `app365_production_m365_demo_copilot`, met
+  `environment_id=portal_production`.
 
 De bestaande `m365_lab_pgb_test` mag hooguit als tenantbeheerbewijs dienen bij
 de voorbereiding van een nieuwe identiteit, nooit als app365-actor, tokenbron of
@@ -218,12 +223,22 @@ Daardoor kan `www.app365.bestuurdersportaal.com` nu dezelfde tenantbinding krijg
 als de exacte host zodra het verzoek de deployment bereikt. Dat is strijdig met
 de vereiste exacte hostbinding en wordt vóór app365-provisioning gecorrigeerd.
 
-De pure hostlogica wordt gesplitst:
+De pure hostlogica wordt gesplitst en hergebruikt dezelfde vormregels als
+`canoniekeFondsHost()`; een host wordt nooit door `split(":")[0]`, trimmen of
+andere reparatie geldig gemaakt:
 
-- `normaliseerExacteHost`: trim, lowercase en poort verwijderen; laat alle
-  DNS-labels, inclusief `www.`, intact;
-- `normaliseerMarketingHost`: gebruikt de exacte normalisatie en canonicaliseert
-  daarna uitsluitend voor de marketing-surface één leidende `www.`;
+- `normaliseerExacteHost`: accepteert uitsluitend een geldige DNS-labelvorm en
+  canonicaliseert alleen ASCII-hoofdletters naar lowercase. Userinfo (`@`),
+  voor-/achter-/binnenwitruimte, paden, backslashes, query, fragment,
+  IPv6-haakjes, lege of ongeldige labels en meerdere dubbelepunten leveren
+  `null` op;
+- een poort is verboden op Preview- en Productiehosts, inclusief `:443`. Alleen
+  wanneer de lokale testmodus expliciet aanstaat mag een poort van `1..65535`
+  behouden blijven op `localhost`, `127.0.0.1` of `*.localhost`; een poort op
+  iedere andere host is ongeldig;
+- `normaliseerMarketingHost`: valideert eerst met de exacte parser en
+  canonicaliseert daarna uitsluitend voor de marketing-surface één leidende
+  `www.`;
 - `APP_HOST`, `PLATFORM_HOST`, `tenant_domains`, de tenant-RPC en de demohost-
   allowlist gebruiken uitsluitend `normaliseerExacteHost`;
 - `MARKETING_HOST` en de marketingroute blijven apex/`www` samenvoegen;
@@ -232,15 +247,30 @@ De pure hostlogica wordt gesplitst:
 - de strengere `canoniekeFondsHost()` van Microsoft-login blijft exact en wordt
   niet versoepeld.
 
-De fail-safe app-surface voor onbekende hosts blijft bestaan als routinglaag,
-maar levert geen fondscontext op: de exacte tenantresolver classificeert
-`www.<tenant-host>` als `onbekend`, waarna `TENANT_ENFORCE` de toegang blokkeert.
+Requestwaarden en configuratiewaarden hebben bewust een verschillend
+foutcontract. Een ongeldige request-`Host` levert geen surface of fondscontext
+op en eindigt neutraal fail-closed. Een ingevuld maar ongeldig of leeg lijstitem
+in `APP_HOST`, `PLATFORM_HOST` of `MARKETING_HOST` is daarentegen een harde
+configuratiefout bij het inlezen; het item mag niet stil worden overgeslagen. Dit
+geldt ook voor niet-lokale poorten en voor overlap die na
+marketingcanonicalisatie ontstaat. Alleen een volledig ontbrekende optionele
+configuratie behoudt haar bestaande expliciete afwezigheidssemantiek.
+
+De fail-safe app-surface voor een **vormgeldig maar onbekend** host blijft
+bestaan als routinglaag, maar levert geen fondscontext op: de exacte
+tenantresolver classificeert `www.<tenant-host>` als `onbekend`, waarna
+`TENANT_ENFORCE` de toegang blokkeert. Een vormongeldige host bereikt die
+fallback niet.
 
 Regressiebewijs omvat alle bestaande exacte Preview- en Productiehosts, lokale
-host-met-poortgevallen, marketing-apex/`www`, en negatieve `www.`-varianten van
-app-, platform- en tenant-hosts. De bestaande test die `www.horizon.nl` naar
-Horizon laat resolven wordt bewust omgekeerd naar `onbekend`; dit is de enige
-beoogde gedragswijziging voor tenantnormalisatie.
+host-met-poortgevallen, marketing-apex/`www`, negatieve `www.`-varianten van
+app-, platform- en tenant-hosts en alle afwijscases uit
+`canoniekeFondsHost()`. Daaronder valt expliciet
+`app365.bestuurdersportaal.com:443@evil.test`. Configuratietests bewijzen
+daarnaast dat ieder ongeldig `*_HOST`-lijstitem de configuratie hard laat falen.
+De bestaande test die `www.horizon.nl` naar Horizon laat resolven wordt bewust
+omgekeerd naar `onbekend`; dit is de enige beoogde gedragswijziging voor een
+vormgeldige tenanthost.
 
 ## 5. Permanente markering en indexering
 
@@ -328,12 +358,20 @@ telt niet.
 
 ### Besluit D-6 — eigen actor, app en bron
 
-De latere context bestaat uit één gesloten keten:
+De latere Microsoftcontext gebruikt één eigen actor, app en bron, maar krijgt
+twee gesloten uitvoerprofielen. Zo blijft vanuit iedere nieuwe chat of live call
+ondubbelzinnig welke portaalomgeving de token- en callcontext levert:
 
-`m365-demo` → `m365_lab_app365_demo` →
+| Profiel-id | `environment_id` | Exacte portaalhost | Toegestaan gebruik |
+|---|---|---|---|
+| `app365_preview_m365_demo_copilot` | `portal_preview` | `app365.preview.bestuurdersportaal.com` | uitsluitend Previewacceptatie |
+| `app365_production_m365_demo_copilot` | `portal_production` | `app365.bestuurdersportaal.com` | uitsluitend Productie na apart akkoord |
+
+Beide profielen verwijzen naar `m365_lab_app365_demo` →
 `entra_app_portal_copilot_app365` →
-`sharepoint_app365_demo_retrieval_lab` →
-`app365_m365_demo_copilot`.
+`sharepoint_app365_demo_retrieval_lab`, maar zijn niet onderling uitwisselbaar.
+Een token- of live-callrunner eist het profiel-id en verifieert dat
+`environment_id`, exacte portaalhost en geselecteerde portaalcontext overeenkomen.
 
 Voorgestelde SharePoint-root:
 
@@ -355,7 +393,7 @@ Vóór een Retrieval-call worden read-only bewezen:
 1. exacte tenant, actor, client-id en bronroot;
 2. fixturemanifest versus aanwezige bestanden;
 3. SharePoint-indexcanaries;
-4. geen PGB-root, PGB-actor of PGB-token in het profiel;
+4. geen PGB-root, PGB-actor of PGB-token in een van beide profielen;
 5. billing-/licentiestatus en kostenplafond;
 6. fondsflag en globale kill switch nog dicht.
 
@@ -372,8 +410,8 @@ Nu al mogelijk ná akkoord op deze review:
 
 - repositorywijzigingen voor permanente badge/noindex, hosttests en runbook;
 - gedeelde additieve fonds-/configmigratie zonder omgevingsdata;
-- afzonderlijke Preview- en Productieprovisioning met elk een rollback en
-  self-check;
+- artefacten voor afzonderlijke Preview- en Productieprovisioning maken en
+  ephemeer testen, met elk een rollback en self-check;
 - hermetische/ephemere DB-tests;
 - expliciete inerte fondsconfiguratie.
 
@@ -438,7 +476,9 @@ accounts hebben in hetzelfde pakket een eigen providerrollbackchecklist.
 1. Gedeelde migratie voor fonds, theming, expliciet modulemanifest en flags;
    zonder omgevingsdata.
 2. Twee environment-specifieke provisioning-, self-check- en rollbackpakketten.
-3. Splits exacte hostnormalisatie van marketing-`www`-canonicalisatie.
+3. Splits strikte exacte hostparsing van marketing-`www`-canonicalisatie;
+   ongeldige requesthosts worden geweigerd en ongeldige `*_HOST`-configuratie
+   veroorzaakt een harde configuratiefout.
 4. Permanente hostgedreven demobadge en `noindex,nofollow` op beide hosts.
 5. Host-, module-, flag-, rollback- en cross-tenanttests, inclusief bestaande
    hosts en negatieve `www.`-varianten.
@@ -447,6 +487,11 @@ accounts hebben in hetzelfde pakket een eigen providerrollbackchecklist.
    DB-laag, karakterisering, E2E en productiebuild.
 
 ### Fase 2 — blijvende Preview-acceptatietenant
+
+Deze fase is **niet** geautoriseerd door akkoord op versie 3. Eerst worden alle
+Fase 1-artefacten als concrete diff gereviewd, inclusief Previewprovisioning,
+self-check, providerchecklist, rollback en proven-red verkeerde-doeltests. Pas
+een afzonderlijk Preview-uitvoeringsakkoord autoriseert onderstaande mutaties.
 
 Geselecteerde live context voor deze fase: `portal_preview`. Controleer vóór elke
 actie opnieuw projectref, actor, host en Vercel-environment.
@@ -466,7 +511,7 @@ actie opnieuw projectref, actor, host en Vercel-environment.
 9. Previewrollback eerst ephemeer en daarna als read-only uitvoerbaarheidscheck
    tegen de werkelijke stand valideren; niet uitvoeren zonder rollbackreden.
 10. Na duurzame inrichting uitsluitend de Previewhost en -identiteiten in de
-    registry vastleggen; nog geen Microsoft-retrievalprofiel toevoegen.
+    registry vastleggen; nog geen Microsoft-retrievalprofielen toevoegen.
 
 ### Fase 3 — basisinrichting Productie, Copilot nog uit
 
@@ -495,7 +540,8 @@ Pas na een apart akkoord:
 2. eigen confidential-clientapp volgens de definitieve T4-D/E-contracten;
 3. eigen SharePoint-site/root en synthetisch fixturemanifest;
 4. read-only indexcontrole;
-5. registryobjecten en profiel toevoegen, status nog `inactive`/geblokkeerd;
+5. registryobjecten en beide omgevingsgebonden profielen toevoegen, status nog
+   `inactive`/geblokkeerd;
 6. `node scripts/validate-registry.mjs` groen.
 
 ### Fase 5 — één begrensde smoke
@@ -524,17 +570,37 @@ Rollback is **disable-first** en raakt geen ander fonds.
 4. uitsluitend de accounts van de doelomgeving blokkeren;
 5. de environmentrollback voor de geselecteerde context uitvoeren; het script
    weigert als projectref, fingerprint of host niet exact bij die context hoort;
-6. het overeenkomstige Vercel-domain loskoppelen, daarna DNS verwijderen;
-7. uitsluitend de omgevingseigen app365-host uit `APP_HOST` en exacte
+6. het overeenkomstige DNS-record verwijderen of uitschakelen en vanaf een
+   onafhankelijke resolver verifiëren dat nieuw verkeer niet meer naar Vercel
+   routeert; houd rekening met de vastgelegde TTL;
+7. pas na dat bewijs het overeenkomstige Vercel-domain loskoppelen en verifiëren
+   dat geen dangling claim of alternatieve route resteert;
+8. uitsluitend de omgevingseigen app365-host uit `APP_HOST` en exacte
    Auth-redirects verwijderen via de normale releaseweg;
-8. fondsconfiguratie terugschrijven als nieuwe, geaudite versie;
-9. het fonds alleen fysiek verwijderen wanneer harde prechecks bewijzen dat er
+9. fondsconfiguratie terugschrijven als nieuwe, geaudite versie;
+10. het fonds alleen fysiek verwijderen wanneer harde prechecks bewijzen dat er
    geen profielen, documenten, Storage-objecten of domeinaudit aan hangen.
 
 Append-only auditlogs worden nooit door rollback verwijderd. Zodra het fonds is
 gebruikt, is “tenant uitschakelen en behouden” de standaard; cascade-delete is
 dan geen normale rollback. Preview- en Productierollback zijn onafhankelijke
 handelingen: terugdraaien van Preview raakt nooit de Production-host en omgekeerd.
+
+De providerrollbackchecklists leggen dezelfde veilige volgorde afzonderlijk vast:
+
+- **Preview (`portal_preview`):** Previewaccounts blokkeren; uitsluitend het
+  `app365.preview.bestuurdersportaal.com`-DNS-record uitschakelen/verwijderen;
+  onafhankelijke non-routingcontrole na de geldende TTL; pas daarna het domain
+  uit `preview-stable` vrijgeven; vervolgens uitsluitend Preview-`APP_HOST` en
+  Preview Auth-callbacks via de releaseweg verwijderen.
+- **Productie (`portal_production`):** Productieaccounts blokkeren; uitsluitend
+  het `app365.bestuurdersportaal.com`-DNS-record uitschakelen/verwijderen;
+  onafhankelijke non-routingcontrole na de geldende TTL; pas daarna het
+  Production-domain vrijgeven; vervolgens uitsluitend Production-`APP_HOST` en
+  Production Auth-callbacks via de releaseweg verwijderen.
+
+Geen checklist mag het Vercel-domain vrijgeven zolang DNS nog naar die binding
+kan wijzen.
 
 ## 11. Verificatiematrix
 
@@ -547,6 +613,11 @@ handelingen: terugdraaien van Preview raakt nooit de Production-host en omgekeer
   bedoelde branch;
 - onbekende, verkeerd gespelde en alle tenant-/app-/platform-`www.`-varianten
   leveren geen fondscontext; alleen marketing canonicaliseert apex/`www`;
+- vormongeldige requesthosts, waaronder userinfo, witruimte, pad, backslash,
+  query/fragment en niet-lokale poorten, worden vóór surfacefallback geweigerd;
+- ieder ongeldig item in een ingevulde `APP_HOST`, `PLATFORM_HOST` of
+  `MARKETING_HOST`-configuratie veroorzaakt een configuratiefout en wordt niet
+  stil overgeslagen;
 - PGB-, Horizon-, PH&C- en Huisartsenbindings zijn ongewijzigd;
 - PGB-/Horizonaccount op app365 wordt fail-closed geweigerd;
 - app365-account op elke andere fondshost wordt fail-closed geweigerd.
@@ -582,18 +653,23 @@ handelingen: terugdraaien van Preview raakt nooit de Production-host en omgekeer
 - Productie-app365 is een Production-domain en volgt `main`, niet een
   deploymentalias;
 - TLS geldig en geen dangling binding;
+- rollback verwijdert/disablet per omgeving eerst DNS, bewijst non-routing en
+  geeft pas daarna het Vercel-domain vrij;
 - iedere environmentrollback verwijdert alleen haar eigen app365-binding;
 - volledige repositorygate groen.
 
 ## 12. Goedkeuringspunt
 
-Akkoord op deze planreview autoriseert uitsluitend **Fase 1 en Fase 2**:
-repositorywijzigingen, hermetisch/ephemeer bewijs en de blijvende
-`portal_preview`-acceptatietenant. Preview-mutatiewerk begint pas nadat de Fase
-1-artefacten zijn gereviewd en alle verkeerde-doeltests proven-red zijn. Fase 3
-bevat Production-database- en providerwijzigingen en vereist daarna een
-afzonderlijk uitvoeringsakkoord op het groene Previewbewijs en het concrete
-Productie-, self-check- en rollbackpakket.
+Akkoord op versie 3 autoriseert uitsluitend **Fase 1**: repositorywijzigingen en
+hermetisch/ephemeer bewijs zonder provider-, account- of blijvende
+databasemutaties. De concrete Previewprovisioning, self-check,
+providerchecklist, rollback en verkeerde-doeltests worden daarna als diff
+beoordeeld. Alleen een daaropvolgend, afzonderlijk **Preview-uitvoeringsakkoord**
+autoriseert Fase 2 en de blijvende `portal_preview`-acceptatietenant.
+
+Fase 3 bevat Production-database- en providerwijzigingen en vereist opnieuw een
+afzonderlijk **Productie-uitvoeringsakkoord** op het groene Previewbewijs en het
+concrete Productie-, self-check- en rollbackpakket.
 
 De review keurt uitdrukkelijk nog niet goed: een aparte stack, Microsoftobjecten,
 permissions, consent, billing, live tokens, Copilot-calls of blijvende
