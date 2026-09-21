@@ -1,10 +1,17 @@
 # T4-E planreview — centrale orkestratie en adapter-per-spoor (#426)
 
-**Status:** versie 3, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 4, ter beoordeling. Geen productiecode geschreven.
 **Vertakt van:** `origin/preview` `b3961ba` (bevat #424 / T4-C volledig).
 **Datum:** 2026-09-21.
 
-**Wijzigingen t.o.v. versie 2:** de groepsgewijze aaneenschakeling in §2.4 vervangen door
+**Wijzigingen t.o.v. versie 3:** de interne tegenspraak rond `meta.adapters` opgelost — T4-E zet
+de sleutel niet meer in `RetrievalMeta`, raakt `audit-meta.ts` niet en levert hoogstens een pure
+aggregatiefunctie; T4-F voegt typeveld, allowlist, projectie en route-aansluiting atomair toe
+(§2.7, §2.10, B-4, A-1, tests 10/11/17). Daarnaast de onuitgesproken aanname achter
+`ordinalPerGroep` vastgelegd met centrale exact-ref-deduplicatie vóór de ordinaltoekenning
+(§2.2, §2.4, test 18), §1 bijgewerkt naar `57a1a83`, en #428 verwerkt in §7.
+
+**Wijzigingen in versie 3 t.o.v. versie 2:** de groepsgewijze aaneenschakeling in §2.4 vervangen door
 globale ordinals die vóór de groepering worden vastgelegd en erna hersteld (die aaneenschakeling
 verànderde de bronvolgorde — een regressie die versie 2 introduceerde); `equivalentieSleutel`
 vervangen door een inerte `equivalentieClaim` die nooit op zichzelf tot deduplicatie leidt;
@@ -61,7 +68,7 @@ uitbreiding van T4-C is de Copilot-arm niet eerlijk aansluitbaar.
 |---|---|---|
 | T4-B (client, endpointpin, filter, fouten) | op `preview` | consumeren |
 | T4-C (mapping, DriveItem, download, extractie, keten) | op `preview` via #424 (`b3961ba`) | consumeren; **B-1 raakt dit** |
-| T4-D (readiness, tokeninterface, rolloutpoorten) | PR #425 op `0bc007c`, `OPEN` + `CLEAN`, 12/12 groen; resterende rollbackcorrectie open | contract bekend, nog één correctie te gaan |
+| T4-D (readiness, tokeninterface, rolloutpoorten) | PR #425 op `57a1a83`, `OPEN` + `CLEAN`; **drie open rollbackbevindingen** (B/C-volgorde, SQL-Editor-compatibiliteit, ontbrekende `PUBLIC`-revoke op de helperfunctie) | contract bekend, nog niet definitief — zie §7 |
 | T4-E | dit ticket | planreview nu, code ná merge van #424 + gecorrigeerde #425 |
 | T4-F (beheer, status, duurzame auditprojectie) | apart | **niet** stil meenemen |
 
@@ -204,6 +211,11 @@ worden geteld. Voorstel:
 * het veld is **alleen aanwezig bij meer dan één groep**. Bij één groep is het afwezig en is `metaBasis` dus byte-identiek aan vandaag — dezelfde regel als bij `perAdapter[].geweigerd` en `meta.toelating`;
 * `primaireRefs` blijft staan in zijn huidige vorm en betekenis voor bestaande consumenten, maar wordt intern niet meer geraadpleegd zodra `primairPerGroep` er is. Dat is bewust: het veld zit ín `RetrievalUitkomst` (via `Omit<RetrievalTussenresultaat, "grendel">`) en weghalen zou de uitkomstvorm breken.
 
+**Binnen** een groep moet `ref` uniek zijn, en ook dát is geen aanname: §2.4 legt een centrale
+exact-ref-deduplicatie vast — eerste voorkomen wint — die vóór de ordinaltoekenning draait. Zonder
+die stap zou dezelfde `ref` in twee sporen van dezelfde adapter de binnenste sleutel van zowel
+`ordinalPerGroep` als `primairPerGroep` overschrijven.
+
 **Gelijke `ref` uit twee adapters is hiermee structureel onschadelijk** — niet omdat botsing
 onwaarschijnlijk is, maar omdat geen enkele beslissing meer op een beurtbrede `ref` rust.
 Vereiste test 3 laat twee adapters bewust dezelfde `ref` teruggeven en eist dat beide bronnen
@@ -291,6 +303,26 @@ Voor `A1, B1, A2` levert dat weer `A1, B1, A2`. Valt `B1` in de hook weg, dan bl
 veranderen niet. Bij één groep zijn de ordinals `0..n-1` in dezelfde volgorde en is de sortering
 een no-op: byte-identiek aan vandaag, zonder aparte tak.
 
+**De aanname die hieronder ligt, en die versie 3 niet vastlegde.** `ordinalPerGroep` is een
+`Map<groep, Map<ref, number>>`, en dat veronderstelt dat een `ref` **binnen één adaptergroep**
+uniek is. Dat staat nergens. Een groep kan meerdere sporen omvatten, en dezelfde `ref` in twee
+sporen zou zijn eerdere ordinal overschrijven. Hetzelfde geldt voor `primairPerGroep` in §2.2.
+
+**Vastgelegd: centrale exact-ref-deduplicatie vóór de ordinaltoekenning, eerste voorkomen
+wint.** `ref` is passage-identiteit; twee keer dezelfde passage in één antwoord is hoe dan ook
+een fout, en de eerste is per definitie de best gerangschikte. Na deze stap is de binnenste sleutel
+uniek door constructie in plaats van door aanname.
+
+**Wat dit voor het bestaande pad betekent, en waarom het gemeten moet worden.** Bij de huidige
+tweesporenopdracht is het een **no-op**, en dat is aantoonbaar: de samenvoeging filtert
+`aanvullend` al op `primaireDocIds` (`orkestratie.ts` stap 5), een `ref` hoort bij precies één
+document, dus een `ref` die in spoor 0 én spoor 1 voorkomt is daar al weggevallen. Bij **drie of
+meer sporen** ligt dat anders: `geselecteerdPerSpoor.slice(1).flat()` dedupliceert de aanvullende
+sporen niet onderling, dus daar kan vandaag dezelfde passage tweemaal overleven. Voor die
+configuratie is de nieuwe dedup dus géén no-op maar een gedragswijziging — verdedigbaar, want
+het weghalen van een dubbele passage is een correctie, maar het mag niet als aanname passeren.
+Een test meet beide gevallen afzonderlijk (nr. 18).
+
 **Twee contractregels die hierbij horen** — de eerste is een eis aan `verrijkWeergave()` die
 vandaag impliciet al geldt, de tweede is nieuw:
 
@@ -349,32 +381,57 @@ Alles wat een geheim raakt wordt **geïnjecteerd**, nooit gelezen in de route:
 lopen via `SECURITY DEFINER`-functies met een expliciete grant, niet via een service-role-client.
 T4-E voegt daar niets aan toe; als de planreview van #425 op dat punt nog wijzigt, volgt T4-E.
 
-### 2.7 Metadata — wat T4-E doet en wat bij T4-F blijft
+### 2.7 Metadata — T4-E bouwt de vorm, T4-F sluit hem aan
 
-**T4-E verzamelt intern**, conform §3.6 van de T4-A-planreview:
+**Versie 3 was hier intern tegenstrijdig en de review wees dat terecht aan.** A-1 verbood
+aansluiting op route en auditpad, terwijl deze paragraaf zei dat T4-E de sleutel in
+`RetrievalMeta` zet, §2.10 `audit-meta.ts` wijzigde en B-4 sprak van "in de route-respons". Dat
+kán niet samen: `RetrievalUitkomst.meta` **verlaat de orkestratie** — de routes lezen hem en het
+auditspoor schrijft hem weg. Iets wat in `RetrievalMeta` staat is per definitie niet intern.
 
+De knip ligt daarom een stap eerder:
+
+**T4-E levert uitsluitend een pure, gesloten aggregatiefunctie** met haar eigen vorm:
+
+```ts
+/** Adapterdiagnostiek. Gesloten van vorm, inhoudsvrij, per beurt. */
+export interface AdapterDiagnostiek {
+  naam: RetrievalAdapter["naam"];
+  methode: AdapterUitkomst["methode"];
+  resultaatcategorie: Resultaatcategorie;          // vaste enum
+  netwerkpogingen: number; latencyMs: number;
+  downloads: number; bytes: number; throttles: number; retries: number;
+  kandidatenVoorPoort: number; kandidatenNaPoort: number;
+  opgenomen: number;                                // ná contextafkapping
+  afwijzingen: Partial<Record<Afwijsgrond, number>>;
+}
+
+export function bouwAdapterDiagnostiek(…): AdapterDiagnostiek[];
 ```
-adapters: [{ naam, methode, resultaatcategorie,
-             netwerkpogingen, latencyMs, downloads, bytes, throttles, retries,
-             kandidaten_voor_poort, kandidaten_na_poort,
-             afwijzingen: { <grond>: <aantal> } }]
-```
 
-Uitsluitend vaste enumwaarden en `Number.isFinite`-tellers. **Verboden, ook gehasht:** URL, pad,
-bestandsnaam, drive-/item-/bron-id, opaque ref, tokenclaim, providerfouttekst, HTTP-body.
-`KetenTelling` uit #424 voldoet al aan die vorm en is vrijwel één-op-één over te nemen.
+**T4-E voegt niets toe aan `RetrievalMeta`, niets aan `audit-meta.ts`, en niets aan enige
+routerespons.** De functie heeft in deze tranche geen productie-aanroeper.
 
-Twee regels uit eerdere rondes die hier gelden:
+**T4-F voegt daarna atomair toe:** het veld op `RetrievalMeta`, de regel in `META_BASIS`, de
+migratie op `public.meta_projectie()` en de route-aansluiting. Atomair, want die vier horen bij
+elkaar: een typeveld zonder projectie is een sleutel die per beurt verdwijnt, en een projectie
+zonder allowlist valt op de sanity-test.
 
-* **`metaBasis.diagnostiek` blijft spoor 0.** Ongewijzigd, want dat borgt de byte-identiteit van bestaande snapshots. `adapters` staat ernáást, niet in plaats van.
-* **Selectiegebonden tellers worden herbouwd na afkapping.** `bouwRetrievalMeta()` draait tweemaal; de tweede keer over `c.opgenomen`. De per-adapter aantallen opgenomen passages komen uit díé berekening — anders noemt het auditspoor bronnen die nooit naar het model gingen. Beurtbrede providertellers zijn onafhankelijk van de afkapping en reizen ongewijzigd mee.
+**De prijs hiervan, eerlijk benoemd.** Een geëxporteerde functie zonder productie-aanroeper is
+dode code tot T4-F. Ik stel haar toch voor, om twee redenen: de gesloten-vorm-eis (alleen
+enumwaarden, alle getallen `Number.isFinite`) en de herberekening ná contextafkapping zijn
+precies de dingen die je vóóraf wilt vastleggen, niet tijdens een tranche die ook nog een
+migratie doet. Wie dat te zwaar vindt, kan T4-E de functie óók laten weglaten en alles bij T4-F
+leggen; dan verliest deze tranche twee tests en wint zij één minder bestand. Ik heb geen sterke
+voorkeur en volg hierin de opdrachtgever.
 
-**Bij T4-F blijft:** de beheerpagina, de statusroute, de duurzame auditprojectie en de migratie
-op `public.meta_projectie()`. T4-E schrijft de sleutel `adapters` wél in `RetrievalMeta`, maar
-voegt **geen** databaseobject toe en past `meta_projectie()` niet aan. Dat is een bewuste knip —
-zie B-4 en de harde activeringsvoorwaarde **A-1** in §5: tot T4-F de projectie ondersteunt, mag
-`adapters` niet op de route en niet op het auditpad worden aangesloten. De sleutel wordt intern
-opgebouwd en blijft binnen de orkestratie.
+Twee regels uit eerdere rondes die onverkort gelden:
+
+* **`metaBasis.diagnostiek` blijft spoor 0.** Ongewijzigd, want dat borgt de byte-identiteit van bestaande snapshots.
+* **De selectiegebonden teller `opgenomen` wordt berekend ná de contextafkapping**, over `c.opgenomen` — precies zoals `meta.geselecteerd` en `bronversie_audit` dat al doen. Beurtbrede providertellers (calls, kosten, throttles) zijn onafhankelijk van de afkapping.
+
+**Bij T4-F blijft** verder: de beheerpagina, de statusroute, de duurzame auditprojectie en de
+bijbehorende migratie.
 
 ### 2.8 Deadlines, annulering en resource-eigenaarschap
 
@@ -412,7 +469,7 @@ Dit is de bewijslast die T4-A aan D-1 verbond, en zij is de belangrijkste accept
 | `core/lib/retrieval/toelatingspoort.ts` | meervoudsvorm van `verifieerToelating()`, gedeelde `poortNu`, standenmaps per groep |
 | `core/lib/microsoft-retrieval/adapter.ts` *(nieuw)* | de dunne wrapper om T4-C/T4-D |
 | `tests/cross-tenant/retrieval-adaptergroepen.test.ts` *(nieuw)* | de twaalf vereiste tests |
-| `core/lib/audit-meta.ts` | één sleutel `adapters` in de allowlist (zie A-1: niet operationeel bruikbaar vóór T4-F) |
+| `core/lib/audit-meta.ts` | **niet geraakt.** De allowlistregel hoort bij T4-F, samen met het typeveld, de migratie en de route-aansluiting — zie §2.7 en A-1 |
 | `core/lib/microsoft-retrieval/keten.ts` | **besluit D-4:** additief `grondslag: { bronregistratieRef, configuratieversie, vastgesteldOp }` op `KetenTreffer`, gevuld bij de laatste GESLAAGDE grondslagcontrole |
 | `core/lib/retrieval/afbreken.ts` | **besluit D-5:** `resterendMs()` op `Afbreekgrendel`, additief |
 
@@ -531,22 +588,20 @@ gezette `bronstatus` onmogelijk is, maar `"meld"` blijft tot de UI-tranche **ong
 elk spoor dat T4-E aanmaakt staat op `"stop"`. Daarmee is het veld gebouwd en het risico niet
 genomen.
 
-### B-4 — `adapters` in de meta zonder migratie is een halve sleutel
+### B-4 — `adapters` hoort pas in de meta als de hele keten erachter bestaat *(opgelost)*
 
 Uit #322 is de les vastgelegd: een nieuwe metasleutel vereist **zowel** een toevoeging in de
-TS-allowlist (`core/lib/audit-meta.ts`) **als** een migratie op `public.meta_projectie()`. T4-E
-mag geen databaseobjecten toevoegen en T4-F bezit de duurzame projectie.
+TS-allowlist (`core/lib/audit-meta.ts`) **als** een migratie op `public.meta_projectie()`.
 
-Gevolg zoals het nu staat: `adapters` bestaat in het geheugen en in de route-respons, maar niet
-in het duurzame auditspoor. Dat is verdedigbaar als tussenstand, mits het **expliciet** is en
-niet per ongeluk.
+Versie 3 probeerde dat te verzoenen met een gebruiksverbod (A-1) terwijl de sleutel wél in
+`RetrievalMeta` zou worden gezet. Dat verzoent niets: `RetrievalUitkomst.meta` verlaat de
+orkestratie, dus een sleutel daarin is aangesloten — of het gebruik nu gewenst is of niet. Een
+verbod dat afhangt van de discipline van iedere volgende lezer, is geen grens.
 
-**Vastgelegd als harde activeringsvoorwaarde A-1** (§5): de sleutel mag niet operationeel worden
-gebruikt — niet voor beheer, alarmering, facturering of rapportage — zolang T4-F de duurzame
-projectie niet heeft toegevoegd. Anders zou een conclusie berusten op data die per beurt
-verdwijnt. Dat het in §5 staat en niet alleen hier, is opzet: precies zo viel bij de herplanning
-van het reviewrapport veertien R-nummers buiten elk plan — niet afgewezen, gewoon niet
-meegenomen.
+**Opgelost in §2.7:** T4-E zet de sleutel helemaal niet. Het levert hoogstens de pure
+aggregatiefunctie en haar vormgaranties; T4-F voegt typeveld, allowlist, databaseprojectie en
+route-aansluiting **atomair** toe. Daarmee is er geen tussenstand waarin een halve sleutel
+bestaat, en is A-1 een structurele eigenschap in plaats van een afspraak.
 
 ### B-5 — de ketendeadline kan het resterende beurtbudget niet kennen
 
@@ -586,7 +641,7 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 
 | # | Voorwaarde / beperking | Opgeheven door |
 |---|---|---|
-| **A-1** | `meta.adapters` **mag niet worden aangesloten op de route of op het auditpad** zolang T4-F de duurzame projectie niet ondersteunt. Niet doorgeven in een routerespons, niet naar `governance_events`, niet naar telemetrie. De sleutel wordt intern opgebouwd en blijft binnen de orkestratie. "Niet operationeel gebruiken" was te vrijblijvend: een veld dat de route al verlaat, wordt gebruikt — dat is precies hoe een tussenstand een afhankelijkheid wordt. Een contracttest bewaakt dat `adapters` niet in de routerespons voorkomt. | T4-F: migratie op `public.meta_projectie()` + toevoeging in `META_BASIS` (`core/lib/audit-meta.ts`), met de sanity-test die beide lijsten tegen elkaar houdt. |
+| **A-1** | **T4-E voegt `adapters` NIET toe aan `RetrievalMeta`, niet aan `audit-meta.ts` en niet aan enige routerespons.** Niet "wel zetten maar niet gebruiken" — dat was te vrijblijvend, want `RetrievalUitkomst.meta` verlaat de orkestratie en is daarmee per definitie aangesloten. T4-E levert hoogstens een pure aggregatiefunctie zonder productie-aanroeper. Een contracttest bewaakt dat `RetrievalMeta` de sleutel niet kent. | T4-F voegt **atomair** toe: typeveld op `RetrievalMeta`, regel in `META_BASIS`, migratie op `public.meta_projectie()` en de route-aansluiting — met de sanity-test die allowlist en projectie tegen elkaar houdt. |
 | **A-2** | **Dubbele citaten van hetzelfde document over twee adapters heen blijven mogelijk.** T4-E dedupliceert niet over adaptergroepen heen, door constructie: een `equivalentieClaim` is een adapterbewering en mag nooit leiden tot het verdwijnen van een bron van een ándere adapter. Expliciete tijdelijke beperking, en bewust de veilige kant. | Een server-side documentbinding waarmee de orkestratie **onafhankelijk van beide adapters** kan vaststellen dat twee kandidaten hetzelfde document zijn. Eigen tranche, niet T4-E. |
 | **A-3** | **`bijBronfout: "meld"` blijft ongebruikt** tot route én UI de `bronstatus` aantoonbaar tonen. Tot dan is elk spoor `"stop"`. | De UI-tranche, met een waarneembare weergave. |
 | **A-4** | **De bronnummering bij twee adapters volgt de gezamenlijke SELECTIEvolgorde** (primair spoor eerst, dan de aanvullende), vastgelegd in globale ordinals vóór de groepering. Dat is geen gedeelde relevantieweging over providers heen — die bestaat niet, want de scores van twee providers zijn niet vergelijkbaar. | Een expliciet ontwerp voor cross-provider weging, als dat ooit gewenst is. Niet T4-E. |
@@ -606,13 +661,14 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 7 | `verrijkWeergave` van A krijgt nooit bronnen van B | hook registreert ontvangen refs; assertie op disjunctie |
 | 8 | providerfout/readinessverlies zonder stille fallback | `bijBronfout: "stop"` → beurt stopt; `"meld"` → `bronstatus` verplicht aanwezig |
 | 9 | timeout/annulering stopt alle groepen, geen fail-safe | telt calls ná de afbreking in beide groepen; moet 0 zijn |
-| 10 | contextafkapping herbouwt per-adapter metadata uit werkelijk opgenomen bronnen | kleine `maxContextTekens`; `adapters[].opgenomen` telt alleen wat in `contextTekst` staat |
-| 11 | diagnostiek inhouds- en identifiervrij, alle getallen finite | recursieve scan over `meta.adapters`: elke string moet in een enum zitten, elk getal `Number.isFinite` |
+| 10 | contextafkapping herbouwt per-adapter metadata uit werkelijk opgenomen bronnen | rechtstreeks op de pure `bouwAdapterDiagnostiek()`: met een afgekapte set telt `opgenomen` alleen wat in `contextTekst` staat. Niet via `meta`, want T4-E zet de sleutel daar niet (A-1) |
+| 11 | diagnostiek inhouds- en identifiervrij, alle getallen finite | recursieve scan over de uitvoer van `bouwAdapterDiagnostiek()`: elke string moet in een enum zitten, elk getal `Number.isFinite` |
 | 13 | *(toegevoegd)* gemengde `bijBronfout` binnen één adaptergroep | opdracht met twee sporen op dezelfde adapter en verschillende standen → configuratiefout vóór elke adapter-, token- of netwerkcall |
 | 14 | *(toegevoegd)* **VERWEVEN GROEPEN, mét een weggevallen bron** | selectie `A1, B1, A2, B2`; groep B laat `B1` vallen in `verrijkWeergave`. Verwacht: `A1, A2, B2` in díé volgorde, met de bronnummers die de globale ordinals voorschrijven. Een implementatie die per groep aaneenschakelt levert `A1, A2, B2` óók — daarom draait de test bovendien het spiegelgeval `B1, A1, B2` zonder uitval, waar concatenatie `B1, B2, A1` zou geven en de ordinalherstelling `B1, A1, B2` |
 | 15 | *(toegevoegd)* **VIJANDIG: geclaimde equivalentie** | adapter B geeft een resultaat terug met de `equivalentieClaim` van een bron van adapter A. De bron van A blijft staan, met eigen bronnummer en eigen weergavemetadata; er verdwijnt niets |
 | 16 | *(toegevoegd)* onbekende `(groep, ref)` uit een hook | `verrijkWeergave` geeft een resultaat terug dat niet is aangeboden → configuratiefout, geen stille toevoeging aan de citatenstroom |
-| 17 | *(toegevoegd)* A-1 | `meta.adapters` komt niet voor in de routerespons en niet in het auditpad |
+| 17 | *(toegevoegd)* A-1 | `RetrievalMeta` kent de sleutel `adapters` NIET; `core/lib/audit-meta.ts` is ongewijzigd t.o.v. `preview`; de routerespons bevat hem niet. Alle drie gemeten, want het verbod is structureel en niet afhankelijk van discipline |
+| 18 | *(toegevoegd)* **dezelfde `ref` in twee sporen van dezelfde adapter** | twee gevallen apart: (a) de huidige tweesporenopdracht — de exact-ref-dedup moet een **no-op** zijn, want de `primaireDocIds`-filter ving hem al; (b) drie sporen, verweven met een tweede adaptergroep — hier verandert het gedrag aantoonbaar, en de test legt vast wát er verandert in plaats van het te laten gebeuren |
 | 12 | goldens alleen na goedgekeurde semantische diff | karakterisering draait ongewijzigd; een verschil is een blokker, geen update |
 
 Daarnaast: `tsc`, boundaries, secretscan, security-baseline, volledige cross-tenant inclusief
@@ -625,7 +681,8 @@ DB-laag, karakterisering, E2E en productiebuild.
 Eerlijkheidshalve, omdat een planreview die alleen zekerheden noemt een verkeerd beeld geeft:
 
 * **#425 is nog niet definitief.** Deze review is geschreven tegen het T4-D-contract op `31514ce`. De PR staat inmiddels op `57a1a83` en `CLEAN`, maar heeft nog **drie open rollbackbevindingen**: de B/C-volgorde, de SQL-Editor-compatibiliteit en een ontbrekende `PUBLIC`-revoke op de helperfunctie. Die laatste raakt precies de regel uit CLAUDE.md dat `revoke … from public` op Supabase niet genoeg is, omdat de default-ACL rechten expliciet aan `anon` en `authenticated` toekent. **Deze planreview moet daarom ná die drie correcties opnieuw worden herijkt op de gecombineerde `preview`** — stap 3 uit de merge-orde van #426, en geen formaliteit. Ik heb de contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) niet opnieuw tegen `57a1a83` gelegd; dat hoort bij die herijking.
-* **De integratieregistry loopt achter op de werkelijkheid.** `pgb_m365_lab_copilot` staat daar op `blocked_on_sharepoint_index`, terwijl de index gereed is en de feitelijke blokkade Copilot-toegang is (`copilot_toegang_geweigerd`). Dat blokkeert deze planreview niet — T4-E doet geen live call — maar het moet vóór een live smoke worden rechtgezet, anders stuurt de registry een volgende sessie naar het verkeerde probleem. Genoteerd als vervolgpunt, buiten de scope van dit ticket.
+* **De eerste structurele demoactivering verhuist naar `app365_m365_demo_copilot`** (ticket #428). Dat raakt T4-E niet: deze laag is en blijft fonds- en omgevingsneutraal — zij kent geen profiel, geen fonds en geen omgeving, alleen een adapter per spoor. De keuze wélke omgeving als eerste wordt geactiveerd hoort bij de activeringstranche.
+* **De PGB-registrydrift is daarmee een afzonderlijk historisch/labpunt.** `pgb_m365_lab_copilot` staat in de integratieregistry nog op `blocked_on_sharepoint_index`, terwijl de index gereed is en de feitelijke blokkade `copilot_toegang_geweigerd` is. Dat blokkeert deze planreview niet en het ligt niet meer op het pad van de eerste activering, maar het moet vóór een live labsmoke worden rechtgezet — anders stuurt de registry een volgende sessie naar het verkeerde probleem.
 * **Ik heb geen enkele Microsoft-call gedaan** en niets aan consent, scopes, billing, flags of kill switch geraakt.
 * **`bronsoort: "sharepoint"` staat in geen enkel productie-bronbeleid.** Ook met T4-E volledig gebouwd levert de Copilot-arm dus niets, totdat een fonds die bronsoort krijgt. Dat is een bestaande inerte laag en T4-E verandert hem niet — maar het betekent ook dat "het werkt" pas in de activeringstranche aantoonbaar is.
 * **De byte-identiteitsclaim is een claim tot hij gemeten is.** §2.9 beschrijft hoe; het bewijs komt pas met de code.
