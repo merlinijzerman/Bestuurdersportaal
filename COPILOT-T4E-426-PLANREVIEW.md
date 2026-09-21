@@ -1,10 +1,18 @@
 # T4-E planreview — centrale orkestratie en adapter-per-spoor (#426)
 
-**Status:** versie 4, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 5, ter beoordeling. Geen productiecode geschreven.
 **Vertakt van:** `origin/preview` `b3961ba` (bevat #424 / T4-C volledig).
 **Datum:** 2026-09-21.
 
-**Wijzigingen t.o.v. versie 3:** de interne tegenspraak rond `meta.adapters` opgelost — T4-E zet
+**Wijzigingen t.o.v. versie 4:** de herkomst verhuisd van een ref-gebaseerde set naar een
+request-lokale `WeakMap` op de resultaatINSTANTIE, omdat een ref-sleutel ná de citaatafkapping
+is uitgewerkt (§2.2); de centrale exact-ref-deduplicatie **ingetrokken** en vervangen door
+occurrence-toewijzing, omdat die dedup bestaand één-adaptergedrag bij drie of meer sporen
+veranderde (§2.4); `primairPerGroep` vervallen; derde contractregel op `verrijkWeergave()`
+(volgorde behouden); tests 18 t/m 20; en drie tekstcorrecties (§1/§7 naar `27ad291a`, §2.10
+ontdaan van de `adapters`-aggregatie, B-2 ontdaan van de tellerbelofte).
+
+**Wijzigingen in versie 4 t.o.v. versie 3:** de interne tegenspraak rond `meta.adapters` opgelost — T4-E zet
 de sleutel niet meer in `RetrievalMeta`, raakt `audit-meta.ts` niet en levert hoogstens een pure
 aggregatiefunctie; T4-F voegt typeveld, allowlist, projectie en route-aansluiting atomair toe
 (§2.7, §2.10, B-4, A-1, tests 10/11/17). Daarnaast de onuitgesproken aanname achter
@@ -68,7 +76,7 @@ uitbreiding van T4-C is de Copilot-arm niet eerlijk aansluitbaar.
 |---|---|---|
 | T4-B (client, endpointpin, filter, fouten) | op `preview` | consumeren |
 | T4-C (mapping, DriveItem, download, extractie, keten) | op `preview` via #424 (`b3961ba`) | consumeren; **B-1 raakt dit** |
-| T4-D (readiness, tokeninterface, rolloutpoorten) | PR #425 op `57a1a83`, `OPEN` + `CLEAN`; **drie open rollbackbevindingen** (B/C-volgorde, SQL-Editor-compatibiliteit, ontbrekende `PUBLIC`-revoke op de helperfunctie) | contract bekend, nog niet definitief — zie §7 |
+| T4-D (readiness, tokeninterface, rolloutpoorten) | PR #425 op `27ad291a`, `OPEN`; nieuwe CI-ronde loopt. De drie rollbackbevindingen (B/C-volgorde, SQL-Editor-compatibiliteit, ontbrekende `PUBLIC`-revoke op de helperfunctie) zijn in bewerking | contract bekend, nog niet definitief — zie §7 |
 | T4-E | dit ticket | planreview nu, code ná merge van #424 + gecorrigeerde #425 |
 | T4-F (beheer, status, duurzame auditprojectie) | apart | **niet** stil meenemen |
 
@@ -205,16 +213,35 @@ groep, dus wat terugkomt hoort per constructie bij die groep. Er valt nooit iets
 **`primaireRefs` is de derde sleutelruimte, en versie 1 noemde hem niet.** Hij splitst de
 opgenomen bronnen in primair en aanvullend, wat `meta.chunks` en `meta.aanvullend` bepaalt. Een
 `ref` uit groep B die toevallig gelijk is aan een primaire `ref` uit groep A zou als primair
-worden geteld. Voorstel:
+worden geteld.
 
-* `metaBasis` krijgt een **optioneel** `primairPerGroep: ReadonlyMap<Adaptergroep, ReadonlySet<string>>`, dat de beslissing draagt;
-* het veld is **alleen aanwezig bij meer dan één groep**. Bij één groep is het afwezig en is `metaBasis` dus byte-identiek aan vandaag — dezelfde regel als bij `perAdapter[].geweigerd` en `meta.toelating`;
-* `primaireRefs` blijft staan in zijn huidige vorm en betekenis voor bestaande consumenten, maar wordt intern niet meer geraadpleegd zodra `primairPerGroep` er is. Dat is bewust: het veld zit ín `RetrievalUitkomst` (via `Omit<RetrievalTussenresultaat, "grendel">`) en weghalen zou de uitkomstvorm breken.
+Versie 3 en 4 losten dat op met een `primairPerGroep`-set. **Dat is niet genoeg, en de vierde
+reviewronde wees precies aan waarom:** ná `verrijkWeergave()` worden de groepen weer één
+`Bronresultaat[]`, en `bouwCitaties()` levert daaruit alleen `c.opgenomen`. Bij gelijke refs uit
+twee groepen kan `bouwRetrievalMeta(c.opgenomen, …)` dán niet meer bepalen bij welke groep een
+opgenomen bron hoorde — een ref-gebaseerde set, hoe genest ook, is op dat punt uitgewerkt.
 
-**Binnen** een groep moet `ref` uniek zijn, en ook dát is geen aanname: §2.4 legt een centrale
-exact-ref-deduplicatie vast — eerste voorkomen wint — die vóór de ordinaltoekenning draait. Zonder
-die stap zou dezelfde `ref` in twee sporen van dezelfde adapter de binnenste sleutel van zowel
-`ordinalPerGroep` als `primairPerGroep` overschrijven.
+**De herkomst hoort dus bij de RESULTAATINSTANTIE, niet bij de `ref`:**
+
+```ts
+interface Herkomst { groep: Adaptergroep; ordinal: number; primair: boolean; }
+/** Request-lokaal. Nooit onderdeel van het publieke contract. */
+const herkomst = new WeakMap<Bronresultaat, Herkomst>();
+```
+
+Dat werkt omdat `bouwCitaties()` de objectreferenties **behoudt**: `opgenomen.push(bron)`
+(`citatie.ts:126`) duwt exact het object dat binnenkwam. De binding overleeft de afkapping
+zonder dat zij ergens in `RetrievalUitkomst` terechtkomt — een `WeakMap` is niet serialiseerbaar
+en kan dus ook niet per ongeluk meelekken naar de route of het auditspoor.
+
+`metaBasis.primaireRefs` blijft ongewijzigd bestaan voor bestaande consumenten, maar wordt
+intern niet meer geraadpleegd. `primairPerGroep` uit versie 3 **vervalt**: met de herkomst per
+instantie is er geen tweede sleutelruimte meer nodig, en dus ook geen extra veld op `metaBasis`.
+Dat is meteen één vormwijziging minder.
+
+**Binnen** een groep hoeft `ref` NIET uniek te zijn, en er wordt ook niets gededupliceerd —
+zie §2.4. Dezelfde passage kan in twee sporen van dezelfde adapter voorkomen, en dat blijft
+precies zoals het vandaag is.
 
 **Gelijke `ref` uit twee adapters is hiermee structureel onschadelijk** — niet omdat botsing
 onwaarschijnlijk is, maar omdat geen enkele beslissing meer op een beurtbrede `ref` rust.
@@ -303,37 +330,40 @@ Voor `A1, B1, A2` levert dat weer `A1, B1, A2`. Valt `B1` in de hook weg, dan bl
 veranderen niet. Bij één groep zijn de ordinals `0..n-1` in dezelfde volgorde en is de sortering
 een no-op: byte-identiek aan vandaag, zonder aparte tak.
 
-**De aanname die hieronder ligt, en die versie 3 niet vastlegde.** `ordinalPerGroep` is een
-`Map<groep, Map<ref, number>>`, en dat veronderstelt dat een `ref` **binnen één adaptergroep**
-uniek is. Dat staat nergens. Een groep kan meerdere sporen omvatten, en dezelfde `ref` in twee
-sporen zou zijn eerdere ordinal overschrijven. Hetzelfde geldt voor `primairPerGroep` in §2.2.
+**Versie 4 loste de ref-uniciteit op met centrale exact-ref-deduplicatie vóór de
+ordinaltoekenning. Die oplossing is INGETROKKEN.** Zij veranderde bestaand één-adaptergedrag bij
+drie of meer sporen, en dat botst rechtstreeks met de harde eis uit #426 dat het bestaande pad
+byte-identiek blijft zolang er geen tweede adapter is.
 
-**Vastgelegd: centrale exact-ref-deduplicatie vóór de ordinaltoekenning, eerste voorkomen
-wint.** `ref` is passage-identiteit; twee keer dezelfde passage in één antwoord is hoe dan ook
-een fout, en de eerste is per definitie de best gerangschikte. Na deze stap is de binnenste sleutel
-uniek door constructie in plaats van door aanname.
+Mijn redenering daarbij was fout, en het is de moeite waard waaróm: ik toetste aan de huidige
+aanroeper ("C1 draait twee sporen, dus het is een no-op") in plaats van aan het contract.
+`Queries<T>` accepteert iedere niet-lege spoorlijst. Dat er vandaag geen productieaanroeper met
+drie sporen is, maakt een contractwijziging niet neutraal — het maakt haar alleen onzichtbaar
+tot iemand het derde spoor toevoegt.
 
-**Wat dit voor het bestaande pad betekent, en waarom het gemeten moet worden.** Bij de huidige
-tweesporenopdracht is het een **no-op**, en dat is aantoonbaar: de samenvoeging filtert
-`aanvullend` al op `primaireDocIds` (`orkestratie.ts` stap 5), een `ref` hoort bij precies één
-document, dus een `ref` die in spoor 0 én spoor 1 voorkomt is daar al weggevallen. Bij **drie of
-meer sporen** ligt dat anders: `geselecteerdPerSpoor.slice(1).flat()` dedupliceert de aanvullende
-sporen niet onderling, dus daar kan vandaag dezelfde passage tweemaal overleven. Voor die
-configuratie is de nieuwe dedup dus géén no-op maar een gedragswijziging — verdedigbaar, want
-het weghalen van een dubbele passage is een correctie, maar het mag niet als aanname passeren.
-Een test meet beide gevallen afzonderlijk (nr. 18).
+**In plaats daarvan: occurrence-toewijzing, zonder enige deduplicatie.**
 
-**Twee contractregels die hierbij horen** — de eerste is een eis aan `verrijkWeergave()` die
-vandaag impliciet al geldt, de tweede is nieuw:
+* per groep houden we `ordinalsPerRef: Map<ref, ordinal[]>` — een `ref` die twee keer voorkomt
+  heeft twee ordinals, in volgorde;
+* ná de hook worden de teruggegeven resultaten **occurrence-voor-occurrence** toegewezen: een
+  tweepuntersloop over (aangeboden, teruggegeven) binnen de groep, waarbij elk teruggegeven
+  object de herkomst krijgt van het eerstvolgende aangeboden element met dezelfde `ref`;
+* elk toegewezen object wordt in de `herkomst`-WeakMap uit §2.2 gezet. Daarmee is de binding
+  instantiegebonden en overleeft zij de citaatafkapping.
 
-* **een hook mag resultaten WEGLATEN maar mag een `ref` niet WIJZIGEN.** De Supabase-adapter
-  voldoet hieraan: `behoudIdentiteit()` (`supabase-adapter.ts:87`) zoekt op `bron.ref` en de
-  herbouwde resultaten dragen de ref van hun chunk. Zonder deze regel is er geen enkele
-  betrouwbare terugkoppeling — noch op ref, noch positioneel, noch op objectidentiteit;
-* **een teruggegeven resultaat waarvan `(groep, ref)` onbekend is, is een configuratiefout.**
-  Niet stil achteraan plakken: dan zou een bron die wij nooit hebben aangeboden op een
-  willekeurige plek in de citatenstroom belanden, ongerangschikt en ongetoetst door de
-  toelatingspoort. Fail-closed is hier de enige verdedigbare uitkomst.
+Er wordt dus **niets samengevoegd en niets weggegooid**. Twee keer dezelfde passage in twee
+sporen van dezelfde adapter blijft twee keer, precies zoals vandaag.
+
+**Een derde contractregel op `verrijkWeergave()`, naast de twee hieronder:** de hook moet de
+**onderlinge volgorde behouden**. Hij mag resultaten weglaten, maar niet herschikken. Zonder die
+regel is occurrence-toewijzing niet mogelijk — dan is er geen enkele manier om twee gelijke refs
+uit elkaar te houden. De Supabase-implementatie voldoet eraan: zij mapt over de invoervolgorde.
+
+**Een legacy-fast-path blijft mogelijk en is verdedigbaar:** bij precies één adaptergroep kan de
+hele groepering worden overgeslagen en de bestaande aanroep één-op-één blijven staan. Ik stel
+hem niet voor als *noodzaak* — de occurrence-toewijzing is bij één groep al een identiteits-
+operatie — maar wel als optie als de reviewer de byte-identiteit liever structureel dan
+aantoonbaar wil hebben. Test 1 meet het verschil niet; hij meet de uitkomst.
 
 **Wat dit wél verandert bij twee adapters.** De bronnummering volgt nu de gezamenlijke selectie-
 volgorde, en die komt uit de bestaande samenvoeging: eerst het primaire spoor, dan de aanvullende
@@ -465,7 +495,7 @@ Dit is de bewijslast die T4-A aan D-1 verbond, en zij is de belangrijkste accept
 | Bestand | Aard van de wijziging |
 |---|---|
 | `core/lib/retrieval/contract.ts` | additief: `Bronstatus`, `Bronstatusreden`, optioneel `bronstatus` op tussen-/eindresultaat |
-| `core/lib/retrieval/orkestratie.ts` | `Spoor.adapter` / `Spoor.bijBronfout`, effectieve adapter per spoor, herkomst op spoorindex, per-groep dedup, `verrijkWeergave` per groep, `adapters`-aggregatie |
+| `core/lib/retrieval/orkestratie.ts` | `Spoor.adapter` / `Spoor.bijBronfout`, effectieve adapter per spoor, herkomst per resultaatinstantie (request-lokale `WeakMap`), `verrijkWeergave` per groep met occurrence-toewijzing, en de **pure** `bouwAdapterDiagnostiek()` zonder productieaanroeper. **Geen deduplicatie en geen aansluiting van `adapters`** — zie A-1 |
 | `core/lib/retrieval/toelatingspoort.ts` | meervoudsvorm van `verifieerToelating()`, gedeelde `poortNu`, standenmaps per groep |
 | `core/lib/microsoft-retrieval/adapter.ts` *(nieuw)* | de dunne wrapper om T4-C/T4-D |
 | `tests/cross-tenant/retrieval-adaptergroepen.test.ts` *(nieuw)* | de twaalf vereiste tests |
@@ -564,8 +594,14 @@ server-side gegevens waar geen adapter invloed op heeft.
 **Die binding bestaat vandaag niet.** Supabase en Microsoft kennen geen gedeelde
 documentregistratie; hun `bronregistratieRef`-waarden zitten in gescheiden namespaces. **Dus
 dedupliceert T4-E niet, door constructie — niet door een uitgeschakelde vlag.** Beide bronnen
-blijven staan. De claim wordt wel vervoerd en geteld, zodat zichtbaar is hoe vaak de situatie
-zich voordoet en of een centrale binding de moeite waard is.
+blijven staan.
+
+**En hij wordt in T4-E ook niet geteld.** Versie 4 beweerde dat nog wel, maar dat kon niet
+kloppen: `AdapterDiagnostiek` heeft er geen veld voor, en de helper waarin zo'n teller zou
+landen heeft in deze tranche geen productieaanroeper (§2.7). Het veld wordt dus **alleen
+vervoerd**. Een teller hoort bij de tranche die de diagnostiek werkelijk aansluit — T4-F — en
+tot die tijd is "hoe vaak komt dit voor" een vraag die deze arm niet kan beantwoorden. Dat is
+eerlijker dan een telling beloven die nergens terechtkomt.
 
 Wat er nodig zou zijn om dit op te heffen hoort niet in T4-E: een server-side binding tussen de
 twee registraties, opgebouwd uit gegevens die de adapters niet leveren. Dat is een eigen tranche
@@ -622,7 +658,7 @@ maar dan staat de rekensom op twee plekken (**D-5**).
 | # | Besluit | Verwerking |
 |---|---|---|
 | **D-1** | De orkestratie moet **beide** spoorvolgordes ondersteunen; Copilot bij de eerste activering aanvullend, maar niet hardgecodeerd. | §2.9 punt 1. `metaBasis.methode`/`diagnostiek` blijven uit spoor 0, wélk spoor dat ook is. De laag kent geen "Copilot-spoor". De volgordekeuze verhuist naar de activeringstranche. |
-| **D-2** | Dubbele citaten niet als eindoplossing; providerneutrale equivalentiesleutel — en ná de tweede ronde: **dedup alleen bij een centraal bevestigde documentidentiteit**, niet op een adapterclaim. | B-2 herschreven. Het veld heet nu `equivalentieClaim` en is **inert**: het leidt nooit op zichzelf tot dedup. Dedup vereist dat de orkestratie de binding onafhankelijk van beide adapters vaststelt; die binding bestaat vandaag niet, dus T4-E dedupliceert niet — door constructie, niet door een vlag. Vijandige test vereist (nr. 15). Beperking A-2 in §5. |
+| **D-2** | Dubbele citaten niet als eindoplossing; providerneutrale equivalentiesleutel — en ná de tweede ronde: **dedup alleen bij een centraal bevestigde documentidentiteit**, niet op een adapterclaim. | B-2 herschreven. Het veld heet nu `equivalentieClaim` en is **inert**: het leidt nooit op zichzelf tot dedup. Dedup vereist dat de orkestratie de binding onafhankelijk van beide adapters vaststelt; die binding bestaat vandaag niet, dus T4-E dedupliceert niet — door constructie, niet door een vlag. Vijandige test vereist (nr. 15). Beperking A-2 in §5. In T4-E wordt de claim **alleen vervoerd, niet geteld** — een teller hoort bij de tranche die de diagnostiek aansluit. |
 | **D-3** | `"meld"` bouwen maar niet gebruiken tot route en UI de status aantoonbaar tonen. | B-3 ongewijzigd; elk spoor dat T4-E aanmaakt staat op `"stop"`. Contracttest: `"meld"` zonder gezette `bronstatus` is onmogelijk. |
 | **D-4** | `KetenTreffer` uitbreiden met grondslaggegevens, vastgelegd bij de **laatste geslaagde** grondslagcontrole. | B-1; de formulering "laatste geslaagde" is overgenomen in het voorstel, want juist dát moment is wat V4 toetst. |
 | **D-5** | Eén `resterendMs()` op de bestaande afbreekgrendel. | B-5; additief op `maakAfbreekgrendel()`, geen gedragswijziging voor bestaande gebruikers. |
@@ -654,7 +690,7 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 |---|---|---|
 | 1 | zonder spooradapter byte-identiek | bestaande suites ongewijzigd + expliciete `deepEqual`-test (§2.9 punt 3) |
 | 2 | dichte poort → 0 adapter-/token-/netwerkcalls | tellende stubs; spoor wordt niet aangemaakt (`isBewustUit`) |
-| 3 | gelijke `ref` uit twee adapters | twee adapters met bewust identieke refs; beide bronnen overleven, krijgen eigen standen uit hun eigen genestte map, en de primair/aanvullend-splitsing (`primairPerGroep`) blijft correct |
+| 3 | gelijke `ref` uit twee adapters | twee adapters met bewust identieke refs; beide bronnen overleven, krijgen hun standen uit de eigen genestte map van hun groep, en de primair/aanvullend-splitsing blijft correct — die leest de `herkomst`-WeakMap, niet de `ref` |
 | 4 | filter-/capabilitycontrole per effectieve adapter | adapter A ondersteunt filter X, B niet; alleen B's spoor valt uit |
 | 5 | V5/versie eenmaal per unieke adapterbron | twee sporen op dezelfde adapter → hookteller is 1 |
 | 6 | intrekking verwijdert alles op die grondslag | `verifieerBronregistratie` levert `verbonden: false`; alle bronnen van die groep vallen weg, de andere groep blijft |
@@ -668,7 +704,9 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 15 | *(toegevoegd)* **VIJANDIG: geclaimde equivalentie** | adapter B geeft een resultaat terug met de `equivalentieClaim` van een bron van adapter A. De bron van A blijft staan, met eigen bronnummer en eigen weergavemetadata; er verdwijnt niets |
 | 16 | *(toegevoegd)* onbekende `(groep, ref)` uit een hook | `verrijkWeergave` geeft een resultaat terug dat niet is aangeboden → configuratiefout, geen stille toevoeging aan de citatenstroom |
 | 17 | *(toegevoegd)* A-1 | `RetrievalMeta` kent de sleutel `adapters` NIET; `core/lib/audit-meta.ts` is ongewijzigd t.o.v. `preview`; de routerespons bevat hem niet. Alle drie gemeten, want het verbod is structureel en niet afhankelijk van discipline |
-| 18 | *(toegevoegd)* **dezelfde `ref` in twee sporen van dezelfde adapter** | twee gevallen apart: (a) de huidige tweesporenopdracht — de exact-ref-dedup moet een **no-op** zijn, want de `primaireDocIds`-filter ving hem al; (b) drie sporen, verweven met een tweede adaptergroep — hier verandert het gedrag aantoonbaar, en de test legt vast wát er verandert in plaats van het te laten gebeuren |
+| 18 | *(toegevoegd)* **dezelfde `ref` in twee sporen van dezelfde adapter** | (a) **drie sporen, één adapter**: de uitkomst moet **exact gelijk** zijn aan die van `preview` — geen dedup, geen verschoven nummering, beide voorkomens blijven. Dit meet de byte-identiteitseis op een spoorlijst die `Queries<T>` toestaat maar die vandaag geen productieaanroeper heeft; (b) **dezelfde drie sporen, verweven met een tweede adaptergroep**: de occurrence-toewijzing koppelt elk teruggegeven resultaat aan het juiste voorkomen, en de herkomst klopt ná de citaatafkapping |
+| 19 | *(toegevoegd)* **herkomst overleeft de citaatafkapping** | kleine `maxContextTekens` met gelijke refs uit twee groepen; voor elke bron in `c.opgenomen` levert de `herkomst`-WeakMap de juiste groep, ordinal en primair-vlag. Negatieve controle: met een ref-gebaseerde lookup wordt deze test rood |
+| 20 | *(toegevoegd)* `verrijkWeergave` die de volgorde HERSCHIKT | contractregel drie: herschikken is een configuratiefout, want dan is occurrence-toewijzing onmogelijk |
 | 12 | goldens alleen na goedgekeurde semantische diff | karakterisering draait ongewijzigd; een verschil is een blokker, geen update |
 
 Daarnaast: `tsc`, boundaries, secretscan, security-baseline, volledige cross-tenant inclusief
@@ -680,7 +718,7 @@ DB-laag, karakterisering, E2E en productiebuild.
 
 Eerlijkheidshalve, omdat een planreview die alleen zekerheden noemt een verkeerd beeld geeft:
 
-* **#425 is nog niet definitief.** Deze review is geschreven tegen het T4-D-contract op `31514ce`. De PR staat inmiddels op `57a1a83` en `CLEAN`, maar heeft nog **drie open rollbackbevindingen**: de B/C-volgorde, de SQL-Editor-compatibiliteit en een ontbrekende `PUBLIC`-revoke op de helperfunctie. Die laatste raakt precies de regel uit CLAUDE.md dat `revoke … from public` op Supabase niet genoeg is, omdat de default-ACL rechten expliciet aan `anon` en `authenticated` toekent. **Deze planreview moet daarom ná die drie correcties opnieuw worden herijkt op de gecombineerde `preview`** — stap 3 uit de merge-orde van #426, en geen formaliteit. Ik heb de contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) niet opnieuw tegen `57a1a83` gelegd; dat hoort bij die herijking.
+* **#425 is nog niet definitief, en beweegt sneller dan deze review.** Ik schreef tegen `31514ce`; daarna passeerden `0bc007c` en `57a1a83`, en de actuele head is `27ad291a` met een lopende CI-ronde waarin de drie rollbackbevindingen (B/C-volgorde, SQL-Editor-compatibiliteit, ontbrekende `PUBLIC`-revoke op de helperfunctie) worden verwerkt. Die laatste raakt precies de regel uit CLAUDE.md dat `revoke … from public` op Supabase niet genoeg is, omdat de default-ACL rechten expliciet aan `anon` en `authenticated` toekent. **Deze planreview moet ná het landen van #425 opnieuw worden herijkt op de gecombineerde `preview`** — stap 3 uit de merge-orde van #426, en geen formaliteit. De contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) zijn sinds `31514ce` niet opnieuw getoetst; dat hoort bij die herijking en niet bij deze ronde, anders loopt de review achter de PR aan.
 * **De eerste structurele demoactivering verhuist naar `app365_m365_demo_copilot`** (ticket #428). Dat raakt T4-E niet: deze laag is en blijft fonds- en omgevingsneutraal — zij kent geen profiel, geen fonds en geen omgeving, alleen een adapter per spoor. De keuze wélke omgeving als eerste wordt geactiveerd hoort bij de activeringstranche.
 * **De PGB-registrydrift is daarmee een afzonderlijk historisch/labpunt.** `pgb_m365_lab_copilot` staat in de integratieregistry nog op `blocked_on_sharepoint_index`, terwijl de index gereed is en de feitelijke blokkade `copilot_toegang_geweigerd` is. Dat blokkeert deze planreview niet en het ligt niet meer op het pad van de eerste activering, maar het moet vóór een live labsmoke worden rechtgezet — anders stuurt de registry een volgende sessie naar het verkeerde probleem.
 * **Ik heb geen enkele Microsoft-call gedaan** en niets aan consent, scopes, billing, flags of kill switch geraakt.
