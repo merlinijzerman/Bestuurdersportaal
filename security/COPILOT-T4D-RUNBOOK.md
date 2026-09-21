@@ -108,38 +108,71 @@ evaluatievolgorde en niet achteraan.
 
 ### De vier rollbackfasen
 
-Elke fase is een **apart bestand** met een eigen preflight en eindcontrole, en
-weigert te draaien tot haar voorwaarde aantoonbaar is vervuld. Dat is geen
-formaliteit: één plakbaar bestand zou B, C en D binnen een seconde achter elkaar
-uitvoeren, en dan veroorzaakt de rollback precies de storing die de fasering moet
-voorkomen.
+Elke fase is een **apart bestand** met een eigen preflight en eindcontrole, draait
+in **één transactie**, en weigert tot haar voorwaarde aantoonbaar is vervuld. Dat
+is geen formaliteit: één plakbaar bestand zou alle fasen binnen een seconde
+achter elkaar uitvoeren, en dan veroorzaakt de rollback precies de storing die de
+fasering moet voorkomen.
 
-| Fase | Bestand (`supabase/rollbacks/2026_09_21_423_t4d_copilot_…`) | Voorwaarde | Tussenstap erna |
+| Fase | Bestand (`supabase/rollbacks/2026_09_21_423_t4d_copilot_…`) | Voorwaarde | Wat erna moet gebeuren |
 |---|---|---|---|
-| A | `faseA_killswitch_ROLLBACK.sql` | geen | — (hier stopt een incident) |
-| B | `faseB_poorten_ROLLBACK.sql` | kill switch staat uit | oude applicatiecode klaarzetten |
-| C | `faseC_signatuur_ROLLBACK.sql` | fase B gedraaid | **deployen en waarnemen** |
-| D | `faseD_kolommen_ROLLBACK.sql` | fase C gedraaid, deploy bevestigd | — |
+| 1 | `fase1_killswitch_ROLLBACK.sql` | geen | — hier stopt een incident |
+| 2 | `fase2_signatuur_ROLLBACK.sql` | kill switch staat uit | **oude code deployen en waarnemen** |
+| 3 | `fase3_poorten_ROLLBACK.sql` | fase 2 gedraaid, deploy bevestigd | — |
+| 4 | `fase4_kolommen_ROLLBACK.sql` | fase 3 gedraaid, deploy bevestigd | — |
 
-```bash
-psql "$DB" -v ON_ERROR_STOP=1 -v actor='<naam>' -v reden='<incident>' \
-     -f supabase/rollbacks/2026_09_21_423_t4d_copilot_faseA_killswitch_ROLLBACK.sql
+**De poorten verdwijnen pas in fase 3, ná de deploy.** Dat is een correctie na de
+review op PR #425. Zou fase 3 vóór de deploy draaien, dan verdwijnt
+`copilot_lees_readiness` onder draaiende nieuwe code — juist de functie waarmee
+die code vaststelt dat de kill switch uit staat. Elke retrievalbeurt zou dan
+falen op een ontbrekend leespad in plaats van netjes inert te zijn. Dezelfde
+redenering geldt voor `copilot_rollout`: readiness leest die tabel, dus haar
+eerder droppen breekt readiness net zo goed.
+
+De cijfers, niet letters, maken de uitvoervolgorde alfabetisch zichtbaar.
+
+#### Uitvoeren
+
+De bestanden zijn **SQL-editorvast**: geen psql-metacommando's, dus ze zijn te
+plakken in de Supabase SQL Editor én te draaien met `psql`. Parameters gaan via
+`set_config` met een in te vullen placeholder. Vervang bovenaan het bestand
+`VUL_IN` door de echte waarde:
+
+```sql
+select set_config('t4d.actor', 'jouw-naam', true),
+       set_config('t4d.reden', 'waarom je dit doet', true);
 ```
 
-Fase C **voert** het herstel van de twaalf-parametersignatuur uit — het is geen
-aanwijzing in commentaar. Zij draait vóórdat de oude applicatiecode terugkomt:
-andersom roept de teruggezette code een functie aan die niet meer bestaat.
+Een onbewerkt bestand weigert zichzelf — `VUL_IN` is geen geldige waarde. Fase 3
+en 4 vragen op dezelfde manier om `set_config('t4d.oude_code_gedeployd', 'ja', true)`.
 
-Fase C bouwt de body op de kolommen zoals ze op dát moment zijn, en fase D
-verandert die. Fase D roept de generator daarom nog één keer aan voordat zij hem
-opruimt; zonder die tweede aanroep verwijst de herstelde functie naar `client_id`
-die dan net is gedropt, en breekt de eerste koppelpoging.
+#### Fase 3 en 4 vragen twee bewijzen
 
-Fase D is **onomkeerbaar** en vraagt twee bewijzen: geen verse koppeling met een
-gevulde `client_id` in het laatste uur (gegevens), én een expliciete bevestiging
-`-v oude_code_gedeployd=ja` (verklaring). Het eerste is stil groen op een
-omgeving waar toevallig niemand koppelt; het tweede dwingt af dat iemand heeft
-gekeken.
+Beide fasen zijn in de praktijk onomkeerbaar (fase 4 letterlijk: de kolomwaarden
+zijn erna weg). Daarom is één bewijs er één te weinig:
+
+1. **Gegevens** — geen verse koppeling met een gevulde `client_id` in het laatste
+   uur. Schrijft er nog iets, dan draait de nieuwe code nog.
+2. **Verklaring** — `set_config('t4d.oude_code_gedeployd', 'ja', true)`.
+
+Het eerste is stil groen op een omgeving waar toevallig niemand koppelt; het
+tweede dwingt af dat iemand heeft gekeken. Andersom vangt het eerste een
+verklaring die te goeder trouw maar onjuist is.
+
+#### De generator
+
+Fase 2 **voert** het herstel van de twaalf-parametersignatuur uit — het is geen
+aanwijzing in commentaar. Zij bouwt de body op de kolommen zoals ze op dát moment
+zijn. Fase 4 verandert die en roept de generator daarom nog één keer aan voordat
+zij hem opruimt; zonder die tweede aanroep verwijst de herstelde functie naar
+`client_id` die dan net is gedropt, en breekt de eerste koppelpoging.
+
+De generator krijgt, als elke nieuwe functie, standaard `EXECUTE` voor `PUBLIC`
+(bevinding H-18). Fase 2 trekt dat expliciet in voor `public`, `anon`,
+`authenticated` en `service_role`, en haar eindcontrole faalt als dat niet is
+gelukt.
+
+#### Het auditspoor blijft
 
 `microsoft_private.copilot_operator_log` blijft in **alle** fasen staan, met zijn
 append-only trigger. Dat is auditdata — wie de rem wanneer en waarom bediende —
