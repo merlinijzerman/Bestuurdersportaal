@@ -43,13 +43,34 @@ nog niet.
 
 ## 2. Activatie
 
-Uitsluitend na het licentie-, kosten- en consentbesluit uit
-`COPILOT-RETRIEVAL-407-LICENTIE-EN-CONSENT.md`.
+> **GEBLOKKEERD.** Activering wacht op twee dingen, niet op één.
+>
+> 1. Het licentie-, kosten- en consentbesluit uit
+>    `COPILOT-RETRIEVAL-407-LICENTIE-EN-CONSENT.md`.
+> 2. **#428.** De eerste structurele demoactivering verhuist naar
+>    `app365.bestuurdersportaal.com`. Activeren mag pas wanneer die omgeving is
+>    ingericht **én** het profiel `app365_m365_demo_copilot` werkelijk in de
+>    registry bestaat — niet wanneer het is aangekondigd of gepland.
+>
+> Het bestaande **PGB-profiel mag hiervoor niet als vervanger worden gebruikt.**
+> Het is ingericht voor de PGB-retrievalacceptatieset (#385 onder #354), met een
+> eigen doel, eigen testidentiteiten en een eigen rechtenopzet. Het omhangen aan
+> een Copilot-demoactivering zou twee proeven met verschillende grenzen in één
+> identiteit laten samenvallen, en dan is achteraf niet meer vast te stellen
+> onder welke afspraak een retrievalresultaat tot stand kwam.
+>
+> De T4-D-**code** is en blijft fondsneutraal: zij kent geen PGB, geen app365 en
+> geen enkel specifiek fonds. Deze blokkade is operationeel en hoort in dit
+> runbook, niet in een `if` in de readinesspoort.
 
-1. **Herconsent** voor de PGB-testidentiteit via de bestaande koppelflow. Zonder
-   dat blijft `client_id` leeg en is readiness `configuratie_ongeldig`. Er wordt
-   niets gebackfilled: een bestaande rij kan onder een andere appregistratie zijn
-   ontstaan.
+Zodra beide voorwaarden zijn vervuld:
+
+1. **Herconsent** voor de identiteit van het onder #428 ingerichte profiel, via
+   de bestaande koppelflow. Zonder dat blijft `client_id` leeg en is readiness
+   `configuratie_ongeldig`. Er wordt niets gebackfilled: een bestaande rij kan
+   onder een andere appregistratie zijn ontstaan — en dat is hier geen
+   theoretisch geval, want de verhuizing naar `app365` brengt juist een andere
+   appregistratie mee.
 2. **Billingbewijs**:
    ```sql
    select microsoft_private.copilot_zet_billingbewijs('<fonds-uuid>', true, '<actor>', '<reden>');
@@ -71,6 +92,16 @@ Uitsluitend na het licentie-, kosten- en consentbesluit uit
    ```
 5. **Readiness aantonen** — pas wanneer die `gereed` oplevert, inclusief
    tokenbevestiging, mag er één geautoriseerde Retrieval-call volgen.
+
+Controleer vóór stap 1 dat het profiel er werkelijk is. Een aangekondigd profiel
+is geen profiel:
+
+```sql
+-- Het fonds waaronder #428 is ingericht moet bestaan én de flag moet DAAR staan.
+select id, naam, slug from public.fondsen where slug = '<app365-demofonds-slug>';
+```
+
+Levert dit niets op, dan is #428 niet ingericht en stopt de activering hier.
 
 Elke operatoraanroep legt actor, reden **en** `session_user` vast in
 `microsoft_private.copilot_operator_log`. Die laatste zet de functie zelf: binnen

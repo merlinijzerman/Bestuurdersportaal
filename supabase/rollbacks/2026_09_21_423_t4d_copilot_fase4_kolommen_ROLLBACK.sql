@@ -13,15 +13,17 @@
 --
 --  SQL-EDITORVAST: geen psql-metacommando's; één transactie.
 --
---  VUL IN: zet hieronder de bevestiging op 'ja'.
+--  VUL IN: de bevestiging op 'ja', en het WAARGENOMEN deploymoment als
+--          tijdstempel (bijvoorbeeld 2026-09-21T14:05:00+02:00).
 -- ============================================================================
 begin;
 
-select set_config('t4d.oude_code_gedeployd', 'VUL_IN', true);
+select set_config('t4d.oude_code_gedeployd', 'VUL_IN', true),
+       set_config('t4d.deploy_moment', 'VUL_IN', true);
 
 -- ── Preflight ───────────────────────────────────────────────────────────────
 do $$
-declare v_vers integer; v_rest text;
+declare v_vers integer; v_rest text; v_moment timestamptz;
 begin
   if coalesce(current_setting('t4d.oude_code_gedeployd', true), '') <> 'ja' then
     raise exception 'FASE 4 geweigerd: zet bovenaan dit bestand de bevestiging op ''ja''. Deze fase is onomkeerbaar.';
@@ -50,6 +52,22 @@ begin
     raise exception 'FASE 4 geweigerd: de generator uit fase 2 ontbreekt. Zij moet ná het droppen van de kolommen opnieuw draaien, anders verwijst de herstelde functie naar kolommen die niet meer bestaan.';
   end if;
 
+  -- Het WAARGENOMEN deploymoment is de scherpe grens. Een vast venster van een
+  -- uur zou een correcte rollback nog een uur tegenhouden om koppelingen die
+  -- van vóór de deploy stammen — terecht geschreven door code die toen nog
+  -- draaide. Alleen writes ná dat moment zeggen iets over de huidige stand.
+  begin
+    v_moment := coalesce(current_setting('t4d.deploy_moment', true), '')::timestamptz;
+  exception when others then
+    raise exception 'FASE 4 geweigerd: vul bovenaan dit bestand het waargenomen deploymoment in als tijdstempel, bijvoorbeeld 2026-09-21T14:05:00+02:00.';
+  end;
+  if v_moment > now() then
+    raise exception 'FASE 4 geweigerd: het opgegeven deploymoment (%) ligt in de toekomst; dan meet de controle een leeg venster en stelt zij niets vast.', v_moment;
+  end if;
+  if v_moment > now() - interval '2 minutes' then
+    raise notice 'LET OP: het deploymoment is nog geen twee minuten geleden. Neem de deploy eerst werkelijk waar; de controle hieronder meet dan pas iets.';
+  end if;
+
   if exists (
     select 1 from information_schema.columns
      where table_schema = 'microsoft_private' and table_name = 'verbindingen'
@@ -57,10 +75,10 @@ begin
   ) then
     execute $q$
       select count(*) from microsoft_private.verbindingen
-       where client_id is not null and gekoppeld_op > now() - interval '1 hour'
-    $q$ into v_vers;
+       where client_id is not null and gekoppeld_op > $1
+    $q$ into v_vers using v_moment;
     if v_vers > 0 then
-      raise exception 'FASE 4 geweigerd: % verse koppeling(en) met een gevulde client_id in het laatste uur. Er draait nog een instantie op de nieuwe code.', v_vers;
+      raise exception 'FASE 4 geweigerd: % koppeling(en) met een gevulde client_id NA het opgegeven deploymoment (%). Er draait nog een instantie op de nieuwe code.', v_vers, v_moment;
     end if;
   end if;
 end $$;
@@ -135,6 +153,28 @@ begin
   ) rest;
   if v_rest is not null then
     raise exception 'FASE 4 mislukt: deze copilot-objecten staan er nog: %', v_rest;
+  end if;
+
+  -- ── Auditslot: tabel ÉN de append-only trigger ──────────────────────────
+  -- Een append-only tabel zonder haar trigger is geen append-only tabel. Een
+  -- destructieve rollback voortzetten terwijl het operatorspoor onbeschermd is,
+  -- is precies het moment waarop je moet stoppen. Schemagekwalificeerd, want
+  -- `relname` alleen kan een gelijknamige tabel in een ander schema treffen.
+  if not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'microsoft_private' and c.relname = 'copilot_operator_log'
+       and c.relkind = 'r'
+  ) then
+    raise exception 'FASE 4 mislukt: copilot_operator_log ontbreekt in microsoft_private; dat is auditdata en hoort te blijven staan';
+  end if;
+  if not exists (
+    select 1 from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'microsoft_private' and c.relname = 'copilot_operator_log'
+       and not t.tgisinternal
+  ) then
+    raise exception 'FASE 4 mislukt: de append-only trigger op copilot_operator_log ontbreekt; het auditspoor is muteerbaar';
   end if;
 
   raise notice 'FASE 4 geslaagd: T4-D is volledig teruggebouwd. copilot_operator_log blijft staan als auditspoor.';

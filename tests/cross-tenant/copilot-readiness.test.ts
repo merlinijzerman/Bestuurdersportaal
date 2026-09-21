@@ -543,21 +543,84 @@ test("de rollbackbestanden zijn plakbaar in de Supabase SQL Editor", () => {
   }
 });
 
-test("de rollback wist het operatorauditspoor niet", () => {
+test("elke rollbackfase controleert het auditslot echt, niet op tekst", () => {
   // CLAUDE.md stelt append-only audit als niet-onderhandelbaar. Een rollback is
   // geen vrijbrief om stilletjes te wissen wie de rem wanneer en waarom bediende.
+  //
+  // Deze test zoekt bewust NIET naar de naam `copilot_operator_log`: die komt ook
+  // voor in een uitzonderingsclausule en in een succesmelding, en dan lijkt een
+  // fase gecontroleerd terwijl zij niets toetst. Dat was precies de bevinding op
+  // PR #425. Er moet een echte pg_class- én pg_trigger-controle staan,
+  // schemagekwalificeerd, met `not tgisinternal` zodat een systeemtrigger (een
+  // foreign key bijvoorbeeld) niet voor het append-only slot doorgaat.
   for (const fase of ROLLBACKFASEN) {
     const sql = zonderCommentaar(rollbackBestand(fase));
+
     assert.ok(
       !/drop table[^;]*copilot_operator_log/i.test(sql),
       `fase ${fase} dropt het auditspoor`,
     );
-  }
-  for (const fase of ["3_poorten", "4_kolommen"] as const) {
-    assert.match(
-      zonderCommentaar(rollbackBestand(fase)),
-      /copilot_operator_log/,
-      `fase ${fase} controleert het auditspoor niet`,
+
+    const tabelcontrole = new RegExp(
+      "from pg_class c join pg_namespace n on n\\.oid = c\\.relnamespace\\s+" +
+      "where n\\.nspname = 'microsoft_private' and c\\.relname = 'copilot_operator_log'",
     );
+    assert.match(sql, tabelcontrole, `fase ${fase} toetst het bestaan van de auditTABEL niet`);
+
+    assert.match(
+      sql,
+      /from pg_trigger t[\s\S]{0,400}?c\.relname = 'copilot_operator_log'[\s\S]{0,200}?not t\.tgisinternal/,
+      `fase ${fase} toetst de append-only TRIGGER niet`,
+    );
+
+    assert.match(
+      sql,
+      /raise exception 'FASE \d mislukt: de append-only trigger op copilot_operator_log ontbreekt/,
+      `fase ${fase} faalt niet op een ontbrekend auditslot`,
+    );
+  }
+});
+
+test("de deploycontrole meet vanaf het waargenomen deploymoment", () => {
+  // Een vast venster van een uur houdt een correcte rollback nog een uur tegen
+  // om koppelingen die van vóór de deploy stammen — terecht geschreven door code
+  // die toen nog draaide. Alleen writes ná dat moment zeggen iets.
+  for (const fase of ["3_poorten", "4_kolommen"] as const) {
+    const sql = zonderCommentaar(rollbackBestand(fase));
+    assert.match(sql, /t4d\.deploy_moment/, `fase ${fase} vraagt geen deploymoment`);
+    assert.match(sql, /gekoppeld_op > \$1/, `fase ${fase} meet niet vanaf het deploymoment`);
+    assert.ok(
+      !/interval '1 hour'/.test(sql),
+      `fase ${fase} gebruikt nog het vaste uurvenster`,
+    );
+    // Een moment in de toekomst meet een leeg venster en stelt dus niets vast.
+    assert.match(sql, /ligt in de toekomst/, `fase ${fase} accepteert een deploymoment in de toekomst`);
+    // De handmatige bevestiging blijft daarnaast staan.
+    assert.match(sql, /t4d\.oude_code_gedeployd/, `fase ${fase} vraagt geen deploybevestiging`);
+  }
+});
+
+test("het runbook blokkeert activering tot #428 is ingericht", () => {
+  // De eerste structurele demoactivering verhuist naar app365; het PGB-profiel
+  // mag geen vervanger zijn. De CODE blijft fondsneutraal — deze blokkade is
+  // operationeel en hoort in het runbook, niet in een `if` in de poort.
+  const runbook = readFileSync(
+    resolve(import.meta.dirname, "../..", "security/COPILOT-T4D-RUNBOOK.md"),
+    "utf8",
+  );
+  const activatie = runbook.slice(runbook.indexOf("## 2. Activatie"), runbook.indexOf("## 3."));
+  assert.ok(activatie.length > 0, "de activatieparagraaf is niet gevonden");
+  assert.match(activatie, /GEBLOKKEERD/, "activering is niet als geblokkeerd gemarkeerd");
+  assert.match(activatie, /#428/, "het runbook noemt #428 niet");
+  assert.match(activatie, /app365_m365_demo_copilot/, "het toekomstige profiel wordt niet benoemd");
+  assert.match(activatie, /PGB-profiel mag hiervoor niet als vervanger/, "het PGB-profiel wordt niet uitgesloten");
+
+  // En de code blijft er buiten: geen fondsnaam in de poort.
+  for (const bestand of [
+    "core/lib/microsoft-retrieval/rollout-core.ts",
+    "core/lib/microsoft-retrieval/copilot-tokenbron.ts",
+  ]) {
+    const inhoud = readFileSync(resolve(import.meta.dirname, "../..", bestand), "utf8");
+    assert.ok(!/\bPGB\b|app365/.test(inhoud), `${bestand} noemt een specifiek fonds of profiel`);
   }
 });
