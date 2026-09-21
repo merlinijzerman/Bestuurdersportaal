@@ -63,6 +63,7 @@ import {
   type BronSnapshot,
   type ItemAfwijzing,
   type ItemLezer,
+  type RootUitkomst,
   type Versiebewijs,
 } from "./driveitem";
 import { lokaliseerEersteBruikbare, type Lokalisatie } from "./extractlokalisatie";
@@ -235,6 +236,7 @@ export interface KetenTelling {
 
 export type KetenResultaat =
   | { ok: true; treffers: KetenTreffer[]; telling: KetenTelling }
+  /** De scope was niet houdbaar; er zijn GEEN treffers, ook niet gedeeltelijk. */
   | { ok: false; afwijzing: ItemAfwijzing; telling: KetenTelling };
 
 // ── Opdracht ────────────────────────────────────────────────────────────────
@@ -255,8 +257,19 @@ export interface KetenOpdracht {
    */
   accessToken: string;
   leesItem: ItemLezer;
+  /**
+   * Leest de bronregistratie OPNIEUW, tijdens het verzoek.
+   *
+   * `bron` hierboven is een momentopname van vóór de beurt. Wordt de bron
+   * ingetrokken, gepauzeerd of opnieuw geconfigureerd terwijl wij bezig zijn,
+   * dan zegt die momentopname daar niets over — en zonder herlezing zou een
+   * passage worden vrijgegeven op grond van een registratie die op dat moment
+   * niet meer bestaat. Verplicht: zonder herlezing is er geen grondslag om op
+   * toe te laten.
+   */
+  herleesBron: () => Promise<BronSnapshot | undefined>;
   /** De private registeropzoeking; levert hoogstens één rij. */
-  zoekRegister: (canoniek: string) => Promise<GeregistreerdDocument | undefined>;
+  zoekRegister: (canoniek: string, signal?: AbortSignal) => Promise<GeregistreerdDocument | undefined>;
   /** Levert de kandidaten bij de ZOJUIST GELEZEN root. Geïnjecteerd. */
   haalKandidaten: KandidaatBron;
   /** Het beurtsignaal. Breekt dit af, dan werpt de keten. */
@@ -265,7 +278,7 @@ export interface KetenOpdracht {
   /** Uitsluitend voor tests. */
   downloadImpl?: (opdracht: DownloadOpdracht) => Promise<DownloadResultaat>;
   /** Uitsluitend voor tests. */
-  extractImpl?: (bytes: Buffer, type: Bestandstype) => Promise<ExtractieResultaat>;
+  extractImpl?: (bytes: Buffer, type: Bestandstype, signal?: AbortSignal) => Promise<ExtractieResultaat>;
 }
 
 // ── Hulpmiddelen ────────────────────────────────────────────────────────────
@@ -316,9 +329,14 @@ interface Groep {
  * Voert de volledige keten uit voor één bron.
  *
  * WERPT bij een afbreking van de beurt en bij een providerstoring — die mogen
- * niet stil tot een lege uitslag degraderen. Levert `ok: false` alleen als de
- * ROOT niet is vast te stellen: dan is er geen scope om in te zoeken en is er
- * ook niets afgewezen.
+ * niet stil tot een lege uitslag degraderen.
+ *
+ * `ok: false` betekent dat de SCOPE ZELF niet houdbaar was, niet dat er
+ * kandidaten zijn afgewezen. Twee gevallen:
+ *   • de root is niet vast te stellen — dan is er niets te doorzoeken;
+ *   • de registratie of de root is TIJDENS het verzoek gewijzigd — dan rust
+ *     alles wat tot dan toe is toegelaten op een grondslag die niet meer
+ *     bestaat, en worden ook de reeds gevonden treffers losgelaten.
  */
 export async function voerKetenUit(opdracht: KetenOpdracht): Promise<KetenResultaat> {
   const grenzen = grenzenVan(opdracht.grenzen);
@@ -345,6 +363,7 @@ export async function voerKetenUit(opdracht: KetenOpdracht): Promise<KetenResult
   // die 600 ms te gaan had. Een deadline die de runtime mag overslaan is geen
   // deadline. Weglaten kost niets, want `clearTimeout` staat in de `finally`
   // hieronder en de timer kan de keten dus nooit overleven.
+  const eindtijd = Date.now() + grenzen.deadlineMs;
   const timer = setTimeout(() => eigenKlok.abort(verlopen), grenzen.deadlineMs);
   const keten = opdracht.signal
     ? AbortSignal.any([opdracht.signal, eigenKlok.signal])
@@ -353,18 +372,70 @@ export async function voerKetenUit(opdracht: KetenOpdracht): Promise<KetenResult
   /**
    * NA ELKE STAP, ook na een geslaagde. Beurtafbreking wint: die werpt door.
    * Daarna pas onze eigen klok, die als budgetuitkomst wordt afgehandeld.
+   *
+   * DE WANDKLOK STAAT HIER NIET VOOR NIETS NAAST DE TIMERVLAG. Een
+   * `setTimeout`-callback is een macrotaak: blokkeert een synchrone stap de
+   * event-loop — en onze eigen extractie van een groot PDF doet precies dat —
+   * dan is de deadline allang verstreken terwijl `eigenKlok.signal.aborted`
+   * nog `false` is, want de callback heeft nooit kunnen draaien. Wie alleen de
+   * vlag leest, laat daarna doodleuk de volgende stap vertrekken.
+   *
+   * Wat hier wordt afgedwongen is dus niet "geen synchroon werk meer na de
+   * deadline" — dat kán deze keten niet, want een blokkerende extractie is niet
+   * te onderbreken zonder worker. Wat wél wordt afgedwongen: na de deadline
+   * wordt niets meer TOEGELATEN. De bytegrens per download is wat begrenst
+   * hoeveel synchroon werk er überhaupt mogelijk is.
    */
   const bewaak = (): void => {
     bewaakNaIO(opdracht.signal);
     if (eigenKlok.signal.aborted) throw verlopen;
+    if (Date.now() >= eindtijd) {
+      // Ook de controller afbreken: alles wat nog op `keten` wacht moet mee.
+      eigenKlok.abort(verlopen);
+      throw verlopen;
+    }
+  };
+
+  /**
+   * Wacht op geïnjecteerd werk, maar NOOIT langer dan de deadline.
+   *
+   * Een signaal in de signatuur zegt alleen dat een implementatie kán stoppen;
+   * het dwingt niet af dat zij het dóét. Zonder deze race wachtte de keten op
+   * wat de aanroeper toevallig teruggeeft: gemeten liep een registerlezing met
+   * een budget van 300 ms door tot 5.003 ms, en de "deadline" was daarmee niet
+   * meer dan een commentaarregel.
+   *
+   * De verlaten belofte krijgt een `catch`: een afgedankte belofte die later
+   * alsnog faalt, sloopt het proces als unhandled rejection.
+   */
+  const metDeadline = async <T>(werk: Promise<T>): Promise<T> => {
+    if (keten.aborted) {
+      void werk.catch(() => {});
+      throw keten.reason ?? verlopen;
+    }
+    let ontkoppel = (): void => {};
+    const grens = new Promise<never>((_, afwijzen) => {
+      const opAbort = () => afwijzen(keten.reason ?? verlopen);
+      keten.addEventListener("abort", opAbort, { once: true });
+      ontkoppel = () => keten.removeEventListener("abort", opAbort);
+    });
+    try {
+      return await Promise.race([werk, grens]);
+    } finally {
+      ontkoppel();
+      void werk.catch(() => {});
+    }
   };
 
   try {
-    return await draaiKeten(opdracht, grenzen, telling, keten, bewaak, verlopen);
+    return await draaiKeten(opdracht, grenzen, telling, keten, bewaak, metDeadline, verlopen);
   } finally {
     clearTimeout(timer);
   }
 }
+
+/** Wacht op geïnjecteerd werk, maar nooit langer dan de ketendeadline. */
+type MetDeadline = <T>(werk: Promise<T>) => Promise<T>;
 
 async function draaiKeten(
   opdracht: KetenOpdracht,
@@ -372,6 +443,7 @@ async function draaiKeten(
   telling: KetenTelling,
   keten: AbortSignal,
   bewaak: () => void,
+  metDeadline: MetDeadline,
   verlopen: KetenDeadline,
 ): Promise<KetenResultaat> {
   const { bron } = opdracht;
@@ -385,16 +457,24 @@ async function draaiKeten(
   let openDocumenten = 0;
 
   try {
+    // Elke Graph-lezing loopt door de race. `leesRoot()` en de twee
+    // bevestigingen roepen de lezer zelf aan; door HEM te omwikkelen valt ook
+    // hun I/O onder de deadline, zonder dat driveitem.ts er iets van hoeft te
+    // weten.
+    const leesItem: ItemLezer = (itemId, signal) => metDeadline(opdracht.leesItem(itemId, signal));
+
     // ── Stap 1: de root, ÉÉN keer ───────────────────────────────────────────
     bewaak();
-    const root = await leesRoot(bron, opdracht.leesItem, keten);
+    const root = await leesRoot(bron, leesItem, keten);
     bewaak();
     if (!root.ok) return { ok: false, afwijzing: root.afwijzing, telling };
 
     // ── Stap 2: de kandidaten, bij DEZE root ────────────────────────────────
-    const rauw = await opdracht.haalKandidaten(
-      { rootWebUrl: root.rootWebUrl, siteHostnaam: bron.siteHostnaam },
-      keten,
+    const rauw = await metDeadline(
+      opdracht.haalKandidaten(
+        { rootWebUrl: root.rootWebUrl, siteHostnaam: bron.siteHostnaam },
+        keten,
+      ) as Promise<readonly CopilotKandidaat[]>,
     );
     bewaak();
 
@@ -413,7 +493,9 @@ async function draaiKeten(
       }
       const hit = rauw[index];
       bewaak();
-      const mapping = await zoekBronreferentie(hit.webUrl, root.rootWebUrl, opdracht.zoekRegister);
+      const mapping = await zoekBronreferentie(hit.webUrl, root.rootWebUrl, (canoniek) =>
+        metDeadline(opdracht.zoekRegister(canoniek, keten)),
+      );
       bewaak();
       if (!mapping.ok) {
         afwijzingen[mapping.afwijzing] += 1;
@@ -499,12 +581,21 @@ async function draaiKeten(
 
       const uitkomst = await verwerkDocument(opdracht, groep, {
         bron,
-        rootGraphPad: root.rootGraphPad,
+        root,
+        leesItem,
         keten,
         bewaak,
+        metDeadline,
         telling,
+        grenzen,
         resterendeBytes,
       });
+      // De GRONDSLAG is weggevallen: de registratie of de root is tijdens dit
+      // verzoek gewijzigd. Dat geldt niet één document maar de hele scope —
+      // ook de treffers die al waren toegelaten rusten op wat er niet meer is.
+      if (!uitkomst.ok && uitkomst.grondslagWeg) {
+        return { ok: false, afwijzing: "rechten_configuratie", telling };
+      }
       if (uitkomst.verbruikt) slots += 1;
       if (uitkomst.ok) {
         treffers.push(uitkomst.treffer);
@@ -547,10 +638,14 @@ function voegExtractsToe(groep: Groep, extracts: readonly string[], max: number)
 
 interface DocumentContext {
   bron: BronSnapshot;
-  rootGraphPad: string;
+  root: RootUitkomst;
+  /** De lezer ZOALS DE KETEN HEM GEBRUIKT: al door de deadlinerace gehaald. */
+  leesItem: ItemLezer;
   keten: AbortSignal;
   bewaak: () => void;
+  metDeadline: MetDeadline;
   telling: KetenTelling;
+  grenzen: KetenGrenzen;
   resterendeBytes: number;
 }
 
@@ -560,17 +655,42 @@ interface DocumentContext {
  * een gratis controle afvalt, laat het budget onaangeroerd — anders zouden zes
  * bestanden met een onleesbaar formaat het budget opmaken zonder dat er één
  * byte is opgehaald.
+ *
+ * `grondslagWeg` is geen documentuitkomst maar een BEURTuitkomst: de
+ * registratie of de root is tijdens dit verzoek gewijzigd, en dan klopt de
+ * scope waaronder álles is beoordeeld niet meer.
  */
 type DocumentUitkomst =
   | { ok: true; verbruikt: boolean; treffer: KetenTreffer }
-  | { ok: false; verbruikt: boolean; afwijzing: KetenAfwijzing };
+  | { ok: false; verbruikt: boolean; afwijzing: KetenAfwijzing; grondslagWeg?: boolean };
+
+/**
+ * Is de registratie waarop wij deze beurt bouwen nog dezelfde?
+ *
+ * Elke waarde hier bepaalt mede de SCOPE: een andere drive of root betekent een
+ * andere verzameling documenten, een andere configuratieversie betekent dat de
+ * bron opnieuw is ingericht, en een status die niet `actief` is, betekent dat
+ * er niets meer uit mag komen.
+ */
+function bronOngewijzigd(eerste: BronSnapshot, nu: BronSnapshot): boolean {
+  return (
+    nu.status === "actief" &&
+    nu.id === eerste.id &&
+    nu.tenantId === eerste.tenantId &&
+    nu.siteHostnaam === eerste.siteHostnaam &&
+    nu.driveId === eerste.driveId &&
+    nu.rootItemId === eerste.rootItemId &&
+    nu.configuratieversie === eerste.configuratieversie
+  );
+}
 
 async function verwerkDocument(
   opdracht: KetenOpdracht,
   groep: Groep,
   ctx: DocumentContext,
 ): Promise<DocumentUitkomst> {
-  const { bron, rootGraphPad, keten, bewaak, telling } = ctx;
+  const { bron, root, leesItem, keten, bewaak, metDeadline, telling, grenzen } = ctx;
+  const rootGraphPad = root.rootGraphPad;
   const document = groep.document;
 
   // Zonder eigen extractie is er niets om het extract in terug te vinden. Dit
@@ -592,57 +712,89 @@ async function verwerkDocument(
       rootGraphPad,
       signal: keten,
     },
-    opdracht.leesItem,
+    leesItem,
   );
   bewaak();
   if (!bevestigd.ok) return { ok: false, verbruikt: true, afwijzing: bevestigd.afwijzing };
 
   // ── Download, binnen het RESTERENDE beurtbudget ───────────────────────────
   const doeDownload = opdracht.downloadImpl ?? downloadItem;
-  const gedownload = await doeDownload({
-    accessToken: opdracht.accessToken,
-    driveId: bron.driveId,
-    itemId: document.itemId,
-    siteHostnaam: bron.siteHostnaam,
-    signal: keten,
-    maxBytes: Math.min(MAX_DOWNLOAD_BYTES, ctx.resterendeBytes),
-  });
+  const gedownload = await metDeadline(
+    doeDownload({
+      accessToken: opdracht.accessToken,
+      driveId: bron.driveId,
+      itemId: document.itemId,
+      siteHostnaam: bron.siteHostnaam,
+      signal: keten,
+      maxBytes: Math.min(MAX_DOWNLOAD_BYTES, ctx.resterendeBytes),
+    }),
+  );
   bewaak();
   if (!gedownload.ok) return { ok: false, verbruikt: true, afwijzing: gedownload.afwijzing };
   telling.gedownloadeBytes += gedownload.bytes.byteLength;
+  // DE KETEN TELT ZELF NA. `maxBytes` is een instructie aan de downloader, geen
+  // bewijs: een implementatie die hem negeert of verkeerd klemt, zou het
+  // beurtbudget stil laten overschrijden. Wat werkelijk binnenkwam is wat telt.
+  if (gedownload.bytes.byteLength > ctx.resterendeBytes) {
+    return { ok: false, verbruikt: true, afwijzing: "grens" };
+  }
 
   // ── Eigen extractie ───────────────────────────────────────────────────────
   const doeExtractie = opdracht.extractImpl ?? extractTekst;
   let extractie: ExtractieResultaat;
   try {
-    extractie = await doeExtractie(gedownload.bytes, type);
+    extractie = await metDeadline(doeExtractie(gedownload.bytes, type, keten));
   } catch (fout) {
     // Een afbreking of een verlopen ketenbudget is GEEN mislukte extractie;
     // zonder deze regel zou een afgebroken beurt als kwaliteitsuitkomst eindigen.
     bewaakNaIO(opdracht.signal, fout);
     bewaak();
+    if (fout instanceof KetenDeadline) throw fout;
     return { ok: false, verbruikt: true, afwijzing: "extractie" };
   }
   bewaak();
   const segmenten = extractie.segmenten ?? [];
-  telling.geextraheerdeTekens += segmenten.reduce((som, s) => som + s.tekst.length, 0);
+  const tekens = segmenten.reduce((som, segment) => som + segment.tekst.length, 0);
+  telling.geextraheerdeTekens += tekens;
+  // Ook hier natellen: het extractiebudget is een TOTAAL over de beurt, en een
+  // document dat het alsnog overschrijdt wordt niet toegelaten. Anders is de
+  // grens een gemiddelde in plaats van een grens.
+  if (telling.geextraheerdeTekens > grenzen.maxExtractieTekens) {
+    return { ok: false, verbruikt: true, afwijzing: "grens" };
+  }
+
+  // ── DE GRONDSLAG, opnieuw vastgesteld vlak vóór toelating ─────────────────
+  // Tussen de eerste momentopname en dit punt zit alles: de rootlezing, de
+  // kandidatenronde, de registeropzoekingen, een download en een extractie. In
+  // dat venster kan de bron zijn ingetrokken of opnieuw geconfigureerd, en kan
+  // de root zijn verplaatst of hernoemd. Beide maken de scope waaronder wij tot
+  // hier redeneerden ongeldig — en geen van beide is te zien aan het DOCUMENT.
+  const bronNu = await metDeadline(opdracht.herleesBron());
+  bewaak();
+  if (!bronNu || !bronOngewijzigd(bron, bronNu)) {
+    return { ok: false, verbruikt: true, afwijzing: "rechten_configuratie", grondslagWeg: true };
+  }
+  const rootNu = await leesRoot(bronNu, leesItem, keten);
+  bewaak();
+  if (!rootNu.ok || rootNu.rootWebUrl !== root.rootWebUrl || rootNu.rootGraphPad !== root.rootGraphPad) {
+    return { ok: false, verbruikt: true, afwijzing: "rechten_configuratie", grondslagWeg: true };
+  }
 
   // ── De TWEEDE lezing: volledige scope ÉN versie, ná de bytes ──────────────
   // Bewust vóór de lokalisatie. Is het bestand in het downloadvenster gewijzigd
   // of verplaatst, dan is de grond `versie` of `binding` — niet `lokalisatie`.
   // Andersom zou een gewijzigd bestand als "extract niet teruggevonden" worden
   // geboekt, en dan wijst de teller de verkeerde oorzaak aan.
-  bewaak();
   const onveranderd = await bevestigVersieOngewijzigd(
     {
-      bron,
+      bron: bronNu,
       document,
       hitCanoniek: groep.canoniek,
-      rootGraphPad,
+      rootGraphPad: rootNu.rootGraphPad,
       versieVoor: bevestigd.versie,
       signal: keten,
     },
-    opdracht.leesItem,
+    leesItem,
   );
   bewaak();
   if (!onveranderd.ok) return { ok: false, verbruikt: true, afwijzing: onveranderd.afwijzing };
@@ -651,7 +803,18 @@ async function verwerkDocument(
   const lokalisatie = lokaliseerEersteBruikbare(segmenten, groep.extracts);
   if (!lokalisatie.ok) return { ok: false, verbruikt: true, afwijzing: lokalisatie.afwijzing };
 
-  return { ok: true, verbruikt: true, treffer: maakTreffer(groep, bevestigd.naam, type, bevestigd.versie, lokalisatie.lokalisatie) };
+  // DE LAATSTE POORT. De lokalisatie hierboven is SYNCHROON en kan op een groot
+  // document lang blokkeren; zonder deze controle zou een treffer worden
+  // toegelaten die pas ná de deadline is vastgesteld. `bewaak()` kijkt naar de
+  // wandklok en niet alleen naar de timervlag, juist omdat die vlag na
+  // blokkerend werk nog niet gezet hoeft te zijn.
+  bewaak();
+
+  return {
+    ok: true,
+    verbruikt: true,
+    treffer: maakTreffer(groep, bevestigd.naam, type, bevestigd.versie, lokalisatie.lokalisatie),
+  };
 }
 
 /**

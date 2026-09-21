@@ -83,11 +83,15 @@ interface DocOpties {
 
 interface Wereld {
   leesItem: KetenOpdracht["leesItem"];
+  /** De registratie zoals een HERLEZING hem nu zou teruggeven; tests mogen hem wijzigen. */
+  bronNu: { waarde: BronSnapshot | undefined };
+  herleesBron: KetenOpdracht["herleesBron"];
   zoekRegister: KetenOpdracht["zoekRegister"];
   downloadImpl: (opdracht: DownloadOpdracht) => Promise<DownloadResultaat>;
   extractImpl: (bytes: Buffer, type: Bestandstype) => Promise<ExtractieResultaat>;
   log: {
     lezingen: string[];
+    herlezingen: number;
     lezingSignalen: (AbortSignal | undefined)[];
     opzoekingen: string[];
     downloads: DownloadOpdracht[];
@@ -99,6 +103,7 @@ interface Wereld {
 function wereld(docs: DocOpties[], opties: { rootAfwijking?: Partial<GraphDriveItem> } = {}): Wereld {
   const log = {
     lezingen: [] as string[],
+    herlezingen: 0,
     lezingSignalen: [] as (AbortSignal | undefined)[],
     opzoekingen: [] as string[],
     downloads: [] as DownloadOpdracht[],
@@ -155,6 +160,12 @@ function wereld(docs: DocOpties[], opties: { rootAfwijking?: Partial<GraphDriveI
     };
   };
 
+  const bronNu: { waarde: BronSnapshot | undefined } = { waarde: BRON };
+  const herleesBron: KetenOpdracht["herleesBron"] = async () => {
+    log.herlezingen += 1;
+    return bronNu.waarde;
+  };
+
   const zoekRegister: KetenOpdracht["zoekRegister"] = async (canoniek) => {
     log.opzoekingen.push(canoniek);
     return register.get(canoniek);
@@ -182,6 +193,8 @@ function wereld(docs: DocOpties[], opties: { rootAfwijking?: Partial<GraphDriveI
 
   return {
     leesItem,
+    bronNu,
+    herleesBron,
     zoekRegister,
     downloadImpl,
     extractImpl,
@@ -217,6 +230,7 @@ function opdrachtVoor(
     tokenTenantId: TENANT,
     accessToken: "stub-token",
     leesItem: w.leesItem,
+    herleesBron: w.herleesBron,
     zoekRegister: w.zoekRegister,
     haalKandidaten: async () => kandidaten,
     downloadImpl: w.downloadImpl,
@@ -274,8 +288,12 @@ test("één hit levert één treffer, met de passage UIT DE EIGEN EXTRACTIE", as
   assert.equal(treffer.versie.soort, "etag");
   controleerBalans(resultaat);
 
-  // De root is ÉÉN keer gelezen, het item twee keer: vóór en ná de download.
-  assert.deepEqual(w.log.lezingen, [ROOT_ITEM, "item-a", "item-a"]);
+  // De root wordt twee keer gelezen — bij het bepalen van de scope, en opnieuw
+  // vlak vóór toelating om een rootverplaatsing tijdens het verzoek af te
+  // vangen. Het item ook twee keer: vóór en ná de download. En de registratie
+  // is tijdens het verzoek herlezen.
+  assert.deepEqual(w.log.lezingen, [ROOT_ITEM, "item-a", ROOT_ITEM, "item-a"]);
+  assert.equal(w.log.herlezingen, 1);
   assert.equal(w.log.downloads.length, 1);
   assert.equal(w.log.extracties.length, 1);
 });
@@ -856,12 +874,34 @@ test("het bytebudget van de BEURT stopt verdere downloads", async () => {
     ),
   );
   assert.ok(resultaat.ok);
-  // Document 1 past (600). Document 2 krijgt nog 400 mee en levert in deze
-  // stub 600 — de echte download zou hem op 400 afkappen. Document 3 vindt
-  // geen ruimte meer en wordt niet eens geprobeerd.
+  // Document 1 past (600). Document 2 krijgt nog 400 mee, maar deze stub NEGEERT
+  // `maxBytes` en levert er 600 — precies het geval waarin de keten niet op de
+  // downloader mag vertrouwen. Zij telt zelf na en laat het document niet toe.
+  // Document 3 vindt geen ruimte meer en wordt niet eens geprobeerd.
   assert.equal(w.log.downloads.length, 2);
   assert.equal(w.log.downloads[1].maxBytes, 400);
+  assert.equal(resultaat.treffers.length, 1, "een document is toegelaten buiten het bytebudget");
+  assert.equal(resultaat.telling.afwijzingen.grens, 2);
+  controleerBalans(resultaat);
+});
+
+test("de keten telt de WERKELIJK ontvangen bytes na, niet wat zij heeft gevraagd", async () => {
+  // Een downloader die `maxBytes` negeert mag het beurtbudget niet stil
+  // oprekken. De grens is wat er binnenkwam, niet wat er is gevraagd.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      grenzen: { maxTotaalBytes: 500 },
+      downloadImpl: async (o) => {
+        assert.equal(o.maxBytes, 500);
+        return { ok: true, bytes: Buffer.alloc(5_000, 1) };
+      },
+    }),
+  );
+  assert.ok(resultaat.ok);
+  assert.equal(resultaat.treffers.length, 0);
   assert.equal(resultaat.telling.afwijzingen.grens, 1);
+  assert.equal(resultaat.telling.gedownloadeBytes, 5_000, "de werkelijke bytes zijn niet geteld");
   controleerBalans(resultaat);
 });
 
@@ -877,9 +917,34 @@ test("het extractiebudget van de BEURT stopt verder extractiewerk", async () => 
     ),
   );
   assert.ok(resultaat.ok);
+  // Document 1 past. Document 2 wordt nog geëxtraheerd — de omvang is pas ná de
+  // extractie bekend — maar duwt het totaal over de grens en wordt dáárom niet
+  // toegelaten. Een totaal dat één document mag overschrijden is geen totaal
+  // maar een gemiddelde. Document 3 wordt niet meer geprobeerd.
   assert.equal(w.log.extracties.length, 2);
-  assert.equal(resultaat.telling.afwijzingen.grens, 1);
+  assert.equal(resultaat.treffers.length, 1);
+  assert.equal(resultaat.telling.afwijzingen.grens, 2);
   assert.ok(resultaat.telling.geextraheerdeTekens >= lang.length);
+  controleerBalans(resultaat);
+});
+
+test("de keten telt de WERKELIJK geëxtraheerde tekens na", async () => {
+  // De extractie is geïnjecteerd; haar omvang is geen belofte maar een meting.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      grenzen: { maxExtractieTekens: 100 },
+      extractImpl: async () => ({
+        tekst: "",
+        aantalPaginas: 1,
+        segmenten: [{ tekst: `${ZIN} ${"x".repeat(5_000)}`, pagina: 1, paragraaf: null }],
+      }),
+    }),
+  );
+  assert.ok(resultaat.ok);
+  assert.equal(resultaat.treffers.length, 0, "een document is toegelaten buiten het extractiebudget");
+  assert.equal(resultaat.telling.afwijzingen.grens, 1);
+  assert.ok(resultaat.telling.geextraheerdeTekens > 100);
   controleerBalans(resultaat);
 });
 
@@ -948,7 +1013,7 @@ test("IEDERE Graph-lezing krijgt het ketensignaal mee", async () => {
   // nooit terugkomt: `bewaakNaIO()` kijkt TUSSEN de stappen, niet erin.
   const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
   await voerKetenUit(opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)]));
-  assert.equal(w.log.lezingen.length, 3);
+  assert.equal(w.log.lezingen.length, 4);
   for (const [i, signaal] of w.log.lezingSignalen.entries()) {
     assert.ok(signaal instanceof AbortSignal, `lezing ${i} kreeg geen signaal`);
   }
@@ -1253,5 +1318,240 @@ test("de ketendeadline houdt het PROCES open tot zij heeft gevuurd", async () =>
     assert.ok(Number(msRuw) >= 350, `de deadline vuurde te vroeg: ${msRuw}ms`);
   } finally {
     rmSync(map, { recursive: true, force: true });
+  }
+});
+
+// ── 16. De grondslag wordt TIJDENS het verzoek opnieuw vastgesteld ──────────
+
+test("een INGETROKKEN bron tijdens het verzoek laat geen passage door", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  // De registratie verdwijnt terwijl wij bezig zijn. De momentopname van vóór
+  // de beurt weet daar niets van.
+  w.bronNu.waarde = undefined;
+  const resultaat = await voerKetenUit(opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)]));
+  assert.equal(resultaat.ok, false);
+  assert.equal(resultaat.ok === false && resultaat.afwijzing, "rechten_configuratie");
+  assert.equal(w.log.herlezingen, 1, "de registratie is niet herlezen");
+});
+
+test("een bron die tijdens het verzoek op non-actief gaat, sluit de beurt", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  w.bronNu.waarde = { ...BRON, status: "gepauzeerd" };
+  const resultaat = await voerKetenUit(opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)]));
+  assert.equal(resultaat.ok, false);
+});
+
+test("elke scopebepalende wijziging van de bron sluit de beurt", async () => {
+  // Drive, root, configuratieversie, tenant en host bepalen alle vijf WELKE
+  // documenten binnen de grens vallen. Verandert er één, dan klopt de scope
+  // waaronder tot dat moment is geredeneerd niet meer.
+  const wijzigingen: Partial<BronSnapshot>[] = [
+    { driveId: "drive-2" },
+    { rootItemId: "root-2" },
+    { configuratieversie: 4 },
+    { tenantId: "tenant-2" },
+    { siteHostnaam: "anders.sharepoint.com" },
+    { id: "33333333-3333-4333-8333-333333333333" },
+  ];
+  for (const wijziging of wijzigingen) {
+    const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+    w.bronNu.waarde = { ...BRON, ...wijziging };
+    const resultaat = await voerKetenUit(opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)]));
+    assert.equal(resultaat.ok, false, JSON.stringify(wijziging));
+  }
+});
+
+test("een intrekking bij het TWEEDE document laat ook de EERSTE treffer vallen", async () => {
+  // De eerste treffer is destijds rechtmatig toegelaten. Maar bij het teruggeven
+  // bestaat de registratie waarop hij rust niet meer, en dan hoort er niets uit
+  // deze bron naar buiten te komen — ook niet wat al klaarlag.
+  const docs = ["A", "B"].map((n) => ({ itemId: `item-${n}`, naam: `${n}.docx`, tekst: ZIN }));
+  const w = wereld(docs);
+  let herlezingen = 0;
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(
+      w,
+      docs.map((d) => hit(w.url(d.naam), EXTRACT)),
+      {
+        herleesBron: async () => {
+          herlezingen += 1;
+          return herlezingen >= 2 ? undefined : BRON;
+        },
+      },
+    ),
+  );
+  assert.equal(resultaat.ok, false, "er zijn treffers vrijgegeven na een intrekking");
+  assert.equal(herlezingen, 2);
+});
+
+test("de ROOT wordt vóór toelating opnieuw bevestigd", async () => {
+  // Verplaatsing of hernoeming van de rootmap tijdens het verzoek. Het DOCUMENT
+  // ziet er ongewijzigd uit; alleen een herlezing van de root laat het zien.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  let rootLezingen = 0;
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      leesItem: async (itemId, signal) => {
+        if (itemId !== ROOT_ITEM) return w.leesItem(itemId, signal);
+        rootLezingen += 1;
+        // De tweede rootlezing staat elders: andere map, ander pad.
+        return rootLezingen >= 2
+          ? {
+              id: ROOT_ITEM,
+              name: "Documenten-verplaatst",
+              webUrl: `https://${HOST}/sites/pgb/Archief/Documenten-verplaatst`,
+              folder: { childCount: 9 },
+              parentReference: { driveId: DRIVE, id: "drive-root", path: `/drives/${DRIVE}/root:/Archief` },
+            }
+          : w.leesItem(itemId, signal);
+      },
+    }),
+  );
+  assert.equal(resultaat.ok, false, "een passage is vrijgegeven onder een verplaatste root");
+  assert.equal(rootLezingen, 2, "de root is niet opnieuw bevestigd");
+});
+
+test("een root die bij de herbevestiging onleesbaar is, WERPT", async () => {
+  // `leesRoot()` reduceert per contract geen enkele Graph-fout: de root IS de
+  // scope, en kan die niet worden vastgesteld dan stopt de beurt luid. Dat geldt
+  // ook voor de herbevestiging — stil `ok: false` teruggeven zou een storing tot
+  // een kwaliteitsuitkomst maken.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  let rootLezingen = 0;
+  await assert.rejects(
+    voerKetenUit(
+      opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+        leesItem: async (itemId, signal) => {
+          if (itemId !== ROOT_ITEM) return w.leesItem(itemId, signal);
+          rootLezingen += 1;
+          if (rootLezingen >= 2) throw new SharePointGraphError("graph_response");
+          return w.leesItem(itemId, signal);
+        },
+      }),
+    ),
+    SharePointGraphError,
+  );
+  assert.equal(rootLezingen, 2);
+});
+
+// ── 17. De deadline is HARD, ook tegen implementaties die hem negeren ───────
+
+test("een registerlezing die het signaal NEGEERT wordt toch afgekapt", async () => {
+  // Dit is de meting die de eerdere versie liet lopen: budget 300 ms, werkelijke
+  // duur 5.003 s. Een signaal in de signatuur zegt dat een implementatie kán
+  // stoppen; het dwingt niet af dat zij het doet. De keten moet zelf ophouden
+  // met wachten.
+  const docs = ["A", "B", "C", "D"].map((n) => ({ itemId: `item-${n}`, naam: `${n}.docx`, tekst: ZIN }));
+  const w = wereld(docs);
+  let nummer = 0;
+  const begin = Date.now();
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(
+      w,
+      docs.map((d) => hit(w.url(d.naam), EXTRACT)),
+      {
+        grenzen: { deadlineMs: 300 },
+        zoekRegister: async (canoniek) => {
+          nummer += 1;
+          // Negeert het signaal volledig: geen listener, geen afbreking.
+          if (nummer >= 3) await new Promise((r) => setTimeout(r, 5_000));
+          return w.zoekRegister(canoniek);
+        },
+      },
+    ),
+  );
+  const duur = Date.now() - begin;
+  assert.ok(resultaat.ok);
+  assert.equal(resultaat.telling.deadlineVerlopen, true);
+  assert.ok(duur < 2_000, `de keten wachtte ${duur}ms op een budget van 300ms`);
+  assert.equal(resultaat.telling.hitsGegroepeerd, 2);
+  controleerBalans(resultaat);
+});
+
+test("een kandidatenronde die het signaal negeert wordt afgekapt", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  const begin = Date.now();
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [], {
+      grenzen: { deadlineMs: 200 },
+      haalKandidaten: async () => {
+        await new Promise((r) => setTimeout(r, 5_000));
+        return [hit(w.url("A.docx"), EXTRACT)];
+      },
+    }),
+  );
+  const duur = Date.now() - begin;
+  assert.ok(resultaat.ok);
+  assert.equal(resultaat.telling.deadlineVerlopen, true);
+  assert.ok(duur < 2_000, `de keten wachtte ${duur}ms op een budget van 200ms`);
+});
+
+test("een extractie die het signaal negeert wordt afgekapt", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  const begin = Date.now();
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      grenzen: { deadlineMs: 200 },
+      extractImpl: async () => {
+        await new Promise((r) => setTimeout(r, 5_000));
+        return { tekst: ZIN, aantalPaginas: 1, segmenten: [segment(ZIN)] };
+      },
+    }),
+  );
+  const duur = Date.now() - begin;
+  assert.ok(resultaat.ok);
+  assert.equal(resultaat.treffers.length, 0);
+  assert.equal(resultaat.telling.deadlineVerlopen, true);
+  assert.ok(duur < 2_000, `de keten wachtte ${duur}ms op een budget van 200ms`);
+});
+
+test("BLOKKERENDE synchrone extractie laat geen treffer meer door na de deadline", async () => {
+  // Een `setTimeout`-callback is een macrotaak: zolang synchrone code de
+  // event-loop bezet houdt, kan de timer niet vuren en blijft
+  // `signal.aborted` false. Alleen een controle op de WANDKLOK ziet dat de
+  // deadline toch is verstreken. Zonder die controle glipt hier een treffer
+  // doorheen die ruim na de deadline is vastgesteld.
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      grenzen: { deadlineMs: 150 },
+      extractImpl: async () => {
+        // Bezet de loop; geen await, dus geen kans voor de timer.
+        const tot = Date.now() + 400;
+        while (Date.now() < tot) {
+          /* blokkeren */
+        }
+        return { tekst: ZIN, aantalPaginas: 1, segmenten: [segment(ZIN)] };
+      },
+    }),
+  );
+  assert.ok(resultaat.ok);
+  assert.equal(resultaat.treffers.length, 0, "een treffer is toegelaten na de deadline");
+  assert.equal(resultaat.telling.deadlineVerlopen, true);
+  controleerBalans(resultaat);
+});
+
+test("een afgekapte implementatie veroorzaakt geen unhandled rejection", async () => {
+  // De verlaten belofte faalt later alsnog. Zonder `catch` op de afgedankte
+  // belofte sloopt dat het proces — en dan is het geen testfout maar een crash.
+  const gezien: unknown[] = [];
+  const opFout = (fout: unknown) => gezien.push(fout);
+  process.on("unhandledRejection", opFout);
+  try {
+    const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+    const resultaat = await voerKetenUit(
+      opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+        grenzen: { deadlineMs: 120 },
+        downloadImpl: async () =>
+          new Promise((_, afwijzen) => setTimeout(() => afwijzen(new Error("te laat stuk")), 400)),
+      }),
+    );
+    assert.ok(resultaat.ok);
+    assert.equal(resultaat.telling.deadlineVerlopen, true);
+    // Wachten tot de verlaten belofte daadwerkelijk is gefaald.
+    await new Promise((r) => setTimeout(r, 500));
+    assert.deepEqual(gezien, [], `onafgehandelde afwijzing: ${JSON.stringify(gezien.map(String))}`);
+  } finally {
+    process.off("unhandledRejection", opFout);
   }
 });
