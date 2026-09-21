@@ -87,7 +87,38 @@ export type ItemLezer = (itemId: string) => Promise<GraphDriveItem>;
  * dat in de labscan om dezelfde reden.
  */
 function isShortcut(item: GraphDriveItem): boolean {
-  return (item as { remoteItem?: unknown }).remoteItem != null;
+  return item.remoteItem != null;
+}
+
+/**
+ * De VOLLEDIGE scopecontrole op één verse lezing: dezelfde drive, geen
+ * snelkoppeling, een bestand, onder de verse root, en exact de URL waarop
+ * Copilot ons stuurde.
+ *
+ * Waarom dit een eigen functie is en beide lezingen hem draaien: tussen de
+ * eerste bevestiging en de extractie zit een download. In dat venster kan het
+ * bestand naar een andere map — of zelfs een andere drive — worden verplaatst.
+ * Zou de tweede lezing alleen de eTag vergelijken, dan kan die gelijk zijn
+ * gebleven terwijl het document inmiddels buiten de geregistreerde root ligt:
+ * een TOCTOU-scopelek waarbij wij bytes citeren uit een bron die op het moment
+ * van citeren niet meer binnen onze grens valt.
+ */
+function binnenScope(
+  item: GraphDriveItem,
+  args: { bron: BronSnapshot; document: GeregistreerdDocument; hitCanoniek: string; rootGraphPad: string },
+): ItemAfwijzing | null {
+  if (item.id !== args.document.itemId) return "binding";
+  // DEZELFDE DRIVE als de bron, en de verse ouderketen onder de VERSE root.
+  // `webUrl` speelt hier geen rol: die is locator- en anti-hergebruikbewijs,
+  // nooit het bewijs dat dit item binnen onze scope ligt.
+  if (item.parentReference?.driveId !== args.bron.driveId) return "binding";
+  if (isShortcut(item)) return "binding";
+  if (!item.file) return "binding";
+  if (!itemOnderRoot(item, args.bron.driveId, args.rootGraphPad)) return "root";
+  // DE ANTI-HERGEBRUIKCONTROLE. Zonder deze regel kan een hit op de oude URL
+  // van bestand A na een rename bij bestand B uitkomen.
+  if (canoniekeWebUrl(item.webUrl) !== args.hitCanoniek) return "binding";
+  return null;
 }
 
 /**
@@ -214,20 +245,8 @@ export async function bevestigKandidaatItem(
   if (!gelezen.ok) return { ok: false, afwijzing: "rechten_configuratie" };
   const item = gelezen.item;
 
-  if (item.id !== document.itemId) return { ok: false, afwijzing: "binding" };
-  // DEZELFDE DRIVE als de bron, en de verse ouderketen onder de VERSE root.
-  // `webUrl` speelt hier geen rol: die is locator- en anti-hergebruikbewijs,
-  // nooit het bewijs dat dit item binnen onze scope ligt. Sinds Graph voor
-  // Officebestanden een viewer-URL levert, is dat onderscheid niet langer
-  // theoretisch — een containmentcontrole op de URL was daar stukgelopen.
-  if (item.parentReference?.driveId !== bron.driveId) return { ok: false, afwijzing: "binding" };
-  if (isShortcut(item)) return { ok: false, afwijzing: "binding" };
-  if (!item.file) return { ok: false, afwijzing: "binding" };
-  if (!itemOnderRoot(item, bron.driveId, rootGraphPad)) return { ok: false, afwijzing: "root" };
-
-  // DE ANTI-HERGEBRUIKCONTROLE. Zonder deze regel kan een hit op de oude URL
-  // van bestand A na een rename bij bestand B uitkomen.
-  if (canoniekeWebUrl(item.webUrl) !== hitCanoniek) return { ok: false, afwijzing: "binding" };
+  const buiten = binnenScope(item, { bron, document, hitCanoniek, rootGraphPad });
+  if (buiten) return { ok: false, afwijzing: buiten };
 
   const etag = item.eTag?.trim();
   const ctag = item.cTag?.trim();
@@ -253,14 +272,26 @@ export async function bevestigKandidaatItem(
  * geval waarin een citaat later niet meer klopt met wat er stond.
  */
 export async function bevestigVersieOngewijzigd(
-  args: { document: GeregistreerdDocument; versieVoor: Versiebewijs; signal?: AbortSignal },
+  args: {
+    bron: BronSnapshot;
+    document: GeregistreerdDocument;
+    hitCanoniek: string;
+    rootGraphPad: string;
+    versieVoor: Versiebewijs;
+    signal?: AbortSignal;
+  },
   leesItem: ItemLezer,
 ): Promise<{ ok: true } | { ok: false; afwijzing: ItemAfwijzing }> {
   const gelezen = await leesItemVeilig(leesItem, args.document.itemId, args.signal);
   if (!gelezen.ok) return { ok: false, afwijzing: "rechten_configuratie" };
   const item = gelezen.item;
-  if (item.id !== args.document.itemId) return { ok: false, afwijzing: "binding" };
-  if (isShortcut(item)) return { ok: false, afwijzing: "binding" };
+
+  // DE HELE SCOPE OPNIEUW, niet alleen de versie. Een verplaatsing tijdens de
+  // download laat de gekozen eTag ongemoeid, en dan zouden wij bytes citeren
+  // uit een bestand dat op dat moment buiten de geregistreerde root ligt.
+  const buiten = binnenScope(item, args);
+  if (buiten) return { ok: false, afwijzing: buiten };
+
   const waarde = args.versieVoor.soort === "etag" ? item.eTag?.trim() : item.cTag?.trim();
   if (!waarde || waarde !== args.versieVoor.waarde) return { ok: false, afwijzing: "versie" };
   return { ok: true };

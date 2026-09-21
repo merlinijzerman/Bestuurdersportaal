@@ -198,6 +198,13 @@ export type GraphDriveItem = {
   id?: string; name?: string; size?: number; eTag?: string; cTag?: string; webUrl?: string;
   lastModifiedDateTime?: string; folder?: { childCount?: number } | null; file?: { mimeType?: string } | null;
   parentReference?: { driveId?: string; id?: string; path?: string } | null;
+  /**
+   * SHORTCUT naar een item dat elders staat (andere drive of site). Alleen
+   * aanwezig als de lezing het veld ook opvraagt — zie `itemUrl()`. Wie op de
+   * ouderketen redeneert, moet dit veld kennen: die keten is bij een
+   * snelkoppeling die van de snelkoppeling, niet van het echte bestand.
+   */
+  remoteItem?: { id?: string; parentReference?: { driveId?: string; id?: string; path?: string } | null } | null;
 };
 
 export type SiteProjectie = { siteId: string; weergavenaam: string; hostnaam: string };
@@ -288,8 +295,14 @@ export type DocumentProjectie = {
 export function deltaUrl(driveId: string, rootItemId: string): string {
   return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/delta?$select=id,name,size,file,folder,eTag,cTag,lastModifiedDateTime,parentReference,deleted,webUrl&$top=${GRAPH_PAGINAGROOTTE}`;
 }
+/**
+ * `remoteItem` staat bewust in de `$select`: zonder dat veld levert Graph het
+ * niet, en dan kan een controle op snelkoppelingen nooit afgaan — hij zou
+ * alleen in een testfixture werken. Puur additief: bestaande aanroepers krijgen
+ * er een veld bij dat zij niet lezen.
+ */
 export function itemUrl(driveId: string, itemId: string): string {
-  return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,name,size,file,folder,eTag,cTag,lastModifiedDateTime,parentReference,webUrl`;
+  return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}?$select=id,name,size,file,folder,eTag,cTag,lastModifiedDateTime,parentReference,webUrl,remoteItem`;
 }
 export function previewActieUrl(driveId: string, itemId: string): string {
   return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}/preview`;

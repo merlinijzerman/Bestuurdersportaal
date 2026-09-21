@@ -12,7 +12,7 @@ import {
   type BronSnapshot,
 } from "../../core/lib/microsoft-retrieval/driveitem";
 import type { GeregistreerdDocument } from "../../core/lib/microsoft-retrieval/mapping";
-import { SharePointGraphError, type GraphDriveItem } from "../../core/lib/microsoft-sharepoint-graph-core";
+import { SharePointGraphError, itemUrl, type GraphDriveItem } from "../../core/lib/microsoft-sharepoint-graph-core";
 import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
 
 const HOST = "check.sharepoint.com";
@@ -251,7 +251,7 @@ test("een lezing die SLAAGT terwijl het signaal al af is, telt niet mee", async 
   const afbreking2 = new RetrievalAfgebroken("timeout");
   await assert.rejects(
     () => bevestigVersieOngewijzigd(
-      { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' }, signal: controller2.signal },
+      { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' }, signal: controller2.signal },
       async () => { controller2.abort(afbreking2); return item(); },
     ),
     (e: unknown) => e === afbreking2,
@@ -359,7 +359,7 @@ test("een SHORTCUT (remoteItem) wordt fail-closed geweigerd", async () => {
   assert.equal(root.ok === false && root.afwijzing, "rechten_configuratie");
 
   const tweede = await bevestigVersieOngewijzigd(
-    { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+    { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
     lees(shortcut),
   );
   assert.equal(tweede.ok, false);
@@ -377,7 +377,7 @@ test("CROSS-DRIVE: een item uit een andere drive valt af, ook met kloppende URL"
 
 test("de tweede versielezing eist exacte gelijkheid", async () => {
   const gelijk = await bevestigVersieOngewijzigd(
-    { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+    { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
     lees(item()),
   );
   assert.ok(gelijk.ok);
@@ -385,17 +385,41 @@ test("de tweede versielezing eist exacte gelijkheid", async () => {
   // Het bestand is tijdens download of extractie gewijzigd: wij hebben bytes van
   // versie A en een bewijs van versie B. Dat mag nooit een citaat worden.
   const gewijzigd = await bevestigVersieOngewijzigd(
-    { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+    { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
     lees(item({ eTag: 'W/"etag-2"' })),
   );
   assert.equal(gewijzigd.ok, false);
   assert.equal(gewijzigd.ok === false && gewijzigd.afwijzing, "versie");
 });
 
+test("TOCTOU: een VERPLAATSING tijdens de download valt af, ook met gelijke eTag", async () => {
+  // Het venster tussen de eerste bevestiging en de extractie is een download
+  // lang. Wordt het bestand daarin naar een andere map of drive verplaatst,
+  // dan kan de gekozen eTag gelijk blijven — en zouden wij bytes citeren uit
+  // een bron die op dat moment buiten de geregistreerde root ligt.
+  const gevallen: [string, GraphDriveItem, string][] = [
+    ["andere map", item({ parentReference: { driveId: DRIVE, path: `/drives/${DRIVE}/root:/Andere map` } }), "root"],
+    ["prefixlek", item({ parentReference: { driveId: DRIVE, path: `/drives/${DRIVE}/root:/Documenten-geheim` } }), "root"],
+    ["andere drive", item({ parentReference: { driveId: "drive-2", path: ROOT_PAD } }), "binding"],
+    ["andere webUrl na rename", item({ webUrl: `https://${HOST}/sites/pgb/Documenten/B.docx` }), "binding"],
+    ["map geworden", item({ file: null, folder: { childCount: 1 } }), "binding"],
+  ];
+  for (const [waarom, verplaatst, verwacht] of gevallen) {
+    // De eTag is in al deze gevallen ONGEWIJZIGD; alleen de scope verschoof.
+    assert.equal(verplaatst.eTag, 'W/"etag-1"', `${waarom}: de fixture wijzigde de eTag`);
+    const uitkomst = await bevestigVersieOngewijzigd(
+      { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+      lees(verplaatst),
+    );
+    assert.equal(uitkomst.ok, false, waarom);
+    assert.equal(uitkomst.ok === false && uitkomst.afwijzing, verwacht, waarom);
+  }
+});
+
 test("de tweede lezing vergelijkt DEZELFDE soort, niet de andere", async () => {
   // Een cTag die toevallig gelijk blijft mag een gewijzigde eTag niet redden.
   const uitkomst = await bevestigVersieOngewijzigd(
-    { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+    { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
     lees(item({ eTag: undefined, cTag: 'W/"etag-1"' })),
   );
   assert.equal(uitkomst.ok, false);
@@ -404,14 +428,14 @@ test("de tweede lezing vergelijkt DEZELFDE soort, niet de andere", async () => {
 
 test("een verdwenen of verwisseld item bij de tweede lezing faalt gesloten", async () => {
   const verdwenen = await bevestigVersieOngewijzigd(
-    { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+    { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
     faalt,
   );
   // En een storing bij de tweede lezing stopt de beurt in plaats van de
   // kandidaat stil te laten vallen.
   await assert.rejects(
     () => bevestigVersieOngewijzigd(
-      { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+      { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
       async () => { throw new SharePointGraphError("graph_timeout"); },
     ),
     (e: unknown) => e instanceof SharePointGraphError,
@@ -420,9 +444,21 @@ test("een verdwenen of verwisseld item bij de tweede lezing faalt gesloten", asy
   assert.equal(verdwenen.ok === false && verdwenen.afwijzing, "rechten_configuratie");
 
   const verwisseld = await bevestigVersieOngewijzigd(
-    { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+    { bron: BRON, document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
     lees(item({ id: "item-9" })),
   );
   assert.equal(verwisseld.ok, false);
   assert.equal(verwisseld.ok === false && verwisseld.afwijzing, "binding");
+});
+
+test("de Graph-lezing VRAAGT remoteItem op", () => {
+  // Zonder `remoteItem` in de `$select` levert Graph het veld niet, en dan kan
+  // de shortcutcontrole live nooit afgaan — hij zou alleen in een testfixture
+  // werken. Deze test bewaakt het veld waar de controle op steunt.
+  const url = itemUrl("drive-1", "item-1");
+  assert.match(url, /[?&]\$select=[^&]*\bremoteItem\b/, "itemUrl() selecteert remoteItem niet");
+  assert.match(url, /[?&]\$select=[^&]*\bparentReference\b/);
+  assert.match(url, /[?&]\$select=[^&]*\bwebUrl\b/);
+  assert.match(url, /[?&]\$select=[^&]*\beTag\b/);
+  assert.match(url, /[?&]\$select=[^&]*\bcTag\b/);
 });
