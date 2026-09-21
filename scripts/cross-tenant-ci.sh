@@ -238,6 +238,8 @@ SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.s
 # auth-/fonds-/rolslot, of staat als productbreed/trigger expliciet gemotiveerd
 # op de allowlist.
 SQL_SECDEF_SELF="supabase/checks/2026_08_31_secdef_self_gate.sql"
+SQL_T4D_COPILOT="supabase/checks/2026_09_21_423_t4d_copilot_rollout.sql"
+SQL_T4D_PREMERGE="supabase/checks/2026_09_21_423_t4d_premerge_readonly.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -466,6 +468,11 @@ echo
 
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5D_BEEINDIGEN"
+echo
+
+echo "-- #423 T4-D Copilot-rolloutpoorten (rollout dicht, expand-venster, rolscheiding, operatoraudit) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4D_COPILOT"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4D_PREMERGE"
 echo
 
 echo "-- #212 SECURITY DEFINER zelfsloten (inventaris + auth/fonds/rol-gates) --"
