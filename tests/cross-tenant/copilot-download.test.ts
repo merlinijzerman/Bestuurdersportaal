@@ -297,3 +297,43 @@ test("binaire inhoud komt byte-voor-byte terug", async () => {
   assert.ok(uitkomst.ok);
   assert.deepEqual(new Uint8Array(uitkomst.bytes), bytes);
 });
+
+// ── Het beurtbudget: maxBytes ───────────────────────────────────────────────
+//  De documentgrens van 25 MiB begrenst de OPTELSOM niet. De keten (T4-C 2b)
+//  geeft daarom zijn resterende beurtruimte mee; deze twee tests bewaken dat de
+//  grens dan werkelijk die kleinere waarde is en niet stilletjes 25 MiB blijft.
+
+test("een meegegeven maxBytes begrenst de body, niet de documentgrens", async () => {
+  const { impl } = stub([omleiding(DOWNLOAD), bestand("x".repeat(5_000))]);
+  const uitkomst = await downloadItem(opdracht({ fetchImpl: impl, maxBytes: 1_000 }));
+  assert.equal(uitkomst.ok, false);
+  assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "download");
+
+  // Dezelfde body past wél binnen een ruimer budget: de afwijzing komt van de
+  // grens en niet van iets anders in de keten.
+  const ruim = stub([omleiding(DOWNLOAD), bestand("x".repeat(5_000))]);
+  const tweede = await downloadItem(opdracht({ fetchImpl: ruim.impl, maxBytes: 8_000 }));
+  assert.ok(tweede.ok);
+  assert.equal(tweede.bytes.byteLength, 5_000);
+});
+
+test("maxBytes kan de harde documentgrens niet OPREKKEN", async () => {
+  const { impl } = stub([
+    omleiding(DOWNLOAD),
+    bestand("x", { "content-length": String(MAX_DOWNLOAD_BYTES + 1) }),
+  ]);
+  const uitkomst = await downloadItem(
+    opdracht({ fetchImpl: impl, maxBytes: MAX_DOWNLOAD_BYTES * 10 }),
+  );
+  assert.equal(uitkomst.ok, false);
+  assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "download");
+});
+
+test("een onbruikbare maxBytes valt terug op de documentgrens, nooit op 'geen grens'", async () => {
+  for (const waarde of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    const { impl } = stub([omleiding(DOWNLOAD), bestand("hallo")]);
+    const uitkomst = await downloadItem(opdracht({ fetchImpl: impl, maxBytes: waarde }));
+    assert.ok(uitkomst.ok, String(waarde));
+    assert.equal(uitkomst.bytes.toString("utf8"), "hallo");
+  }
+});

@@ -76,8 +76,18 @@ export interface Versiebewijs {
   waarde: string;
 }
 
-/** Leest één DriveItem. Werpt de fouten van de Graph-laag ongewijzigd door. */
-export type ItemLezer = (itemId: string) => Promise<GraphDriveItem>;
+/**
+ * Leest één DriveItem. Werpt de fouten van de Graph-laag ongewijzigd door.
+ *
+ * HET SIGNAAL STAAT IN DE SIGNATUUR, en dat is geen sierletter. `bewaakNaIO()`
+ * kijkt TUSSEN twee stappen; het kan een lezing die nooit terugkomt niet
+ * onderbreken. Zou het signaal alleen via een closure beschikbaar zijn, dan is
+ * "elke stap valt onder dezelfde deadline" een belofte die de aanroeper per
+ * ongeluk kan verbreken zonder dat iets faalt — de keten zou dan eenvoudigweg
+ * eeuwig wachten. Een lezer die de parameter negeert is een fout van de lezer;
+ * een lezer die hem niet krijgt is een fout van dit contract.
+ */
+export type ItemLezer = (itemId: string, signal?: AbortSignal) => Promise<GraphDriveItem>;
 
 /**
  * Een `remoteItem` is een SHORTCUT: het item dat je ziet staat ergens anders,
@@ -142,7 +152,7 @@ async function leesItemVeilig(
   bewaakNaIO(signal);
   let item: GraphDriveItem;
   try {
-    item = await leesItem(itemId);
+    item = await leesItem(itemId, signal);
   } catch (fout) {
     // Eerst de afbreking: een annulering die als providerfout wordt gelezen,
     // start alsnog een stille degradatie.
@@ -187,7 +197,7 @@ export async function leesRoot(
 ): Promise<RootResultaat> {
   if (bron.status !== "actief") return { ok: false, afwijzing: "rechten_configuratie" };
   bewaakNaIO(signal);
-  const root = await leesItem(bron.rootItemId);
+  const root = await leesItem(bron.rootItemId, signal);
   bewaakNaIO(signal);
   if (root.id !== bron.rootItemId || !root.folder || root.parentReference?.driveId !== bron.driveId) {
     return { ok: false, afwijzing: "rechten_configuratie" };
