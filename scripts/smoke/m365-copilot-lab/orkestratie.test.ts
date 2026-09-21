@@ -454,9 +454,29 @@ test("het rapport van een afwijzing noemt de verbruikte poging en geen fixtureco
   assert.ok(!tekst.includes("https://"), "een URL lekte in het rapport");
 });
 
-test("een afbreking tijdens de Retrieval-call blijft een gestopte run, geen afwijzing", async () => {
-  // Zou dit als providerafwijzing worden geboekt, dan zag een Ctrl-C eruit als
-  // een meetuitkomst — en dat is precies de verwarring die #420 wegnam.
+test("een afbreking VÓÓR het vertrek stopt de run en levert geen rapport", async () => {
+  // Ctrl-C bij de akkoordvraag: er is niets verzonden, dus er is geen quotum
+  // verbruikt en niets vast te leggen.
+  const afbreker = new AbortController();
+  const teller = { n: 0 };
+  const { deps } = bouw({
+    signal: afbreker.signal,
+    vraagAkkoord: async () => {
+      afbreker.abort();
+      return true;
+    },
+    retrievalFetch: (async () => {
+      teller.n++;
+      return json({ retrievalHits: [] });
+    }) as unknown as typeof fetch,
+  });
+  await assert.rejects(() => voerSmokeUit(deps));
+  assert.equal(teller.n, 0, "er is tóch een verzoek verzonden");
+});
+
+test("een afbreking NÁ het vertrek levert een eigen eindstand met de verbruikte poging", async () => {
+  // Dit is het gat: het verzoek is de deur uit, de beurt stopt, en zonder deze
+  // tak legde de runner niets vast terwijl het quotum wél op kan zijn.
   const afbreker = new AbortController();
   const { deps } = bouw({
     vraagAkkoord: async () => true,
@@ -468,7 +488,82 @@ test("een afbreking tijdens de Retrieval-call blijft een gestopte run, geen afwi
       throw fout;
     }) as unknown as typeof fetch,
   });
-  await assert.rejects(() => voerSmokeUit(deps));
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+
+  assert.equal(rapport.eindstand, "retrieval_afgebroken");
+  assert.equal(rapport.retrievalAfbreking, "annulering");
+  assert.equal(rapport.retrievalPogingen, 1);
+  assert.equal(rapport.retrieval, null);
+  // NIET als afwijzing geboekt: de provider heeft niets geweigerd.
+  assert.equal(rapport.retrievalFout, undefined);
+  assert.equal(exitcode, EXIT.retrievalAfgebroken);
+});
+
+test("een verlopen deadline ná het vertrek heet 'timeout', niet 'annulering'", async () => {
+  const afbreker = new AbortController();
+  const { deps } = bouw({
+    vraagAkkoord: async () => true,
+    signal: afbreker.signal,
+    retrievalFetch: (async () => {
+      const fout = new Error("te traag");
+      fout.name = "TimeoutError";
+      throw fout;
+    }) as unknown as typeof fetch,
+  });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.equal(rapport.eindstand, "retrieval_afgebroken");
+  assert.equal(rapport.retrievalAfbreking, "timeout");
+  assert.equal(rapport.retrievalPogingen, 1);
+  assert.equal(exitcode, EXIT.retrievalAfgebroken);
+});
+
+test("het rapport van een afbreking is inhoudsvrij en noemt het verbruikte verzoek", async () => {
+  const afbreker = new AbortController();
+  const { deps } = bouw({
+    vraagAkkoord: async () => true,
+    signal: afbreker.signal,
+    retrievalFetch: (async () => {
+      afbreker.abort();
+      const fout = new Error("afgebroken bij netorgft20476383.sharepoint.com/geheim.docx");
+      fout.name = "AbortError";
+      throw fout;
+    }) as unknown as typeof fetch,
+  });
+  const tekst = rapporteer((await voerSmokeUit(deps)).rapport);
+  assert.match(tekst, /Retrieval API-netwerkpogingen: 1/);
+  assert.match(tekst, /afgebroken.*`annulering`/);
+  assert.match(tekst, /Eindstand: `retrieval_afgebroken`/);
+  // De boodschap van de onderliggende fout mag nergens doorlekken.
+  assert.ok(!tekst.includes("geheim"), "een foutboodschap lekte in het rapport");
+  assert.ok(!tekst.includes(".docx"), "een bestandsnaam lekte in het rapport");
+  // Let op: het rapport noemt de GEREGISTREERDE host met opzet — dat is
+  // registry-metadata. Wat er niet in mag, is de host uit de foutboodschap.
+  assert.ok(!tekst.includes("netorgft20476383"), "een host uit de foutboodschap lekte in het rapport");
+});
+
+test("gegarandeerd nul tweede pogingen — ook bij een herhaalbare status", async () => {
+  // 429 en 5xx zijn op zichzelf herhaalbaar; het budget van 1 verbiedt de
+  // herhaling, en de grendel in `meet()` maakt het een feit.
+  for (const status of [429, 500, 503]) {
+    const teller = { n: 0 };
+    const { deps } = bouw({ vraagAkkoord: async () => true, retrievalFetch: afwijzendeRetrieval(status, teller) });
+    const { rapport } = await voerSmokeUit(deps);
+    assert.equal(teller.n, 1, `status ${status}: er is meer dan één verzoek verzonden`);
+    assert.equal(rapport.retrievalPogingen, 1, `status ${status}`);
+    assert.equal(rapport.eindstand, "retrieval_afgewezen", `status ${status}`);
+  }
+});
+
+test("429 levert exact één poging en de rate-limitcode, zonder retry", async () => {
+  const teller = { n: 0 };
+  const { deps } = bouw({ vraagAkkoord: async () => true, retrievalFetch: afwijzendeRetrieval(429, teller) });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.equal(teller.n, 1);
+  assert.equal(rapport.retrievalFout?.code, "copilot_rate_limit");
+  assert.equal(rapport.retrievalFout?.categorie, "rate_limit");
+  assert.equal(rapport.retrievalFout?.httpStatus, 429);
+  assert.equal(rapport.retrievalPogingen, 1);
+  assert.equal(exitcode, EXIT.retrievalAfgewezen);
 });
 
 test("een geslaagde meting noemt nu ook de feitelijke poging", async () => {

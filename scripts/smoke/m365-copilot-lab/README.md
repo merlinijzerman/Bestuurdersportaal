@@ -145,6 +145,7 @@ npm run smoke:m365-copilot-lab -- --rapport=VERIFICATIERAPPORT-labsmoke.md
 | `3` | gestopt op de poort |
 | `4` | gestopt omdat er geen akkoord kwam |
 | `5` | de call is gedaan en fail-closed afgewezen — er is een rapport |
+| `6` | afgebroken ná het vertrek van het verzoek — er is een rapport |
 
 ### Een afgewezen call is ook bewijs
 
@@ -154,8 +155,18 @@ een rapport met de vaste foutcode, de foutcategorie, de HTTP-status en het
 aantal **feitelijk verbruikte** netwerkpogingen. Dat laatste is de reden dat het
 moet: het ene toegestane verzoek is dan op, en zonder rapport staat dat nergens.
 
-Een afbreking (Ctrl-C, verlopen deadline) is géén afwijzing en levert geen
-rapport — die stopt de run, zoals eerder.
+Een afbreking (Ctrl-C, verlopen deadline) is géén afwijzing, en het moment
+waarop zij valt bepaalt wat er gebeurt:
+
+- **vóór** het vertrek van het verzoek: er is niets verbruikt, de run stopt en
+  er komt geen rapport;
+- **ná** het vertrek: eigen eindstand `retrieval_afgebroken` (exitcode 6) met de
+  afbrekingsreden (`annulering` of `timeout`) en `retrievalPogingen`. Of
+  Microsoft het verzoek nog heeft verwerkt is niet vast te stellen, dus gaat de
+  runner ervan uit dat het ene toegestane verzoek is verbruikt.
+
+De pogingteller loopt daarom vóór de aanroep op, niet erna: bij twijfel liever
+een ronde wachten dan een tweede call doen die er niet meer was.
 
 ### Grendels op de omgeving
 

@@ -373,11 +373,18 @@ test("#407-labsmoke — een afgewezen Retrieval-call levert een rapport, geen ge
   assert.match(ork, /retrievalAfgewezen: 5/);
   assert.match(ork, /eindstand: "retrieval_afgewezen"/);
   assert.match(ork, /instanceof CopilotFout/);
-  // En een afbreking blijft een gestopte run: die tak moet vóór de CopilotFout
+  // En een afbreking blijft een eigen geval: die tak moet vóór de CopilotFout
   // staan, anders wordt een Ctrl-C als providerafwijzing geboekt.
   const afbreking = ork.indexOf("isAfbreking(fout)");
   const copilot = ork.indexOf("instanceof CopilotFout");
   assert.ok(afbreking !== -1 && afbreking < copilot, "de afbrekingstak staat niet vóór de CopilotFout-tak");
+
+  // Een afbreking NÁ het vertrek krijgt een eigen, inhoudsvrije eindstand met
+  // de verbruikte poging; vóór het vertrek stopt de run zonder rapport. Dat
+  // onderscheid hangt aan de pogingteller en mag niet wegvallen.
+  assert.match(ork, /retrievalAfgebroken: 6/);
+  assert.match(ork, /eindstand: "retrieval_afgebroken"/);
+  assert.match(ork, /if \(pogingen === 0\) throw fout;/);
 });
 
 test("#407-labsmoke — de runner houdt zich aan het ene scenario en de ene fixture", () => {

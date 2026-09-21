@@ -59,12 +59,18 @@ export interface Smokerapport {
   retrievalFout?: { code: CopilotFoutcode; categorie: RetrievalFoutcategorie; httpStatus: number | null };
   /** Feitelijke netwerkpogingen naar de Retrieval API, ook als die faalden. */
   retrievalPogingen?: number;
+  /**
+   * Gezet als de beurt is afgebroken NÁ het vertrek van het verzoek. Vaste
+   * enum uit de eigen afbrekingslaag; nooit een providertekst.
+   */
+  retrievalAfbreking?: "annulering" | "timeout";
   /** Vaste eindcode; de enige plek waar de uitkomst van de run in één woord staat. */
   eindstand:
     | "gestopt_op_drift"
     | "gestopt_op_poort"
     | "gestopt_op_akkoord"
     | "retrieval_afgewezen"
+    | "retrieval_afgebroken"
     | "gemeten";
 }
 
@@ -155,7 +161,19 @@ export function rapporteer(rapport: Smokerapport): string {
 
   regels.push("## Retrievalmeting");
   regels.push("");
-  if (rapport.retrievalFout) {
+  if (rapport.retrievalAfbreking) {
+    // Geen afwijzing en geen meting: de beurt is gestopt terwijl het verzoek al
+    // onderweg was. Het rapport bestaat alleen om het verbruikte quotum vast te
+    // leggen.
+    regels.push(`- Retrieval API-netwerkpogingen: ${rapport.retrievalPogingen ?? 0}`);
+    regels.push(`- uitkomst: **afgebroken** — \`${rapport.retrievalAfbreking}\``);
+    regels.push("");
+    regels.push(
+      "Het verzoek was al vertrokken toen de beurt stopte. Of Microsoft het heeft"
+      + " verwerkt, is hier niet vast te stellen; ga ervan uit dat het ene"
+      + " toegestane verzoek is verbruikt. Er is niets gemeten en niets geweigerd.",
+    );
+  } else if (rapport.retrievalFout) {
     // De call IS gedaan. Dat hoort in het rapport te staan, ook — en juist —
     // als hij is afgewezen: het ene toegestane verzoek is dan verbruikt.
     regels.push(`- Retrieval API-netwerkpogingen: ${rapport.retrievalPogingen ?? 0}`);
