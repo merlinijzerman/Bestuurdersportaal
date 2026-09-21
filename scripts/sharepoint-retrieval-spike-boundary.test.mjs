@@ -345,6 +345,27 @@ test("#407-labsmoke — de scans beginnen bij het geregistreerde root-item", () 
   assert.match(graph, /export async function leesRootItem/);
 });
 
+test("#407-labsmoke — een nulstand in de inhoudscan is nooit één ongedeelde code", () => {
+  // De live dry-run van 21-09 vond één zoekresultaat en accepteerde er nul, en
+  // rapporteerde dat als een koude index. Die samenvoeging mag niet terugkomen:
+  // wachten, uitzoeken en opruimen zijn drie verschillende vervolgstappen.
+  const smoke = readFileSync(resolve(root, `${SMOKEPAD}/smoke.ts`), "utf8");
+  // Op de STRINGLITERAL toetsen, niet op de naam: de doctekst legt uit waarom
+  // die code is opgesplitst en mag hem dus blijven noemen.
+  assert.ok(
+    !/"inhoud_niet_geindexeerd"/.test(smoke),
+    "de samengevoegde poortcode is terug",
+  );
+  for (const code of ["geen_zoekresultaat", "zoekresultaat_niet_verifieerbaar", "zoekresultaat_buiten_root"]) {
+    assert.ok(smoke.includes(code), `poortcode ${code} ontbreekt`);
+  }
+
+  // De verse herlezing bestaat, en met een harde grens.
+  const graph = readFileSync(resolve(root, `${SMOKEPAD}/graph.ts`), "utf8");
+  assert.match(graph, /export const MAX_VERSE_HERLEZINGEN = \d+;/);
+  assert.match(graph, /export async function beoordeelZoekresultaat/);
+});
+
 test("#407-labsmoke — de runner houdt zich aan het ene scenario en de ene fixture", () => {
   const smoke = readFileSync(resolve(root, `${SMOKEPAD}/smoke.ts`), "utf8");
   // Scenario en fixture worden OVERGENOMEN uit de vastgestelde #407-set, niet

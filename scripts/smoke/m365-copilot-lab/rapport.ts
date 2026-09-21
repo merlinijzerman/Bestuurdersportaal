@@ -22,6 +22,14 @@ export interface Scanregel {
   treffers: number;
   binnenRoot: number;
   afgekapt?: boolean;
+  /** Treffers waarvan is vastgesteld dat ze buiten de bronroot liggen. */
+  buitenRoot?: number;
+  /** Treffers waarvan de locatie niet vast te stellen was. */
+  nietVerifieerbaar?: number;
+  /** Verse DriveItem-lezingen die deze scan heeft gekost. */
+  verseHerlezingen?: number;
+  /** Tellingen per vaste reden. Uitsluitend codes — nooit een pad of naam. */
+  redenen?: Record<string, number>;
 }
 
 export interface Smokerapport {
@@ -58,8 +66,11 @@ const CATEGORIE_LABEL: Record<Hitcategorie, string> = {
 };
 
 const POORT_UITLEG: Record<string, string> = {
-  inhoud_niet_geindexeerd: "de bibliotheek kent het bestand, de zoekindex kent de inhoud nog niet",
-  bestand_niet_aanwezig: "de zoekindex geeft treffers, maar het verwachte bestand staat niet in de bronroot",
+  geen_zoekresultaat: "de zoekindex kent de canaryterm niet; wachten op herindexering",
+  zoekresultaat_niet_verifieerbaar:
+    "de zoekindex geeft een treffer, maar de locatie ervan is niet vast te stellen; uitzoeken vóór een meting",
+  zoekresultaat_buiten_root: "de zoekindex geeft een treffer, maar die ligt aantoonbaar buiten de bronroot",
+  bestand_niet_aanwezig: "het verwachte bestand staat niet in de bronroot",
   beide_nul: "geen inhoudstreffer en geen bestandstreffer binnen de bronroot",
 };
 
@@ -97,6 +108,27 @@ export function rapporteer(rapport: Smokerapport): string {
     const sleutel = scan.naam === "bestandsnaamscan" ? `${scan.sleutel}*` : scan.sleutel;
     regels.push(`| ${scan.naam} | \`${sleutel}\` | ${scan.treffers} | ${scan.binnenRoot} |`);
   }
+  // De uitsplitsing die de poortcode draagt. Zonder deze regels is "0 binnen
+  // de bronroot" niet te onderscheiden van "de index kent de term niet".
+  const metOordeel = rapport.scans.filter(
+    (scan) => scan.buitenRoot !== undefined || scan.nietVerifieerbaar !== undefined,
+  );
+  if (metOordeel.length > 0) {
+    regels.push("");
+    regels.push("| scan | geverifieerd binnen root | buiten root | niet verifieerbaar | verse herlezingen |");
+    regels.push("| --- | ---: | ---: | ---: | ---: |");
+    for (const scan of metOordeel) {
+      regels.push(
+        `| ${scan.naam} | ${scan.binnenRoot} | ${scan.buitenRoot ?? 0} | ${scan.nietVerifieerbaar ?? 0} | ${scan.verseHerlezingen ?? 0} |`,
+      );
+    }
+    const redenen = metOordeel.flatMap((scan) => Object.entries(scan.redenen ?? {}));
+    if (redenen.length > 0) {
+      regels.push("");
+      regels.push(`Redenen: ${redenen.map(([code, aantal]) => `\`${code}\` ×${aantal}`).join(", ")}`);
+    }
+  }
+
   const afgekapt = rapport.scans.some((scan) => scan.afgekapt);
   if (afgekapt) regels.push("");
   if (afgekapt) regels.push("> De bestandsnaamscan is op een scangrens gestopt; de telling is een ondergrens.");

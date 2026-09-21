@@ -32,7 +32,8 @@ Vóór elke Retrieval-call draaien twee scans, en ze meten expres iets
 verschillends:
 
 - **inhoudscan** op `Zandloperbaken 12` — gaat door de SharePoint-zoekindex.
-  Nul betekent: de index kent de inhoud nog niet.
+  Nul betekent: de index kent de inhoud nog niet. Een treffer die niet te
+  plaatsen is, telt niet als nul — zie hieronder.
 - **bestandsnaamscan** op `PGB407-DOC-101*` — loopt de bibliotheek zélf af en
   raakt de index niet. Nul betekent: het bestand staat er niet.
 
@@ -41,10 +42,36 @@ is alleen toevallig hetzelfde zolang de bronroot de hele bibliotheek is; zodra
 een profiel een submap registreert (`sharepoint_library_root` doet dat), zou een
 scan vanaf de drive-root de metadata lezen van alles daarbuiten.
 
-Zolang één van beide nul treffers **binnen de geregistreerde bronroot** geeft,
-vertrekt er geen Retrieval-call. De twee nulgevallen krijgen een eigen code
-(`inhoud_niet_geindexeerd` versus `bestand_niet_aanwezig`), omdat ze om iets
-volstrekt verschillends vragen: wachten op SharePoint, of uploaden.
+Zolang één van beide niets **geverifieerds binnen de geregistreerde bronroot**
+oplevert, vertrekt er geen Retrieval-call. Elke nulstand krijgt een eigen code,
+omdat ze om iets volstrekt verschillends vragen:
+
+| code | betekenis | vervolgstap |
+| --- | --- | --- |
+| `geen_zoekresultaat` | de index kent de canaryterm niet | wachten op herindexering |
+| `zoekresultaat_niet_verifieerbaar` | er is een treffer, maar zijn locatie is niet vast te stellen | uitzoeken |
+| `zoekresultaat_buiten_root` | er is een treffer en die ligt aantoonbaar buiten de bron | bron opruimen |
+| `bestand_niet_aanwezig` | het verwachte bestand staat niet in de bronroot | uploaden |
+| `beide_nul` | geen enkele treffer | uploaden én wachten |
+
+Komen "niet verifieerbaar" en "buiten root" samen voor, dan wint de eerste: dát
+iets buiten de root ligt is een uitkomst, níet weten waar iets staat is een gat
+in de meting.
+
+### Verse DriveItem-bevestiging
+
+Graph laat `parentReference.path` bij zoekresultaten regelmatig weg. Zo'n treffer
+is daarmee niet te plaatsen — en dat is precies wat de live dry-run van 21-09
+liet zien: één treffer, nul geaccepteerd, gerapporteerd als een koude index.
+
+De runner leest het DriveItem nu **éénmalig** opnieuw op drive-id + item-id, en
+accepteert alleen wanneer die verse respons zélf dezelfde drive heeft, geen
+`remoteItem` is en een ouderpad onder de geregistreerde Graph-root draagt. Uit
+het zoekresultaat wordt niets overgenomen behalve het item-id.
+
+Grenzen: maximaal `MAX_VERSE_HERLEZINGEN` (5) verse lezingen per inhoudscan, elk
+item hoogstens één keer, geen retry, en een deadline van 30 s per GET. Een
+shortcut of een expliciet andere drive kost geen lezing — dat is al vastgesteld.
 
 ## Grenzen die de runner afdwingt
 

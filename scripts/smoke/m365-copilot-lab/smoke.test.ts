@@ -137,23 +137,64 @@ test("negatief — een live site of bibliotheek die niet bij de registratie past
 //  De stopregel
 // ---------------------------------------------------------------------------
 
-test("de poort blijft dicht zolang één van beide scans nul geeft, met een eigen code per geval", () => {
-  assert.deepEqual(beoordeelPoort({ binnenRoot: 0 }, { treffers: 0 }), { doorgelaten: false, code: "beide_nul" });
-  assert.deepEqual(beoordeelPoort({ binnenRoot: 0 }, { treffers: 1 }), {
-    doorgelaten: false,
-    code: "inhoud_niet_geindexeerd",
-  });
-  assert.deepEqual(beoordeelPoort({ binnenRoot: 3 }, { treffers: 0 }), {
+/** Korte opbouw van een inhoudsuitslag voor de poorttests. */
+function inhoud(o: Partial<Parameters<typeof beoordeelPoort>[0]> = {}) {
+  return { treffers: 0, binnenRoot: 0, buitenRoot: 0, nietVerifieerbaar: 0, ...o };
+}
+
+test("de poort blijft dicht zolang één van beide scans niets geverifieerds geeft", () => {
+  assert.deepEqual(beoordeelPoort(inhoud(), { treffers: 0 }), { doorgelaten: false, code: "beide_nul" });
+  assert.deepEqual(beoordeelPoort(inhoud({ treffers: 1, binnenRoot: 1 }), { treffers: 0 }), {
     doorgelaten: false,
     code: "bestand_niet_aanwezig",
   });
-  assert.deepEqual(beoordeelPoort({ binnenRoot: 1 }, { treffers: 1 }), { doorgelaten: true });
+  assert.deepEqual(beoordeelPoort(inhoud({ treffers: 1, binnenRoot: 1 }), { treffers: 1 }), { doorgelaten: true });
 });
 
-test("een inhoudstreffer buiten de bronroot telt niet mee voor de poort", () => {
-  // De inhoudscan telt `treffers` tenantbreed maar `binnenRoot` gescoped; de
-  // poort kijkt uitsluitend naar de tweede.
-  assert.equal(beoordeelPoort({ binnenRoot: 0 }, { treffers: 5 }).doorgelaten, false);
+test("de drie inhoudsnulgevallen krijgen elk hun eigen poortcode", () => {
+  // Dit is de correctie zelf. Ze vragen om drie verschillende vervolgstappen:
+  // wachten, uitzoeken, of de bron opruimen.
+  assert.deepEqual(beoordeelPoort(inhoud({ treffers: 0 }), { treffers: 1 }), {
+    doorgelaten: false,
+    code: "geen_zoekresultaat",
+  });
+  assert.deepEqual(beoordeelPoort(inhoud({ treffers: 1, nietVerifieerbaar: 1 }), { treffers: 1 }), {
+    doorgelaten: false,
+    code: "zoekresultaat_niet_verifieerbaar",
+  });
+  assert.deepEqual(beoordeelPoort(inhoud({ treffers: 1, buitenRoot: 1 }), { treffers: 1 }), {
+    doorgelaten: false,
+    code: "zoekresultaat_buiten_root",
+  });
+});
+
+test("de live stand van 21-09 — één treffer, nul geaccepteerd — heet niet langer 'niet geïndexeerd'", () => {
+  // De inhoudscan gaf één zoekresultaat zonder bruikbare parentReference; de
+  // oude code rapporteerde dat als een koude index en stuurde daarmee naar de
+  // verkeerde vervolgstap.
+  const oordeel = beoordeelPoort(inhoud({ treffers: 1, nietVerifieerbaar: 1 }), { treffers: 1 });
+  assert.deepEqual(oordeel, { doorgelaten: false, code: "zoekresultaat_niet_verifieerbaar" });
+});
+
+test("niet-verifieerbaar weegt zwaarder dan buiten-root als beide voorkomen", () => {
+  // Weten dát iets buiten de root ligt is een uitkomst; niet weten waar iets
+  // staat, is een gat in de meting — en dat moet het rapport laten zien.
+  assert.deepEqual(
+    beoordeelPoort(inhoud({ treffers: 2, buitenRoot: 1, nietVerifieerbaar: 1 }), { treffers: 1 }),
+    { doorgelaten: false, code: "zoekresultaat_niet_verifieerbaar" },
+  );
+});
+
+test("treffers die nergens op optellen, vallen fail-closed naar 'niet verifieerbaar'", () => {
+  // Een scan die treffers meldt maar ze niet indeelt, is zelf verdacht.
+  assert.deepEqual(beoordeelPoort(inhoud({ treffers: 3 }), { treffers: 1 }), {
+    doorgelaten: false,
+    code: "zoekresultaat_niet_verifieerbaar",
+  });
+});
+
+test("een inhoudstreffer die niet geverifieerd is, opent de poort niet", () => {
+  assert.equal(beoordeelPoort(inhoud({ treffers: 5, buitenRoot: 5 }), { treffers: 5 }).doorgelaten, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -365,7 +406,7 @@ test("een dichte poort rapporteert nul netwerkpogingen en noemt de reden", () =>
       { naam: "inhoudscan", sleutel: "Zandloperbaken 12", treffers: 0, binnenRoot: 0 },
       { naam: "bestandsnaamscan", sleutel: VERWACHTE_FIXTURE, treffers: 1, binnenRoot: 1, afgekapt: false },
     ],
-    poort: { doorgelaten: false, code: "inhoud_niet_geindexeerd" },
+    poort: { doorgelaten: false, code: "zoekresultaat_niet_verifieerbaar" },
     akkoordGevraagd: false,
     akkoordGegeven: false,
     graphCalls: 5,

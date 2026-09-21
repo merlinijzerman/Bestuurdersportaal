@@ -104,14 +104,27 @@ export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUi
 
   meld(`Inhoudscan op "${INHOUDSCAN_TERM}" …`);
   const inhoud = await inhoudscan(client, bron.driveId, root.rootItemId, root.rootGraphPad, INHOUDSCAN_TERM);
-  meld(`  ${inhoud.treffers} treffer(s), ${inhoud.binnenRoot} binnen de bronroot`);
+  meld(
+    `  ${inhoud.treffers} treffer(s): ${inhoud.binnenRoot} geverifieerd binnen de bronroot, `
+    + `${inhoud.buitenRoot} buiten, ${inhoud.nietVerifieerbaar} niet verifieerbaar `
+    + `(${inhoud.verseHerlezingen} verse herlezing(en))`,
+  );
 
   meld(`Bestandsnaamscan op "${BESTANDSNAAM_PREFIX}*" …`);
   const naam = await bestandsnaamscan(client, bron.driveId, root.rootItemId, root.rootGraphPad, BESTANDSNAAM_PREFIX);
   meld(`  ${naam.treffers} treffer(s) binnen de bronroot, ${naam.bekeken} item(s) bekeken`);
 
   const scans: Scanregel[] = [
-    { naam: "inhoudscan", sleutel: INHOUDSCAN_TERM, treffers: inhoud.treffers, binnenRoot: inhoud.binnenRoot },
+    {
+      naam: "inhoudscan",
+      sleutel: INHOUDSCAN_TERM,
+      treffers: inhoud.treffers,
+      binnenRoot: inhoud.binnenRoot,
+      buitenRoot: inhoud.buitenRoot,
+      nietVerifieerbaar: inhoud.nietVerifieerbaar,
+      verseHerlezingen: inhoud.verseHerlezingen,
+      redenen: inhoud.redenen as Record<string, number>,
+    },
     {
       naam: "bestandsnaamscan",
       sleutel: BESTANDSNAAM_PREFIX,

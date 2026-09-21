@@ -162,28 +162,59 @@ export function toetsDrift(
 //  Stap 5 — de poort
 // ---------------------------------------------------------------------------
 
-export type Poortoordeel =
-  | { doorgelaten: true }
-  | { doorgelaten: false; code: "inhoud_niet_geindexeerd" | "bestand_niet_aanwezig" | "beide_nul" };
+export type Poortcode =
+  | "geen_zoekresultaat"
+  | "zoekresultaat_niet_verifieerbaar"
+  | "zoekresultaat_buiten_root"
+  | "bestand_niet_aanwezig"
+  | "beide_nul";
+
+export type Poortoordeel = { doorgelaten: true } | { doorgelaten: false; code: Poortcode };
 
 /**
- * De stopregel, letterlijk. Zolang één van beide scans nul geeft binnen de
- * bronroot, vertrekt er geen Retrieval-call.
+ * De stopregel, letterlijk. Zolang één van beide scans niets GEVERIFIEERDS
+ * binnen de bronroot oplevert, vertrekt er geen Retrieval-call.
  *
- * De twee nulgevallen krijgen bewust een EIGEN code, want ze vragen om iets
- * heel anders: "niet geïndexeerd" betekent wachten op SharePoint, "niet
- * aanwezig" betekent uploaden. Eén gedeelde code `geen_resultaten` zou die
- * twee samenvegen en de volgende stap tot gokwerk maken.
+ * Elke nulstand krijgt een eigen code, want ze vragen om iets volstrekt
+ * verschillends. `inhoud_niet_geindexeerd` deed dat onderscheid nog niet en
+ * vertelde daardoor het verkeerde verhaal: de live dry-run van 21-09 vond één
+ * zoekresultaat en accepteerde er nul, en rapporteerde dat als "de index kent
+ * de inhoud nog niet" — terwijl de index hem juist wél kende en de LOCATIE niet
+ * vast te stellen was. Wachten op SharePoint was dus precies de verkeerde
+ * vervolgstap.
+ *
+ * Nu:
+ *   geen_zoekresultaat              → de index kent de term niet; wachten.
+ *   zoekresultaat_niet_verifieerbaar→ er is een treffer, maar zijn locatie is
+ *                                     niet vast te stellen; uitzoeken.
+ *   zoekresultaat_buiten_root       → er is een treffer en die ligt aantoonbaar
+ *                                     buiten de bron; dat is een bronprobleem.
+ *
+ * `niet_verifieerbaar` gaat vóór `buiten_root` wanneer beide voorkomen: een
+ * onbekende locatie is het zwaardere signaal. Weten dát iets buiten de root
+ * valt is een uitkomst; niet weten waar iets staat, is een gat in de meting.
  */
 export function beoordeelPoort(
-  inhoud: Pick<InhoudscanUitkomst, "binnenRoot">,
+  inhoud: Pick<InhoudscanUitkomst, "binnenRoot" | "buitenRoot" | "nietVerifieerbaar" | "treffers">,
   naam: Pick<BestandsnaamscanUitkomst, "treffers">,
 ): Poortoordeel {
   const inhoudNul = inhoud.binnenRoot === 0;
   const naamNul = naam.treffers === 0;
-  if (inhoudNul && naamNul) return { doorgelaten: false, code: "beide_nul" };
-  if (inhoudNul) return { doorgelaten: false, code: "inhoud_niet_geindexeerd" };
+
+  if (inhoudNul && naamNul && inhoud.treffers === 0) return { doorgelaten: false, code: "beide_nul" };
+  // Een ontbrekend bestand is het dominante feit: dan valt er over de index
+  // niets zinnigs te zeggen, want er is niets om te indexeren.
   if (naamNul) return { doorgelaten: false, code: "bestand_niet_aanwezig" };
+
+  if (inhoudNul) {
+    if (inhoud.treffers === 0) return { doorgelaten: false, code: "geen_zoekresultaat" };
+    if (inhoud.nietVerifieerbaar > 0) return { doorgelaten: false, code: "zoekresultaat_niet_verifieerbaar" };
+    if (inhoud.buitenRoot > 0) return { doorgelaten: false, code: "zoekresultaat_buiten_root" };
+    // Treffers, geen acceptaties, en geen van beide verklaringen: dan telt de
+    // scan niet op en is de meting zelf verdacht. Fail-closed als het geval dat
+    // om onderzoek vraagt.
+    return { doorgelaten: false, code: "zoekresultaat_niet_verifieerbaar" };
+  }
   return { doorgelaten: true };
 }
 
