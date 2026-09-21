@@ -64,9 +64,15 @@ export type MappingAfwijzing = "root" | "mapping";
  * De canonieke vergelijkingsvorm, of `null` als de URL er geen kan hebben.
  *
  * `null` is geen foutmelding maar een uitkomst: een hit zonder canonieke vorm
- * bestaat voor deze arm niet. Office-weergave-URL's (`/:w:/…`, `/:p:/…`) leveren
- * wél een vorm op, maar die staat niet in het register en valt daarna af onder
- * `mapping` — een bekende, geaccepteerde beperking (#407).
+ * bestaat voor deze arm niet.
+ *
+ * Office-weergave-URL's (`/:w:/r/…`, `/:x:/r/…`, `/:p:/r/…`, `/:b:/r/…`) golden
+ * in #407 nog als geaccepteerde beperking. Dat is achterhaald: de labscan van
+ * #419 stelde vast dat Graph die vorm STRUCTUREEL levert voor Officebestanden,
+ * dus zou die "beperking" de hele arm blind maken voor Word en PowerPoint. Ze
+ * worden nu genormaliseerd. Een SHARINGLINK (`/:w:/s/<token>`) houdt wél zijn
+ * eigen vorm: die draagt een token in plaats van een pad, staat dus niet in het
+ * register, en valt fail-closed af onder `mapping`.
  */
 export function canoniekeWebUrl(url: string | null | undefined): string | null {
   if (typeof url !== "string" || url.length === 0) return null;
