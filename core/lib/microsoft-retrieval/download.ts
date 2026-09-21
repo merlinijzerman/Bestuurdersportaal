@@ -96,14 +96,24 @@ export function veiligeDownloadUrl(locatie: string | null, siteHostnaam: string)
   return parsed;
 }
 
-async function leesBegrensdeBytes(response: Response, keten: AbortSignal): Promise<Buffer | null> {
+/**
+ * Leest de body tot AAN de meegegeven grens. De grens is een parameter en geen
+ * constante omdat de beurt als geheel een bytebudget heeft: acht documenten van
+ * elk 25 MiB zijn samen 200 MiB, en een grens die alleen per document geldt
+ * begrenst die optelsom niet.
+ */
+async function leesBegrensdeBytes(
+  response: Response,
+  keten: AbortSignal,
+  maxBytes: number,
+): Promise<Buffer | null> {
   const lengte = Number(response.headers.get("content-length"));
-  if (Number.isFinite(lengte) && lengte > MAX_DOWNLOAD_BYTES) return null;
+  if (Number.isFinite(lengte) && lengte > maxBytes) return null;
 
   const body = response.body;
   if (!body) {
     const buffer = Buffer.from(await response.arrayBuffer());
-    return buffer.byteLength > MAX_DOWNLOAD_BYTES ? null : buffer;
+    return buffer.byteLength > maxBytes ? null : buffer;
   }
 
   const reader = body.getReader();
@@ -120,7 +130,7 @@ async function leesBegrensdeBytes(response: Response, keten: AbortSignal): Promi
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > MAX_DOWNLOAD_BYTES) {
+      if (bytes > maxBytes) {
         // Annuleren, niet doorlezen: de rest hoeft niet meer binnen te komen.
         await reader.cancel().catch(() => {});
         return null;
@@ -163,6 +173,13 @@ function beoordeelStatus(status: number): DownloadResultaat | null {
   return null;
 }
 
+/** Klemt het meegegeven budget binnen de harde documentgrens. */
+function begrensdeMaat(maxBytes: number | undefined): number {
+  if (maxBytes === undefined) return MAX_DOWNLOAD_BYTES;
+  if (!Number.isFinite(maxBytes)) return MAX_DOWNLOAD_BYTES;
+  return Math.max(1, Math.min(MAX_DOWNLOAD_BYTES, Math.floor(maxBytes)));
+}
+
 export interface DownloadOpdracht {
   accessToken: string;
   driveId: string;
@@ -170,6 +187,14 @@ export interface DownloadOpdracht {
   /** `site_hostnaam` van de geregistreerde bron; bepaalt welke redirect mag. */
   siteHostnaam: string;
   signal?: AbortSignal;
+  /**
+   * Bovengrens op de ONTVANGEN BYTES van dit ene document. Weggelaten betekent
+   * `MAX_DOWNLOAD_BYTES`. Een aanroeper met een beurtbreed bytebudget geeft
+   * hier zijn RESTERENDE ruimte mee; die moet groter dan nul zijn, want een
+   * document dat niet meer past hoort niet te worden opgehaald om daarna als
+   * `download` te worden afgewezen.
+   */
+  maxBytes?: number;
   /** Uitsluitend voor tests; productie gebruikt de globale `fetch`. */
   fetchImpl?: GraphFetch;
   /**
@@ -288,7 +313,8 @@ async function haalOp(
     );
   }
 
-  const bytes = await leesBegrensdeBytes(inhoud, keten).catch(vertaal);
+  const grens = begrensdeMaat(opdracht.maxBytes);
+  const bytes = await leesBegrensdeBytes(inhoud, keten, grens).catch(vertaal);
   bewaakKeten();
   // Te groot is geen storing en geen rechtenkwestie: dit document doet niet mee.
   if (!bytes || bytes.byteLength === 0) return { ok: false, afwijzing: "download" };
