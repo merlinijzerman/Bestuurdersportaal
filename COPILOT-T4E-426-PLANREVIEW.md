@@ -1,19 +1,21 @@
 # T4-E planreview — centrale orkestratie en adapter-per-spoor (#426)
 
-**Status:** versie 9, ter beoordeling. Geen productiecode geschreven.
-**Vertakt van:** `origin/preview` `b3961ba` (bevat #424 / T4-C volledig).
+**Status:** versie 10, ter beoordeling. Geen productiecode geschreven.
+**Herijkt op:** `origin/preview` `e159653` (bevat #424/T4-C, #425/T4-D,
+#430/app365 Fase 1 en #431/post-contractcontrole).
 **Datum:** 2026-09-21.
 
 ## Versiehistorie
 
-**Deze review is vijf keer herzien. Wat hieronder als INGETROKKEN staat, is nergens anders in dit
+**Deze review is meerdere keren herzien. Wat hieronder als INGETROKKEN staat, is nergens anders in dit
 document meer voorgeschreven** — telkens één gezaghebbend algoritme, niet een stapel voorstellen.
 Die regel is er niet voor niets: tot versie 5 bleven ingetrokken mechanismen in §2.4 staan naast
 hun vervanger, waardoor het document zichzelf tegensprak.
 
 | Versie | Wat veranderde | Wat daarvan later is ingetrokken |
 |---|---|---|
-| **9** *(deze)* | `verrijkWeergave()` krijgt het `Bronresultaat` niet meer in handen: hij ziet een read-only projectie en levert `WeergaveVerrijking[]` (`behouden` / `weglaten` / `verrijkt`). De orkestratie houdt het toegelaten resultaat zelf en patcht alleen `weergave`. Daarmee vervallen de `null`-sentinel, de refsnapshot en de verse-instantie-tegen-gedeelde-objecten. Nieuwe bevindingen B-6 (de versmalling is niet byte-identiek — `bronsoort` verandert vandaag ná de poort) en B-7 (`verrijkSelectie()` staat in dezelfde positie), besluit D-6, tests 28 en 29. | — |
+| **10** *(deze)* | Verplichte herijking tegen de werkelijk gemergede T4-C/T4-D-contracten. D-6 beslist: security-relevante kandidaatverrijking draait vóór de definitieve servergrens en V1-V5; ná de poort bestaat alleen een gesloten weergavepatch. De oude claim dat route (a) vanzelf byte-identiek is, is ingetrokken: selectie-effecten worden gemeten en iedere semantische golden-diff blijft een aparte blokkade. De live SEM01-retry bevestigde indexgereedheid maar eindigde opnieuw fail-closed op HTTP 403; dat verandert de orkestratie niet. | **Post-poort `verrijkSelectie()` op een volledig `Bronresultaat`** — daarmee kon een reeds toegelaten grondslag alsnog wijzigen. |
+| **9** | `verrijkWeergave()` krijgt het `Bronresultaat` niet meer in handen: hij ziet een read-only projectie en levert `WeergaveVerrijking[]` (`behouden` / `weglaten` / `verrijkt`). De orkestratie houdt het toegelaten resultaat zelf en patcht alleen `weergave`. Daarmee vervallen de `null`-sentinel, de refsnapshot en de verse-instantie-tegen-gedeelde-objecten. Nieuwe bevindingen B-6 (de versmalling is niet byte-identiek — `bronsoort` verandert vandaag ná de poort) en B-7 (`verrijkSelectie()` staat in dezelfde positie), besluit D-6, tests 28 en 29. | — |
 | 8 | De `WeakMap`-sleutel is niet langer het object van de adapter maar een verse instantie die de orkestratie per occurrence maakt — een hook mag hetzelfde object op twee posities teruggeven. De refcontrole draait tegen een snapshot van vóór de hook, zodat een in-place mutatie niet met zichzelf wordt vergeleken. Tests 26 en 27. | — |
 | 7 | De nul-chunkssemantiek van de Supabase-hook expliciet behouden: nul koppelingen ⇒ oorspronkelijke bronnen op alle posities; `null` alleen op ontbrekende posities; en `rang.positie` blijft een teller over de gekoppelde chunks (§2.4, tests 23-25). Test 16 herschreven naar het positionele contract, inclusief `undefined` en sparse array. | — |
 | 6 | `verrijkWeergave()` wordt **positioneel**: uitvoer even lang als de invoer, `null` voor een weggelaten bron. Herkomst wordt op **positie** toegekend, nooit op `ref`. Eigenaar en levensduur van de request-lokale herkomststaat vastgelegd (§2.2). §2.4 teruggebracht tot één algoritme. Tests 20 t/m 22. | — |
@@ -33,9 +35,10 @@ composite adapter en niet een tweede `voerVolledigeRetrievalUit()`-aanroep. Deze
 die richting uit tot exacte contractwijzigingen en toetst haar tegen de code zoals die er nu
 werkelijk staat.
 
-De uitwerking levert **vijf blokkerende bevindingen** op. Vier daarvan zijn ontwerpbeslissingen
-die ik niet zelfstandig hoor te nemen; één is een gat in het gemergede T4-C-contract waardoor
-T4-E vandaag geen eerlijk toegangsbewijs zou kunnen bouwen.
+De uitwerking leverde **zeven blokkerende bevindingen** op. D-1 t/m D-6 leggen de
+oplossingsrichting nu vast; B-1 en B-5 worden additief in T4-E gerepareerd. B-6 en B-7 zijn in
+versie 10 samengebracht tot één volgorde-invariant: een veld waarop de poort beslist kan ná die
+poort niet meer door een adapter worden gewijzigd.
 
 Versie 1 bevatte zelf een fout die de review terecht ving: §2.2 stelde herkomstbinding op
 spoorindex voor en §2.4 gebruikte vervolgens een `Map` op `ref`. Dat is exact de botsing die
@@ -68,14 +71,14 @@ uitbreiding van T4-C is de Copilot-arm niet eerlijk aansluitbaar.
 | Tranche | Stand | Betekenis voor T4-E |
 |---|---|---|
 | T4-B (client, endpointpin, filter, fouten) | op `preview` | consumeren |
-| T4-C (mapping, DriveItem, download, extractie, keten) | op `preview` via #424 (`b3961ba`) | consumeren; **B-1 raakt dit** |
-| T4-D (readiness, tokeninterface, rolloutpoorten) | PR #425, `OPEN` en in beweging. **Bewust geen SHA hier** — zie §7 | contract bekend, nog niet definitief |
-| T4-E | dit ticket | planreview nu, code ná merge van #424 + gecorrigeerde #425 |
+| T4-C (mapping, DriveItem, download, extractie, keten) | op `preview` via #424 | consumeren; **B-1 raakt dit** |
+| T4-D (readiness, tokeninterface, rolloutpoorten) | op `preview` via #425; expand/contract op Preview afgerond | contract opnieuw getoetst; consumeren |
+| T4-E | dit ticket | planreview herijkt; code pas na expliciet akkoord op versie 10 |
 | T4-F (beheer, status, duurzame auditprojectie) | apart | **niet** stil meenemen |
 
-De implementatievolgorde uit #426 is aangehouden: productiecode begint pas nadat #425 is
-gecorrigeerd, gemerged, en de gecombineerde T4-C/T4-D-contracten opnieuw zijn beoordeeld vanaf
-een verse `origin/preview`.
+De implementatievolgorde uit #426 is tot en met de verplichte herijking uitgevoerd. Productiecode
+begint pas na expliciete goedkeuring van deze versie 10; de gemergede T4-C/T4-D-contracten zijn
+dan de vaste basis en niet langer een open voorwaarde.
 
 ---
 
@@ -297,48 +300,54 @@ Vier invarianten:
 De foutafhandeling blijft ongewijzigd en dus **per groep**: een hook die gooit levert
 `hookFout` voor díé groep; `isAfbreking(e)` gooit onverkort door en stopt de hele beurt.
 
-### 2.4 `verrijkSelectie()` en `verrijkWeergave()` per adaptergroep
+### 2.4 Verrijking per adaptergroep — de definitieve poort staat achteraan
 
-`verrijkSelectie()` draait vandaag al per spoor (`orkestratie.ts` stap 5) — daar verandert
-alleen wélke adapter wordt aangeroepen: `effectieveAdapter(i)`. De groep is bekend uit de
-spoorindex; er wordt niets opgezocht.
+Versie 9 versmalde alleen `verrijkWeergave()`. Dat was noodzakelijk maar niet voldoende:
+`verrijkSelectie()` krijgt vandaag eveneens een volledig `Bronresultaat`, draait ná V1-V5 en
+herbouwt dezelfde security-relevante velden. Een invariantcontrole ná de hook zou het huidige
+Supabase-pad bovendien onmiddellijk afwijzen, omdat `bronsoort` daar aantoonbaar van `fonds`
+naar `notulen` kan veranderen. Een controle die het geldige bestaande pad direct breekt, wordt
+in de praktijk uitgezet; dat is geen houdbaar ontwerp.
 
-`verrijkWeergave()` is het echte werk. Vandaag roept `citeer()` één hook aan over **alle**
-geselecteerde bronnen. Met twee adapters zou adapter A de weergavemetadata van de bronnen van B
-mogen zetten — en dat is de laag die de citaten voedt.
+**Besluit D-6 kiest daarom route (a), met één aanscherping:** alle verrijking die
+`Bronresultaat` buiten uitsluitend `weergave` kan wijzigen, gebeurt vóór de definitieve
+servergrens en vóór V1-V5. De poort beoordeelt de kandidaat zoals die werkelijk naar selectie,
+prompt en citatie kan gaan. Ná de poort kan geen adapter meer bij identiteit, bewijs, versie,
+passage, status, bronsoort of rang.
 
-**Een feit dat versie 1 miste en dat de eerste oplossing ongeldig maakt.** Ik stelde voor de
-verrijkte resultaten "op `ref` terug te plaatsen in de oorspronkelijke volgorde". Dat is niet
-alleen botsingsgevoelig; het kán sowieso niet, want `verrijkWeergave()` is géén
-lengtebehoudende enrichment. De Supabase-implementatie (`supabase-adapter.ts:219`) doet:
+De volgorde per adaptergroep wordt:
 
-```js
-let chunks = geselecteerd.map((b) => chunkPerRef.get(b.ref)).filter(Boolean);
-if (chunks.length === 0) return geselecteerd;          // andere lengte-semantiek
-const resultaten = chunks.map((c, i) => …);            // kan KORTER zijn
-```
+1. `zoek()` levert de ruwe kandidaten;
+2. een **voorgrens zonder I/O** verwijdert kandidaten die op hun ruwe, servercontroleerbare
+   velden al buiten fonds-, document-, proces- of bronbeleid vallen. Dit is geen toelatingspoort
+   en levert geen bewijs; hij voorkomt alleen dat een adapter voor een evident buitenscope-
+   kandidaat verrijkings-I/O uitvoert;
+3. de nieuwe pre-poorthook `verrijkKandidaten()` draait éénmaal per groep over alle overgebleven
+   kandidaten, binnen hetzelfde afbreeksignaal. De hook mag kandidaten verrijken of weglaten,
+   maar moet een volledig `Bronresultaat` teruggeven omdat juist die volledige vorm hierna wordt
+   beoordeeld;
+4. de centrale servergrens draait **opnieuw** op de verrijkte vorm;
+5. V1-V5 plus de versieherlezing draaien éénmaal op de verrijkte kandidaatset, vóór
+   kandidatenbegrenzing en selectie. Een geweigerde kandidaat kan dus nog steeds geen geldige
+   kandidaat verdringen;
+6. selectie, samenvoeging en contextafkapping gebruiken uitsluitend deze toegelaten vorm;
+7. ná de poort bestaat alleen de gesloten `verrijkWeergave()`-patch hieronder.
 
-Een bron die de adapter niet herkent **verdwijnt**. Positioneel terugkoppelen zou dus
-weergavemetadata aan de verkeerde bron hangen, en een strikte lengte-invariant zou de bestaande
-adapter breken.
+`verrijkKandidaten()` vervangt het huidige post-selectiecontract `verrijkSelectie()`. Voor de
+Supabase-adapter verhuizen parent-context, notulen- en documentmetadata naar deze fase. Dat kost
+meer databasewerk omdat de verrijking vóór de eindselectie draait; het zoekresultaat is echter
+al hard begrensd door het adaptercontract en alles deelt het resterende beurtbudget uit §2.8.
+T4-E meet calls en latency in de hermetische suite en behandelt budgetoverschrijding als timeout,
+niet als gedeeltelijk succes.
 
-**Het voorstel — de hook krijgt het `Bronresultaat` niet meer in handen.**
+**Geen ongefundeerde byte-identiteitsclaim.** Route (a) houdt de eindvelden beschikbaar, maar
+verplaatst hun berekening vóór de selectie. Daardoor kunnen titel, passage, bronsoort of
+curatievelden de selectie anders beïnvloeden. Versie 9 noemde route (a) zonder voorbehoud
+byte-identiek; die claim is ingetrokken. De bestaande goldens moeten eerst ongewijzigd groen
+blijven. Ontstaat een verschil, dan is dat een semantische diff die vóór snapshotwijziging apart
+wordt beoordeeld. Er wordt niet naar route (b) teruggevallen om de tests groen te krijgen.
 
-Versies 2 t/m 8 zochten het in stééds strakkere regels rond een hook die een `Bronresultaat[]`
-teruggeeft: aaneenschakeling (v2), `(groep, ref)` (v3/v4), occurrence-toewijzing (v5),
-positioneel met `null` (v6/v7), verse instantie plus refsnapshot (v8). Elke ronde dichtte één
-gat en liet het volgende open. Dat patroon had me eerder moeten vertellen dat het probleem niet
-in de regels zat maar in de vorm: **zolang de adapter het toegelaten resultaat vasthoudt, is
-elke regel een afspraak in plaats van een grens.**
-
-**En de inzet is hoger dan contracthygiëne.** `verrijkWeergave()` draait **ná** de
-toelatings- en versiepoort. Een hook die `documentIdentiteit`, `versie`, `bronregistratieRef`,
-`toegangscontrole`, `passage`, `status` of `bronsoort` wijzigt, vervangt daarmee precies de
-binding waarop V1–V5 zijn uitgevoerd — vóórdat de bron in de prompt en de citaties belandt. Een
-shallow copy en een shallow `Object.freeze()` sluiten dat niet; die beschermen het buitenste
-object, niet de betekenis.
-
-**De hook levert daarom alleen nog weergavemetadata, typematig afgedwongen:**
+**De post-poorthook is alleen presentatie:**
 
 ```ts
 export type WeergaveVerrijking =
@@ -346,7 +355,6 @@ export type WeergaveVerrijking =
   | { type: "weglaten" }
   | { type: "verrijkt"; weergave: Bronresultaat["weergave"] };
 
-/** De hook ziet een MINIMALE, read-only projectie — nooit het toegelaten resultaat. */
 export interface WeergaveKandidaat {
   readonly ref: string;
   readonly weergave: Readonly<Bronresultaat["weergave"]> | undefined;
@@ -355,42 +363,22 @@ export interface WeergaveKandidaat {
 verrijkWeergave?(
   ctx: RetrievalContext,
   kandidaten: readonly WeergaveKandidaat[],
-): Promise<WeergaveVerrijking[]>;   // positioneel, exact even lang
+): Promise<WeergaveVerrijking[]>; // positioneel, exact even lang
 ```
 
-De orkestratie **houdt het toegelaten `Bronresultaat` zelf in bezit**, maakt per occurrence een
-verse instantie en past uitsluitend het toegestane `weergave`-veld toe. Een adapter kan dan geen
-bewijs-, identiteits-, versie-, status- of promptveld herschrijven — niet omdat het verboden is,
-maar omdat hij die velden nooit in handen krijgt.
+De orkestratie houdt het toegelaten resultaat zelf, maakt per occurrence een verse instantie en
+past alleen `weergave` toe. `behouden`, `weglaten` en `verrijkt` zijn expliciete uitkomsten;
+`undefined`, een sparse array of een lengteverschil is een configuratiefout. Geen enkele ref-
+lookup bepaalt de positie of herkomst.
 
-Het algoritme wordt daarmee korter dan alle voorgaande versies:
+Na de gezamenlijke selectie krijgt ieder resultaat vóór groepering een globale ordinal en de
+herkomst uit §2.2. De groepen worden alleen voor de presentatiehook uit elkaar gehaald; daarna
+worden de overlevenden stabiel op ordinal samengevoegd. Zo blijven verweven groepen en gelijke
+refs correct, terwijl de hook van groep A nooit een bron van groep B ziet.
 
-1. elk element van `tussen.geselecteerd` krijgt **vóór enige groepering** een herkomst
-   `{ groep, ordinal, primair }`;
-2. de selectie wordt per groep gesplitst; per groep bouwt de orkestratie de read-only projectie;
-3. `verrijkWeergave()` levert per groep een even lange `WeergaveVerrijking[]`;
-4. positie *i* wordt toegepast op **het eigen** resultaat van positie *i*: `behouden` laat het
-   ongemoeid, `weglaten` verwijdert het, `verrijkt` levert een verse instantie
-   `{ ...eigen, weergave: patch }`;
-5. de overlevenden van alle groepen gaan samen, **stabiel gesorteerd op ordinal**;
-6. elke instantie staat in de `herkomst`-WeakMap uit §2.2.
-
-Wat daarmee **vervalt** uit de vorige versies: de `null`-sentinel en de `undefined`/sparse-
-controle (de union is expliciet), de refsnapshot en de refcontrole (de hook ziet geen
-`Bronresultaat`), en de verse-instantie-tegen-gedeelde-objecten (de orkestratie maakt álle
-instanties zelf, dus elke occurrence is per constructie uniek). Eén controle blijft: **de
-uitvoer is exact even lang als de invoer**, anders een configuratiefout.
-
-**De nul-chunkstak blijft natuurlijk uitdrukbaar:** geen enkele koppeling betekent
-`{ type: "behouden" }` op alle posities, en gedeeltelijke koppeling `{ type: "weglaten" }` op de
-ontbrekende. Dat is dezelfde semantiek als vandaag, maar nu expliciet in plaats van afgeleid uit
-een lengte.
-
-**Wat dit wél verandert bij twee adapters.** De bronnummering volgt nu de gezamenlijke selectie-
-volgorde, en die komt uit de bestaande samenvoeging: eerst het primaire spoor, dan de aanvullende
-sporen. Dat is geen gedeelde relevantieweging over providers heen — die bestaat niet, want de
-scores van twee providers zijn niet vergelijkbaar. Het is wel deterministisch, reproduceerbaar
-en identiek aan wat de selectie al bepaalde. Zie A-4.
+De bronnummering bij twee adapters volgt daarmee nog steeds de gezamenlijke selectievolgorde:
+primair spoor eerst, daarna de aanvullende sporen. Dat is geen cross-provider scorevergelijking,
+maar wel deterministisch en reproduceerbaar. Zie A-4.
 
 ### 2.5 Gedrag per situatie
 
@@ -500,7 +488,13 @@ Wat T4-E moet regelen:
 
 Dit is de bewijslast die T4-A aan D-1 verbond, en zij is de belangrijkste acceptatievoorwaarde.
 
-1. **Structureel:** zolang geen enkel `Spoor.adapter` is gezet, is `effectieveAdapter(i)` voor elk spoor hetzelfde object, is er precies één adaptergroep, en valt `citeer()` terug op het bestaande pad. Alle nieuwe velden zijn optioneel en afwezig.
+1. **Structureel beperkt:** zolang geen enkel `Spoor.adapter` is gezet, is
+   `effectieveAdapter(i)` voor elk spoor hetzelfde object en is er precies één adaptergroep.
+   Dat houdt de nieuwe meervoudige-adapterlogica inert, maar garandeert op zichzelf **geen**
+   byte-identiteit: de Supabase-verrijking verhuist immers vóór de definitieve poort en kan
+   daardoor selectie beïnvloeden. De garantie komt daarom uit punt 2 en 3, niet uit een
+   vermeende identieke control flow. Alle uitsluitend meervoudige-adaptervelden blijven
+   optioneel en afwezig.
    **Geen spoorvolgorde wordt hardgecodeerd** (besluit D-1). `metaBasis.methode` en
    `metaBasis.diagnostiek` blijven uit spoor 0 komen, wélk spoor dat ook is; de orkestratie
    kent geen "Copilot-spoor" en geen voorkeursvolgorde. Dat de eerste activering het
@@ -515,9 +509,9 @@ Dit is de bewijslast die T4-A aan D-1 verbond, en zij is de belangrijkste accept
 
 | Bestand | Aard van de wijziging |
 |---|---|
-| `core/lib/retrieval/contract.ts` | additief: `Bronstatus`, `Bronstatusreden`, optioneel `bronstatus` op tussen-/eindresultaat, `equivalentieClaim?` op `Bronresultaat`. **Niet additief:** `verrijkWeergave()` wordt versmald — de hook ontvangt een read-only `WeergaveKandidaat[]` en levert positioneel `WeergaveVerrijking[]`; hij ziet het `Bronresultaat` niet meer (§2.4) |
-| `core/lib/retrieval/supabase-adapter.ts` | `verrijkWeergave()` levert `WeergaveVerrijking[]` in plaats van resultaten; de niet-weergavevelden die hij vandaag herschrijft vallen weg (B-6, besluit D-6). Voorheen beschreven als "wordt positioneel" — en dat is méér dan `.filter(Boolean)` vervangen: de nul-chunkstak moet blijven (oorspronkelijke bronnen op alle posities), `null` mag alleen op ontbrekende posities, en `rang.positie` blijft een teller over de gekoppelde chunks. Zie §2.4 punten 1-3 en tests 23-25 |
-| `core/lib/retrieval/orkestratie.ts` | `Spoor.adapter` / `Spoor.bijBronfout`, effectieve adapter per spoor, herkomst per resultaatinstantie (request-lokale `WeakMap`), `verrijkWeergave` per groep met POSITIONELE toewijzing, en de **pure** `bouwAdapterDiagnostiek()` zonder productieaanroeper. **Geen deduplicatie en geen aansluiting van `adapters`** — zie A-1 |
+| `core/lib/retrieval/contract.ts` | additief: `Bronstatus`, `Bronstatusreden`, optioneel `bronstatus` op tussen-/eindresultaat, `equivalentieClaim?` op `Bronresultaat`. **Niet additief:** post-selectie `verrijkSelectie()` wordt vervangen door pre-poort `verrijkKandidaten()`; `verrijkWeergave()` wordt versmald tot een positionele, gesloten weergavepatch (§2.4) |
+| `core/lib/retrieval/supabase-adapter.ts` | parent-context, notulen- en documentmetadata verhuizen naar `verrijkKandidaten()` vóór de definitieve poort. `verrijkWeergave()` levert daarna uitsluitend `WeergaveVerrijking[]`. De nul-koppelingstak blijft expliciet behouden; geen `filter(Boolean)` dat posities stil verschuift |
+| `core/lib/retrieval/orkestratie.ts` | `Spoor.adapter` / `Spoor.bijBronfout`, effectieve adapter per spoor, ruwe voorgrens → verrijking → definitieve servergrens/V1-V5, herkomst per resultaatinstantie (request-lokale `WeakMap`), post-poort-weergavepatch per groep en de **pure** `bouwAdapterDiagnostiek()` zonder productieaanroeper. **Geen deduplicatie en geen aansluiting van `adapters`** — zie A-1 |
 | `core/lib/retrieval/toelatingspoort.ts` | meervoudsvorm van `verifieerToelating()`, gedeelde `poortNu`, standenmaps per groep |
 | `core/lib/microsoft-retrieval/adapter.ts` *(nieuw)* | de dunne wrapper om T4-C/T4-D |
 | `tests/cross-tenant/retrieval-adaptergroepen.test.ts` *(nieuw)* | de twaalf vereiste tests |
@@ -661,7 +655,7 @@ aggregatiefunctie en haar vormgaranties; T4-F voegt typeveld, allowlist, databas
 route-aansluiting **atomair** toe. Daarmee is er geen tussenstand waarin een halve sleutel
 bestaat, en is A-1 een structurele eigenschap in plaats van een afspraak.
 
-### B-6 — de versmalling is NIET byte-identiek, en dat is geen detail
+### B-6 — de versmalling is NIET vanzelf byte-identiek *(opgelost per D-6)*
 
 `verrijkWeergave()` bouwt vandaag het **volledige** `Bronresultaat` opnieuw op uit de (inmiddels
 verrijkte) chunk: `chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)))`. Onder
@@ -682,19 +676,16 @@ oude waarde is beoordeeld. Dat is bestaand gedrag, niet iets wat T4-E introducee
 wel precies het gat dat de versmalling moet dichten, en het laat zien dat het gat niet
 theoretisch is.
 
-Gevolg: de versmalling **verandert de uitkomst** op deze velden en raakt dus de
-karakteriseringsgoldens. Dat kan niet als testaanpassing passeren. Twee wegen:
+**Besluit D-6:** route (a). De verrijking die security-relevante velden raakt verhuist vóór de
+definitieve servergrens en V1-V5; na de poort resteert alleen de gesloten weergavepatch uit
+§2.4. Daarmee beoordeelt de poort de uiteindelijke kandidaat in plaats van een tussenstand.
 
-* **(a) de verrijking die niet-weergavevelden raakt verhuist naar vóór de poort**, zodat de
-  poort de definitieve waarden ziet. Veiliger én byte-identiek in het eindresultaat, maar het
-  verplaatst werk naar een fase waarin nog niet vaststaat welke bronnen worden geselecteerd —
-  dus meer queries;
-* **(b) de versmalling wordt aanvaard als bewuste gedragswijziging**, met een vooraf goedgekeurde
-  semantische diff op de goldens.
+De eerdere formulering "byte-identiek in het eindresultaat" was te stellig: doordat verrijkte
+velden nu al vóór de selectie bestaan, kan ook de selectie veranderen. Daarom blijven alle
+bestaande goldens ongewijzigd als acceptatiepoort. Een verschil is een vooraf te beoordelen
+semantische diff, nooit een automatische snapshotupdate.
 
-Ik heb hier geen voorkeur die ik zelfstandig mag opleggen (**D-6**).
-
-### B-7 — `verrijkSelectie()` staat in dezelfde post-poort-positie
+### B-7 — `verrijkSelectie()` staat in dezelfde post-poort-positie *(opgelost per D-6)*
 
 Het versmallen van alleen `verrijkWeergave()` verplaatst het gat in plaats van het te sluiten.
 De volgorde in `orkestratie.ts` is: `zoek()` → **toelatingspoort** (stap 2) → begrenzing →
@@ -702,14 +693,11 @@ selectie + `verrijkSelectie()` (stap 5) → `citeer()` → `verrijkWeergave()`. 
 draaien dus ná V1–V5, en `verrijkSelectie()` herbouwt het resultaat op precies dezelfde manier
 (`supabase-adapter.ts:208`).
 
-Voorstel: naast de versmalling van `verrijkWeergave()` een **invariantcontrole ná elke hook** die
-het resultaat vergelijkt met de toegelaten momentopname op de velden waarop de poort heeft
-geoordeeld — `ref`, `bronsoort`, `documentIdentiteit`, `versie`, `bronregistratieRef`,
-`toegangscontrole`, `passage`, `status`. Een afwijking is een configuratiefout.
-
-Die controle is goedkoop en dekt beide hooks. Zij zal echter op de huidige
-`bronsoort`-verandering afgaan — wat B-6 aantoont — en moet dus samen met besluit D-6 worden
-ingevoerd. Een controle die meteen bij de bestaande adapter afgaat, wordt anders uitgezet.
+De post-poorthook `verrijkSelectie()` vervalt. Zijn werk verhuist naar de nieuwe
+`verrijkKandidaten()` vóór de definitieve poort. Daardoor hoeft een invariantcontrole geen
+legitieme bestaande transformatie te verbieden: de definitieve servergrens en V1-V5 toetsen de
+getransformeerde vorm. Ná die poort is het contract typematig beperkt tot `weergave`, zodat een
+securityveld niet alleen "verboden" is maar eenvoudigweg niet kan worden teruggegeven.
 
 ### B-5 — de ketendeadline kan het resterende beurtbudget niet kennen
 
@@ -733,7 +721,7 @@ maar dan staat de rekensom op twee plekken (**D-5**).
 | **D-2** | Dubbele citaten niet als eindoplossing; providerneutrale equivalentiesleutel — en ná de tweede ronde: **dedup alleen bij een centraal bevestigde documentidentiteit**, niet op een adapterclaim. | B-2 herschreven. Het veld heet nu `equivalentieClaim` en is **inert**: het leidt nooit op zichzelf tot dedup. Dedup vereist dat de orkestratie de binding onafhankelijk van beide adapters vaststelt; die binding bestaat vandaag niet, dus T4-E dedupliceert niet — door constructie, niet door een vlag. Vijandige test vereist (nr. 15). Beperking A-2 in §5. In T4-E wordt de claim **alleen vervoerd, niet geteld** — een teller hoort bij de tranche die de diagnostiek aansluit. |
 | **D-3** | `"meld"` bouwen maar niet gebruiken tot route en UI de status aantoonbaar tonen. | B-3 ongewijzigd; elk spoor dat T4-E aanmaakt staat op `"stop"`. Contracttest: `"meld"` zonder gezette `bronstatus` is onmogelijk. |
 | **D-4** | `KetenTreffer` uitbreiden met grondslaggegevens, vastgelegd bij de **laatste geslaagde** grondslagcontrole. | B-1; de formulering "laatste geslaagde" is overgenomen in het voorstel, want juist dát moment is wat V4 toetst. |
-| **D-6** | **Open.** De versmalling van `verrijkWeergave()` verandert de uitkomst op `bronsoort`, `versie`, `titel`, `status`, `curatie` en `rang.positie` (B-6). Kiezen: **(a)** de verrijking die niet-weergavevelden raakt verhuist naar vóór de poort — veiliger en byte-identiek in het eindresultaat, maar meer queries; of **(b)** aanvaarden als bewuste gedragswijziging met een vooraf goedgekeurde semantische diff op de goldens. | Geen zelfstandige voorkeur; dit raakt zowel de veiligheid als de goldens. |
+| **D-6** | De verrijking die niet-weergavevelden raakt verhuist naar vóór de definitieve servergrens en V1-V5. Ná de poort mag alleen de gesloten weergavepatch bestaan. | §2.4 en B-6/B-7. Meer I/O is de bewuste prijs voor een poort die de uiteindelijke kandidaat beoordeelt. Byte-identiteit wordt niet verondersteld: bestaande goldens blijven de blokkade, en iedere diff vraagt vooraf semantisch akkoord. |
 | **D-5** | Eén `resterendMs()` op de bestaande afbreekgrendel. | B-5; additief op `maakAfbreekgrendel()`, geen gedragswijziging voor bestaande gebruikers. |
 
 De twee ontwerpblockers uit dezelfde reviewronde zijn verwerkt in §2.2 (samengestelde sleutel /
@@ -767,7 +755,7 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 4 | filter-/capabilitycontrole per effectieve adapter | adapter A ondersteunt filter X, B niet; alleen B's spoor valt uit |
 | 5 | V5/versie eenmaal per unieke adapterbron | twee sporen op dezelfde adapter → hookteller is 1 |
 | 6 | intrekking verwijdert alles op die grondslag | `verifieerBronregistratie` levert `verbonden: false`; alle bronnen van die groep vallen weg, de andere groep blijft |
-| 7 | `verrijkWeergave` van A krijgt nooit bronnen van B | hook registreert ontvangen refs; assertie op disjunctie |
+| 7 | `verrijkWeergave` van A krijgt nooit bronnen van B | de gesloten weergavehook registreert ontvangen projecties; assertie op disjunctie |
 | 8 | providerfout/readinessverlies zonder stille fallback | `bijBronfout: "stop"` → beurt stopt; `"meld"` → `bronstatus` verplicht aanwezig |
 | 9 | timeout/annulering stopt alle groepen, geen fail-safe | telt calls ná de afbreking in beide groepen; moet 0 zijn |
 | 10 | contextafkapping herbouwt per-adapter metadata uit werkelijk opgenomen bronnen | rechtstreeks op de pure `bouwAdapterDiagnostiek()`: met een afgekapte set telt `opgenomen` alleen wat in `contextTekst` staat. Niet via `meta`, want T4-E zet de sleutel daar niet (A-1) |
@@ -781,15 +769,16 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 18 | *(toegevoegd)* **dezelfde `ref` in twee sporen van dezelfde adapter** | (a) **drie sporen, één adapter**: de uitkomst moet **exact gelijk** zijn aan die van `preview` — geen dedup, geen verschoven nummering, beide voorkomens blijven. Dit meet de byte-identiteitseis op een spoorlijst die `Queries<T>` toestaat maar die vandaag geen productieaanroeper heeft; (b) **dezelfde drie sporen, verweven met een tweede adaptergroep**: de positionele toewijzing koppelt elk teruggegeven resultaat aan het juiste voorkomen, en de herkomst klopt ná de citaatafkapping |
 | 19 | *(toegevoegd)* **herkomst overleeft de citaatafkapping** | kleine `maxContextTekens` met gelijke refs uit twee groepen; voor elke bron in `c.opgenomen` levert de `herkomst`-WeakMap de juiste groep, ordinal en primair-vlag. Negatieve controle: met een ref-gebaseerde lookup wordt deze test rood |
 | 20 | `verrijkWeergave` met een LENGTEVERSCHIL | uitvoer korter of langer dan de invoer → configuratiefout, geen "best effort"-interpretatie |
-| 21 | *(toegevoegd)* **VIJANDIG: dubbele `ref` waarvan er één wegvalt** | invoer `[R-primair, R-aanvullend]` (twee occurrences van dezelfde ref), hook geeft `[null, nieuw R]` terug. De overlevende moet de **aanvullende** herkomst krijgen, niet de primaire; `meta.chunks` en `meta.aanvullend` moeten dat weerspiegelen. Het spiegelgeval `[nieuw R, null]` levert de primaire herkomst. Negatieve controle: een op `ref` matchende implementatie kiest in beide gevallen de eerste occurrence en wordt rood op één van de twee |
+| 21 | *(herzien in v10)* **VIJANDIG: dubbele `ref` waarvan er één wegvalt** | invoer `[R-primair, R-aanvullend]` (twee occurrences van dezelfde ref), de gesloten hook geeft `[weglaten, behouden]` terug. De overlevende moet de **aanvullende** herkomst krijgen, niet de primaire; `meta.chunks` en `meta.aanvullend` moeten dat weerspiegelen. Het spiegelgeval `[behouden, weglaten]` levert de primaire herkomst. Negatieve controle: een op `ref` matchende implementatie kiest in beide gevallen de eerste occurrence en wordt rood op één van de twee |
 | 22 | *(toegevoegd)* eigenaarschap van de herkomststaat | de staat is niet bereikbaar buiten het verzoek: twee opeenvolgende beurten delen geen enkele herkomst, en `RetrievalUitkomst` bevat geen serialiseerbaar herkomstveld |
 | 23 | *(toegevoegd)* **nul gekoppelde chunks** | geen enkele bron heeft een chunk → de hook levert `{ type: "behouden" }` op alle posities en de bronnen blijven ongewijzigd. Negatieve controle: een implementatie die hier `weglaten` teruggeeft maakt alles leeg en wordt rood |
 | 24 | *(toegevoegd)* **gedeeltelijke koppeling** | `{ type: "weglaten" }` uitsluitend op de ontbrekende posities; de overige bronnen behouden hun plaats en krijgen hun eigen `weergave`-patch |
-| 25 | *(toegevoegd)* **`rang.positie` onder de versmalling** | de hook kan `rang` niet meer zetten, dus `positie` houdt zijn waarde van vóór de hook. Dat is een gedragswijziging t.o.v. vandaag (B-6) en de test legt de gekozen uitkomst van besluit D-6 vast — niet een aanname |
+| 25 | *(herzien in v10)* **selectiegedrag na pre-poortverrijking** | dezelfde één-adapteropdracht draait op `preview` en op de nieuwe volgorde. De selectie, `rang.positie`, context en citaties moeten byte-identiek blijven; ieder verschil is een semantische-diffblokkade en wordt niet door een snapshotupdate opgelost |
 | 26 | *(vervallen in v9)* hook muteert `invoer[i].ref` in-place | **Niet meer mogelijk:** de projectie is read-only en bevat geen muteerbaar resultaat. Vervangen door nr. 28 |
 | 27 | *(vervallen in v9)* één gedeelde objectinstantie op twee posities | **Niet meer mogelijk:** de orkestratie maakt álle instanties zelf, dus elke occurrence is per constructie uniek |
 | 28 | *(toegevoegd)* **VIJANDIG: hook probeert de grondslag te wijzigen** | de hook levert een `verrijkt`-patch waarin hij probeert `documentIdentiteit.id`, `versie`, `bronregistratieRef`, `toegangscontrole`, `passage`, `status` en `bronsoort` mee te geven. **Geen daarvan mag in het eindresultaat veranderen**; alleen de toegestane `weergave`-patch landt. Het type sluit het al uit — de test bewijst dat de runtime-toepassing dat óók doet en niet stilletjes spreidt |
-| 29 | *(toegevoegd)* invariantcontrole ná elke hook (B-7) | een hook die `bronsoort` of `versie` wijzigt wordt als configuratiefout gemeld, voor **beide** hooks — `verrijkSelectie()` én `verrijkWeergave()` |
+| 29 | *(herzien in v10)* **definitieve poort ziet de verrijkte vorm** | een `verrijkKandidaten()`-stub wijzigt `bronsoort` van `fonds` naar `notulen`; met een beleid dat alleen `fonds` toestaat wordt de kandidaat na verrijking geweigerd. De spiegeltest met `notulen` toegestaan bereikt V1-V5 op de nieuwe vorm |
+| 30 | *(toegevoegd in v10)* **geen post-poortmutatie** | een runtimekwaadwillige weergavepatch probeert naast `weergave` ook identiteit, bewijs, versie, passage, status, bronsoort en rang mee te geven. De toepassing neemt uitsluitend `weergave` over; alle andere velden blijven byte-gelijk aan de toegelaten instantie |
 
 Daarnaast: `tsc`, boundaries, secretscan, security-baseline, volledige cross-tenant inclusief
 DB-laag, karakterisering, E2E en productiebuild.
@@ -800,12 +789,23 @@ DB-laag, karakterisering, E2E en productiebuild.
 
 Eerlijkheidshalve, omdat een planreview die alleen zekerheden noemt een verkeerd beeld geeft:
 
-* **#425 is nog niet definitief, en beweegt sneller dan deze review kan bijhouden.** Ik schreef tegen `31514ce`; sindsdien passeerden `0bc007c`, `57a1a83`, `27ad291a` en `b6de123`. **Deze review noemt daarom bewust geen actuele SHA meer.** Elke ronde de head bijwerken is schijnprecisie: het getal is verouderd op het moment dat het wordt opgeschreven, en het suggereert een toetsing die niet heeft plaatsgevonden.
-  Wat wél geldt: de contractaannames (`CopilotReadinessToestand`, `beoordeelReadiness()`, `readinessNogGeldig()`, de tokenbevestiging) zijn **sinds `31514ce` niet opnieuw getoetst**. De drie rollbackbevindingen — B/C-volgorde, SQL-Editor-compatibiliteit en de ontbrekende `PUBLIC`-revoke op de helperfunctie — waren bij het schrijven nog open; die laatste raakt precies de regel uit CLAUDE.md dat `revoke … from public` op Supabase niet volstaat, omdat de default-ACL rechten expliciet aan `anon` en `authenticated` toekent.
-  **De herijking gebeurt één keer, ná het landen van #425 en de rebase van #427 op de dan actuele `preview`** — stap 3 uit de merge-orde van #426, en geen formaliteit. Dan wordt de SHA van dát moment vastgelegd, met een werkelijke hercontrole erachter.
+* **De verplichte herijking is uitgevoerd.** PR #427 is gerebased op `origin/preview`
+  `e159653`, inclusief de gemergede #424/T4-C- en #425/T4-D-contracten en de afgeronde
+  expand/contractmigraties op Preview. De zeven readinessstanden, de volgorde
+  readiness → tokenbevestiging → herlezing en de gelijkheidstoets op `verbindingVersie` zijn
+  opnieuw tegen de werkelijke code gecontroleerd. B-1 en B-5 blijven reëel: `KetenTreffer`
+  draagt nog geen grondslag en `Afbreekgrendel` kent nog geen resterende tijd.
 * **De eerste structurele demoactivering verhuist naar `app365_m365_demo_copilot`** (ticket #428). Dat raakt T4-E niet: deze laag is en blijft fonds- en omgevingsneutraal — zij kent geen profiel, geen fonds en geen omgeving, alleen een adapter per spoor. De keuze wélke omgeving als eerste wordt geactiveerd hoort bij de activeringstranche.
-* **De PGB-registrydrift is daarmee een afzonderlijk historisch/labpunt.** `pgb_m365_lab_copilot` staat in de integratieregistry nog op `blocked_on_sharepoint_index`, terwijl de index gereed is en de feitelijke blokkade `copilot_toegang_geweigerd` is. Dat blokkeert deze planreview niet en het ligt niet meer op het pad van de eerste activering, maar het moet vóór een live labsmoke worden rechtgezet — anders stuurt de registry een volgende sessie naar het verkeerde probleem.
-* **Ik heb geen enkele Microsoft-call gedaan** en niets aan consent, scopes, billing, flags of kill switch geraakt.
+* **De PGB-labstand is opnieuw live gemeten.** Beide begrensde indexscans waren groen:
+  de inhoudscan vond en verifieerde `Zandloperbaken 12` binnen de geregistreerde root en de
+  bestandsnaamscan vond `PGB407-DOC-101`. Daarna is exact één SEM01-Retrieval-poging
+  verstuurd. Die eindigde ook ná het propagatievenster fail-closed op HTTP 403 als
+  `copilot_toegang_geweigerd`; er is geen inhoudskandidaat beoordeeld. Daarmee is de index
+  niet langer de blokkade en heeft een nieuwe retry zonder concrete entitlementcorrectie geen
+  diagnostische waarde.
+* **De live meting heeft niets bij Microsoft gewijzigd.** Geen consent, scopes, billing,
+  licentie, featureflag of kill switch is aangepast; de runner heeft uitsluitend gelezen en
+  één geautoriseerde Retrieval-call uitgevoerd.
 * **`bronsoort: "sharepoint"` staat in geen enkel productie-bronbeleid.** Ook met T4-E volledig gebouwd levert de Copilot-arm dus niets, totdat een fonds die bronsoort krijgt. Dat is een bestaande inerte laag en T4-E verandert hem niet — maar het betekent ook dat "het werkt" pas in de activeringstranche aantoonbaar is.
 * **De byte-identiteitsclaim is een claim tot hij gemeten is.** §2.9 beschrijft hoe; het bewijs komt pas met de code.
 * **Versie 1 van deze review bevatte een ontwerpfout die ik zelf niet ving.** §2.2 stelde herkomst op spoorindex voor en §2.4 gebruikte vervolgens een ref-sleutel. Bij het herschrijven bleken er bovendien twee feiten te zijn die versie 1 niet kende: `verrijkWeergave()` laat bronnen vallen, en `primaireRefs` is een derde beurtbrede ref-sleutelruimte. Dat laatste was met een gerichte grep vindbaar geweest. Ik noem het hier omdat het iets zegt over de betrouwbaarheid van de rest: een planreview die op code steunt is zo goed als de plaatsen waar werkelijk is gekeken, en die verantwoording hoort erbij.
