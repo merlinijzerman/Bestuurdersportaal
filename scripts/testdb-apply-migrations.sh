@@ -174,6 +174,20 @@ begin
       noreplication
       nobypassrls;
   end if;
+  -- #423 T4-D — de operatorrol die de Copilot-kill-switch bedient. Wordt in
+  -- Preview/Productie VOORAF via het runbook geprovisioned; de expand-migratie
+  -- weigert te draaien als hij ontbreekt. Hier staat hij in de lokale fixture
+  -- zodat de wegwerp-DB dezelfde voorwaarde heeft als de echte omgeving.
+  if not exists (select 1 from pg_roles where rolname = 'copilot_operator') then
+    create role copilot_operator
+      nologin
+      noinherit
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noreplication
+      nobypassrls;
+  end if;
   -- #344 — de beperkte portaalrol waarnaar de Auth-hook een break-glass- of
   -- koppelsessie afschaalt. PostgREST doet `set role` op de claim, dus de rol
   -- moet bestaan én lid zijn van authenticator (zoals anon/authenticated).
