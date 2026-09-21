@@ -83,7 +83,8 @@ test("LK-1b T2 — de server-pagina beslist over de Microsoft-knop (fail-closed)
 // ── LK-2 · Login-layout ──────────────────────────────────────────────────────
 
 test("LK-2 INVARIANT — login-layout stuurt alleen een sessie MET profielen-rij naar '/', een platform-identiteit niet", () => {
-  assert.match(loginLayout, /robots: \{ index: false, follow: true \}/);
+  assert.match(loginLayout, /index: false/);
+  assert.match(loginLayout, /follow: !isApp365DemoHost\(\(await headers\(\)\)\.get\("host"\)\)/, "demo-login is noindex,nofollow; overige loginhosts blijven follow");
   assert.match(loginLayout, /\.from\("profielen"\)\s*\.select\("id"\)\s*\.eq\("id", user\.id\)\s*\.maybeSingle\(\)/);
   assert.match(loginLayout, /if \(profiel\) redirect\("\/"\);/, "alleen met profiel terug naar de app (voorkomt redirectlus met platform-identiteit)");
   assert.equal((loginLayout.match(/redirect\(/g) ?? []).length, 1, "precies één redirect in de login-layout");
@@ -280,7 +281,7 @@ test("LK-11 PIN — sha256 van de auth-kernbestanden (bewust bijwerken; nieuwe w
     "core/lib/fonds-sessie.ts": "754bcca82b56d9683de5bcec42bcf34aba3416f19381f4b9e7c947608e06944a",
     "app/auth/callback/route.ts": "23097717109ba1b31642933453aa4e7034ddf7fcfe5250c4d665772bb67dd328",
     "core/lib/supabase-server.ts": "ff104b6a4bb390ee3563b901dd461fc6e82f2086cb80923816f8ec381a698872",
-    "app/login/layout.tsx": "b7ac4b145a3852e003872b0cce93edd640cf0f5b2cfbcfa225b7071c0c59b23c",
+    "app/login/layout.tsx": "6cb52b51a2ba864369b0579deecc64bba53f4aca77399fa2c92f99fde778c95f",
     "app/login/page.tsx": "62e135ae3215872e09a046bb6a438a1db596ab56e0f4c3e33e2b0fa119600fbe",
     "core/lib/redirect-veilig.ts": "e8986ce5c29d7b564ba8e75f0edc6c0913d350daf637d70c61397d2b7b7b97e4",
     "app/login/_components/LoginForm.tsx": "aeee8de8413c28391fe065738a777a7ad4b6e2d6aa314146859589dd7ec1a9db",

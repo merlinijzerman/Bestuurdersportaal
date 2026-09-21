@@ -65,64 +65,65 @@ export const MARKETING_PUBLIEKE_PADEN = new Set<string>([
 export const MARKETING_HOME_PAD = "/home";
 
 export type Surface = "marketing" | "app" | "platform";
-
-/** Normaliseer een host: poort strippen, lowercase, leidende `www.` weg, zodat
- *  apex en `www.apex` dezelfde marketing-surface zijn. Geëxporteerd zodat de
- *  tenant-resolver (lib/tenant-host.ts) exact hetzelfde contract hergebruikt. */
-export function normaliseerHost(host: string | null | undefined): string | null {
-  if (!host) return null;
-  let h = host.split(":")[0].trim().toLowerCase();
-  if (h.startsWith("www.")) h = h.slice(4);
-  return h || null;
-}
-
-/** Normaliseer een komma-gescheiden hostlijst naar een set genormaliseerde hosts.
- *  Zo mag elke *_HOST-env één host ÓF een komma-lijst zijn (bv. apex + www);
- *  elke variant wordt via normaliseerHost (poort/`www.`) gelijkgetrokken. Dit
- *  contract is identiek aan de origin-check (originToegestaan in /api/contact),
- *  zodat surface-routing en CSRF-check dezelfde env-waarde consistent lezen. */
-function hostSet(waarde: string | null | undefined): Set<string> {
-  const out = new Set<string>();
-  if (!waarde) return out;
-  for (const deel of waarde.split(",")) {
-    const n = normaliseerHost(deel);
-    if (n) out.add(n);
-  }
-  return out;
-}
+import {
+  leesHostConfiguratie,
+  normaliseerHostVoorRoutering,
+  normaliseerMarketingHost,
+} from "./host-validatie";
 
 /** Hoort deze host bij de platform-surface? Lege/ontbrekende config → nooit.
  *  platformHost mag een komma-lijst zijn (consistent met bepaalSurface). */
 export function isPlatformHost(
   host: string | null | undefined,
-  platformHost: string | null | undefined
+  platformHost: string | null | undefined,
+  lokaalToegestaan = false
 ): boolean {
-  const h = normaliseerHost(host);
+  const h = normaliseerHostVoorRoutering(host, { lokaalToegestaan });
   if (!h) return false;
-  return hostSet(platformHost).has(h);
+  return leesHostConfiguratie({
+    naam: "PLATFORM_HOST",
+    waarde: platformHost,
+    type: "exact",
+    lokaalToegestaan,
+  }).has(h);
 }
 
 /** Bepaalt de surface op basis van de request-host en het env-contract. Pure,
- *  zodat de host-matrix zonder server testbaar is. Matchvolgorde:
- *  platform → app → marketing → default 'app'. Elke *_HOST mag een komma-lijst
- *  zijn (apex + www); elk deel wordt genormaliseerd. De app-precedentie boven
- *  marketing voorkomt bovendien een redirect-lus bij een (fout)configuratie
- *  waarin APP_HOST en MARKETING_HOST overlappen. */
+ *  zodat de host-matrix zonder server testbaar is. App/platform matchen exact;
+ *  alleen marketing voegt apex en `www` samen. Ongeldige requesthost → null;
+ *  ongeldige of overlappende configuratie → harde configuratiefout. */
 export function bepaalSurface(args: {
   host: string | null | undefined;
   marketingHost?: string | null;
   appHost?: string | null;
   platformHost?: string | null;
-}): Surface {
-  const h = normaliseerHost(args.host);
-  if (!h) return "app";
+  lokaalToegestaan?: boolean;
+}): Surface | null {
+  const lokaalToegestaan = args.lokaalToegestaan ?? false;
+  const h = normaliseerHostVoorRoutering(args.host, { lokaalToegestaan });
+  if (!h) return null;
 
-  if (hostSet(args.platformHost).has(h)) return "platform";
-  if (hostSet(args.appHost).has(h)) return "app";
-  if (hostSet(args.marketingHost).has(h)) return "marketing";
+  const platform = leesHostConfiguratie({ naam: "PLATFORM_HOST", waarde: args.platformHost, type: "exact", lokaalToegestaan });
+  const app = leesHostConfiguratie({ naam: "APP_HOST", waarde: args.appHost, type: "exact", lokaalToegestaan });
+  const marketing = leesHostConfiguratie({ naam: "MARKETING_HOST", waarde: args.marketingHost, type: "marketing", lokaalToegestaan });
+  for (const host of platform) if (app.has(host) || marketing.has(host)) throw new Error(`Hostconfiguratie overlapt tussen surfaces: ${host}.`);
+  for (const host of app) if (marketing.has(host)) throw new Error(`Hostconfiguratie overlapt tussen surfaces: ${host}.`);
+
+  if (platform.has(h)) return "platform";
+  if (app.has(h)) return "app";
+  if (marketing.has(normaliseerMarketingHost(h, { lokaalToegestaan })!)) return "marketing";
   // Fail-safe: onbekende/onconfigureerde host → 'app' (achter de auth-gate).
   // Platform is hierboven al afgehandeld en wordt nooit default → fail-closed.
   return "app";
+}
+
+export function eersteGeconfigureerdeHost(args: {
+  naam: "APP_HOST" | "MARKETING_HOST" | "PLATFORM_HOST";
+  waarde: string | null | undefined;
+  type: "exact" | "marketing";
+  lokaalToegestaan?: boolean;
+}): string | null {
+  return leesHostConfiguratie({ ...args, lokaalToegestaan: args.lokaalToegestaan ?? false }).values().next().value ?? null;
 }
 
 export type RouteBeslissing =

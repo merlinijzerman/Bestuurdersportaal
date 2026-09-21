@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
-import { bepaalSurface } from "@/core/lib/platform-host";
+import { bepaalSurface, eersteGeconfigureerdeHost } from "@/core/lib/platform-host";
+import { lokaleHostmodus } from "@/core/lib/host-validatie";
 
 // Host-bewuste sitemap. Alleen de marketing-host heeft publieke, indexeerbare
 // pagina's (de (public)-allowlist, TO §9.1). Op de app- en platform-host is er
@@ -12,18 +13,19 @@ import { bepaalSurface } from "@/core/lib/platform-host";
 // een sitemap die een noindex-pagina aanmeldt, geeft een tegenstrijdig signaal.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const host = (await headers()).get("host");
+  const lokaalToegestaan = lokaleHostmodus({ seedDoelomgeving: process.env.SEED_DOELOMGEVING });
   const surface = bepaalSurface({
     host,
     marketingHost: process.env.MARKETING_HOST,
     appHost: process.env.APP_HOST,
     platformHost: process.env.PLATFORM_HOST,
+    lokaalToegestaan,
   });
 
   if (surface !== "marketing") return [];
 
-  const origin = `https://${
-    process.env.MARKETING_HOST?.split(",")[0]?.trim() || host
-  }`;
+  const marketingHost = eersteGeconfigureerdeHost({ naam: "MARKETING_HOST", waarde: process.env.MARKETING_HOST, type: "marketing", lokaalToegestaan });
+  const origin = `https://${marketingHost ?? host}`;
   const nu = new Date();
 
   return [
