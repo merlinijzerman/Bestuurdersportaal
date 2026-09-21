@@ -1,6 +1,6 @@
 # T4-E planreview — centrale orkestratie en adapter-per-spoor (#426)
 
-**Status:** versie 6, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 7, ter beoordeling. Geen productiecode geschreven.
 **Vertakt van:** `origin/preview` `b3961ba` (bevat #424 / T4-C volledig).
 **Datum:** 2026-09-21.
 
@@ -13,7 +13,8 @@ hun vervanger, waardoor het document zichzelf tegensprak.
 
 | Versie | Wat veranderde | Wat daarvan later is ingetrokken |
 |---|---|---|
-| **6** *(deze)* | `verrijkWeergave()` wordt **positioneel**: uitvoer even lang als de invoer, `null` voor een weggelaten bron. Herkomst wordt op **positie** toegekend, nooit op `ref`. Eigenaar en levensduur van de request-lokale herkomststaat vastgelegd (§2.2). §2.4 teruggebracht tot één algoritme. Tests 20 t/m 22. | — |
+| **7** *(deze)* | De nul-chunkssemantiek van de Supabase-hook expliciet behouden: nul koppelingen ⇒ oorspronkelijke bronnen op alle posities; `null` alleen op ontbrekende posities; en `rang.positie` blijft een teller over de gekoppelde chunks (§2.4, tests 23-25). Test 16 herschreven naar het positionele contract, inclusief `undefined` en sparse array. | — |
+| 6 | `verrijkWeergave()` wordt **positioneel**: uitvoer even lang als de invoer, `null` voor een weggelaten bron. Herkomst wordt op **positie** toegekend, nooit op `ref`. Eigenaar en levensduur van de request-lokale herkomststaat vastgelegd (§2.2). §2.4 teruggebracht tot één algoritme. Tests 20 t/m 22. | — |
 | 5 | Herkomst van een ref-gebaseerde set naar een request-lokale `WeakMap` op de resultaat*instantie*; `primairPerGroep` vervallen; centrale deduplicatie ingetrokken. | **occurrence-toewijzing met een tweepuntersloop** — ambigu bij twee gelijke refs waarvan er één wegvalt; **contractregel "volgorde behouden"** — vervangen door de sterkere positionele regel |
 | 4 | `meta.adapters` niet meer door T4-E aangesloten; T4-F voegt typeveld, allowlist, projectie en route atomair toe. | **centrale exact-ref-deduplicatie** — veranderde één-adaptergedrag bij ≥3 sporen |
 | 3 | `equivalentieSleutel` → inerte `equivalentieClaim`; A-1 aangescherpt tot een aansluitverbod; globale ordinals. | **terugkoppeling via `(groep, ref)` met `ordinalPerGroep`** — een ref-sleutel is ná de citaatafkapping uitgewerkt |
@@ -374,14 +375,42 @@ vervalt; positioneel is sterker):
 
 * **de uitvoer is exact even lang als de invoer**, met `null` voor een weggelaten bron. Een
   lengteverschil is een configuratiefout en stopt de beurt — niet "best effort", want elke
-  andere uitleg raadt welke bron bedoeld was;
+  andere uitleg raadt welke bron bedoeld was. **Gelijke lengte alleen is niet genoeg:** elk
+  element moet óf een `Bronresultaat` zijn óf exact `null`. Een `undefined` of een gat in een
+  sparse array heeft wél de goede `length` maar betekent iets anders — dat is een vergeten tak,
+  geen besluit om een bron weg te laten, en het wordt dus als configuratiefout behandeld;
 * **een `ref` mag niet wijzigen.** Voor de herkomst is dat niet langer dragend — die is
   positioneel — maar `metaBasis.primaireRefs` en de citaatidentiteit hangen er wél aan.
 
-**De prijs:** dit is een wijziging aan de `RetrievalAdapter`-interface en aan de enige
-implementatie, `supabase-adapter.ts`. Die filtert vandaag met `.filter(Boolean)` en moet in
-plaats daarvan `null` op de weggelaten posities teruggeven. Klein en lokaal, maar het is een
-contractwijziging en staat als zodanig in §2.10.
+**De prijs, en die is groter dan "een filter vervangen".** Dit is een wijziging aan de
+`RetrievalAdapter`-interface én aan de enige implementatie. De naïeve omzetting —
+`null` teruggeven voor elke bron zonder chunk — **breekt de byte-identiteit op drie manieren**.
+De huidige implementatie (`supabase-adapter.ts:219-228`) doet namelijk dit:
+
+```js
+let chunks = geselecteerd.map((b) => chunkPerRef.get(b.ref)).filter(Boolean);
+if (chunks.length === 0) return geselecteerd;                       // (1)
+…
+const resultaten = chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)));  // (3)
+return resultaten;                                                   // (2)
+```
+
+1. **Nul gekoppelde chunks levert de OORSPRONKELIJKE selectie terug — alle bronnen, ongewijzigd.**
+   Een omzetting die per ontbrekende chunk `null` geeft, zou in dat geval een array van louter
+   `null`s opleveren en dus élke bron verwijderen. Regel: **nul koppelingen ⇒ de oorspronkelijke
+   bronnen op alle posities, geen enkele `null`.**
+2. **Bij gedeeltelijke koppeling verdwijnen de ongekoppelde bronnen.** Dat blijft zo, maar nu als
+   `null` op precies díé posities; de gekoppelde bronnen staan op hun **oorspronkelijke** positie.
+   Na het wegfilteren van de `null`s levert dat exact de array van vandaag.
+3. **`chunkAlsBronresultaat(c, i)` zet `i` op `rang.positie`** (`rag.ts:1885`, r. 1922), en `i` is
+   vandaag de index binnen de **gefilterde** reeks. Wie positioneel gaat mappen en de
+   oorspronkelijke index doorgeeft, verandert `rang.positie` voor élke bron zodra er ook maar één
+   niet gekoppeld is. Regel: **`positie` blijft een doorlopende teller over de GEKOPPELDE chunks**,
+   los van de positie in de uitvoer-array.
+
+Punt 3 stond niet in de reviewopmerking en is het soort detail dat een byte-identiteitstest rood
+laat lopen zonder dat de oorzaak in de diff te zien is. Alle drie staan als expliciete regel in
+de tests (nrs. 23-25).
 
 **Een legacy-fast-path blijft mogelijk:** bij precies één adaptergroep kan de groepering worden
 overgeslagen. Niet nodig — bij één groep is stap 4 een identiteitsoperatie — maar wel een optie
@@ -517,7 +546,7 @@ Dit is de bewijslast die T4-A aan D-1 verbond, en zij is de belangrijkste accept
 | Bestand | Aard van de wijziging |
 |---|---|
 | `core/lib/retrieval/contract.ts` | additief: `Bronstatus`, `Bronstatusreden`, optioneel `bronstatus` op tussen-/eindresultaat, `equivalentieClaim?` op `Bronresultaat`. **Niet additief:** `verrijkWeergave()` wordt positioneel — retourtype `(Bronresultaat \| null)[]` met dezelfde lengte als de invoer (§2.4) |
-| `core/lib/retrieval/supabase-adapter.ts` | de enige implementatie van `verrijkWeergave()`: `.filter(Boolean)` vervangen door `null` op de weggelaten posities. Klein en lokaal, maar het volgt uit een contractwijziging en hoort dus zichtbaar in deze tabel |
+| `core/lib/retrieval/supabase-adapter.ts` | de enige implementatie van `verrijkWeergave()` wordt positioneel — en dat is méér dan `.filter(Boolean)` vervangen: de nul-chunkstak moet blijven (oorspronkelijke bronnen op alle posities), `null` mag alleen op ontbrekende posities, en `rang.positie` blijft een teller over de gekoppelde chunks. Zie §2.4 punten 1-3 en tests 23-25 |
 | `core/lib/retrieval/orkestratie.ts` | `Spoor.adapter` / `Spoor.bijBronfout`, effectieve adapter per spoor, herkomst per resultaatinstantie (request-lokale `WeakMap`), `verrijkWeergave` per groep met POSITIONELE toewijzing, en de **pure** `bouwAdapterDiagnostiek()` zonder productieaanroeper. **Geen deduplicatie en geen aansluiting van `adapters`** — zie A-1 |
 | `core/lib/retrieval/toelatingspoort.ts` | meervoudsvorm van `verifieerToelating()`, gedeelde `poortNu`, standenmaps per groep |
 | `core/lib/microsoft-retrieval/adapter.ts` *(nieuw)* | de dunne wrapper om T4-C/T4-D |
@@ -722,17 +751,20 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 9 | timeout/annulering stopt alle groepen, geen fail-safe | telt calls ná de afbreking in beide groepen; moet 0 zijn |
 | 10 | contextafkapping herbouwt per-adapter metadata uit werkelijk opgenomen bronnen | rechtstreeks op de pure `bouwAdapterDiagnostiek()`: met een afgekapte set telt `opgenomen` alleen wat in `contextTekst` staat. Niet via `meta`, want T4-E zet de sleutel daar niet (A-1) |
 | 11 | diagnostiek inhouds- en identifiervrij, alle getallen finite | recursieve scan over de uitvoer van `bouwAdapterDiagnostiek()`: elke string moet in een enum zitten, elk getal `Number.isFinite` |
+| 12 | goldens alleen na goedgekeurde semantische diff | karakterisering draait ongewijzigd; een verschil is een blokker, geen update |
 | 13 | *(toegevoegd)* gemengde `bijBronfout` binnen één adaptergroep | opdracht met twee sporen op dezelfde adapter en verschillende standen → configuratiefout vóór elke adapter-, token- of netwerkcall |
 | 14 | *(toegevoegd)* **VERWEVEN GROEPEN, mét een weggevallen bron** | selectie `A1, B1, A2, B2`; groep B laat `B1` vallen in `verrijkWeergave`. Verwacht: `A1, A2, B2` in díé volgorde, met de bronnummers die de globale ordinals voorschrijven. Een implementatie die per groep aaneenschakelt levert `A1, A2, B2` óók — daarom draait de test bovendien het spiegelgeval `B1, A1, B2` zonder uitval, waar concatenatie `B1, B2, A1` zou geven en de ordinalherstelling `B1, A1, B2` |
 | 15 | *(toegevoegd)* **VIJANDIG: geclaimde equivalentie** | adapter B geeft een resultaat terug met de `equivalentieClaim` van een bron van adapter A. De bron van A blijft staan, met eigen bronnummer en eigen weergavemetadata; er verdwijnt niets |
-| 16 | *(toegevoegd)* onbekende `(groep, ref)` uit een hook | `verrijkWeergave` geeft een resultaat terug dat niet is aangeboden → configuratiefout, geen stille toevoeging aan de citatenstroom |
+| 16 | *(toegevoegd)* **positiebinding van de hookuitvoer** | een niet-`null` resultaat op positie *i* moet dezelfde `ref` houden als invoerpositie *i*; wijkt hij af, dan is dat een configuratiefout en geen stille verwisseling. Plus twee runtimegevallen die de lengtecontrole alléén niet vangt: een `undefined` op een positie, en een **sparse array** (`[a, , c]`) — beide hebben de goede `length` maar geen geldige waarde op die plek |
 | 17 | *(toegevoegd)* A-1 | `RetrievalMeta` kent de sleutel `adapters` NIET; `core/lib/audit-meta.ts` is ongewijzigd t.o.v. `preview`; de routerespons bevat hem niet. Alle drie gemeten, want het verbod is structureel en niet afhankelijk van discipline |
 | 18 | *(toegevoegd)* **dezelfde `ref` in twee sporen van dezelfde adapter** | (a) **drie sporen, één adapter**: de uitkomst moet **exact gelijk** zijn aan die van `preview` — geen dedup, geen verschoven nummering, beide voorkomens blijven. Dit meet de byte-identiteitseis op een spoorlijst die `Queries<T>` toestaat maar die vandaag geen productieaanroeper heeft; (b) **dezelfde drie sporen, verweven met een tweede adaptergroep**: de positionele toewijzing koppelt elk teruggegeven resultaat aan het juiste voorkomen, en de herkomst klopt ná de citaatafkapping |
 | 19 | *(toegevoegd)* **herkomst overleeft de citaatafkapping** | kleine `maxContextTekens` met gelijke refs uit twee groepen; voor elke bron in `c.opgenomen` levert de `herkomst`-WeakMap de juiste groep, ordinal en primair-vlag. Negatieve controle: met een ref-gebaseerde lookup wordt deze test rood |
 | 20 | *(toegevoegd)* `verrijkWeergave` met een LENGTEVERSCHIL | uitvoer korter of langer dan de invoer → configuratiefout, geen "best effort"-interpretatie |
 | 21 | *(toegevoegd)* **VIJANDIG: dubbele `ref` waarvan er één wegvalt** | invoer `[R-primair, R-aanvullend]` (twee occurrences van dezelfde ref), hook geeft `[null, nieuw R]` terug. De overlevende moet de **aanvullende** herkomst krijgen, niet de primaire; `meta.chunks` en `meta.aanvullend` moeten dat weerspiegelen. Het spiegelgeval `[nieuw R, null]` levert de primaire herkomst. Negatieve controle: een op `ref` matchende implementatie kiest in beide gevallen de eerste occurrence en wordt rood op één van de twee |
 | 22 | *(toegevoegd)* eigenaarschap van de herkomststaat | de staat is niet bereikbaar buiten het verzoek: twee opeenvolgende beurten delen geen enkele herkomst, en `RetrievalUitkomst` bevat geen serialiseerbaar herkomstveld |
-| 12 | goldens alleen na goedgekeurde semantische diff | karakterisering draait ongewijzigd; een verschil is een blokker, geen update |
+| 23 | *(toegevoegd)* **nul gekoppelde chunks** | geen enkele bron heeft een chunk → de hook levert de OORSPRONKELIJKE bronnen op alle posities, geen enkele `null`, en de uitkomst is gelijk aan die van `preview`. Negatieve controle: de naïeve omzetting (`null` per ontbrekende chunk) maakt hier alles leeg en wordt rood |
+| 24 | *(toegevoegd)* **gedeeltelijke koppeling** | `null` staat uitsluitend op de ontbrekende posities; de gekoppelde bronnen staan op hun oorspronkelijke positie, en ná het wegfilteren is de array identiek aan die van vandaag |
+| 25 | *(toegevoegd)* **`rang.positie` bij gedeeltelijke koppeling** | `positie` blijft de doorlopende teller over de GEKOPPELDE chunks, niet de index in de uitvoer-array. Meet met een selectie waarin de eerste bron geen chunk heeft: de tweede bron moet `positie: 0` houden, niet `1` |
 
 Daarnaast: `tsc`, boundaries, secretscan, security-baseline, volledige cross-tenant inclusief
 DB-laag, karakterisering, E2E en productiebuild.
