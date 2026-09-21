@@ -80,6 +80,17 @@ export interface Versiebewijs {
 export type ItemLezer = (itemId: string) => Promise<GraphDriveItem>;
 
 /**
+ * Een `remoteItem` is een SHORTCUT: het item dat je ziet staat ergens anders,
+ * vaak in een andere drive of site. De ouderketen die wij toetsen is dan die van
+ * de snelkoppeling en niet die van het werkelijke bestand — de containment zou
+ * dus iets bewijzen over de verkeerde locatie. Fail-closed weigeren; #419 doet
+ * dat in de labscan om dezelfde reden.
+ */
+function isShortcut(item: GraphDriveItem): boolean {
+  return (item as { remoteItem?: unknown }).remoteItem != null;
+}
+
+/**
  * De enige twee Graph-uitkomsten die over ÉÉN document gaan. Al het andere
  * treft de hele beurt en mag geen kandidaatweigering worden.
  */
@@ -150,6 +161,9 @@ export async function leesRoot(
   if (root.id !== bron.rootItemId || !root.folder || root.parentReference?.driveId !== bron.driveId) {
     return { ok: false, afwijzing: "rechten_configuratie" };
   }
+  // Een root die zelf een snelkoppeling is, wijst naar een bibliotheek die wij
+  // niet hebben geregistreerd; dan is er geen scope om in te zoeken.
+  if (isShortcut(root)) return { ok: false, afwijzing: "rechten_configuratie" };
   const rootWebUrl = canoniekeWebUrl(root.webUrl);
   const rootGraphPad = rootPadVanItem(root, bron.driveId);
   if (!rootWebUrl || !rootGraphPad) return { ok: false, afwijzing: "rechten_configuratie" };
@@ -201,7 +215,13 @@ export async function bevestigKandidaatItem(
   const item = gelezen.item;
 
   if (item.id !== document.itemId) return { ok: false, afwijzing: "binding" };
+  // DEZELFDE DRIVE als de bron, en de verse ouderketen onder de VERSE root.
+  // `webUrl` speelt hier geen rol: die is locator- en anti-hergebruikbewijs,
+  // nooit het bewijs dat dit item binnen onze scope ligt. Sinds Graph voor
+  // Officebestanden een viewer-URL levert, is dat onderscheid niet langer
+  // theoretisch — een containmentcontrole op de URL was daar stukgelopen.
   if (item.parentReference?.driveId !== bron.driveId) return { ok: false, afwijzing: "binding" };
+  if (isShortcut(item)) return { ok: false, afwijzing: "binding" };
   if (!item.file) return { ok: false, afwijzing: "binding" };
   if (!itemOnderRoot(item, bron.driveId, rootGraphPad)) return { ok: false, afwijzing: "root" };
 
@@ -240,6 +260,7 @@ export async function bevestigVersieOngewijzigd(
   if (!gelezen.ok) return { ok: false, afwijzing: "rechten_configuratie" };
   const item = gelezen.item;
   if (item.id !== args.document.itemId) return { ok: false, afwijzing: "binding" };
+  if (isShortcut(item)) return { ok: false, afwijzing: "binding" };
   const waarde = args.versieVoor.soort === "etag" ? item.eTag?.trim() : item.cTag?.trim();
   if (!waarde || waarde !== args.versieVoor.waarde) return { ok: false, afwijzing: "versie" };
   return { ok: true };

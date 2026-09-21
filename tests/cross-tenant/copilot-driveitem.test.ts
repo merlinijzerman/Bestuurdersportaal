@@ -298,6 +298,83 @@ test("een item buiten de root, een map of een verwisseld id valt af", async () =
   }
 });
 
+test("OFFICE-VIEWER-URL: viewer- en bibliotheekvorm wijzen dezelfde bron aan", async () => {
+  // Graph levert voor Word/PowerPoint een viewer-URL; de listing slaat die
+  // vorm op. Beide richtingen moeten matchen, anders valt precies het
+  // bestandstype af waar de fixtures uit bestaan.
+  const viewer = `https://${HOST}/:w:/r/sites/pgb/Documenten/A.docx`;
+
+  // hit in bibliotheekvorm, item in viewervorm
+  const a = await bevestigKandidaatItem(
+    { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+    lees(item({ webUrl: viewer })),
+  );
+  assert.ok(a.ok, "viewer-URL op het item werd niet herkend");
+
+  // hit in viewervorm, item in bibliotheekvorm — `hitCanoniek` is dan al
+  // genormaliseerd door de locatorstap, dus dit is dezelfde waarde.
+  const b = await bevestigKandidaatItem(
+    { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+    lees(item({ webUrl: HIT })),
+  );
+  assert.ok(b.ok);
+
+  // PowerPoint en Excel volgen dezelfde regel.
+  for (const prefix of [":p:", ":x:", ":b:"]) {
+    const uitkomst = await bevestigKandidaatItem(
+      { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+      lees(item({ webUrl: `https://${HOST}/${prefix}/r/sites/pgb/Documenten/A.docx` })),
+    );
+    assert.ok(uitkomst.ok, prefix);
+  }
+});
+
+test("een SHARINGLINK wordt niet als bibliotheekpad gelezen", async () => {
+  // `/s/<token>` draagt geen pad. Zou hij genormaliseerd worden, dan werd een
+  // token als bibliotheekpad gelezen en kon een gedeeld bestand van buiten de
+  // root alsnog matchen.
+  const uitkomst = await bevestigKandidaatItem(
+    { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+    lees(item({ webUrl: `https://${HOST}/:w:/s/EaBc123` })),
+  );
+  assert.equal(uitkomst.ok, false);
+  assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "binding");
+});
+
+test("een SHORTCUT (remoteItem) wordt fail-closed geweigerd", async () => {
+  // De ouderketen van een snelkoppeling is die van de snelkoppeling, niet van
+  // het echte bestand: containment zou dan iets over de verkeerde locatie
+  // bewijzen. Ook op het rootitem en bij de tweede versielezing.
+  const shortcut = { ...item(), remoteItem: { id: "elders-1", parentReference: { driveId: "drive-9" } } } as GraphDriveItem;
+  const kandidaat = await bevestigKandidaatItem(
+    { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+    lees(shortcut),
+  );
+  assert.equal(kandidaat.ok, false);
+  assert.equal(kandidaat.ok === false && kandidaat.afwijzing, "binding");
+
+  const rootShortcut = { ...rootItem(), remoteItem: { id: "elders-root" } } as GraphDriveItem;
+  const root = await leesRoot(BRON, lees(rootShortcut));
+  assert.equal(root.ok, false);
+  assert.equal(root.ok === false && root.afwijzing, "rechten_configuratie");
+
+  const tweede = await bevestigVersieOngewijzigd(
+    { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
+    lees(shortcut),
+  );
+  assert.equal(tweede.ok, false);
+  assert.equal(tweede.ok === false && tweede.afwijzing, "binding");
+});
+
+test("CROSS-DRIVE: een item uit een andere drive valt af, ook met kloppende URL", async () => {
+  const uitkomst = await bevestigKandidaatItem(
+    { bron: BRON, tokenTenantId: "tenant-1", document: DOCUMENT, hitCanoniek: HIT, rootGraphPad: ROOT_PAD },
+    lees(item({ parentReference: { driveId: "drive-2", id: "root-1", path: ROOT_PAD } })),
+  );
+  assert.equal(uitkomst.ok, false);
+  assert.equal(uitkomst.ok === false && uitkomst.afwijzing, "binding");
+});
+
 test("de tweede versielezing eist exacte gelijkheid", async () => {
   const gelijk = await bevestigVersieOngewijzigd(
     { document: DOCUMENT, versieVoor: { soort: "etag", waarde: 'W/"etag-1"' } },
