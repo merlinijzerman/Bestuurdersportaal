@@ -1,34 +1,24 @@
 # T4-E planreview — centrale orkestratie en adapter-per-spoor (#426)
 
-**Status:** versie 5, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 6, ter beoordeling. Geen productiecode geschreven.
 **Vertakt van:** `origin/preview` `b3961ba` (bevat #424 / T4-C volledig).
 **Datum:** 2026-09-21.
 
-**Wijzigingen t.o.v. versie 4:** de herkomst verhuisd van een ref-gebaseerde set naar een
-request-lokale `WeakMap` op de resultaatINSTANTIE, omdat een ref-sleutel ná de citaatafkapping
-is uitgewerkt (§2.2); de centrale exact-ref-deduplicatie **ingetrokken** en vervangen door
-occurrence-toewijzing, omdat die dedup bestaand één-adaptergedrag bij drie of meer sporen
-veranderde (§2.4); `primairPerGroep` vervallen; derde contractregel op `verrijkWeergave()`
-(volgorde behouden); tests 18 t/m 20; en drie tekstcorrecties (§1/§7 naar `27ad291a`, §2.10
-ontdaan van de `adapters`-aggregatie, B-2 ontdaan van de tellerbelofte).
+## Versiehistorie
 
-**Wijzigingen in versie 4 t.o.v. versie 3:** de interne tegenspraak rond `meta.adapters` opgelost — T4-E zet
-de sleutel niet meer in `RetrievalMeta`, raakt `audit-meta.ts` niet en levert hoogstens een pure
-aggregatiefunctie; T4-F voegt typeveld, allowlist, projectie en route-aansluiting atomair toe
-(§2.7, §2.10, B-4, A-1, tests 10/11/17). Daarnaast de onuitgesproken aanname achter
-`ordinalPerGroep` vastgelegd met centrale exact-ref-deduplicatie vóór de ordinaltoekenning
-(§2.2, §2.4, test 18), §1 bijgewerkt naar `57a1a83`, en #428 verwerkt in §7.
+**Deze review is vijf keer herzien. Wat hieronder als INGETROKKEN staat, is nergens anders in dit
+document meer voorgeschreven** — telkens één gezaghebbend algoritme, niet een stapel voorstellen.
+Die regel is er niet voor niets: tot versie 5 bleven ingetrokken mechanismen in §2.4 staan naast
+hun vervanger, waardoor het document zichzelf tegensprak.
 
-**Wijzigingen in versie 3 t.o.v. versie 2:** de groepsgewijze aaneenschakeling in §2.4 vervangen door
-globale ordinals die vóór de groepering worden vastgelegd en erna hersteld (die aaneenschakeling
-verànderde de bronvolgorde — een regressie die versie 2 introduceerde); `equivalentieSleutel`
-vervangen door een inerte `equivalentieClaim` die nooit op zichzelf tot deduplicatie leidt;
-A-1 aangescherpt tot een aansluitverbod; §7 bijgewerkt naar `57a1a83` met de drie open
-rollbackbevindingen; vier tests toegevoegd (14 t/m 17).
-
-**Wijzigingen in versie 2 t.o.v. versie 1:** twee ontwerpblockers uit de review verwerkt (§2.2 en §2.1),
-de vijf besluiten D-1 t/m D-5 verwerkt (§4), twee harde activeringsvoorwaarden toegevoegd (§5),
-en de stand van #425 en de integratieregistry geactualiseerd (§7).
+| Versie | Wat veranderde | Wat daarvan later is ingetrokken |
+|---|---|---|
+| **6** *(deze)* | `verrijkWeergave()` wordt **positioneel**: uitvoer even lang als de invoer, `null` voor een weggelaten bron. Herkomst wordt op **positie** toegekend, nooit op `ref`. Eigenaar en levensduur van de request-lokale herkomststaat vastgelegd (§2.2). §2.4 teruggebracht tot één algoritme. Tests 20 t/m 22. | — |
+| 5 | Herkomst van een ref-gebaseerde set naar een request-lokale `WeakMap` op de resultaat*instantie*; `primairPerGroep` vervallen; centrale deduplicatie ingetrokken. | **occurrence-toewijzing met een tweepuntersloop** — ambigu bij twee gelijke refs waarvan er één wegvalt; **contractregel "volgorde behouden"** — vervangen door de sterkere positionele regel |
+| 4 | `meta.adapters` niet meer door T4-E aangesloten; T4-F voegt typeveld, allowlist, projectie en route atomair toe. | **centrale exact-ref-deduplicatie** — veranderde één-adaptergedrag bij ≥3 sporen |
+| 3 | `equivalentieSleutel` → inerte `equivalentieClaim`; A-1 aangescherpt tot een aansluitverbod; globale ordinals. | **terugkoppeling via `(groep, ref)` met `ordinalPerGroep`** — een ref-sleutel is ná de citaatafkapping uitgewerkt |
+| 2 | Twee ontwerpblockers verwerkt (§2.1, §2.2); besluiten D-1 t/m D-5; activeringsvoorwaarden A-1 t/m A-4. | **aaneenschakeling per groep** — veranderde de bronvolgorde |
+| 1 | Eerste opzet: de tien onderwerpen uit #426, bevindingen B-1 t/m B-5. | **`Map<ref, Adaptergroep>`** — botste met de eis die zij moest inlossen |
 
 ---
 
@@ -234,6 +224,21 @@ Dat werkt omdat `bouwCitaties()` de objectreferenties **behoudt**: `opgenomen.pu
 zonder dat zij ergens in `RetrievalUitkomst` terechtkomt — een `WeakMap` is niet serialiseerbaar
 en kan dus ook niet per ongeluk meelekken naar de route of het auditspoor.
 
+**Eigenaar en levensduur, expliciet.** De herkomststaat wordt gemaakt door
+`voerVolledigeRetrievalUit()` — dezelfde eigenaar als de `Afbreekgrendel` — en via een **private
+parameter** uitgeleend aan beide fasen. Zij leeft precies zo lang als het verzoek.
+
+Twee alternatieven die er niet mogen komen, elk om een eigen reden:
+
+* **niet moduleglobaal.** Een `WeakMap` op moduleniveau overleeft het verzoek en wordt gedeeld
+  door élk gelijktijdig verzoek in hetzelfde proces. Twee beurten voor verschillende fondsen
+  zouden dan in dezelfde staat schrijven. De sleutels zijn objecten en botsen niet, dus het zou
+  waarschijnlijk werken — en dat is precies het gevaar: een tenantoverschrijdende structuur die
+  niet faalt, wordt niet opgemerkt;
+* **niet als veld op `RetrievalTussenresultaat`.** Dat type is via `Omit<…, "grendel">` ingebed
+  in `RetrievalUitkomst` en verlaat dus de orkestratie: het gaat naar de route en wordt gelogd.
+  Dezelfde redenering als bij de grendel, die om die reden bewust níét in het eindresultaat zit.
+
 `metaBasis.primaireRefs` blijft ongewijzigd bestaan voor bestaande consumenten, maar wordt
 intern niet meer geraadpleegd. `primairPerGroep` uit versie 3 **vervalt**: met de herkomst per
 instantie is er geen tweede sleutelruimte meer nodig, en dus ook geen extra veld op `metaBasis`.
@@ -307,63 +312,80 @@ Een bron die de adapter niet herkent **verdwijnt**. Positioneel terugkoppelen zo
 weergavemetadata aan de verkeerde bron hangen, en een strikte lengte-invariant zou de bestaande
 adapter breken.
 
-**Het voorstel, zonder de signatuur van `citeer()` te breken.**
+**Het voorstel — één algoritme, en de eerdere twee zijn ingetrokken.**
 
-Versie 2 stelde hier voor de groepen ná verrijking *aaneen te schakelen* in volgorde van eerste
-voorkomen. Dat is fout, en de review wees het terecht aan: bij een selectie `A1, B1, A2` levert
-concatenatie `A1, A2, B1`. De relevantievolgorde en daarmee de bronnummering veranderen dan
-zodra een tweede adapter meedoet — precies wat T4-E niet mag doen.
+Versies 2 t/m 5 lieten hier achtereenvolgens drie mechanismen staan: aaneenschakeling per groep
+(v2), terugkoppeling via `(groep, ref)` met een `ordinalPerGroep`-map (v3/v4), en
+occurrence-toewijzing met een tweepuntersloop (v5). De eerste twee waren al ingetrokken maar
+bleven in de tekst staan — dezelfde fout als eerder in deze review: het nieuwe mechanisme
+toevoegen zonder het oude te verwijderen. Hieronder staat er nog **één**.
 
-De volgorde moet dus **vóór** de groepering worden vastgelegd en **erna** worden hersteld:
+**Waarom ook de tweepuntersloop niet volstaat.** Neem binnen één groep de invoer
+`[R-primair, R-aanvullend]` — twee occurrences van dezelfde `ref` R — en een hook die er één
+laat vallen, zodat de uitvoer `[nieuw R]` is. Welke van de twee is weggevallen? Op de `ref` is
+dat niet te zien, en volgordebehoud helpt niet: beide occurrences hebben dezelfde ref, dus elke
+volgorde is met beide uitkomsten verenigbaar. De tweepuntersloop zou de primaire herkomst
+toekennen aan wat mogelijk de aanvullende occurrence is — en daarmee `meta.chunks` en
+`meta.aanvullend` verkeerd vullen.
 
-1. elk element van `tussen.geselecteerd` krijgt een **globale ordinal** — zijn index in de
-   samengevoegde selectie, vastgesteld vóór enige groepering;
-2. die ordinals gaan in `ordinalPerGroep: Map<Adaptergroep, Map<ref, number>>` — dezelfde
-   genestte sleutel uit §2.2, dus botsingsvrij;
-3. de selectie wordt per groep gesplitst, met behoud van de onderlinge volgorde;
-4. `verrijkWeergave()` draait per groep, met uitsluitend de bronnen van die groep;
-5. elk teruggegeven resultaat krijgt zijn ordinal terug via `(groep, ref)`;
-6. alles wordt samengevoegd en **stabiel gesorteerd op ordinal**.
+**De hook wordt daarom POSITIONEEL.** Niet "dezelfde volgorde", maar "dezelfde posities":
 
-Voor `A1, B1, A2` levert dat weer `A1, B1, A2`. Valt `B1` in de hook weg, dan blijft
-`A1, A2` — met hun oorspronkelijke onderlinge volgorde, want de ordinals van de overlevenden
-veranderen niet. Bij één groep zijn de ordinals `0..n-1` in dezelfde volgorde en is de sortering
-een no-op: byte-identiek aan vandaag, zonder aparte tak.
+```ts
+verrijkWeergave?(
+  ctx: RetrievalContext,
+  geselecteerd: Bronresultaat[],
+): Promise<(Bronresultaat | null)[]>;
+//         ^ EXACT even lang als `geselecteerd`. `null` = bewust weggelaten.
+//           Positie i in de uitvoer hoort bij positie i in de invoer, punt.
+```
 
-**Versie 4 loste de ref-uniciteit op met centrale exact-ref-deduplicatie vóór de
-ordinaltoekenning. Die oplossing is INGETROKKEN.** Zij veranderde bestaand één-adaptergedrag bij
-drie of meer sporen, en dat botst rechtstreeks met de harde eis uit #426 dat het bestaande pad
-byte-identiek blijft zolang er geen tweede adapter is.
+Het algoritme, volledig:
 
-Mijn redenering daarbij was fout, en het is de moeite waard waaróm: ik toetste aan de huidige
-aanroeper ("C1 draait twee sporen, dus het is een no-op") in plaats van aan het contract.
-`Queries<T>` accepteert iedere niet-lege spoorlijst. Dat er vandaag geen productieaanroeper met
-drie sporen is, maakt een contractwijziging niet neutraal — het maakt haar alleen onzichtbaar
-tot iemand het derde spoor toevoegt.
+1. elk element van `tussen.geselecteerd` krijgt **vóór enige groepering** een herkomst
+   `{ groep, ordinal, primair }`, waarbij `ordinal` zijn index in de samengevoegde selectie is
+   en `primair` uit het spoor komt waaruit hij kwam;
+2. de selectie wordt per groep gesplitst; per groep houdt de orkestratie de herkomsten in
+   dezelfde posities bij;
+3. `verrijkWeergave()` draait per groep, met uitsluitend de bronnen van die groep, en levert een
+   array van **gelijke lengte** terug;
+4. positie *i* in de uitvoer krijgt de herkomst van positie *i* in de invoer; een `null` valt
+   weg. **Er wordt nergens op `ref` gematcht** — de binding is positioneel en daarmee eenduidig,
+   ook bij identieke refs;
+5. de overlevenden van alle groepen gaan samen en worden **stabiel gesorteerd op ordinal**;
+6. elk toegewezen object komt in de `herkomst`-WeakMap uit §2.2, zodat de binding de
+   citaatafkapping overleeft.
 
-**In plaats daarvan: occurrence-toewijzing, zonder enige deduplicatie.**
+Voor `A1, B1, A2` levert dat weer `A1, B1, A2`. Valt `B1` weg, dan blijft `A1, A2`. Bij het
+vijandige geval hierboven is eenduidig welke occurrence overleefde. Bij één groep zijn de
+ordinals `0..n-1` in dezelfde volgorde en is de sortering een no-op — byte-identiek aan vandaag,
+zonder aparte tak.
 
-* per groep houden we `ordinalsPerRef: Map<ref, ordinal[]>` — een `ref` die twee keer voorkomt
-  heeft twee ordinals, in volgorde;
-* ná de hook worden de teruggegeven resultaten **occurrence-voor-occurrence** toegewezen: een
-  tweepuntersloop over (aangeboden, teruggegeven) binnen de groep, waarbij elk teruggegeven
-  object de herkomst krijgt van het eerstvolgende aangeboden element met dezelfde `ref`;
-* elk toegewezen object wordt in de `herkomst`-WeakMap uit §2.2 gezet. Daarmee is de binding
-  instantiegebonden en overleeft zij de citaatafkapping.
+**Er wordt niets gededupliceerd.** De centrale exact-ref-deduplicatie uit versie 4 is
+ingetrokken omdat zij bestaand één-adaptergedrag bij drie of meer sporen veranderde, wat botst
+met de harde eis uit #426. Mijn redenering daarbij was fout op een manier die het vermelden
+waard is: ik toetste aan de huidige aanroeper ("C1 draait twee sporen, dus het is een no-op") in
+plaats van aan het contract. `Queries<T>` accepteert iedere niet-lege spoorlijst; dat er vandaag
+geen aanroeper met drie sporen is, maakt een contractwijziging niet neutraal — alleen onzichtbaar
+tot iemand dat spoor toevoegt. Twee keer dezelfde passage in twee sporen blijft dus twee keer,
+precies zoals nu.
 
-Er wordt dus **niets samengevoegd en niets weggegooid**. Twee keer dezelfde passage in twee
-sporen van dezelfde adapter blijft twee keer, precies zoals vandaag.
+**De twee contractregels op `verrijkWeergave()`** (de "volgorde behouden"-regel uit versie 5
+vervalt; positioneel is sterker):
 
-**Een derde contractregel op `verrijkWeergave()`, naast de twee hieronder:** de hook moet de
-**onderlinge volgorde behouden**. Hij mag resultaten weglaten, maar niet herschikken. Zonder die
-regel is occurrence-toewijzing niet mogelijk — dan is er geen enkele manier om twee gelijke refs
-uit elkaar te houden. De Supabase-implementatie voldoet eraan: zij mapt over de invoervolgorde.
+* **de uitvoer is exact even lang als de invoer**, met `null` voor een weggelaten bron. Een
+  lengteverschil is een configuratiefout en stopt de beurt — niet "best effort", want elke
+  andere uitleg raadt welke bron bedoeld was;
+* **een `ref` mag niet wijzigen.** Voor de herkomst is dat niet langer dragend — die is
+  positioneel — maar `metaBasis.primaireRefs` en de citaatidentiteit hangen er wél aan.
 
-**Een legacy-fast-path blijft mogelijk en is verdedigbaar:** bij precies één adaptergroep kan de
-hele groepering worden overgeslagen en de bestaande aanroep één-op-één blijven staan. Ik stel
-hem niet voor als *noodzaak* — de occurrence-toewijzing is bij één groep al een identiteits-
-operatie — maar wel als optie als de reviewer de byte-identiteit liever structureel dan
-aantoonbaar wil hebben. Test 1 meet het verschil niet; hij meet de uitkomst.
+**De prijs:** dit is een wijziging aan de `RetrievalAdapter`-interface en aan de enige
+implementatie, `supabase-adapter.ts`. Die filtert vandaag met `.filter(Boolean)` en moet in
+plaats daarvan `null` op de weggelaten posities teruggeven. Klein en lokaal, maar het is een
+contractwijziging en staat als zodanig in §2.10.
+
+**Een legacy-fast-path blijft mogelijk:** bij precies één adaptergroep kan de groepering worden
+overgeslagen. Niet nodig — bij één groep is stap 4 een identiteitsoperatie — maar wel een optie
+als de byte-identiteit liever structureel dan aantoonbaar is.
 
 **Wat dit wél verandert bij twee adapters.** De bronnummering volgt nu de gezamenlijke selectie-
 volgorde, en die komt uit de bestaande samenvoeging: eerst het primaire spoor, dan de aanvullende
@@ -494,8 +516,9 @@ Dit is de bewijslast die T4-A aan D-1 verbond, en zij is de belangrijkste accept
 
 | Bestand | Aard van de wijziging |
 |---|---|
-| `core/lib/retrieval/contract.ts` | additief: `Bronstatus`, `Bronstatusreden`, optioneel `bronstatus` op tussen-/eindresultaat |
-| `core/lib/retrieval/orkestratie.ts` | `Spoor.adapter` / `Spoor.bijBronfout`, effectieve adapter per spoor, herkomst per resultaatinstantie (request-lokale `WeakMap`), `verrijkWeergave` per groep met occurrence-toewijzing, en de **pure** `bouwAdapterDiagnostiek()` zonder productieaanroeper. **Geen deduplicatie en geen aansluiting van `adapters`** — zie A-1 |
+| `core/lib/retrieval/contract.ts` | additief: `Bronstatus`, `Bronstatusreden`, optioneel `bronstatus` op tussen-/eindresultaat, `equivalentieClaim?` op `Bronresultaat`. **Niet additief:** `verrijkWeergave()` wordt positioneel — retourtype `(Bronresultaat \| null)[]` met dezelfde lengte als de invoer (§2.4) |
+| `core/lib/retrieval/supabase-adapter.ts` | de enige implementatie van `verrijkWeergave()`: `.filter(Boolean)` vervangen door `null` op de weggelaten posities. Klein en lokaal, maar het volgt uit een contractwijziging en hoort dus zichtbaar in deze tabel |
+| `core/lib/retrieval/orkestratie.ts` | `Spoor.adapter` / `Spoor.bijBronfout`, effectieve adapter per spoor, herkomst per resultaatinstantie (request-lokale `WeakMap`), `verrijkWeergave` per groep met POSITIONELE toewijzing, en de **pure** `bouwAdapterDiagnostiek()` zonder productieaanroeper. **Geen deduplicatie en geen aansluiting van `adapters`** — zie A-1 |
 | `core/lib/retrieval/toelatingspoort.ts` | meervoudsvorm van `verifieerToelating()`, gedeelde `poortNu`, standenmaps per groep |
 | `core/lib/microsoft-retrieval/adapter.ts` *(nieuw)* | de dunne wrapper om T4-C/T4-D |
 | `tests/cross-tenant/retrieval-adaptergroepen.test.ts` *(nieuw)* | de twaalf vereiste tests |
@@ -704,9 +727,11 @@ een herplanning stil wegvalt als het alleen in een alinea staat.
 | 15 | *(toegevoegd)* **VIJANDIG: geclaimde equivalentie** | adapter B geeft een resultaat terug met de `equivalentieClaim` van een bron van adapter A. De bron van A blijft staan, met eigen bronnummer en eigen weergavemetadata; er verdwijnt niets |
 | 16 | *(toegevoegd)* onbekende `(groep, ref)` uit een hook | `verrijkWeergave` geeft een resultaat terug dat niet is aangeboden → configuratiefout, geen stille toevoeging aan de citatenstroom |
 | 17 | *(toegevoegd)* A-1 | `RetrievalMeta` kent de sleutel `adapters` NIET; `core/lib/audit-meta.ts` is ongewijzigd t.o.v. `preview`; de routerespons bevat hem niet. Alle drie gemeten, want het verbod is structureel en niet afhankelijk van discipline |
-| 18 | *(toegevoegd)* **dezelfde `ref` in twee sporen van dezelfde adapter** | (a) **drie sporen, één adapter**: de uitkomst moet **exact gelijk** zijn aan die van `preview` — geen dedup, geen verschoven nummering, beide voorkomens blijven. Dit meet de byte-identiteitseis op een spoorlijst die `Queries<T>` toestaat maar die vandaag geen productieaanroeper heeft; (b) **dezelfde drie sporen, verweven met een tweede adaptergroep**: de occurrence-toewijzing koppelt elk teruggegeven resultaat aan het juiste voorkomen, en de herkomst klopt ná de citaatafkapping |
+| 18 | *(toegevoegd)* **dezelfde `ref` in twee sporen van dezelfde adapter** | (a) **drie sporen, één adapter**: de uitkomst moet **exact gelijk** zijn aan die van `preview` — geen dedup, geen verschoven nummering, beide voorkomens blijven. Dit meet de byte-identiteitseis op een spoorlijst die `Queries<T>` toestaat maar die vandaag geen productieaanroeper heeft; (b) **dezelfde drie sporen, verweven met een tweede adaptergroep**: de positionele toewijzing koppelt elk teruggegeven resultaat aan het juiste voorkomen, en de herkomst klopt ná de citaatafkapping |
 | 19 | *(toegevoegd)* **herkomst overleeft de citaatafkapping** | kleine `maxContextTekens` met gelijke refs uit twee groepen; voor elke bron in `c.opgenomen` levert de `herkomst`-WeakMap de juiste groep, ordinal en primair-vlag. Negatieve controle: met een ref-gebaseerde lookup wordt deze test rood |
-| 20 | *(toegevoegd)* `verrijkWeergave` die de volgorde HERSCHIKT | contractregel drie: herschikken is een configuratiefout, want dan is occurrence-toewijzing onmogelijk |
+| 20 | *(toegevoegd)* `verrijkWeergave` met een LENGTEVERSCHIL | uitvoer korter of langer dan de invoer → configuratiefout, geen "best effort"-interpretatie |
+| 21 | *(toegevoegd)* **VIJANDIG: dubbele `ref` waarvan er één wegvalt** | invoer `[R-primair, R-aanvullend]` (twee occurrences van dezelfde ref), hook geeft `[null, nieuw R]` terug. De overlevende moet de **aanvullende** herkomst krijgen, niet de primaire; `meta.chunks` en `meta.aanvullend` moeten dat weerspiegelen. Het spiegelgeval `[nieuw R, null]` levert de primaire herkomst. Negatieve controle: een op `ref` matchende implementatie kiest in beide gevallen de eerste occurrence en wordt rood op één van de twee |
+| 22 | *(toegevoegd)* eigenaarschap van de herkomststaat | de staat is niet bereikbaar buiten het verzoek: twee opeenvolgende beurten delen geen enkele herkomst, en `RetrievalUitkomst` bevat geen serialiseerbaar herkomstveld |
 | 12 | goldens alleen na goedgekeurde semantische diff | karakterisering draait ongewijzigd; een verschil is een blokker, geen update |
 
 Daarnaast: `tsc`, boundaries, secretscan, security-baseline, volledige cross-tenant inclusief
