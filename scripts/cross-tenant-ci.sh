@@ -214,6 +214,12 @@ SQL_M365F3B="supabase/checks/2026_09_04_microsoft_sharepoint_fase3b_documenten.s
 # — omwisseling van twee URL's binnen één listing, een botsing met een rij buiten
 # de listing, gelijktijdige listings — vallen in een review niet op.
 SQL_M365_WEBURL="supabase/checks/2026_09_20_413_weburl_gedrag.sql"
+# #413 T4-C — de canonicalisering bestaat TWEEMAAL: in SQL (de gegenereerde
+# kolom waartegen wordt opgezocht) en in TypeScript (waarmee wordt opgezocht).
+# Deze suite draait één gedeelde vectorlijst door de SQL-kant; de TS-test
+# `tests/cross-tenant/copilot-mapping.test.ts` bewaakt dat beide lijsten gelijk
+# blijven. Lopen ze uiteen, dan vindt de arm stil niets meer.
+SQL_M365_WEBURL_VECTOREN="supabase/checks/2026_09_20_413_weburl_canonicalisering_vectoren.sql"
 # Microsoft-login fase 1B (#335, T1, besluit 0211) — privaat schema login_private,
 # minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
 # SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
@@ -430,6 +436,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F2A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL_VECTOREN"
 echo
 echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"

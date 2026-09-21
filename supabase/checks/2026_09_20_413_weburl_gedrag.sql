@@ -56,6 +56,28 @@ begin
     fouten := fouten || E'\n- sharepoint_upsert_documenten serialiseert niet per bron (advisory lock ontbreekt)';
   end if;
 
+  -- STALE GENERATED WAARDEN. `web_url_canoniek` is STORED; Postgres herberekent
+  -- hem niet wanneer de canonicaliseringsfunctie verandert, en waarschuwt daar
+  -- ook niet voor. Een migratie die de functie vervangt zonder de kolom te
+  -- herschrijven laat de index dus op oude waarden matchen en de opzoeking op
+  -- nieuwe. Deze controle vangt precies dat.
+  select count(*) into v_aantal from microsoft_private.sharepoint_documenten
+   where web_url_canoniek is distinct from microsoft_private.sharepoint_canoniek_weburl(web_url);
+  if v_aantal > 0 then
+    fouten := fouten || format(E'\n- %s rij(en) dragen een verouderde canonieke waarde (kolom niet herschreven na een functiewijziging)', v_aantal);
+  end if;
+
+  -- De viewerprefixen horen in de functie te zitten; zonder die normalisatie
+  -- valt elk Word-/PowerPointdocument buiten de rootgrens.
+  if microsoft_private.sharepoint_canoniek_weburl('https://check.sharepoint.com/:w:/r/sites/pgb/A.docx')
+     is distinct from 'https://check.sharepoint.com/sites/pgb/A.docx' then
+    fouten := fouten || E'\n- Office-viewer-URL wordt niet genormaliseerd';
+  end if;
+  if microsoft_private.sharepoint_canoniek_weburl('https://check.sharepoint.com/:w:/s/EaBc123')
+     is distinct from 'https://check.sharepoint.com/:w:/s/EaBc123' then
+    fouten := fouten || E'\n- een sharinglink wordt als bibliotheekpad gelezen';
+  end if;
+
   if fouten <> '' then raise exception '#413 webUrl-locator structuur faalt:%', fouten; end if;
   raise notice '#413 webUrl-locator structuur OK.';
 end $controle$;
@@ -110,10 +132,10 @@ begin
 
   -- 3. %2F mag NOOIT samenvallen met een echte padscheiding.
   perform microsoft_private.sharepoint_upsert_documenten('74130000-0000-4000-8000-000000000001', v_bron, 1,
-    format('[{"item_id":"p1","naam":"Map.docx","web_url":"%smap%%2FX.docx"},{"item_id":"p2","naam":"Map2.docx","web_url":"%smap/X.docx"}]', v_url, v_url)::jsonb);
+    format('[{"item_id":"p1","naam":"Map.docx","web_url":"%smap%sX.docx"},{"item_id":"p2","naam":"Map2.docx","web_url":"%smap/X.docx"}]', v_url, '%2F', v_url)::jsonb);
   select count(*) into v_aantal from microsoft_private.sharepoint_documenten
    where bron_id = v_bron and item_id in ('p1','p2') and mapping_status = 'actief';
-  if v_aantal <> 2 then raise exception 'FAALT: %%2F en een echte padscheiding vielen samen'; end if;
+  if v_aantal <> 2 then raise exception 'FAALT: % en een echte padscheiding vielen samen', '%2F'; end if;
 
   -- 4. Twee items met dezelfde canonieke URL: de upsert valt NIET om en beide
   --    belanden in quarantaine — met hun web_url intact.
@@ -185,6 +207,36 @@ begin
     end if;
   end loop;
 
-  raise notice '#413 webUrl-locator gedrag OK: canonicalisering, quarantaine zonder gegevensverlies, herstel, omwisseling, botsing buiten de listing, invariant, cross-tenant en fail-closed opzoeking.';
+  -- 13. OFFICE-VIEWER-URL: de listing slaat de viewervorm op, de locator vindt
+  --     hem toch — anders is de arm blind voor Word en PowerPoint.
+  perform microsoft_private.sharepoint_upsert_documenten('74130000-0000-4000-8000-000000000001', v_bron, 1,
+    format('[{"item_id":"v1","naam":"Viewer.docx","web_url":"https://check.sharepoint.com/:w:/r/sites/bestuur-a/Documenten/Viewer.docx"}]')::jsonb);
+  select id into v_gevonden from microsoft_private.sharepoint_zoek_document_op_weburl(
+    '74130000-0000-4000-8000-000000000001', v_bron, v_url || 'Viewer.docx');
+  if v_gevonden is null then raise exception 'FAALT: viewer-URL in het register is niet vindbaar op het bibliotheekpad'; end if;
+  -- en andersom: de hit komt in viewervorm binnen.
+  select id into v_gevonden from microsoft_private.sharepoint_zoek_document_op_weburl(
+    '74130000-0000-4000-8000-000000000001', v_bron, 'https://check.sharepoint.com/:w:/r/sites/bestuur-a/Documenten/Viewer.docx');
+  if v_gevonden is null then raise exception 'FAALT: hit in viewervorm vindt de geregistreerde rij niet'; end if;
+
+  -- 14. NIEUWE CANONICALISERINGSBOTSING: viewervorm en bibliotheekvorm van
+  --     hetzelfde pad horen nu samen te vallen, dus beide naar quarantaine.
+  perform microsoft_private.sharepoint_upsert_documenten('74130000-0000-4000-8000-000000000001', v_bron, 1,
+    format('[{"item_id":"v2","naam":"Viewer.docx","web_url":"%sViewer.docx"}]', v_url)::jsonb);
+  select count(*) into v_aantal from microsoft_private.sharepoint_documenten
+   where bron_id = v_bron and item_id in ('v1','v2') and mapping_status = 'botsing';
+  if v_aantal <> 2 then raise exception 'FAALT: viewer- en bibliotheekvorm van hetzelfde pad botsen niet (%)', v_aantal; end if;
+  if exists (select 1 from microsoft_private.sharepoint_zoek_document_op_weburl(
+    '74130000-0000-4000-8000-000000000001', v_bron, v_url || 'Viewer.docx')) then
+    raise exception 'FAALT: ambigue viewer/bibliotheek-URL levert toch een treffer';
+  end if;
+
+  -- 15. Een SHARINGLINK blijft zijn eigen vorm houden en matcht nergens op.
+  if exists (select 1 from microsoft_private.sharepoint_zoek_document_op_weburl(
+    '74130000-0000-4000-8000-000000000001', v_bron, 'https://check.sharepoint.com/:w:/s/EaBc123')) then
+    raise exception 'FAALT: sharinglink levert een treffer';
+  end if;
+
+  raise notice '#413 webUrl-locator gedrag OK: canonicalisering, quarantaine zonder gegevensverlies, herstel, omwisseling, botsing buiten de listing, invariant, cross-tenant, Office-viewer-URL, sharinglink en fail-closed opzoeking.';
 end $gedrag$;
 rollback;
