@@ -1,10 +1,14 @@
 # #428 — Planreview M365-demo op `app365.bestuurdersportaal.com`
 
-**Status:** ter akkoord; uitsluitend analyse en ontwerp.  
+**Status:** versie 2 ter akkoord; uitsluitend analyse en ontwerp.
 **Basis:** `origin/preview` op `b3961ba` (bevat T4-C via #424).  
 **Datum:** 2026-09-21.  
 **Nog niet uitgevoerd:** DNS, Vercel, Supabase, Auth, Entra, SharePoint,
 integratieregistry, accounts, featureflags en live Retrieval.
+
+**Verwerkt in versie 2:** een blijvende Preview-acceptatietenant, exacte
+tenant-/apphostnormalisatie, environment-specifieke provisioning, eigenaar,
+herbeoordelingsdatum, kostenlimiet en `generatie_timeout_ms`.
 
 ## 0. Besluit in één oogopslag
 
@@ -23,6 +27,12 @@ Dit besluit geldt alleen onder deze harde grenzen:
 6. de latere Copilot-tokenbron kan tenant, app en credential **fondsgebonden**
    injecteren zonder een bestaand fonds om te configureren.
 
+De Productietenant krijgt vóór livegang een blijvende tegenhanger op
+`app365.preview.bestuurdersportaal.com`. Die gebruikt dezelfde slug en expliciete
+configuratie in de geïsoleerde `portal_preview`-database, maar eigen Preview-
+accounts en uitsluitend synthetische data. Hostrouting, login, badge, metadata en
+harde reload worden daardoor eerst op de echte `preview-stable`-deployment getest.
+
 Punt 6 is een herbeoordelingspoort. T4-D legt vast dat de productieroute een
 confidential-clientconnector gebruikt en dat het huidige public-client-labprofiel
 alleen voor de smokerunner is. Als de uiteindelijke implementatie alleen globale
@@ -40,17 +50,19 @@ relevante collecties gelezen; er is niets in gewijzigd.
 | Onderdeel | Bestaande registry-id | Gebruik in #428 |
 |---|---|---|
 | Portaalomgeving | `portal_production` | doel van de uiteindelijke logische tenant |
-| Releasevoorportaal | `portal_preview` | Preview-eerst code- en migratierepetitie |
+| Releasevoorportaal | `portal_preview` | blijvende app365-acceptatietenant op `preview-stable` |
 | Microsoftomgeving | `microsoft_lab` | enige toegestane M365-omgeving |
 | Entra-tenant | `entra_bestuurdersportaal_lab` | enige toegestane tenant |
 | Bestaande app | `entra_app_copilot_retrieval_lab` | **niet** hergebruiken voor de productieroute; public client/PKCE, smokerunner |
 | Bestaande identiteit | `m365_lab_pgb_test` | **niet** hergebruiken; PGB-identiteit is geen app365-bewijs |
 | Bestaande bron | `sharepoint_pgb_retrieval_lab` | **niet** hergebruiken; PGB-root is geen app365-bron |
 
-Nieuwe voorgestelde ids worden pas na de werkelijk uitgevoerde, duurzame
-inrichting aan de registry toegevoegd:
+Nieuwe voorgestelde ids worden per omgeving pas na de werkelijk uitgevoerde,
+duurzame inrichting aan de registry toegevoegd:
 
-- portalidentiteiten: `production_app365_demo_beheerder` en
+- Previewportalidentiteiten: `preview_app365_demo_beheerder` en
+  `preview_app365_demo_bestuurder`;
+- Productieportalidentiteiten: `production_app365_demo_beheerder` en
   `production_app365_demo_bestuurder`;
 - Entra-identiteit: `m365_lab_app365_demo`;
 - appregistratie voor de productieroute:
@@ -61,6 +73,21 @@ inrichting aan de registry toegevoegd:
 De bestaande `m365_lab_pgb_test` mag hooguit als tenantbeheerbewijs dienen bij
 de voorbereiding van een nieuwe identiteit, nooit als app365-actor, tokenbron of
 acceptatiebewijs.
+
+## 1.1 Eigenaarschap, herbeoordeling en kosten
+
+| Onderwerp | Besluit |
+|---|---|
+| operationeel eigenaar | Merlin IJzerman |
+| eerstvolgende herbeoordeling | 2026-12-21; daarna minimaal ieder kwartaal |
+| maandelijkse kostenlimiet | EUR 100 exclusief btw per kalendermaand voor alle app365-specifieke Microsoft-licenties en variabele Copilot/Retrieval-kosten samen |
+| signalering | waarschuwing op 50% en 80%; blokkade/kill switch uiterlijk op 100% |
+| bij ontbrekend hard providerplafond | T4-F moet de 100%-grens operationeel afdwingen; tot die bewaking bewezen is blijft Copilot uit |
+
+Een vaste licentie of minimale contractverplichting die de limiet overschrijdt,
+vereist vooraf een gewijzigd kostenbesluit. Op de herbeoordelingsdatum is de
+fail-closed standaard: Copilot blijft of gaat uit totdat eigenaar, bron, accounts,
+permissions, indexstatus en kosten opnieuw zijn bevestigd.
 
 ## 2. Isolatiereview: logisch fonds of aparte stack
 
@@ -108,48 +135,62 @@ aparte Vercel-runtime vereisen zonder meteen een tweede Supabase-project.
 | fondsnaam | `Bestuurdersportaal M365 Demo` |
 | stabiele slug | `m365-demo` |
 | Productiehost | `app365.bestuurdersportaal.com` |
-| Preview-repetitie | dezelfde migratie tegen ephemere DB; geen tweede blijvende demo-identiteit zonder apart akkoord |
+| Previewhost | `app365.preview.bestuurdersportaal.com` |
+| Previewcontext | `portal_preview`, Vercel `preview-stable`, branch `preview` |
 | logoletter | `D` |
 | palet | generiek basispalet; geen klantkleur of -logo |
 | vaste markering | `DEMO · GEEN KLANTOMGEVING` |
 
-Het fonds wordt additief gemaakt en via slug opgelost. Geen UUID komt in Git.
-De host krijgt exact één actieve `tenant_domains`-rij. `on conflict do nothing`
-is onvoldoende als enige bescherming: de migratie controleert vóór de insert dat
-een bestaande host niet naar een ander fonds wijst en controleert erna exact
-`host → m365-demo, actief=true`.
+Het fonds wordt additief en identiek geconfigureerd in beide geïsoleerde
+Supabase-projecten en via slug opgelost. Geen UUID komt in Git. Iedere omgeving
+krijgt via haar eigen provisioning exact één actieve `tenant_domains`-rij.
+`on conflict do nothing` is onvoldoende als enige bescherming: elk script
+controleert vóór de insert dat de host niet naar een ander fonds wijst en
+controleert erna exact de omgevingseigen `host → m365-demo, actief=true`-binding.
 
 De demo-indicatie is geen gewone, door een fondsbeheerder uitschakelbare
 featureflag. De code krijgt een kleine pure allowlist voor de permanente host
-`app365.bestuurdersportaal.com`, gebruikt door de root-layout, metadata, robots
-en tests. Daardoor is de markering niet afhankelijk van `VERCEL_ENV`, een
+`app365.bestuurdersportaal.com` en de acceptatiehost
+`app365.preview.bestuurdersportaal.com`, gebruikt door de root-layout, metadata,
+robots en tests. Daardoor is de markering niet afhankelijk van `VERCEL_ENV`, een
 database-read na login of een tenantconfiguratie die de demo zelf kan uitzetten.
-De Preview-markering blijft daarnaast ongewijzigd bestaan op Preview-deployments.
+Op de Previewhost zijn zowel `DEMO · GEEN KLANTOMGEVING` als
+`PREVIEW · GEEN PRODUCTIEOMGEVING` zichtbaar, zonder visuele overlap.
 
 ## 4. Vercel, DNS en Supabase Auth
 
 ### Besluit D-3 — Vercel
 
-- Project: bestaand Vercel-project `bestuurdersportaal`.
-- Environment: **Production**, branch tracking via `main`.
-- Domein: als native Production-domain aan het project koppelen.
-- Verboden: `vercel alias` of een handmatige koppeling aan één deployment.
-- `APP_HOST`: voeg exact `app365.bestuurdersportaal.com` toe aan de bestaande
-  komma-lijst; laat alle bestaande hosts bytegelijk staan.
-- DNS wordt pas toegevoegd nadat Vercel het domein claimt en de verwachte
-  recordvorm toont. Controleer vóór publicatie op bestaande/dangling binding.
+Beide hosts horen als native domain bij een Vercel-environment, nooit bij één
+deployment:
 
-Een succesvolle `main`-deploy promoveert daarna automatisch alle Production-
-domains, inclusief app365. Dit houdt app365 op dezelfde releaseversie als de
-andere logische Productietenants.
+| Host | Vercel-environment | Branch tracking | Portaalcontext |
+|---|---|---|---|
+| `app365.preview.bestuurdersportaal.com` | `preview-stable` | exact `preview` | `portal_preview` |
+| `app365.bestuurdersportaal.com` | Production | `main` | `portal_production` |
+
+- Project: bestaand Vercel-project `bestuurdersportaal`.
+- Verboden: `vercel alias` of een handmatige koppeling aan één deployment.
+- Preview-`APP_HOST`: voeg exact `app365.preview.bestuurdersportaal.com` toe.
+- Production-`APP_HOST`: voeg exact `app365.bestuurdersportaal.com` toe.
+- Laat alle bestaande hosts in de betreffende omgeving bytegelijk staan.
+- DNS wordt per omgeving pas toegevoegd nadat Vercel het domein claimt en de
+  verwachte recordvorm toont. Controleer vóór publicatie op een bestaande of
+  dangling binding.
+
+Een succesvolle deploy van `preview` promoveert eerst de Previewhost. Productie
+wordt pas voorbereid nadat de volledige Preview-acceptatiematrix groen is. Een
+latere succesvolle `main`-deploy promoveert vervolgens de Production-host samen
+met de andere logische Productietenants.
 
 ### Besluit D-4 — Supabase en Auth
 
-- Supabase-context: `portal_production`; geen nieuw project in de basis.
-- Site URL blijft de bestaande Productiefallback; app365 wordt geen algemene
+- Supabase-contexten: eerst `portal_preview`, na acceptatie
+  `portal_production`; geen nieuw project in de basis.
+- Site URL blijft per context de bestaande fallback; app365 wordt geen algemene
   loginhub.
-- Voeg alleen de callbacks toe die de bestaande Supabase-flow werkelijk nodig
-  heeft op `https://app365.bestuurdersportaal.com`.
+- Voeg per omgeving alleen de callbacks toe die de bestaande Supabase-flow
+  werkelijk nodig heeft op de eigen exacte app365-host.
 - Geen wildcard voor `*.bestuurdersportaal.com`.
 - Microsoft-callback
   `/auth/microsoft-login/callback` wordt **niet** toegevoegd tijdens de basis.
@@ -160,17 +201,52 @@ Voorgestelde accounts:
 
 | Registry-id | Portaalrol | Gebruik |
 |---|---|---|
+| `preview_app365_demo_beheerder` | `beheerder` | Preview-inrichting en beheercontroles |
+| `preview_app365_demo_bestuurder` | `bestuurder` | Preview-gebruikers- en cross-hostsmoke |
 | `production_app365_demo_beheerder` | `beheerder` | inrichting en beheercontroles |
 | `production_app365_demo_bestuurder` | `bestuurder` | normale gebruikerssmoke |
 
-Concrete adressen en secretrefs worden tijdens provisioning gekozen. Wachtwoord,
-MFA-materiaal en recoverycodes komen nooit in Git, issue, registry of bewijs.
+Preview- en Productieaccounts zijn verschillende Auth-identiteiten en delen geen
+lidmaatschap. Concrete adressen en secretrefs worden tijdens provisioning
+gekozen. Wachtwoord, MFA-materiaal en recoverycodes komen nooit in Git, issue,
+registry of bewijs.
+
+### Besluit D-4a — exacte app-/tenanthosts, alleen marketing canonicaliseert `www`
+
+De huidige gedeelde `normaliseerHost()` verwijdert altijd een leidende `www.`.
+Daardoor kan `www.app365.bestuurdersportaal.com` nu dezelfde tenantbinding krijgen
+als de exacte host zodra het verzoek de deployment bereikt. Dat is strijdig met
+de vereiste exacte hostbinding en wordt vóór app365-provisioning gecorrigeerd.
+
+De pure hostlogica wordt gesplitst:
+
+- `normaliseerExacteHost`: trim, lowercase en poort verwijderen; laat alle
+  DNS-labels, inclusief `www.`, intact;
+- `normaliseerMarketingHost`: gebruikt de exacte normalisatie en canonicaliseert
+  daarna uitsluitend voor de marketing-surface één leidende `www.`;
+- `APP_HOST`, `PLATFORM_HOST`, `tenant_domains`, de tenant-RPC en de demohost-
+  allowlist gebruiken uitsluitend `normaliseerExacteHost`;
+- `MARKETING_HOST` en de marketingroute blijven apex/`www` samenvoegen;
+- CSRF-/origincontroles blijven per surface expliciet: apphosts exact,
+  marketing-apex en `www` alleen waar beide bewust in de marketingallowlist staan;
+- de strengere `canoniekeFondsHost()` van Microsoft-login blijft exact en wordt
+  niet versoepeld.
+
+De fail-safe app-surface voor onbekende hosts blijft bestaan als routinglaag,
+maar levert geen fondscontext op: de exacte tenantresolver classificeert
+`www.<tenant-host>` als `onbekend`, waarna `TENANT_ENFORCE` de toegang blokkeert.
+
+Regressiebewijs omvat alle bestaande exacte Preview- en Productiehosts, lokale
+host-met-poortgevallen, marketing-apex/`www`, en negatieve `www.`-varianten van
+app-, platform- en tenant-hosts. De bestaande test die `www.horizon.nl` naar
+Horizon laat resolven wordt bewust omgekeerd naar `onbekend`; dit is de enige
+beoogde gedragswijziging voor tenantnormalisatie.
 
 ## 5. Permanente markering en indexering
 
 ### Besluit D-5
 
-De exacte app365-host krijgt applicatiebreed:
+Beide exacte app365-hosts krijgen applicatiebreed:
 
 - een vaste badge `DEMO · GEEN KLANTOMGEVING`, ook op login-, fout- en lege
   toestanden;
@@ -181,17 +257,18 @@ De exacte app365-host krijgt applicatiebreed:
 
 De huidige `robots.ts` sluit app-surfaces al uit en `sitemap.ts` geeft daar een
 lege lijst. De ontbrekende bewijslast is de expliciete `nofollow`-metadata en de
-permanente demobadge. Beide krijgen hostmatrixtests. De bestaande
+permanente demobadge op beide hosts. Beide krijgen hostmatrixtests. De bestaande
 `PREVIEW · GEEN PRODUCTIEOMGEVING`-badge blijft uitsluitend lifecycle-informatie
 en wordt niet gebruikt als demoherkenning.
 
 ## 6. Expliciete veilige beginmatrix
 
 Ontbrekende rijen zijn voor app365 niet acceptabel wanneer code een env-fallback
-kent. De provisioningmigratie schrijft iedere onderstaande waarde expliciet als
-JSON-boolean of getal, zodat globale env-defaults de demo niet kunnen activeren.
-Alle writes lopen via de bestaande configtabellen en het append-only
-`fonds_config_log`-spoor.
+kent. De gedeelde fonds-/configmigratie schrijft iedere onderstaande waarde
+expliciet als JSON-boolean of getal in zowel Preview als Productie, zodat globale
+env-defaults de demo niet kunnen activeren. Alle writes lopen via de bestaande
+configtabellen en het append-only `fonds_config_log`-spoor. Hosts en overige
+omgevingsdata staan nadrukkelijk niet in deze migratie; zie §9.
 
 ### Modules
 
@@ -232,6 +309,7 @@ kernmodules uit de code-registry. `stemmingen` blijft productbreed uit.
 | `vraagrouter_model` | `false` | afhankelijke vlag expliciet uit |
 | `volledige_analyse_vervolg` | `false` | afhankelijke vlag expliciet uit |
 | `retrieval_timeout_ms` | `20000` | huidige veilige codebaseline, inert zolang retrieval uit staat |
+| `generatie_timeout_ms` | `120000` | huidige veilige generatiebaseline expliciet vastgelegd |
 
 ### Microsoft-login en globale Copilotpoorten
 
@@ -293,7 +371,9 @@ Vóór een Retrieval-call worden read-only bewezen:
 Nu al mogelijk ná akkoord op deze review:
 
 - repositorywijzigingen voor permanente badge/noindex, hosttests en runbook;
-- additieve provisioningmigratie, rollback en self-check;
+- gedeelde additieve fonds-/configmigratie zonder omgevingsdata;
+- afzonderlijke Preview- en Productieprovisioning met elk een rollback en
+  self-check;
 - hermetische/ephemere DB-tests;
 - expliciete inerte fondsconfiguratie.
 
@@ -311,6 +391,42 @@ Niet mogelijk zonder nieuwe activeringsgoedkeuring:
 Elke fase heeft een afzonderlijk stopmoment. Een latere fase mag pas beginnen
 nadat het bewijs van de vorige is beoordeeld.
 
+### Artefactgrens: schema/config gedeeld, omgevingsdata gescheiden
+
+De normale migratieketen bevat uitsluitend omgevingneutrale, additieve data:
+
+- `supabase/migrations/2026_09_22_428_app365_demo_fonds_config.sql`:
+  fonds `m365-demo`, neutrale theming, volledig modulemanifest, volledige
+  flagmatrix en Microsoft-loginstand `uit`;
+- `supabase/rollbacks/2026_09_22_428_app365_demo_fonds_config_ROLLBACK.sql`:
+  weigert zolang een host, profiel, document, Storage- of andere tenantafhankelijkheid
+  bestaat; verwijdert nooit auditlogs.
+
+De gedeelde migratie bevat **geen** host, projectref, account, callback, domain of
+andere Preview-/Productiewaarde. Omgevingsdata wordt per omgeving geprovisioned:
+
+| Omgeving | Provisioning | Self-check | Rollback |
+|---|---|---|---|
+| `portal_preview` | `supabase/seeds/preview/2026_09_22_428_app365_preview_provision.sql` | `supabase/seeds/preview/2026_09_22_428_app365_preview_CHECK.sql` | `supabase/rollbacks/2026_09_22_428_app365_preview_ROLLBACK.sql` |
+| `portal_production` | `supabase/seeds/production/2026_09_22_428_app365_production_provision.sql` | `supabase/seeds/production/2026_09_22_428_app365_production_CHECK.sql` | `supabase/rollbacks/2026_09_22_428_app365_production_ROLLBACK.sql` |
+
+Een kleine runner controleert vóór de eerste databasehandeling twee onafhankelijke
+bewijzen: `SEED_DOELOMGEVING` en de allowlisted Supabase-projectref uit de doel-URL.
+Het SQL-pakket zelf controleert daarnaast een omgevingseigen fingerprint:
+
+- Preview vereist de bekende `*.preview.bestuurdersportaal.com`-bindings en
+  weigert als een Production-host in `tenant_domains` staat;
+- Productie vereist de bestaande Productiebindings en weigert als een
+  `*.preview.bestuurdersportaal.com`-host aanwezig is.
+
+Elk provisioningscript weigert bij een bestaande verkeerde app365-binding,
+schrijft uitsluitend zijn eigen exacte host en bewijst na afloop één actieve rij
+naar `m365-demo`. De self-check verifieert ook de volledige flagmatrix,
+Microsoft-login `uit`, afwezigheid van de andere omgevingshost en ongewijzigde
+bestaande bindings. De environmentrollback raakt uitsluitend de eigen host en
+weigert bij onverwachte drift. Vercel-domain, `APP_HOST`, Auth-callbacks en
+accounts hebben in hetzelfde pakket een eigen providerrollbackchecklist.
+
 ### Fase 0 — planreview
 
 1. Deze review goedkeuren of wijzigen.
@@ -319,33 +435,57 @@ nadat het bewijs van de vorige is beoordeeld.
 
 ### Fase 1 — repository, nog inert
 
-1. Migratie voor fonds, theming, expliciet modulemanifest en flags.
-2. Afzonderlijke hostmigratie met precondition, postcondition en rollback.
-3. Permanente hostgedreven demobadge en `noindex,nofollow`.
-4. Host-, module-, flag-, rollback- en cross-tenanttests.
-5. Runbook en providerchecklist.
-6. Typecheck, boundaries, secretscan, securitybaseline, volledige cross-tenant/
+1. Gedeelde migratie voor fonds, theming, expliciet modulemanifest en flags;
+   zonder omgevingsdata.
+2. Twee environment-specifieke provisioning-, self-check- en rollbackpakketten.
+3. Splits exacte hostnormalisatie van marketing-`www`-canonicalisatie.
+4. Permanente hostgedreven demobadge en `noindex,nofollow` op beide hosts.
+5. Host-, module-, flag-, rollback- en cross-tenanttests, inclusief bestaande
+   hosts en negatieve `www.`-varianten.
+6. Runbook en providerchecklists voor Preview en Productie.
+7. Typecheck, boundaries, secretscan, securitybaseline, volledige cross-tenant/
    DB-laag, karakterisering, E2E en productiebuild.
 
-### Fase 2 — Preview-eerst bewijs
+### Fase 2 — blijvende Preview-acceptatietenant
 
-1. Nieuwe migraties in een ephemere Supabase-DB toepassen.
-2. De hostmatrix met een geïnjecteerde app365-host testen.
-3. Rollback op een verse seed bewijzen.
-4. Branch via `preview` laten deployen; geen Production-domain koppelen.
-5. Bestaande Preview- en Productiehostcontracten regressietesten.
+Geselecteerde live context voor deze fase: `portal_preview`. Controleer vóór elke
+actie opnieuw projectref, actor, host en Vercel-environment.
+
+1. Nieuwe gedeelde migratie en beide environmentpakketten eerst in een ephemere
+   Supabase-DB testen; beide verkeerde-doeltests moeten proven-red zijn.
+2. Gedeelde fonds-/configmigratie via de normale Preview-migratieketen toepassen.
+3. Uitsluitend de Preview-provisioning uitvoeren en de Preview-self-check draaien.
+4. `app365.preview.bestuurdersportaal.com` als native domain van
+   `preview-stable` toevoegen; branch tracking blijft exact `preview`.
+5. Preview-`APP_HOST`, DNS en de exacte Preview Auth-callbacks toevoegen.
+6. Twee eigen Previewaccounts provisionen, ieder alleen lid van `m365-demo`.
+7. Login, logout, reset, harde reload, badge, metadata, robots, sitemap,
+   cross-hostweigering en RLS browsermatig op de vaste Previewhost bewijzen.
+8. Nul Microsoft-tokenaanvragen, nul Copilot-calls en uitsluitend synthetische
+   data aantonen.
+9. Previewrollback eerst ephemeer en daarna als read-only uitvoerbaarheidscheck
+   tegen de werkelijke stand valideren; niet uitvoeren zonder rollbackreden.
+10. Na duurzame inrichting uitsluitend de Previewhost en -identiteiten in de
+    registry vastleggen; nog geen Microsoft-retrievalprofiel toevoegen.
 
 ### Fase 3 — basisinrichting Productie, Copilot nog uit
 
+Deze fase vereist een afzonderlijk Productie-uitvoeringsakkoord op het groene
+Previewbewijs en het concrete Productiepakket.
+
 1. Voorafbewijs van bestaande host-, Auth- en fondsconfig vastleggen.
-2. Provisioningmigratie toepassen en self-check uitvoeren.
-3. Exacte Supabase Auth-redirect(s) toevoegen.
-4. Demoaccounts met één fondsprofiel provisionen.
-5. `APP_HOST` uitbreiden en via `main` deployen.
-6. Vercel Production-domain native koppelen; daarna DNS en TLS controleren.
-7. Login/logout/reset/harde reload, badge en noindex smoken.
-8. Bewijzen: nul Microsoft-tokenaanvragen en nul Copilot-netwerkcalls.
-9. Registry nog niet uitbreiden met Microsoftobjecten die niet bestaan.
+2. Bevestigen dat de gedeelde fonds-/configmigratie via de releaseweg op
+   Productie staat.
+3. Uitsluitend de Productieprovisioning uitvoeren en de Production-self-check
+   draaien.
+4. Exacte Supabase Auth-redirect(s) toevoegen.
+5. Eigen Productie-demoaccounts met één fondsprofiel provisionen.
+6. Production-`APP_HOST` uitbreiden en via `main` deployen.
+7. Vercel Production-domain native koppelen; daarna DNS en TLS controleren.
+8. Dezelfde acceptatiematrix als Preview uitvoeren en uitkomsten vergelijken.
+9. Bewijzen: nul Microsoft-tokenaanvragen en nul Copilot-netwerkcalls.
+10. Productiehost en -identiteiten in de registry vastleggen; nog geen
+    Microsoftobjecten registreren die niet bestaan.
 
 ### Fase 4 — Microsoftobjecten, nog steeds inert
 
@@ -381,25 +521,32 @@ Rollback is **disable-first** en raakt geen ander fonds.
 1. globale Copilot-rollout dicht;
 2. app365 Microsoft-/Copilotfondsflags expliciet `false`;
 3. Microsoftverbinding intrekken/ontkoppelen en token-cache onbruikbaar maken;
-4. app365-accounttoegang blokkeren;
-5. Vercel-domain loskoppelen, daarna DNS verwijderen;
-6. app365 uit `APP_HOST` en exacte Auth-redirects verwijderen via de normale
-   releaseweg;
-7. `tenant_domains`-rij deactiveren/verwijderen;
+4. uitsluitend de accounts van de doelomgeving blokkeren;
+5. de environmentrollback voor de geselecteerde context uitvoeren; het script
+   weigert als projectref, fingerprint of host niet exact bij die context hoort;
+6. het overeenkomstige Vercel-domain loskoppelen, daarna DNS verwijderen;
+7. uitsluitend de omgevingseigen app365-host uit `APP_HOST` en exacte
+   Auth-redirects verwijderen via de normale releaseweg;
 8. fondsconfiguratie terugschrijven als nieuwe, geaudite versie;
 9. het fonds alleen fysiek verwijderen wanneer harde prechecks bewijzen dat er
    geen profielen, documenten, Storage-objecten of domeinaudit aan hangen.
 
 Append-only auditlogs worden nooit door rollback verwijderd. Zodra het fonds is
 gebruikt, is “tenant uitschakelen en behouden” de standaard; cascade-delete is
-dan geen normale rollback.
+dan geen normale rollback. Preview- en Productierollback zijn onafhankelijke
+handelingen: terugdraaien van Preview raakt nooit de Production-host en omgekeerd.
 
 ## 11. Verificatiematrix
 
 ### Host en identiteit
 
+- `app365.preview.bestuurdersportaal.com` resolveert in `portal_preview` exact
+  naar `m365-demo`;
 - `app365.bestuurdersportaal.com` resolveert exact naar `m365-demo`;
-- onbekende, verkeerd gespelde en `www.`-varianten zijn niet stil toegestaan;
+- beide hosts behoren native aan hun bedoelde Vercel-environment en volgen de
+  bedoelde branch;
+- onbekende, verkeerd gespelde en alle tenant-/app-/platform-`www.`-varianten
+  leveren geen fondscontext; alleen marketing canonicaliseert apex/`www`;
 - PGB-, Horizon-, PH&C- en Huisartsenbindings zijn ongewijzigd;
 - PGB-/Horizonaccount op app365 wordt fail-closed geweigerd;
 - app365-account op elke andere fondshost wordt fail-closed geweigerd.
@@ -421,7 +568,8 @@ dan geen normale rollback.
 
 ### UX en SEO
 
-- badge op login, dashboard, foutpagina en harde reload;
+- demobadge op beide hosts bij login, dashboard, foutpagina en harde reload;
+- Previewhost toont daarnaast zonder overlap de Previewbadge;
 - metadata `noindex,nofollow`;
 - `robots.txt` sluit alles uit;
 - sitemap bevat app365 niet;
@@ -429,18 +577,23 @@ dan geen normale rollback.
 
 ### Release en rollback
 
-- app365 is een Production-domain, niet een deploymentalias;
-- branch tracking wijst naar `main`;
+- Preview-app365 is een `preview-stable`-domain met branch tracking exact
+  `preview`, niet een deploymentalias;
+- Productie-app365 is een Production-domain en volgt `main`, niet een
+  deploymentalias;
 - TLS geldig en geen dangling binding;
-- rollback verwijdert alleen app365-bindingen;
+- iedere environmentrollback verwijdert alleen haar eigen app365-binding;
 - volledige repositorygate groen.
 
 ## 12. Goedkeuringspunt
 
 Akkoord op deze planreview autoriseert uitsluitend **Fase 1 en Fase 2**:
-repositorywijzigingen en hermetisch/ephemeer bewijs. Fase 3 bevat Production-
-database- en providerwijzigingen en vereist daarna een afzonderlijk
-uitvoeringsakkoord op het concrete migratie-, provider- en rollbackpakket.
+repositorywijzigingen, hermetisch/ephemeer bewijs en de blijvende
+`portal_preview`-acceptatietenant. Preview-mutatiewerk begint pas nadat de Fase
+1-artefacten zijn gereviewd en alle verkeerde-doeltests proven-red zijn. Fase 3
+bevat Production-database- en providerwijzigingen en vereist daarna een
+afzonderlijk uitvoeringsakkoord op het groene Previewbewijs en het concrete
+Productie-, self-check- en rollbackpakket.
 
 De review keurt uitdrukkelijk nog niet goed: een aparte stack, Microsoftobjecten,
 permissions, consent, billing, live tokens, Copilot-calls of blijvende
