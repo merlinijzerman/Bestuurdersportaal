@@ -117,9 +117,13 @@ export interface LeesClientOpties {
   /** Maximaal aantal GET's in deze run. Overschrijden stopt de run. */
   callBudget: number;
   signal: AbortSignal;
+  /** Deadline per GET. Staat los van de afbreking van de hele run. */
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
+
+/** Standaarddeadline per GET; een lezing hoort in seconden te antwoorden. */
+export const STANDAARD_GET_TIMEOUT_MS = 30_000;
 
 /**
  * Een minimale, uitsluitend lezende Graph-client.
@@ -147,16 +151,33 @@ export function maakLeesClient(opties: LeesClientOpties): LeesClient {
       gebruikt++;
       let response: Response;
       try {
+        // Twee gronden om te stoppen, één signaal: de afbreking van de run en
+        // een eigen deadline per lezing. Zonder die deadline kan een Graph-GET
+        // die blijft hangen de hele dry-run vasthouden — dezelfde val als bij
+        // de tokenuitgifte.
         response = await doeFetch(url, {
           method: "GET",
           headers: { Authorization: `Bearer ${opties.accessToken}`, Accept: "application/json" },
-          signal: opties.signal,
+          signal: AbortSignal.any([
+            opties.signal,
+            AbortSignal.timeout(opties.timeoutMs ?? STANDAARD_GET_TIMEOUT_MS),
+          ]),
           // Een 3xx is hier een fout, geen omleiding: volgen zou ons token naar
           // een host sturen die wij niet hebben gekozen.
           redirect: "manual",
         });
       } catch (fout) {
-        throw new GraphFout("graph_netwerkfout", `GET mislukt (${(fout as Error).name})`);
+        // Een AFBREKING VAN DE RUN is geen storing, en een storing is geen
+        // afbreking. Het onderscheid hangt aan ONS signaal, niet aan de naam
+        // van de fout: een `TimeoutError` uit het transport betekent dat de
+        // provider niet antwoordde, en die hoort als storing geteld te worden.
+        // Wie op de foutnaam afgaat, boekt zo'n timeout als "run afgebroken" en
+        // laat de meting stoppen op iets wat juist een meetuitkomst is.
+        if (opties.signal.aborted) {
+          throw new GraphFout("graph_afgebroken", "de run is afgebroken tijdens een GET");
+        }
+        const naam = (fout as Error)?.name;
+        throw new GraphFout("graph_netwerkfout", `GET mislukt (${naam ?? "netwerkfout"})`);
       }
       if (response.status >= 300 && response.status <= 399) {
         throw new GraphFout("graph_omleiding", `Graph antwoordde met een omleiding`, response.status);
@@ -340,6 +361,125 @@ function itemBinnenGraphRoot(item: GraphItem, driveId: string, rootGraphPad: str
 }
 
 // ---------------------------------------------------------------------------
+//  Verifieerbaarheid van één zoekresultaat
+// ---------------------------------------------------------------------------
+//  WAAROM DIT BESTAAT. Sinds #419 wordt containment op `parentReference`
+//  beoordeeld en niet meer op `webUrl` — terecht, want Graph geeft voor
+//  Office-bestanden een weergavelink terug die geen padbewijs is. Maar bij
+//  ZOEKRESULTATEN laat Graph `parentReference.path` regelmatig wég: de
+//  zoekprojectie draagt vaak alleen `driveId` en `id`. Zo'n resultaat viel
+//  daardoor stilzwijgend af, en de uitslag was niet te onderscheiden van "de
+//  index kent dit document niet".
+//
+//  Dat verschil is precies wat de beslispoort nodig heeft: "geen zoekresultaat"
+//  betekent wachten op de index, "niet verifieerbaar" betekent uitzoeken, en
+//  "buiten de root" betekent dat er iets in de bron staat wat er niet hoort.
+//
+//  DE HERLEZING IS GEEN TWEEDE KANS. Zij is de ENIGE manier om aan de
+//  ontbrekende `parentReference` te komen, en zij accepteert alleen wat zij
+//  zélf heeft waargenomen: dezelfde drive, geen `remoteItem`, en een ouderpad
+//  onder de geregistreerde Graph-root. Niets uit het zoekresultaat wordt
+//  daarbij overgenomen — het levert alleen het item-id waarop wij herlezen.
+
+/** Harde grens op het aantal verse DriveItem-lezingen per inhoudscan. */
+export const MAX_VERSE_HERLEZINGEN = 5;
+
+export type HitAfwijzing =
+  | "andere_drive"
+  | "shortcut"
+  | "pad_buiten_root";
+
+export type HitOnverifieerbaar =
+  | "geen_item_id"
+  | "herleesbudget_op"
+  | "herlezing_geweigerd"
+  | "herlezing_mislukt"
+  | "geen_parentref_na_herlezing";
+
+export type HitOordeel =
+  | { soort: "geaccepteerd"; via: "zoekresultaat" | "verse_lezing"; webUrl: string | null }
+  | { soort: "buiten_root"; reden: HitAfwijzing }
+  | { soort: "niet_verifieerbaar"; reden: HitOnverifieerbaar };
+
+/** Heeft dit item een bruikbaar ouderpad, of moet het herlezen worden? */
+function heeftBruikbaarOuderpad(item: GraphItem): boolean {
+  return normaliseerGraphPad(item.parentReference?.path) !== null;
+}
+
+/**
+ * Beoordeelt één zoekresultaat, desnoods met één verse DriveItem-lezing.
+ *
+ * Gooit door bij een afbreking: een gestopte run is geen meetuitkomst.
+ */
+export async function beoordeelZoekresultaat(
+  client: LeesClient,
+  item: GraphItem,
+  driveId: string,
+  rootGraphPad: string,
+  budget: { resterend: number },
+): Promise<HitOordeel> {
+  // 1. Een shortcut wijst per definitie naar inhoud elders. Daar valt niets aan
+  //    te herlezen: het item dát wij vasthebben is de verwijzing, niet het stuk.
+  if (item.remoteItem) return { soort: "buiten_root", reden: "shortcut" };
+
+  // 2. Een expliciet ANDER drive-id is een vaststelling, geen gebrek aan
+  //    gegevens — herlezen zou daar niets aan veranderen.
+  const zoekDrive = item.parentReference?.driveId;
+  if (typeof zoekDrive === "string" && zoekDrive !== driveId) {
+    return { soort: "buiten_root", reden: "andere_drive" };
+  }
+
+  // 3. Draagt het zoekresultaat zelf al een bruikbaar ouderpad, dan is er geen
+  //    reden om nog een call te doen.
+  if (typeof zoekDrive === "string" && heeftBruikbaarOuderpad(item)) {
+    return itemBinnenGraphRoot(item, driveId, rootGraphPad)
+      ? { soort: "geaccepteerd", via: "zoekresultaat", webUrl: item.webUrl ?? null }
+      : { soort: "buiten_root", reden: "pad_buiten_root" };
+  }
+
+  // 4. Onvoldoende `parentReference`: éénmalig vers herlezen op drive-id +
+  //    item-id. Zonder id is er niets te adresseren.
+  if (typeof item.id !== "string" || item.id.length === 0) {
+    return { soort: "niet_verifieerbaar", reden: "geen_item_id" };
+  }
+  if (budget.resterend <= 0) {
+    return { soort: "niet_verifieerbaar", reden: "herleesbudget_op" };
+  }
+  budget.resterend--;
+
+  let vers: GraphItem;
+  try {
+    vers = await client.json<GraphItem>(
+      `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(item.id)}?$select=id,name,webUrl,parentReference,remoteItem`,
+    );
+  } catch (fout) {
+    if (fout instanceof GraphFout) {
+      // Een afgebroken run stopt de hele meting; zij mag nooit als
+      // "onverifieerbaar resultaat" in een telling belanden.
+      if (fout.code === "graph_afgebroken") throw fout;
+      // 403 en 404: wij MOGEN het niet zien, of het bestaat niet meer. In
+      // beide gevallen is de locatie niet vast te stellen — en dat is iets
+      // anders dan vaststellen dat hij buiten de root ligt.
+      if (fout.httpStatus === 403 || fout.httpStatus === 404) {
+        return { soort: "niet_verifieerbaar", reden: "herlezing_geweigerd" };
+      }
+      return { soort: "niet_verifieerbaar", reden: "herlezing_mislukt" };
+    }
+    throw fout;
+  }
+
+  // 5. De verse respons wordt op eigen kracht beoordeeld.
+  if (vers.remoteItem) return { soort: "buiten_root", reden: "shortcut" };
+  if (vers.parentReference?.driveId !== driveId) return { soort: "buiten_root", reden: "andere_drive" };
+  if (!heeftBruikbaarOuderpad(vers)) {
+    return { soort: "niet_verifieerbaar", reden: "geen_parentref_na_herlezing" };
+  }
+  return itemBinnenGraphRoot(vers, driveId, rootGraphPad)
+    ? { soort: "geaccepteerd", via: "verse_lezing", webUrl: vers.webUrl ?? null }
+    : { soort: "buiten_root", reden: "pad_buiten_root" };
+}
+
+// ---------------------------------------------------------------------------
 //  Scan 1 — inhoudscan via de zoekindex
 // ---------------------------------------------------------------------------
 
@@ -354,8 +494,16 @@ export interface InhoudscanUitkomst {
   term: string;
   /** Alle treffers die de index gaf, ook buiten de root. */
   treffers: number;
-  /** Treffers die binnen de geregistreerde bronroot vallen. */
+  /** Treffers die aantoonbaar binnen de geregistreerde bronroot vallen. */
   binnenRoot: number;
+  /** Treffers waarvan is VASTGESTELD dat ze er niet onder vallen. */
+  buitenRoot: number;
+  /** Treffers waarvan de locatie NIET vast te stellen was. */
+  nietVerifieerbaar: number;
+  /** Hoeveel verse DriveItem-lezingen deze scan heeft gekost. */
+  verseHerlezingen: number;
+  /** Tellingen per vaste reden; uitsluitend codes, nooit een pad of naam. */
+  redenen: Partial<Record<HitAfwijzing | HitOnverifieerbaar, number>>;
   webUrls: string[];
 }
 
@@ -385,11 +533,38 @@ export async function inhoudscan(
     `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/search(q='${gecodeerd}')?$select=id,name,webUrl,parentReference,remoteItem&$top=25`,
   );
   const rijen = Array.isArray(antwoord.value) ? (antwoord.value as GraphItem[]) : [];
-  const binnen: string[] = [];
+  const redenen: Partial<Record<HitAfwijzing | HitOnverifieerbaar, number>> = {};
+  const budget = { resterend: MAX_VERSE_HERLEZINGEN };
+  const webUrls: string[] = [];
+  let geaccepteerd = 0;
+  let buitenRoot = 0;
+  let nietVerifieerbaar = 0;
+
   for (const rij of rijen) {
-    if (itemBinnenGraphRoot(rij, driveId, rootGraphPad) && typeof rij.webUrl === "string") binnen.push(rij.webUrl);
+    const oordeel = await beoordeelZoekresultaat(client, rij, driveId, rootGraphPad, budget);
+    if (oordeel.soort === "geaccepteerd") {
+      // De telling hangt aan het OORDEEL, niet aan de aanwezigheid van een
+      // webUrl: een geverifieerd item zonder weergavelink is nog steeds een
+      // geverifieerd item.
+      geaccepteerd++;
+      if (oordeel.webUrl) webUrls.push(oordeel.webUrl);
+      continue;
+    }
+    redenen[oordeel.reden] = (redenen[oordeel.reden] ?? 0) + 1;
+    if (oordeel.soort === "buiten_root") buitenRoot++;
+    else nietVerifieerbaar++;
   }
-  return { term, treffers: rijen.length, binnenRoot: binnen.length, webUrls: binnen };
+
+  return {
+    term,
+    treffers: rijen.length,
+    binnenRoot: geaccepteerd,
+    buitenRoot,
+    nietVerifieerbaar,
+    verseHerlezingen: MAX_VERSE_HERLEZINGEN - budget.resterend,
+    redenen,
+    webUrls,
+  };
 }
 
 // ---------------------------------------------------------------------------

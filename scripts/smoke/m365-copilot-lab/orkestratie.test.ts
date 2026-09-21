@@ -17,6 +17,7 @@ import type { Aanmelding } from "./auth";
 import { maakLeesClient } from "./graph";
 import { EXIT, voerSmokeUit, type SmokeAfhankelijkheden } from "./orkestratie";
 import type { Labprofiel } from "./registry";
+import { rapporteer } from "./rapport";
 
 const HOST = "bestuurdersportaaltest.sharepoint.com";
 const SITE = `https://${HOST}/sites/PGBRetrievalLab`;
@@ -67,7 +68,19 @@ function json(body: unknown): Response {
  * Een labtenant waarin ALLES klopt en beide scans een treffer geven: de stand
  * waarin de poort openstaat. `inhoudTreffers` kan op 0 om de poort te sluiten.
  */
-function graphStub(opties: { inhoudTreffers?: number; bestandAanwezig?: boolean } = {}) {
+interface StubOpties {
+  inhoudTreffers?: number;
+  bestandAanwezig?: boolean;
+  /**
+   * Bootst de LIVE stand van 21-09 na: het zoekresultaat draagt wel een
+   * drive-id maar geen `path`, zodat de runner het item vers moet herlezen.
+   */
+  zoekresultaatZonderPad?: boolean;
+  /** Wat de verse DriveItem-lezing teruggeeft; standaard een geldige bevestiging. */
+  verseLezing?: (id: string) => Response;
+}
+
+function graphStub(opties: StubOpties = {}) {
   const bezocht: string[] = [];
   const impl = (async (invoer: any) => {
     const url = String(invoer);
@@ -85,7 +98,9 @@ function graphStub(opties: { inhoudTreffers?: number; bestandAanwezig?: boolean 
           id: `hit-${i}`,
           name: FIXTUREBESTAND,
           webUrl: FIXTURE_URL,
-          parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
+          parentReference: opties.zoekresultaatZonderPad
+            ? { driveId: "drive-1" }
+            : { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
         })),
       });
     }
@@ -95,6 +110,17 @@ function graphStub(opties: { inhoudTreffers?: number; bestandAanwezig?: boolean 
         value: aanwezig
           ? [{ id: "f-1", name: FIXTUREBESTAND, file: {}, webUrl: FIXTURE_URL, parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` } }]
           : [],
+      });
+    }
+    // De verse DriveItem-lezing: /drives/drive-1/items/{id}?$select=…
+    const versMatch = /\/drives\/drive-1\/items\/([^/?]+)\?/.exec(url);
+    if (versMatch) {
+      if (opties.verseLezing) return opties.verseLezing(versMatch[1]);
+      return json({
+        id: versMatch[1],
+        name: FIXTUREBESTAND,
+        webUrl: FIXTURE_URL,
+        parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
       });
     }
     throw new Error(`onverwachte Graph-call in de stub: ${url}`);
@@ -188,7 +214,7 @@ test("met akkoord vertrekt er precies één Retrieval-poging naar het vastgepind
 test("een dichte poort vraagt geen akkoord en doet geen call", async () => {
   const { deps, spionnen } = bouw({ graph: graphStub({ inhoudTreffers: 0 }) });
   const { rapport, exitcode } = await voerSmokeUit(deps);
-  assert.deepEqual(rapport.poort, { doorgelaten: false, code: "inhoud_niet_geindexeerd" });
+  assert.deepEqual(rapport.poort, { doorgelaten: false, code: "geen_zoekresultaat" });
   assert.equal(spionnen.akkoordGevraagd, 0);
   assert.deepEqual(spionnen.retrievalPogingen, []);
   assert.equal(exitcode, EXIT.poort);
@@ -250,4 +276,121 @@ test("de volgorde ligt vast: actor, site, bibliotheek, root-item, dan pas de sca
     return "naamscan";
   });
   assert.deepEqual(stappen, ["actor", "site", "bibliotheek", "root-item", "inhoudscan", "naamscan"]);
+});
+
+// ---------------------------------------------------------------------------
+//  De verse herlezing binnen de volledige volgorde (#419-vervolg)
+// ---------------------------------------------------------------------------
+
+test("een zoekresultaat zonder ouderpad wordt vers herlezen en opent dan de poort", async () => {
+  // De live stand van 21-09: één treffer, geen `parentReference.path`.
+  const { deps, graph } = bouw({ dryRun: true, graph: graphStub({ zoekresultaatZonderPad: true }) });
+  const { rapport } = await voerSmokeUit(deps);
+
+  const inhoudscan = rapport.scans.find((scan) => scan.naam === "inhoudscan")!;
+  assert.equal(inhoudscan.treffers, 1);
+  assert.equal(inhoudscan.binnenRoot, 1, "de verse herlezing bevestigde de treffer niet");
+  assert.equal(inhoudscan.verseHerlezingen, 1);
+  assert.equal(rapport.poort.doorgelaten, true);
+  assert.equal(graph.bezocht.filter((url) => /\/items\/hit-0\?/.test(url)).length, 1, "niet exact één herlezing");
+});
+
+test("--dry-run doet ook via de verse-herlezingsweg nul Retrieval-pogingen en vraagt geen akkoord", async () => {
+  // De poort gaat hier open dankzij een herlezing; juist dan moet de grendel
+  // nog steeds sluiten.
+  const { deps, spionnen } = bouw({ dryRun: true, graph: graphStub({ zoekresultaatZonderPad: true }) });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.equal(rapport.poort.doorgelaten, true, "de opzet leverde geen open poort op");
+  assert.deepEqual(spionnen.retrievalPogingen, []);
+  assert.equal(spionnen.akkoordGevraagd, 0);
+  assert.equal(rapport.retrieval, null);
+  assert.equal(exitcode, EXIT.klaar);
+});
+
+test("een treffer die na herlezing niet te plaatsen is, heet 'niet verifieerbaar' en stopt de run", async () => {
+  const { deps, spionnen } = bouw({
+    graph: graphStub({
+      zoekresultaatZonderPad: true,
+      // Graph blijft het ouderpad schuldig.
+      verseLezing: (id) =>
+        new Response(JSON.stringify({ id, webUrl: FIXTURE_URL, parentReference: { driveId: "drive-1" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    }),
+  });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.deepEqual(rapport.poort, { doorgelaten: false, code: "zoekresultaat_niet_verifieerbaar" });
+  const inhoudscan = rapport.scans.find((scan) => scan.naam === "inhoudscan")!;
+  assert.equal(inhoudscan.nietVerifieerbaar, 1);
+  assert.deepEqual(inhoudscan.redenen, { geen_parentref_na_herlezing: 1 });
+  assert.equal(spionnen.akkoordGevraagd, 0);
+  assert.deepEqual(spionnen.retrievalPogingen, []);
+  assert.equal(exitcode, EXIT.poort);
+});
+
+test("een treffer die aantoonbaar elders ligt, krijgt de buiten-root-code", async () => {
+  // De bronroot is hier de héle bibliotheek, dus "buiten de root" kan alleen
+  // een ANDERE drive zijn — een submap blijft per definitie binnen.
+  const { deps, spionnen } = bouw({
+    graph: graphStub({
+      zoekresultaatZonderPad: true,
+      verseLezing: (id) =>
+        new Response(
+          JSON.stringify({ id, parentReference: { driveId: "drive-2", path: "/drives/drive-2/root:/Elders" } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    }),
+  });
+  const { rapport } = await voerSmokeUit(deps);
+  assert.deepEqual(rapport.poort, { doorgelaten: false, code: "zoekresultaat_buiten_root" });
+  assert.deepEqual(
+    rapport.scans.find((scan) => scan.naam === "inhoudscan")!.redenen,
+    { andere_drive: 1 },
+  );
+  assert.deepEqual(spionnen.retrievalPogingen, []);
+});
+
+test("een 403 op de herlezing stopt de run zonder akkoordvraag en zonder Retrieval-call", async () => {
+  const { deps, spionnen } = bouw({
+    graph: graphStub({
+      zoekresultaatZonderPad: true,
+      verseLezing: () => new Response("{}", { status: 403 }),
+    }),
+  });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.deepEqual(rapport.poort, { doorgelaten: false, code: "zoekresultaat_niet_verifieerbaar" });
+  assert.deepEqual(
+    rapport.scans.find((scan) => scan.naam === "inhoudscan")!.redenen,
+    { herlezing_geweigerd: 1 },
+  );
+  assert.equal(spionnen.akkoordGevraagd, 0);
+  assert.deepEqual(spionnen.retrievalPogingen, []);
+  assert.equal(exitcode, EXIT.poort);
+});
+
+test("het rapport draagt de uitsplitsing als codes en tellingen, zonder pad of naam", async () => {
+  const { deps } = bouw({
+    dryRun: true,
+    graph: graphStub({
+      zoekresultaatZonderPad: true,
+      verseLezing: (id) =>
+        new Response(
+          JSON.stringify({
+            id,
+            name: FIXTUREBESTAND,
+            webUrl: FIXTURE_URL,
+            parentReference: { driveId: "drive-2", path: "/drives/drive-2/root:/Elders" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    }),
+  });
+  const { rapport } = await voerSmokeUit(deps);
+  const tekst = rapporteer(rapport);
+  assert.match(tekst, /niet verifieerbaar/);
+  assert.match(tekst, /`andere_drive` ×1/);
+  assert.ok(!tekst.includes("https://"), "een URL lekte in het rapport");
+  assert.ok(!tekst.includes(".docx"), "een bestandsnaam lekte in het rapport");
+  assert.ok(!tekst.includes("Elders"), "een pad lekte in het rapport");
 });

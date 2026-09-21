@@ -17,6 +17,7 @@ import {
   leesBron,
   leesRootItem,
   maakLeesClient,
+  MAX_VERSE_HERLEZINGEN,
 } from "./graph";
 
 const HOST = "bestuurdersportaaltest.sharepoint.com";
@@ -335,4 +336,211 @@ test("een rootpad met onverwachte tekens komt de pad-adressering niet in", async
     (fout: GraphFout) => fout.code === "root_pad_onveilig",
   );
   assert.equal(gezien.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+//  Verifieerbaarheid van een zoekresultaat (#419-vervolg)
+// ---------------------------------------------------------------------------
+//  Graph laat `parentReference.path` bij ZOEKRESULTATEN regelmatig weg. Sinds de
+//  containment op parentReference leunt, viel zo'n treffer stilzwijgend af en
+//  was "één treffer, nul geaccepteerd" niet te onderscheiden van een koude
+//  index. Deze tests leggen het onderscheid vast.
+
+const OFFICE_URL = `https://${HOST}/:w:/r/sites/PGBRetrievalLab/_layouts/15/Doc.aspx?sourcedoc=%7Babc%7D`;
+
+/** Een zoekresultaat zoals Graph het levert: drive-id, geen pad. */
+function zoekhitZonderPad(id = "hit-1") {
+  return { id, name: "PGB407-DOC-101-Zandloperbaken-hersteldossier.docx", webUrl: OFFICE_URL, parentReference: { driveId: "drive-1" } };
+}
+
+function scanClient(afhandel: (url: string) => Response | Promise<Response>, budget = 40) {
+  return client(afhandel, budget);
+}
+
+test("een zoekresultaat met bruikbaar ouderpad wordt geaccepteerd zonder extra lezing", async () => {
+  const { client: c, gezien } = scanClient(() =>
+    json({
+      value: [
+        {
+          id: "hit-1",
+          name: "x.docx",
+          webUrl: OFFICE_URL,
+          parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
+        },
+      ],
+    }));
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.equal(uitkomst.binnenRoot, 1);
+  assert.equal(uitkomst.verseHerlezingen, 0, "er is onnodig herlezen");
+  assert.equal(gezien.length, 1);
+});
+
+test("ontbrekende parentReference leidt tot één verse lezing die de treffer bevestigt", async () => {
+  // Dit is de live stand van 21-09.
+  const { client: c, gezien } = scanClient((url) => {
+    if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+    return json({
+      id: "hit-1",
+      webUrl: OFFICE_URL,
+      parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` },
+    });
+  });
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.equal(uitkomst.treffers, 1);
+  assert.equal(uitkomst.binnenRoot, 1);
+  assert.equal(uitkomst.nietVerifieerbaar, 0);
+  assert.equal(uitkomst.verseHerlezingen, 1);
+  // Herlezen op drive-id + item-id, niet op iets uit het zoekresultaat zelf.
+  assert.ok(gezien[1].includes("/drives/drive-1/items/hit-1?"), `onverwachte herlezing: ${gezien[1]}`);
+});
+
+test("een verse lezing uit een ANDERE drive wordt geweigerd", async () => {
+  const { client: c } = scanClient((url) => {
+    if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+    return json({ id: "hit-1", parentReference: { driveId: "drive-2", path: "/drives/drive-2/root:/Shared Documents" } });
+  });
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.equal(uitkomst.binnenRoot, 0);
+  assert.equal(uitkomst.buitenRoot, 1);
+  assert.deepEqual(uitkomst.redenen, { andere_drive: 1 });
+});
+
+test("een verse lezing buiten de geregistreerde root wordt geweigerd", async () => {
+  const { client: c } = scanClient((url) => {
+    if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+    return json({ id: "hit-1", parentReference: { driveId: "drive-1", path: "/drives/drive-1/root:/Andere Map" } });
+  });
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", `${ROOT_GRAPH_PAD}/02 Beleid`, "Zandloperbaken 12");
+  assert.equal(uitkomst.buitenRoot, 1);
+  assert.deepEqual(uitkomst.redenen, { pad_buiten_root: 1 });
+});
+
+test("een shortcut wordt geweigerd en kost geen enkele verse lezing", async () => {
+  // De inhoud van een snelkoppeling woont ergens anders; het item dat wij
+  // vasthebben is de verwijzing. Daar valt niets aan te herlezen.
+  const { client: c, gezien } = scanClient(() =>
+    json({ value: [{ ...zoekhitZonderPad(), remoteItem: { id: "elders" } }] }));
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.equal(uitkomst.buitenRoot, 1);
+  assert.deepEqual(uitkomst.redenen, { shortcut: 1 });
+  assert.equal(uitkomst.verseHerlezingen, 0);
+  assert.equal(gezien.length, 1);
+});
+
+test("een shortcut die pas bij de verse lezing blijkt, wordt alsnog geweigerd", async () => {
+  const { client: c } = scanClient((url) => {
+    if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+    return json({ id: "hit-1", remoteItem: { id: "elders" }, parentReference: { driveId: "drive-1" } });
+  });
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.equal(uitkomst.buitenRoot, 1);
+  assert.deepEqual(uitkomst.redenen, { shortcut: 1 });
+});
+
+test("403 en 404 op de verse lezing zijn NIET verifieerbaar, niet buiten-root", async () => {
+  // Het verschil telt: "ik mag het niet zien" is iets anders dan "het ligt
+  // buiten de bron". Het eerste vraagt om uitzoeken, het tweede om opruimen.
+  for (const status of [403, 404]) {
+    const { client: c } = scanClient((url) => {
+      if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+      return new Response("{}", { status });
+    });
+    const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+    assert.equal(uitkomst.nietVerifieerbaar, 1, `status ${status}`);
+    assert.equal(uitkomst.buitenRoot, 0, `status ${status}`);
+    assert.deepEqual(uitkomst.redenen, { herlezing_geweigerd: 1 }, `status ${status}`);
+  }
+});
+
+test("429 en 5xx op de verse lezing zijn niet verifieerbaar en leveren geen tweede poging", async () => {
+  for (const status of [429, 503]) {
+    let herlezingen = 0;
+    const { client: c } = scanClient((url) => {
+      if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+      herlezingen++;
+      return new Response("{}", { status });
+    });
+    const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+    assert.equal(uitkomst.nietVerifieerbaar, 1, `status ${status}`);
+    assert.deepEqual(uitkomst.redenen, { herlezing_mislukt: 1 }, `status ${status}`);
+    assert.equal(herlezingen, 1, `status ${status}: er is opnieuw geprobeerd`);
+  }
+});
+
+test("een timeout op de verse lezing telt als niet verifieerbaar, niet als afwijzing", async () => {
+  const { client: c } = scanClient((url) => {
+    if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+    const fout = new Error("te traag");
+    fout.name = "TimeoutError";
+    throw fout;
+  });
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.equal(uitkomst.nietVerifieerbaar, 1);
+  assert.equal(uitkomst.buitenRoot, 0);
+});
+
+test("een AFBREKING stopt de scan en wordt nooit als meetuitkomst geteld", async () => {
+  // Een geannuleerde run mag niet als "niet verifieerbaar" in een telling
+  // eindigen; dan zou Ctrl-C er als een meetresultaat uitzien.
+  const afbreker = new AbortController();
+  const c = maakLeesClient({
+    accessToken: "test-token",
+    callBudget: 40,
+    signal: afbreker.signal,
+    fetchImpl: (async (invoer: any) => {
+      if (String(invoer).includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+      afbreker.abort();
+      const fout = new Error("afgebroken");
+      fout.name = "AbortError";
+      throw fout;
+    }) as unknown as typeof fetch,
+  });
+  await assert.rejects(
+    () => inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12"),
+    (fout: GraphFout) => fout.code === "graph_afgebroken",
+  );
+});
+
+test("een zoekresultaat zonder item-id is niet verifieerbaar en kost geen lezing", async () => {
+  const { client: c, gezien } = scanClient(() =>
+    json({ value: [{ name: "x.docx", webUrl: OFFICE_URL, parentReference: { driveId: "drive-1" } }] }));
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.deepEqual(uitkomst.redenen, { geen_item_id: 1 });
+  assert.equal(uitkomst.verseHerlezingen, 0);
+  assert.equal(gezien.length, 1);
+});
+
+test("het herleesbudget is een harde grens; daarboven wordt niet meer gelezen", async () => {
+  let herlezingen = 0;
+  const { client: c } = scanClient((url) => {
+    if (url.includes("/search(")) {
+      return json({ value: Array.from({ length: MAX_VERSE_HERLEZINGEN + 3 }, (_, i) => zoekhitZonderPad(`hit-${i}`)) });
+    }
+    herlezingen++;
+    return json({ id: "x", parentReference: { driveId: "drive-1", path: `${ROOT_GRAPH_PAD}/02 Beleid` } });
+  });
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.equal(herlezingen, MAX_VERSE_HERLEZINGEN, "er is buiten het budget gelezen");
+  assert.equal(uitkomst.verseHerlezingen, MAX_VERSE_HERLEZINGEN);
+  assert.equal(uitkomst.binnenRoot, MAX_VERSE_HERLEZINGEN);
+  assert.equal(uitkomst.nietVerifieerbaar, 3);
+  assert.deepEqual(uitkomst.redenen, { herleesbudget_op: 3 });
+});
+
+test("een verse lezing die nog steeds geen ouderpad draagt, blijft niet verifieerbaar", async () => {
+  const { client: c } = scanClient((url) => {
+    if (url.includes("/search(")) return json({ value: [zoekhitZonderPad()] });
+    return json({ id: "hit-1", webUrl: OFFICE_URL, parentReference: { driveId: "drive-1" } });
+  });
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.deepEqual(uitkomst.redenen, { geen_parentref_na_herlezing: 1 });
+  assert.equal(uitkomst.nietVerifieerbaar, 1);
+});
+
+test("een expliciet andere drive in het zoekresultaat kost geen verse lezing", async () => {
+  const { client: c, gezien } = scanClient(() =>
+    json({ value: [{ ...zoekhitZonderPad(), parentReference: { driveId: "drive-2" } }] }));
+  const uitkomst = await inhoudscan(c, "drive-1", "root-item", ROOT_GRAPH_PAD, "Zandloperbaken 12");
+  assert.deepEqual(uitkomst.redenen, { andere_drive: 1 });
+  assert.equal(gezien.length, 1);
 });
