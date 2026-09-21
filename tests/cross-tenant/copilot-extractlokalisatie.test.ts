@@ -10,6 +10,7 @@ import {
   MIN_EXTRACT_TEKENS,
   lokaliseerEersteBruikbare,
   lokaliseerExtract,
+  normaliseerMetIndexkaart,
   normaliseerVoorLokalisatie,
 } from "../../core/lib/microsoft-retrieval/extractlokalisatie";
 import type { TekstSegment } from "../../core/lib/document-extractie";
@@ -105,6 +106,55 @@ test("een lange passage wordt begrensd, rond de treffer", () => {
   assert.ok(uitkomst.ok);
   assert.ok(uitkomst.lokalisatie.passage.length <= MAX_PASSAGE_TEKENS, "passage is niet begrensd");
   assert.ok(uitkomst.lokalisatie.passage.includes("hersteltermijn"), "de treffer valt buiten het venster");
+});
+
+test("OFFSETMAPPING: het venster ligt om de treffer, ook als de tekst samentrekt", () => {
+  // De genormaliseerde en de leesbare tekst hebben NIET dezelfde lengte: elke
+  // reeks witruimte wordt één spatie. Met dubbele spaties vóór de treffer liep
+  // dat in de meting 600 tekens uiteen — genoeg om het venster volledig naast
+  // de treffer te leggen terwijl de test op "bevat het woord" nog slaagde.
+  // De vulling is zo gekozen dat de drift (hier ~2000 tekens) GROTER is dan het
+  // venster: zonder vertaalslag valt de treffer er gegarandeerd buiten. Met een
+  // kleinere vulling kan een verschoven venster de zin toevallig nog raken, en
+  // dan bewijst de test niets.
+  const vulling = "Veel   witruimte   en   dubbele   spaties.   ".repeat(200);
+  const eigen = segment(`${vulling}${ZIN}${vulling}`);
+  const uitkomst = lokaliseerExtract([eigen], ZIN);
+  assert.ok(uitkomst.ok);
+
+  const passage = uitkomst.lokalisatie.passage;
+  assert.ok(passage.length <= MAX_PASSAGE_TEKENS);
+  // De VOLLEDIGE zin moet in de passage staan, niet alleen een los woord dat
+  // toevallig ook in de vulling voorkomt.
+  assert.ok(passage.includes(ZIN), "de treffer valt buiten het venster");
+
+  // En het bewijs dat de twee teksten werkelijk uiteenlopen: zonder vertaalslag
+  // zou de positie honderden tekens verschoven zijn.
+  const kaart = normaliseerMetIndexkaart(eigen.tekst);
+  const positieGenormaliseerd = kaart.tekst.indexOf(normaliseerVoorLokalisatie(ZIN));
+  const positieLeesbaar = kaart.naarLeesbaar[positieGenormaliseerd];
+  assert.ok(positieGenormaliseerd >= 0);
+  assert.ok(
+    positieLeesbaar - positieGenormaliseerd > 100,
+    `verwacht een forse drift, gemeten ${positieLeesbaar - positieGenormaliseerd}`,
+  );
+  assert.equal(kaart.leesbaar.slice(positieLeesbaar, positieLeesbaar + ZIN.length), ZIN);
+});
+
+test("de indexkaart wijst elk genormaliseerd teken naar zijn eigen bron", () => {
+  const kaart = normaliseerMetIndexkaart("  A\t\tB  ");
+  assert.equal(kaart.tekst, "a b");
+  // "a" komt uit index 2, de spatie uit de eerste tab (3), "B" uit index 5.
+  assert.deepEqual(kaart.naarLeesbaar, [2, 3, 5]);
+  assert.equal(kaart.leesbaar.slice(kaart.naarLeesbaar[2], kaart.naarLeesbaar[2] + 1), "B");
+});
+
+test("normaliseerVoorLokalisatie en de indexkaart zijn dezelfde implementatie", () => {
+  // Twee implementaties van dezelfde normalisatie lopen vroeg of laat uiteen,
+  // en dan zoekt de naald anders dan de hooiberg.
+  for (const proef of [ZIN, "  dubbele   spaties  ", "Typografie: “quote” — streepje", "ÉÉN Hoofdletter"]) {
+    assert.equal(normaliseerVoorLokalisatie(proef), normaliseerMetIndexkaart(proef).tekst, proef);
+  }
 });
 
 test("de eerste bruikbare van meerdere extracts wint", () => {

@@ -19,12 +19,21 @@
 //  uit het verkeerde document. Nul treffers betekent dat het extract niet meer
 //  in de actuele tekst staat. Beide vallen fail-closed af.
 //
-//  ── NORMALISEREN, MAAR NIET MEER DAN NODIG ─────────────────────────────────
-//  Word en PDF leveren dezelfde zin met andere aanhalingstekens, streepjes en
-//  witruimte dan de index. Zonder normalisatie zou een inhoudelijk identiek
-//  extract op opmaak stuklopen. De normalisatie raakt daarom alleen vorm:
-//  Unicode-vorm, typografische leestekens, witruimte en kapitalisatie. Zij
-//  verwijdert nooit woorden en verandert nooit de volgorde.
+//  ── ZOEKEN OP DE ENE TEKST, KNIPPEN UIT DE ANDERE ──────────────────────────
+//  De vergelijking gebeurt op een GENORMALISEERDE vorm (anders loopt een
+//  inhoudelijk identiek extract stuk op opmaak), maar de passage moet uit de
+//  LEESBARE tekst komen. Die twee hebben niet dezelfde lengte: witruimte wordt
+//  samengetrokken, stuurtekens verdwijnen, kapitalisatie kan een teken langer
+//  of korter maken. Een positie uit de ene tekst rechtstreeks op de andere
+//  toepassen levert dus een venster op de verkeerde plek op — bij een segment
+//  met veel dubbele spaties liep dat in de meting 600 tekens uiteen, ruim genoeg
+//  om de treffer volledig buiten de passage te laten vallen.
+//
+//  Daarom levert de normalisatie een INDEXKAART mee: per teken in de
+//  genormaliseerde tekst de positie waar het in de leesbare tekst begon. Er is
+//  één normalisatiefunctie; `normaliseerVoorLokalisatie()` is niets anders dan
+//  de tekst uit diezelfde kaart, zodat naald en hooiberg niet uiteen kunnen
+//  lopen.
 // ============================================================================
 import type { TekstSegment } from "../document-extractie";
 
@@ -46,42 +55,111 @@ export interface Lokalisatie {
   paragraaf: string | null;
 }
 
-/**
- * Normaliseert vorm, niet inhoud. Beide kanten van de vergelijking gaan hier
- * doorheen, zodat een verschil in opmaak geen verschil in betekenis wordt.
- */
-export function normaliseerVoorLokalisatie(tekst: string): string {
-  return tekst
-    .normalize("NFKC")
-    .replace(/[\u2018\u2019\u201a\u2032]/g, "'")
-    .replace(/[\u201c\u201d\u201e\u2033]/g, '"')
-    .replace(/[\u2010-\u2015\u2212]/g, "-")
-    .replace(/[\u00a0\u2007\u202f]/g, " ")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleLowerCase("nl");
+/** Typografische varianten die geen betekenisverschil dragen. */
+const TYPOGRAFIE = new Map<string, string>([
+  ["‘", "'"], ["’", "'"], ["‚", "'"], ["′", "'"],
+  ["“", '"'], ["”", '"'], ["„", '"'], ["″", '"'],
+  ["‐", "-"], ["‑", "-"], ["‒", "-"], ["–", "-"],
+  ["—", "-"], ["―", "-"], ["−", "-"],
+]);
+
+/** Witruimte in brede zin: ook harde spaties en stuurtekens. */
+function isWitruimte(teken: string): boolean {
+  return /\s/.test(teken) || /[\u0000-\u001f\u007f\u00a0\u2007\u202f]/.test(teken);
 }
 
-/** Een venster rond de treffer, op woordgrenzen afgekapt. */
-function venster(tekst: string, positie: number, lengte: number): string {
-  if (tekst.length <= MAX_PASSAGE_TEKENS) return tekst.trim();
-  const ruimte = Math.max(0, MAX_PASSAGE_TEKENS - lengte);
-  const start = Math.max(0, positie - Math.floor(ruimte / 2));
-  const eind = Math.min(tekst.length, start + MAX_PASSAGE_TEKENS);
-  const stuk = tekst.slice(start, eind);
-  // Eerste en laatste (mogelijk halve) woord eraf, tenzij we aan de rand zitten.
-  const vanaf = start > 0 ? stuk.indexOf(" ") + 1 : 0;
-  const tot = eind < tekst.length ? stuk.lastIndexOf(" ") : stuk.length;
-  return stuk.slice(vanaf, tot > vanaf ? tot : undefined).trim();
+export interface GenormaliseerdeTekst {
+  /** Waarop wordt vergeleken. */
+  tekst: string;
+  /**
+   * Per UTF-16-eenheid in `tekst` de startpositie in `leesbaar`. Zonder deze
+   * kaart is een positie in de ene tekst betekenisloos in de andere.
+   */
+  naarLeesbaar: number[];
+  /** De NFKC-vorm van de invoer; hieruit wordt de passage geknipt. */
+  leesbaar: string;
+}
+
+/**
+ * Normaliseert vorm, niet inhoud, en houdt bij waar elk teken vandaan komt.
+ *
+ * NFKC gebeurt in één keer over de hele string (combinerende tekens hebben hun
+ * buren nodig); de resterende stappen zijn per teken en daarmee exact te
+ * volgen. Kapitalisatie wordt per teken omgezet — voor een enkel schrift, zoals
+ * Grieks aan woordeinde, wijkt dat theoretisch af van omzetting over de hele
+ * string, maar de uitkomst blijft aan beide kanten van de vergelijking gelijk
+ * omdat naald en hooiberg door dezelfde functie gaan.
+ */
+export function normaliseerMetIndexkaart(bron: string): GenormaliseerdeTekst {
+  const leesbaar = bron.normalize("NFKC");
+  let tekst = "";
+  const naarLeesbaar: number[] = [];
+  let positie = 0;
+  let vorigeWasSpatie = true; // leidende witruimte valt weg (trim)
+
+  for (const teken of leesbaar) {
+    const start = positie;
+    positie += teken.length;
+
+    if (isWitruimte(teken)) {
+      if (vorigeWasSpatie) continue; // samentrekken
+      tekst += " ";
+      naarLeesbaar.push(start);
+      vorigeWasSpatie = true;
+      continue;
+    }
+    vorigeWasSpatie = false;
+
+    const vervangen = TYPOGRAFIE.get(teken) ?? teken;
+    const klein = vervangen.toLocaleLowerCase("nl");
+    tekst += klein;
+    // Eén bronteken kan meerdere eenheden opleveren; ze wijzen alle naar de
+    // plek waar het originele teken begon.
+    for (let i = 0; i < klein.length; i++) naarLeesbaar.push(start);
+  }
+
+  if (tekst.endsWith(" ")) {
+    tekst = tekst.slice(0, -1);
+    naarLeesbaar.pop();
+  }
+  return { tekst, naarLeesbaar, leesbaar };
+}
+
+/**
+ * De vergelijkingsvorm. Eén implementatie, gedeeld met de indexkaart: liepen ze
+ * uiteen, dan zou de naald op een andere manier genormaliseerd zijn dan de
+ * hooiberg en vond de lokalisatie stil niets meer.
+ */
+export function normaliseerVoorLokalisatie(tekst: string): string {
+  return normaliseerMetIndexkaart(tekst).tekst;
+}
+
+/**
+ * Knipt een leesbaar venster rond de treffer, op woordgrenzen.
+ *
+ * `start` en `eind` zijn posities in de LEESBARE tekst — vertaald via de
+ * indexkaart, niet overgenomen uit de genormaliseerde vorm.
+ */
+function venster(leesbaar: string, start: number, eind: number): string {
+  if (leesbaar.length <= MAX_PASSAGE_TEKENS) return leesbaar.trim();
+  const trefferLengte = Math.max(0, eind - start);
+  const ruimte = Math.max(0, MAX_PASSAGE_TEKENS - trefferLengte);
+  const vanaf = Math.max(0, start - Math.floor(ruimte / 2));
+  const tot = Math.min(leesbaar.length, vanaf + MAX_PASSAGE_TEKENS);
+  const stuk = leesbaar.slice(vanaf, tot);
+
+  // Halve woorden aan de randen eraf, maar nooit zo ver dat de treffer zelf
+  // wegvalt: de passage moet bevatten waarop zij is gevonden.
+  const trefferInStuk = start - vanaf;
+  const eersteSpatie = stuk.indexOf(" ");
+  const laatsteSpatie = stuk.lastIndexOf(" ");
+  const knipVoor = vanaf > 0 && eersteSpatie >= 0 && eersteSpatie + 1 <= trefferInStuk ? eersteSpatie + 1 : 0;
+  const knipNa = tot < leesbaar.length && laatsteSpatie > trefferInStuk + trefferLengte ? laatsteSpatie : stuk.length;
+  return stuk.slice(knipVoor, knipNa).trim();
 }
 
 /**
  * Zoekt het extract in de eigen segmenten en eist precies één voorkomen.
- *
- * De posities worden bepaald op de GENORMALISEERDE tekst, maar de passage komt
- * uit de ORIGINELE segmenttekst: wat het model ziet moet leesbaar zijn, niet
- * ontdaan van hoofdletters en leestekens.
  */
 export function lokaliseerExtract(
   segmenten: readonly TekstSegment[],
@@ -94,15 +172,23 @@ export function lokaliseerExtract(
 
   const treffers: Lokalisatie[] = [];
   for (const segment of segmenten) {
-    const genormaliseerd = normaliseerVoorLokalisatie(segment.tekst);
-    if (genormaliseerd.length === 0) continue;
+    const { tekst, naarLeesbaar, leesbaar } = normaliseerMetIndexkaart(segment.tekst);
+    if (tekst.length === 0) continue;
 
     let vanaf = 0;
     for (;;) {
-      const positie = genormaliseerd.indexOf(naald, vanaf);
+      const positie = tekst.indexOf(naald, vanaf);
       if (positie === -1) break;
+
+      // DE VERTAALSLAG. `positie` geldt in `tekst`; de passage komt uit
+      // `leesbaar`, en die twee hebben niet dezelfde lengte.
+      const start = naarLeesbaar[positie] ?? 0;
+      const laatste = naarLeesbaar[positie + naald.length - 1] ?? start;
+      // Het laatste bronteken kan meerdere eenheden beslaan; neem de volgende
+      // grens als einde, of het einde van de tekst.
+      const eind = naarLeesbaar[positie + naald.length] ?? leesbaar.length;
       treffers.push({
-        passage: venster(segment.tekst, positie, naald.length),
+        passage: venster(leesbaar, start, Math.max(eind, laatste + 1)),
         pagina: segment.pagina,
         paragraaf: segment.paragraaf,
       });
