@@ -46,8 +46,6 @@ export interface CopilotAdapterDeps {
   bron: BronSnapshot;
   /** T4-C-injecties: Graph-lezer, register, kandidatenbron, bronherlezing. */
   keten: Pick<KetenOpdracht, "leesItem" | "zoekRegister" | "haalKandidaten" | "herleesBron" | "grenzen">;
-  /** Hoeveel van het beurtbudget de keten mag gebruiken; uit `grendel.resterendMs()`. */
-  resterendMs?: () => number;
   /** Uitsluitend voor tests; productie gebruikt `voerKetenUit` uit T4-C. */
   ketenImpl?: typeof voerKetenUit;
 }
@@ -171,7 +169,27 @@ export function maakCopilotAdapter(deps: CopilotAdapterDeps): RetrievalAdapter {
         };
       }
 
-      const resterend = deps.resterendMs?.();
+      // ── HET BEURTBUDGET, uit DEZELFDE grendel als `ctx.signal` ─────────────
+      // Niet als losse adapterdependency: die kan aan een ándere klok hangen dan
+      // het signaal, en dan bewaken die twee verschillende dingen.
+      const resterend = ctx.resterendMs?.();
+      if (resterend === undefined) {
+        // Fail-closed. Zonder budget is er geen grens om de keten onder te laten
+        // lopen, en terugvallen op haar eigen standaard zou juist de langste
+        // variant kiezen.
+        return {
+          kandidaten: [], methode: "geen", provider: "geen",
+          latencyMs: Date.now() - t0, opgehaald: 0, fout: "configuratiefout",
+        };
+      }
+      if (resterend <= 0) {
+        // Het budget is op: de keten wordt NUL keer aangeroepen.
+        return {
+          kandidaten: [], methode: "geen", provider: "geen",
+          latencyMs: Date.now() - t0, opgehaald: 0, fout: "timeout",
+        };
+      }
+
       const draaiKeten = deps.ketenImpl ?? voerKetenUit;
       const uitkomst = await draaiKeten({
         bron: deps.bron,
@@ -184,8 +202,10 @@ export function maakCopilotAdapter(deps: CopilotAdapterDeps): RetrievalAdapter {
         signal: ctx.signal,
         grenzen: {
           ...(deps.keten.grenzen ?? {}),
-          // Het budget van de BEURT wint van de eigen default van de keten.
-          ...(resterend !== undefined && resterend > 0 ? { deadlineMs: resterend } : {}),
+          // Het budget van de BEURT wint ALTIJD van de eigen default van de
+          // keten. Voorwaardelijk meegeven zou betekenen dat juist een uitgeput
+          // budget de langste deadline activeert.
+          deadlineMs: resterend,
         },
       });
 

@@ -60,6 +60,19 @@ export interface RetrievalContext {
   verzoekStartOp: string;
   /** T2-1/PR-B: de samengestelde afbraak- én deadlinegrendel over de hele keten. */
   signal?: AbortSignal;
+  /**
+   * #426 — wat er van het BEURTbudget over is, in milliseconden.
+   *
+   * Gezet door de orkestratie, naast `signal`, uit dezelfde grendel. Een
+   * deelketen met een eigen, kortere klok (de Copilot-keten van T4-C) leest hem
+   * hier en nergens anders: zou hij als losse adapterdependency worden
+   * meegegeven, dan kan hij aan een ándere klok hangen dan het signaal, en dan
+   * bewaken die twee verschillende dingen.
+   *
+   * Een adapter die hem nodig heeft en niet aantreft, hoort fail-closed te
+   * stoppen — niet terug te vallen op een eigen standaard.
+   */
+  resterendMs?: () => number;
 }
 
 /**
@@ -272,6 +285,23 @@ export interface Bronstatus {
   bronsoort: Bronsoort;
   geraadpleegd: boolean;
   reden: Bronstatusreden;
+}
+
+/**
+ * #426 — een GEVRAAGDE bron kon niet worden geraadpleegd, en het beleid van die
+ * adaptergroep is `"stop"`.
+ *
+ * Dit is een EIGEN fout en geen afbreking: `isAfbreking()` mag hem niet
+ * herkennen, want dan zou een fail-closed bronfout als annulering eindigen. De
+ * boodschap is inhoudsvrij; wat de route mag tonen staat in `bronstatus`.
+ */
+export class BronNietGeraadpleegd extends Error {
+  readonly bronstatus: Bronstatus[];
+  constructor(bronstatus: Bronstatus[]) {
+    super("retrieval: een gevraagde bron kon niet worden geraadpleegd");
+    this.name = "BronNietGeraadpleegd";
+    this.bronstatus = bronstatus;
+  }
 }
 
 export type RetrievalFoutcategorie =

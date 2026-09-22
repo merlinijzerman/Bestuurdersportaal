@@ -30,6 +30,7 @@ import {
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type { Afbreekgrendel } from "./afbreken";
 import { maakDocumentIdentiteit } from "./identiteit";
+import { BronNietGeraadpleegd } from "./contract";
 import type {
   AdapterCapabilities,
   AdapterUitkomst,
@@ -330,7 +331,9 @@ export async function voerRetrievalUit(
 
   const eigenGrendel = geleendeGrendel === undefined;
   const grendel = geleendeGrendel ?? maakAfbreekgrendel(ctx.signal, opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS);
-  const ctxMetGrendel = { ...ctx, signal: grendel.signal };
+  // `resterendMs` komt uit DEZELFDE grendel als `signal`. Twee klokken die
+  // onafhankelijk worden meegegeven, bewaken vroeg of laat verschillende dingen.
+  const ctxMetGrendel = { ...ctx, signal: grendel.signal, resterendMs: () => grendel.resterendMs() };
 
   const vandaagVoorDezeBeurt = effectievePeildatum(undefined);
   const peildatumVanSpoor = (q: RetrievalQuery) => q.filters?.peildatum ?? vandaagVoorDezeBeurt;
@@ -448,6 +451,17 @@ export async function voerRetrievalUit(
       ...(geweigerdPerSpoor[i] > 0 ? { geweigerd: geweigerdPerSpoor[i] } : {}),
     }));
 
+    // ── 5b. FAIL-CLOSED bij een bron die niet kon worden geraadpleegd ───────
+    //    Dit staat VÓÓR begrenzing, selectie en citaatvorming. Zou het erna
+    //    staan, dan is er al een antwoord gebouwd uit de overgebleven bronnen en
+    //    is "stoppen" niet meer dan een melding achteraf — precies de stille
+    //    fallback die dit ticket verbiedt.
+    const bronstatus = bouwBronstatus(uitkomsten, perAdapter, spoorNaarGroep, groepen);
+    const moetStoppen = uitkomsten.some(
+      (u, i) => isBronfout(u.fout) && stoptBijFout(beleidPerGroep[spoorNaarGroep[i]], groepen.length)
+    );
+    if (moetStoppen) throw new BronNietGeraadpleegd(bronstatus);
+
     // ── 6. Harde grens op de KANDIDATENPOOL ─────────────────────────────────
     let truncatie: RetrievalTussenresultaat["truncatie"];
     const begrensd = toegelatenPerSpoor.map((toegelaten, i) => {
@@ -516,8 +530,6 @@ export async function voerRetrievalUit(
     };
     const meta = bouwRetrievalMeta(geselecteerd, metaBasis, primairVanMet(herkomst, metaBasis));
 
-    const bronstatus = bouwBronstatus(uitkomsten, perAdapter, spoorNaarGroep, groepen, beleidPerGroep);
-
     return {
       kandidaten: begrensd.flat(),
       geselecteerd,
@@ -548,14 +560,16 @@ export async function voerRetrievalUit(
  * `sporen.length === 0`-grendel, die ook een geval afvangt dat het type al
  * verbiedt. En mocht deze functie ooit worden omzeild, dan wint `"stop"`.
  */
+type Bronfoutbeleid = "stop" | "meld" | "onbepaald";
+
 function bepaalBronfoutbeleid(
   sporen: Queries<Spoor>,
   spoorNaarGroep: readonly number[]
-): ("stop" | "meld")[] {
-  const beleid: ("stop" | "meld")[] = [];
+): Bronfoutbeleid[] {
+  const beleid: Bronfoutbeleid[] = [];
   for (let i = 0; i < sporen.length; i++) {
     const groep = spoorNaarGroep[i];
-    const stand = sporen[i].bijBronfout ?? "stop";
+    const stand: Bronfoutbeleid = sporen[i].bijBronfout ?? "onbepaald";
     if (beleid[groep] === undefined) beleid[groep] = stand;
     else if (beleid[groep] !== stand) {
       throw new Error(
@@ -563,7 +577,33 @@ function bepaalBronfoutbeleid(
       );
     }
   }
-  return beleid.map((b) => (b === "meld" ? "meld" : "stop"));
+  return beleid.map((b) => b ?? "onbepaald");
+}
+
+/**
+ * Stopt een bronfout de hele beurt?
+ *
+ * `"stop"` en `"meld"` zijn expliciete keuzes van de aanroeper en gelden altijd.
+ * Bij `"onbepaald"` — het veld is niet gezet — hangt het af van het aantal
+ * adaptergroepen, en dat is geen slordigheid maar het oplossen van een botsing
+ * tussen twee eisen van #426:
+ *
+ *   • "geen stille degradatie naar een volledig ogend antwoord uit alleen de
+ *     overige bronnen";
+ *   • "bestaand pad byte-identiek zolang geen tweede adapter actief is".
+ *
+ * Met ÉÉN adaptergroep bestaan er geen "overige bronnen": een mislukte bron
+ * levert dan een lege uitslag die zijn `fout` meedraagt — geen terugval, en
+ * precies het bestaande gedrag dat de byte-identiteitseis beschermt. Pas met een
+ * TWEEDE groep ontstaat het gevaar dat het ticket beschrijft, en daar valt
+ * `"onbepaald"` dus fail-closed uit.
+ *
+ * Wie ook bij één bron hard wil stoppen, zet `bijBronfout: "stop"` expliciet.
+ */
+function stoptBijFout(beleid: Bronfoutbeleid, aantalGroepen: number): boolean {
+  if (beleid === "meld") return false;
+  if (beleid === "stop") return true;
+  return aantalGroepen > 1;
 }
 
 /** Leest primair van de INSTANTIE zodra er een herkomststaat is; anders van de ref. */
@@ -585,8 +625,7 @@ function bouwBronstatus(
   uitkomsten: readonly AdapterUitkomst[],
   perAdapter: RetrievalTussenresultaat["perAdapter"],
   spoorNaarGroep: readonly number[],
-  groepen: readonly RetrievalAdapter[],
-  beleidPerGroep: readonly ("stop" | "meld")[]
+  groepen: readonly RetrievalAdapter[]
 ): Bronstatus[] {
   const status: Bronstatus[] = [];
   const gezien = new Set<number>();
@@ -602,13 +641,22 @@ function bouwBronstatus(
       geraadpleegd: uitkomsten[i].provider !== "geen",
       reden: redenVanFout(fout),
     });
-    // `"stop"` betekent dat de beurt hier fail-closed hoort te stoppen. Die
-    // beslissing hoort bij de aanroeper (T4-E-orkestratielaag boven deze fase);
-    // wat hier gebeurt is dat de status ZICHTBAAR wordt gemaakt, zodat een
-    // kleinere bronset nooit stil als volledig kan worden gepresenteerd.
-    void beleidPerGroep[groep];
   }
   return status;
+}
+
+/**
+ * Is dit een fout die betekent dat de BRON niet kon worden geraadpleegd?
+ *
+ * `geen_resultaten` hoort er niet bij: dat is een geldige, volledige uitslag —
+ * de bron is geraadpleegd en had niets. Zou die wel meetellen, dan zou een lege
+ * bibliotheek de hele beurt afbreken.
+ *
+ * `buiten_scope` evenmin: die ontstaat doordat de SERVER kandidaten weigerde,
+ * niet doordat de bron onbereikbaar was. De weigering staat al in `toelating`.
+ */
+function isBronfout(fout: RetrievalFoutcategorie | undefined): boolean {
+  return fout !== undefined && fout !== "geen_resultaten" && fout !== "buiten_scope";
 }
 
 function redenVanFout(fout: RetrievalFoutcategorie): Bronstatusreden {

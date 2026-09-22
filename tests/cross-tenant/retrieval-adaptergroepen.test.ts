@@ -253,11 +253,14 @@ test("de filtercontrole gebruikt de EFFECTIEVE adapter van elk spoor", async () 
     timeout: true,
   });
 
+  // `bijBronfout: "meld"` op het falende spoor, anders stopt de beurt fail-closed
+  // — wat zij bij twee groepen ook hoort te doen. Wat deze test meet is dat de
+  // filtercontrole de JUISTE capabilities gebruikt, niet wat er daarna gebeurt.
   const uit = await voerRetrievalUit(CTX, {
     adapter: a,
     sporen: [
-      { query: QUERY("primair", { filters: { peildatum: "2026-01-01" } }), grenzen: GRENZEN, adapter: a },
-      { query: QUERY("aanvullend", { filters: { peildatum: "2026-01-01" } }), grenzen: GRENZEN, adapter: b },
+      { query: QUERY("primair", { filters: { peildatum: "2026-01-01" } }), grenzen: GRENZEN, adapter: a, bijBronfout: "meld" },
+      { query: QUERY("aanvullend", { filters: { peildatum: "2026-01-01" } }), grenzen: GRENZEN, adapter: b, bijBronfout: "meld" },
     ],
   });
   uit.grendel?.stop();
@@ -471,7 +474,10 @@ test("gemengde bijBronfout binnen één adaptergroep werpt VÓÓR elke aanroep",
   assert.equal(zoekaanroepen, 0, "er is bevraagd ondanks een tegenstrijdige configuratie");
 });
 
-test("een providerfout levert een zichtbare bronstatus op", async () => {
+test("bij ÉÉN adaptergroep levert een providerfout een zichtbare bronstatus op", async () => {
+  // Eén bron: er zijn geen "overige bronnen" om stil naar terug te vallen, dus
+  // een lege uitslag mét `fout` en `bronstatus` is het bestaande — en veilige —
+  // gedrag. Met twee groepen ligt dat anders; zie de vijandige test hieronder.
   const a = stub({ namespace: "ns-a", perQuery: { primair: [] }, fout: "providerfout" });
   const uit = await voerVolledigeRetrievalUit(
     CTX,
@@ -484,4 +490,107 @@ test("een providerfout levert een zichtbare bronstatus op", async () => {
   assert.equal(uit.bronstatus[0].geraadpleegd, true);
   // Inhoudsvrij: geen providerteksten, geen identifiers.
   assert.deepEqual(Object.keys(uit.bronstatus[0]).sort(), ["adapter", "bronsoort", "geraadpleegd", "reden"]);
+});
+
+// ── 6. Fail-closed: geen stille terugval op de overgebleven bronnen ────────
+
+test("VIJANDIG: één geslaagde adapter en één met providerfout levert GEEN resultaat", async () => {
+  // Dit is de verboden stille fallback: adapter A werkt, adapter B faalt, en het
+  // antwoord zou er compleet uitzien terwijl een gevraagde bron ontbreekt.
+  // Zonder expliciet beleid, met twee adaptergroepen, moet de beurt stoppen.
+  const goed = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const stuk = stub({ namespace: "ns-b", perQuery: { aanvullend: [] }, fout: "providerfout" });
+
+  await assert.rejects(
+    voerVolledigeRetrievalUit(
+      CTX,
+      {
+        adapter: goed,
+        sporen: [
+          { query: QUERY("primair"), grenzen: GRENZEN, adapter: goed },
+          { query: QUERY("aanvullend"), grenzen: GRENZEN, adapter: stuk },
+        ],
+      },
+      CITAAT,
+    ),
+    (e: unknown) => {
+      assert.ok(e instanceof Error && e.name === "BronNietGeraadpleegd", `onverwachte fout: ${String(e)}`);
+      // De fout draagt de INHOUDSVRIJE status mee, zodat de route kan tonen
+      // wélke bron ontbrak zonder een providerboodschap te lekken.
+      const status = (e as { bronstatus?: unknown }).bronstatus as { reden: string }[];
+      assert.ok(Array.isArray(status) && status.length === 1);
+      assert.equal(status[0].reden, "providerfout");
+      return true;
+    },
+  );
+});
+
+test("readiness-, configuratie- en toestemmingsfouten stoppen de beurt evengoed", async () => {
+  const goed = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  for (const [fout, reden] of [
+    ["configuratiefout", "readiness_ontbreekt"],
+    ["toestemming_geweigerd", "token_ongeldig"],
+    ["timeout", "timeout"],
+    ["rate_limit", "providerfout"],
+  ] as const) {
+    const stuk = stub({ namespace: "ns-b", perQuery: { aanvullend: [] }, fout });
+    await assert.rejects(
+      voerVolledigeRetrievalUit(
+        CTX,
+        {
+          adapter: goed,
+          sporen: [
+            { query: QUERY("primair"), grenzen: GRENZEN, adapter: goed },
+            { query: QUERY("aanvullend"), grenzen: GRENZEN, adapter: stuk },
+          ],
+        },
+        CITAAT,
+      ),
+      (e: unknown) => {
+        assert.equal((e as Error).name, "BronNietGeraadpleegd", fout);
+        const status = (e as { bronstatus?: { reden: string }[] }).bronstatus ?? [];
+        assert.equal(status[0]?.reden, reden, fout);
+        return true;
+      },
+      `${fout} stopte de beurt niet`,
+    );
+  }
+});
+
+test("`geen_resultaten` is GEEN bronfout en stopt dus niets", async () => {
+  // De bron is geraadpleegd en had niets. Zou dat de beurt afbreken, dan zou een
+  // lege bibliotheek het hele antwoord onmogelijk maken.
+  const goed = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const leeg = stub({ namespace: "ns-b", perQuery: { aanvullend: [] }, fout: "geen_resultaten" });
+  const uit = await voerVolledigeRetrievalUit(
+    CTX,
+    {
+      adapter: goed,
+      sporen: [
+        { query: QUERY("primair"), grenzen: GRENZEN, adapter: goed },
+        { query: QUERY("aanvullend"), grenzen: GRENZEN, adapter: leeg },
+      ],
+    },
+    CITAAT,
+  );
+  assert.ok(uit.geselecteerd.length >= 1);
+});
+
+test("`meld` gaat door, maar UITSLUITEND met een zichtbare bronstatus", async () => {
+  const goed = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const stuk = stub({ namespace: "ns-b", perQuery: { aanvullend: [] }, fout: "providerfout" });
+  const uit = await voerVolledigeRetrievalUit(
+    CTX,
+    {
+      adapter: goed,
+      sporen: [
+        { query: QUERY("primair"), grenzen: GRENZEN, adapter: goed, bijBronfout: "meld" },
+        { query: QUERY("aanvullend"), grenzen: GRENZEN, adapter: stuk, bijBronfout: "meld" },
+      ],
+    },
+    CITAAT,
+  );
+  assert.ok(uit.geselecteerd.length >= 1);
+  assert.ok(uit.bronstatus && uit.bronstatus.length === 1, "`meld` zonder bronstatus is stille degradatie");
+  assert.equal(uit.bronstatus[0].reden, "providerfout");
 });

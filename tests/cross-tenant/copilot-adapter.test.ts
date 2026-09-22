@@ -25,6 +25,8 @@ const CTX: RetrievalContext = {
   bronbeleid: { bronsoorten: ["sharepoint"] },
   correlationId: "corr-1",
   verzoekStartOp: new Date().toISOString(),
+  // De orkestratie zet dit naast `signal`, uit dezelfde grendel.
+  resterendMs: () => 12_000,
 };
 
 const QUERY: RetrievalQuery = {
@@ -245,4 +247,67 @@ test("een afgekapte keten is zichtbaar als truncatie, niet als volledige uitslag
   });
   const uit = await adapter.zoek(CTX, QUERY);
   assert.deepEqual(uit.truncatie, { reden: "tijd" });
+});
+
+// ── Het beurtbudget ────────────────────────────────────────────────────────
+
+test("een OPGEBRUIKT beurtbudget roept de keten NUL keer aan", async () => {
+  // De valkuil die dit afdekt: budget alleen doorgeven "als het positief is".
+  // Dan vertrekt de keten bij nul juist met haar eigen standaard van vijftien
+  // seconden — uitgerekend het uitgeputte geval krijgt dan de langste deadline.
+  const t = tellers();
+  let ketenAanroepen = 0;
+  const adapter = maakCopilotAdapter({
+    ...maakDeps("gereed", t),
+    ketenImpl: async () => {
+      ketenAanroepen += 1;
+      throw new Error("de keten had niet mogen vertrekken");
+    },
+  });
+  for (const budget of [0, -5]) {
+    const uit = await adapter.zoek({ ...CTX, resterendMs: () => budget }, QUERY);
+    assert.equal(ketenAanroepen, 0, `budget ${budget}: de keten is toch gestart`);
+    assert.equal(uit.fout, "timeout", `budget ${budget}`);
+    assert.deepEqual(uit.kandidaten, []);
+  }
+});
+
+test("het RESTERENDE budget wordt als ketendeadline doorgegeven", async () => {
+  let gezien: number | undefined;
+  const adapter = maakCopilotAdapter({
+    ...maakDeps("gereed", tellers()),
+    ketenImpl: async (opdracht) => {
+      gezien = opdracht.grenzen?.deadlineMs;
+      return {
+        ok: true as const,
+        treffers: [],
+        telling: {
+          hits: 0, hitsBuitenGrens: 0, hitsAfgewezen: 0, hitsGegroepeerd: 0,
+          documenten: 0, documentenAfgewezen: 0,
+          afwijzingen: {
+            root: 0, mapping: 0, binding: 0, rechten_configuratie: 0, versie: 0,
+            download: 0, extractie: 0, lokalisatie: 0, grens: 0,
+          },
+          gedownloadeBytes: 0, geextraheerdeTekens: 0, deadlineVerlopen: false,
+        },
+      };
+    },
+  });
+  await adapter.zoek({ ...CTX, resterendMs: () => 3_500 }, QUERY);
+  assert.equal(gezien, 3_500, "de keten kreeg niet het resterende beurtbudget");
+});
+
+test("ZONDER budget in de context stopt de adapter fail-closed", async () => {
+  let ketenAanroepen = 0;
+  const adapter = maakCopilotAdapter({
+    ...maakDeps("gereed", tellers()),
+    ketenImpl: async () => {
+      ketenAanroepen += 1;
+      throw new Error("onbereikbaar");
+    },
+  });
+  const { resterendMs: _weg, ...zonderBudget } = CTX;
+  const uit = await adapter.zoek(zonderBudget, QUERY);
+  assert.equal(ketenAanroepen, 0);
+  assert.equal(uit.fout, "configuratiefout");
 });
