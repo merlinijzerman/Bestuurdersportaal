@@ -17,7 +17,7 @@
 //  orkestratie doet dat hier bewust net zo: selectie per query, dan samenvoegen.
 // ============================================================================
 import { effectievePeildatum } from "../rag";
-import type { RetrievalMeta } from "../rag";
+import type { AdapterMeta, AdapterTellers, RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
@@ -31,6 +31,7 @@ import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEF
 import type { Afbreekgrendel } from "./afbreken";
 import { maakDocumentIdentiteit } from "./identiteit";
 import { BronNietGeraadpleegd } from "./contract";
+import { valideerAdapterMeta } from "./adaptermeta";
 import type {
   AdapterCapabilities,
   AdapterUitkomst,
@@ -250,7 +251,9 @@ function bouwRetrievalMeta(
    * staat leest hij de herkomst van de INSTANTIE, want een `ref` uit groep B die
    * gelijk is aan een primaire `ref` uit groep A zou anders als primair tellen.
    */
-  primairVan?: (bron: Bronresultaat) => boolean
+  primairVan?: (bron: Bronresultaat) => boolean,
+  /** #434 — welke adaptergroep een opgenomen bron had; alleen bij >1 groep. */
+  groepVan?: (bron: Bronresultaat) => number
 ): RetrievalMeta {
   const isPrimair = primairVan ?? ((b: Bronresultaat) => basis.primaireRefs.has(b.ref));
   const primair = opgenomen.filter(isPrimair);
@@ -279,6 +282,9 @@ function bouwRetrievalMeta(
     bronversie_audit: volledigeBronmeta.bronversie_audit,
     opgehaald: basis.opgehaald,
     geselecteerd: opgenomen.length,
+    ...(basis.adaptersBasis && groepVan
+      ? { adapters: hertelOpgenomen(basis.adaptersBasis, opgenomen, groepVan) }
+      : {}),
     ...(basis.meerdereSporen
       ? {
           aanvullend: {
@@ -532,6 +538,17 @@ export async function voerRetrievalUit(
       });
     }
 
+    // #434 — alleen bij meer dan één adaptergroep; met één groep ontstaat de
+    // sleutel niet en blijft het bestaande pad byte-identiek.
+    const adaptersBasis = bouwAdapterMeta(
+      geselecteerd,
+      uitkomsten,
+      perAdapter,
+      spoorNaarGroep,
+      groepen,
+      groepVanMet(herkomst)
+    );
+
     const metaBasis = {
       methode: uitkomsten[0].methode as RetrievalMeta["methode"],
       opgehaald: uitkomsten.reduce((s, u) => s + u.opgehaald, 0),
@@ -540,8 +557,14 @@ export async function voerRetrievalUit(
       primaireRefs: new Set(primair.map((b) => b.ref)),
       meerdereSporen: uitkomsten.length > 1,
       correlationId: ctx.correlationId,
+      ...(adaptersBasis ? { adaptersBasis } : {}),
     };
-    const meta = bouwRetrievalMeta(geselecteerd, metaBasis, primairVanMet(herkomst, metaBasis));
+    const meta = bouwRetrievalMeta(
+      geselecteerd,
+      metaBasis,
+      primairVanMet(herkomst, metaBasis),
+      adaptersBasis ? groepVanMet(herkomst) : undefined
+    );
 
     return {
       kandidaten: begrensd.flat(),
@@ -617,6 +640,109 @@ function stoptBijFout(beleid: Bronfoutbeleid, aantalGroepen: number): boolean {
   if (beleid === "meld") return false;
   if (beleid === "stop") return true;
   return aantalGroepen > 1;
+}
+
+/**
+ * Herberekent UITSLUITEND de selectiegebonden velden over de werkelijk
+ * opgenomen bronnen. De beurtbrede tellers liggen na fase 1 vast en worden
+ * ongewijzigd doorgegeven — een netwerkpoging die is gedaan, is gedaan.
+ *
+ * Deze functie draait ook in `citeer()`, ná de contextafkapping. Zou zij daar
+ * niet draaien, dan telt het auditspoor passages mee die nooit naar het model
+ * zijn gegaan.
+ */
+function hertelOpgenomen(
+  basis: readonly AdapterMeta[],
+  opgenomen: readonly Bronresultaat[],
+  groepVan: (bron: Bronresultaat) => number
+): AdapterMeta[] {
+  const rijen = basis.map((rij, groep) => {
+    const vanGroep = opgenomen.filter((b) => groepVan(b) === groep);
+    return {
+      ...rij,
+      opgenomen_passages: vanGroep.length,
+      opgenomen_documenten: new Set(vanGroep.map((b) => b.documentIdentiteit.id)).size,
+    };
+  });
+  // Opnieuw fail-closed: de herberekening is een plek waar een teller kan
+  // ontsporen, en een ongeldige vorm mag ook hier geen antwoord opleveren.
+  valideerAdapterMeta(rijen);
+  return rijen;
+}
+
+/**
+ * #434 T4-F — per-adapterdiagnostiek over EXACT de meegegeven bronnen.
+ *
+ * ALLEEN BIJ MEER DAN ÉÉN ADAPTERGROEP. Met één groep ontstaat de sleutel niet,
+ * en blijft het bestaande pad byte-identiek — dat is de DoD-eis van #434 en
+ * tegelijk de reden dat de fail-closed validatie de single-adapterroute niet
+ * raakt: wat niet wordt geconstrueerd, wordt niet gevalideerd.
+ *
+ * Twee soorten tellers, en het onderscheid is niet cosmetisch. De beurtbrede
+ * komen uit de adapter en veranderen niet door de citaatafkapping: een
+ * netwerkpoging die is gedaan, is gedaan. De selectiegebonden worden geteld
+ * over `opgenomen` — en deze functie draait tweemaal, in fase 1 en opnieuw in
+ * `citeer()` ná de afkapping, precies zoals `meta.geselecteerd` dat al doet.
+ * Kwamen zij uit de eerste berekening, dan noemt het auditspoor passages die
+ * nooit naar het model zijn gegaan.
+ */
+function bouwAdapterMeta(
+  opgenomen: readonly Bronresultaat[],
+  uitkomsten: readonly AdapterUitkomst[],
+  perAdapter: RetrievalTussenresultaat["perAdapter"],
+  spoorNaarGroep: readonly number[],
+  groepen: readonly RetrievalAdapter[],
+  groepVan: (bron: Bronresultaat) => number
+): AdapterMeta[] | undefined {
+  if (groepen.length <= 1) return undefined;
+
+  const leeg = (): AdapterTellers => ({});
+  const rijen: AdapterMeta[] = groepen.map((adapter, groep) => {
+    const sporen = spoorNaarGroep
+      .map((g, i) => (g === groep ? i : -1))
+      .filter((i) => i >= 0);
+    const som = (lees: (t: AdapterTellers) => number | undefined) =>
+      sporen.reduce((t, i) => t + (lees(uitkomsten[i].tellers ?? leeg()) ?? 0), 0);
+
+    const naPoort = sporen.reduce((t, i) => t + perAdapter[i].kandidaten, 0);
+    const geraadpleegd = sporen.some((i) => uitkomsten[i].provider !== "geen");
+    const opgenomenVanGroep = opgenomen.filter((b) => groepVan(b) === groep);
+
+    return {
+      naam: adapter.naam,
+      methode: uitkomsten[sporen[0]]?.methode ?? "geen",
+      resultaat: !geraadpleegd ? "niet_geraadpleegd" : naPoort === 0 ? "leeg" : "treffers",
+      netwerkpogingen: som((t) => t.netwerkpogingen),
+      latency_ms: sporen.reduce((t, i) => t + perAdapter[i].latencyMs, 0),
+      downloads: som((t) => t.downloads),
+      bytes: som((t) => t.bytes),
+      throttles: som((t) => t.throttles),
+      retries: som((t) => t.retries),
+      kandidaten_voor_poort: sporen.reduce((t, i) => t + uitkomsten[i].opgehaald, 0),
+      kandidaten_na_poort: naPoort,
+      afwijzing_root: som((t) => t.afwijzing_root),
+      afwijzing_mapping: som((t) => t.afwijzing_mapping),
+      afwijzing_binding: som((t) => t.afwijzing_binding),
+      afwijzing_rechten: som((t) => t.afwijzing_rechten),
+      afwijzing_versie: som((t) => t.afwijzing_versie),
+      afwijzing_download: som((t) => t.afwijzing_download),
+      afwijzing_extractie: som((t) => t.afwijzing_extractie),
+      afwijzing_lokalisatie: som((t) => t.afwijzing_lokalisatie),
+      afwijzing_grens: som((t) => t.afwijzing_grens),
+      opgenomen_passages: opgenomenVanGroep.length,
+      opgenomen_documenten: new Set(opgenomenVanGroep.map((b) => b.documentIdentiteit.id)).size,
+    };
+  });
+
+  // FAIL-CLOSED, vóór de auditlaag. Werpt bij de eerste afwijking; de beurt
+  // levert dan geen antwoord en geen citaten.
+  valideerAdapterMeta(rijen);
+  return rijen;
+}
+
+/** #434 — de adaptergroep van een INSTANTIE; zonder staat is er maar één groep. */
+function groepVanMet(herkomst: HerkomstStaat | undefined): (bron: Bronresultaat) => number {
+  return (bron) => herkomst?.kaart.get(bron)?.groep ?? 0;
 }
 
 /** Leest primair van de INSTANTIE zodra er een herkomststaat is; anders van de ref. */
@@ -780,7 +906,12 @@ export async function citeer(
     return {
       ...tussenData,
       geselecteerd: c.opgenomen,
-      meta: bouwRetrievalMeta(c.opgenomen, tussen.metaBasis, primairVan),
+      meta: bouwRetrievalMeta(
+        c.opgenomen,
+        tussen.metaBasis,
+        primairVan,
+        tussen.metaBasis.adaptersBasis ? groepVanMet(herkomst) : undefined
+      ),
       bronverwijzingen: c.bronnen,
       contextTekst: c.contextTekst,
       sentinel: c.sentinel,

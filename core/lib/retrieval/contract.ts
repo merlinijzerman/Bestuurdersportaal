@@ -12,7 +12,7 @@
 //  Wat hier NOOIT in mag: providertokens, endpoints, ruwe Graph-/Search-
 //  responses of database-implementatiedetails.
 // ============================================================================
-import type { RetrievalFilters, RetrievalMeta, BronVerwijzing } from "../rag";
+import type { AdapterTellers, RetrievalFilters, RetrievalMeta, BronVerwijzing } from "../rag";
 import type { Actor, Taaktype } from "../ai-gateway/contract";
 import type { RetrievalModus } from "../vraagtype";
 
@@ -371,6 +371,15 @@ export interface AdapterUitkomst {
   diagnostiek?: Partial<RetrievalMeta>;
   /** Aantal kandidaten vóór selectie — voedt `RetrievalMeta.opgehaald`. */
   opgehaald: number;
+  /**
+   * #434 — gesloten, inhoudsvrije providertellers voor `meta.adapters`.
+   *
+   * Wat de adapter zelf heeft gedaan en de orkestratie niet kan weten:
+   * netwerkpogingen, downloads, bytes, throttles, retries en afwijzingen per
+   * grond. Uitsluitend getallen; de orkestratie vult de rest aan en valideert
+   * het geheel fail-closed.
+   */
+  tellers?: AdapterTellers;
 }
 
 /**
@@ -435,6 +444,13 @@ export interface RetrievalTussenresultaat {
     diagnostiek: Partial<RetrievalMeta>;
     extra: Partial<RetrievalMeta>;
     primaireRefs: ReadonlySet<string>;
+    /**
+     * #434 — de BEURTBREDE adapterdiagnostiek, vastgesteld in fase 1. Alleen
+     * aanwezig bij meer dan één adaptergroep, zodat het bestaande pad
+     * byte-identiek blijft. De selectiegebonden velden erin worden bij elke
+     * herbouw opnieuw berekend; zie `hertelOpgenomen()`.
+     */
+    adaptersBasis?: import("../rag").AdapterMeta[];
     meerdereSporen: boolean;
     correlationId: string;
   };

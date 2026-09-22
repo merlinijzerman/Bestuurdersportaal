@@ -151,6 +151,15 @@
         "document_chunks"
       ]
     },
+    "core/lib/retrieval/adaptermeta.ts": {
+      "modules": {
+        "rag": [
+          "AdapterMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
     "core/lib/retrieval/citatie.ts": {
       "modules": {
         "bron-afbakening": [
@@ -170,6 +179,7 @@
     "core/lib/retrieval/contract.ts": {
       "modules": {
         "rag": [
+          "AdapterTellers",
           "BronVerwijzing",
           "RetrievalFilters",
           "RetrievalMeta"
@@ -199,6 +209,8 @@
     "core/lib/retrieval/orkestratie.ts": {
       "modules": {
         "rag": [
+          "AdapterMeta",
+          "AdapterTellers",
           "RetrievalMeta",
           "effectievePeildatum"
         ]

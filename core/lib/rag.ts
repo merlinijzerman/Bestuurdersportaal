@@ -577,7 +577,73 @@ export interface DocumentChunk {
 // Diagnostiek per retrieval: wat is opgehaald en wat is uiteindelijk
 // geselecteerd voor de prompt. Wordt insert-only weggeschreven in
 // governance_log.retrieval_meta — geen wijziging aan append-only-garanties.
+/**
+ * #434 T4-F — per-adapterdiagnostiek, per beurt. GESLOTEN en PLAT.
+ *
+ * De gesloten veldverzameling, de enums en de fail-closed validator staan in
+ * `core/lib/retrieval/adaptermeta.ts`; een sanity-test houdt die lijst en dit
+ * type gelijk. Inhoudsvrij: geen URL, ref, pad, bestandsnaam, identifier,
+ * tokenclaim, providerfouttekst of fragment — ook niet gehasht.
+ */
+export interface AdapterMeta {
+  naam: "supabase-rag" | "microsoft-sharepoint";
+  methode: string;
+  resultaat: "treffers" | "leeg" | "niet_geraadpleegd";
+  // Beurtbreed — onafhankelijk van de citaatafkapping.
+  netwerkpogingen: number;
+  latency_ms: number;
+  downloads: number;
+  bytes: number;
+  throttles: number;
+  retries: number;
+  kandidaten_voor_poort: number;
+  kandidaten_na_poort: number;
+  afwijzing_root: number;
+  afwijzing_mapping: number;
+  afwijzing_binding: number;
+  afwijzing_rechten: number;
+  afwijzing_versie: number;
+  afwijzing_download: number;
+  afwijzing_extractie: number;
+  afwijzing_lokalisatie: number;
+  afwijzing_grens: number;
+  // Selectiegebonden — ná de contextafkapping opnieuw berekend over uitsluitend
+  // de werkelijk opgenomen bronnen.
+  opgenomen_passages: number;
+  opgenomen_documenten: number;
+}
+
+/**
+ * #434 — wat een ADAPTER aan `AdapterMeta` mag bijdragen.
+ *
+ * Bewust een gesloten deelverzameling en geen `Partial<AdapterMeta>`: een
+ * adapter mag tellen wat hij zelf heeft gedaan (netwerk, downloads, afwijzingen),
+ * maar niet zijn eigen naam, methode, resultaatcategorie of de selectiegebonden
+ * velden zetten — die stelt de orkestratie vast.
+ */
+export type AdapterTellers = Partial<
+  Pick<
+    AdapterMeta,
+    | "netwerkpogingen"
+    | "downloads"
+    | "bytes"
+    | "throttles"
+    | "retries"
+    | "afwijzing_root"
+    | "afwijzing_mapping"
+    | "afwijzing_binding"
+    | "afwijzing_rechten"
+    | "afwijzing_versie"
+    | "afwijzing_download"
+    | "afwijzing_extractie"
+    | "afwijzing_lokalisatie"
+    | "afwijzing_grens"
+  >
+>;
+
 export interface RetrievalMeta {
+  /** #434 — per-adapterdiagnostiek. Alleen aanwezig als er iets te melden is. */
+  adapters?: AdapterMeta[];
   /** Eén id voor adapter → poort → selectie → citatie → gateway → governance. */
   correlation_id?: string;
   /**
