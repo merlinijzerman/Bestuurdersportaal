@@ -1,6 +1,16 @@
 # T4-F planreview — beheer, status en duurzame auditprojectie (#434)
 
-**Status:** ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 2, ter beoordeling. Geen productiecode geschreven.
+
+**Wijzigingen t.o.v. versie 1:** het voorstel om de migratie te laten vertrekken vanuit
+`pg_get_functiondef()` is **ingetrokken** — dat maakt de inhoud van een migratiebestand
+afhankelijk van de omgeving waarin zij draait (B-2, §7.1). De functie krijgt één canonieke
+definitie in het bestand; `pg_get_functiondef()` is nu uitsluitend een fail-closed preflight op
+een genormaliseerde hash, met een inhoudsvrije foutcategorie (§7.2). Verder: het bewijs ná de
+migratie op een ephemere database met vier expliciete controles (§7.3), de CI-gate die de
+werkelijk geïnstalleerde functie aanroept in plaats van bestandstekst te vergelijken (§7.4), de
+eis dat `adapters` een gesloten array van platte records is met validatie vóór de auditlaag
+(§4), en de vastlegging dat T4-F aggregeert per adapter en foutgrond — niet per bron (B-4).
 **Vertakt van:** `origin/preview` `0e7b392` (de mergecommit van #432 / T4-E).
 **Datum:** 2026-09-22.
 
@@ -116,13 +126,19 @@ Vijf keer is de hele lijst overgetypt om er één sleutel aan toe te voegen. Dat
 schoonheidsfout: elke kopie is een gelegenheid om een sleutel te laten vallen, en niets in de
 repo of de CI merkt dat op. **En welke definitie op Preview en Productie werkelijk actief is, is
 uit de repo niet af te leiden** — er is geen migratierunner en migraties worden handmatig
-geplakt. Vertrekken vanuit het nieuwste bestand is dus een aanname, geen vaststelling.
+geplakt.
+
+**Een eerdere versie van deze review stelde voor de migratie te laten VERTREKKEN vanuit
+`pg_get_functiondef()` op de doeldatabase. Dat is ingetrokken.** De review wees terecht aan
+waarom: dan is de inhoud van de migratie afhankelijk van de omgeving waarin zij draait, en kan
+hetzelfde bestand op Preview en Productie verschillende SQL opleveren. Precies het probleem dat
+zij moest oplossen, één laag dieper.
+
+De migratie draagt dus **één canonieke definitie**, letterlijk in het bestand. Wat
+`pg_get_functiondef()` wél mag zijn, is een **fail-closed preflight** — zie §7.
 
 Dit versterkt B-1: de gate die #434 vraagt zou niet alleen de nieuwe sleutel bewaken, maar voor
-het eerst ook aantonen dat de vier bestaande kopieerrondes niets hebben laten vallen. De nieuwe migratie moet daarom vertrekken vanuit `pg_get_functiondef()` op de
-doeldatabase, niet vanuit een migratiebestand. Dat is een uitvoeringsstap vóór het schrijven van
-de migratie, en zij hoort in de planning te staan in plaats van tijdens het werk ontdekt te
-worden.
+het eerst ook aantonen dat de vier bestaande kopieerrondes niets hebben laten vallen.
 
 ### B-3 — de vorm van `adapters` is genest, en de projectie is dat niet
 
@@ -154,17 +170,19 @@ vergelijken. Een gehashte bron-id zou dat oplossen en is precies wat de eis uits
 
 Dat is terecht — een hash is een pseudoniem, geen anonimisering, en met een kleine bronset is
 hij triviaal terug te rekenen — maar het betekent wel dat `adapters` **geen enkele correlatie
-over beurten heen** mogelijk maakt. Wie later wil weten "welke bron faalt structureel", kan dat
-uit deze sleutel niet halen. Ik noem het hier omdat het een bewuste beperking is en geen
-omissie; wordt die vraag later gesteld, dan is het antwoord een eigen ontwerp met een eigen
-afweging, niet een veld dat er stilletjes bij komt.
+over beurten heen** mogelijk maakt.
+
+**Vastgelegd (opdrachtgever, 22-09):** T4-F levert aggregatie **per adapter en per foutgrond**,
+niet per SharePoint-bron. Structurele problemen per bron horen bij een afzonderlijk, streng
+geautoriseerd beheerspoor — een eigen ontwerp met een eigen afweging, niet een veld dat hier
+stilletjes bij komt.
 
 ---
 
 ## 4. De voorgestelde vorm
 
 ```ts
-/** Per adaptergroep, per beurt. Gesloten, inhoudsvrij, plat. */
+/** Per adaptergroep, per beurt. GESLOTEN, inhoudsvrij, PLAT — geen genest vrij object. */
 export interface AdapterMeta {
   naam: "supabase-rag" | "microsoft-sharepoint";
   methode: RetrievalMeta["methode"] | "sharepoint_live" | "geen";
@@ -194,6 +212,25 @@ export interface AdapterMeta {
   opgenomen_documenten: number;
 }
 ```
+
+**Gesloten array van PLATTE records, en dat is een eis en geen voorkeur.** `adapters` is een
+array; elk element is een record met uitsluitend scalaire velden. Geen genest vrij object,
+nergens — ook niet als "één klein extra veldje". Een vrij object is een plek waar later iets in
+kan groeien wat niemand heeft goedgekeurd, en de projectie kan er niet op filteren.
+
+**Validatie vóórdat de metadata de auditlaag bereikt.** Er is één plek die `AdapterMeta`
+construeert, en die bouwt uit een vaste literale vorm — onbekende velden zijn daarmee door
+constructie onmogelijk. Daarbovenop komt een totale validator die vóór het overhandigen toetst
+dat élke veldnaam in de gesloten set zit en élke enumwaarde in haar eigen gesloten set, en dat
+elk getal `Number.isFinite` is.
+
+Wat die validator doet als hij afgaat, is een afweging die ik expliciet maak: hij **laat de
+sleutel `adapters` weg** en breekt de beurt níét af. Telemetrie mag een retrievalbeurt niet
+onderuithalen. De prijs is dat een programmeerfout de sleutel stil kan verliezen, en daarvoor
+zijn twee netten: `splitsRetrievalMeta()` rapporteert een sleutel die buiten de allowlist valt
+al als `onbekend`, en een sanity-test houdt de gedeclareerde veldverzameling en de werkelijk
+geconstrueerde verzameling tegen elkaar. Wie dat te zacht vindt, kan de validator laten werpen;
+dan is de prijs dat een telemetriebug een beurt kost.
 
 **Twee soorten tellers, en het onderscheid is niet cosmetisch.** `bouwRetrievalMeta()` draait
 tweemaal: in fase 1 over de selectie, en in `citeer()` opnieuw over `c.opgenomen` — ná de
@@ -245,22 +282,66 @@ Toegang via de bestaande capabilitypoort; geen service-role, geen nieuwe route b
 
 ---
 
-## 7. Migratie, verificatie, rollback
+## 7. Migratie, preflight, verificatie, rollback
 
-1. **Vóór het schrijven:** `pg_get_functiondef('public.meta_projectie'::regproc)` draaien op
-   Preview en Productie en de twee definities vergelijken (B-2). Wijken ze af, dan is dát eerst
-   een bevinding.
-2. **Migratie:** volledige herdefinitie van `meta_projectie()`, identiek aan de actuele
-   definitie met als enige inhoudelijke wijziging `adapters` in `c_basis`. Idempotent.
-3. **Verificatie:** een query die de functie aanroept op een proefobject en aantoont dat
-   `adapters` op basisniveau terugkomt én dat een verboden veld dat niet doet.
-4. **Rollback:** herdefinitie naar de vorige vorm, met dezelfde volledige-kopieregel.
-5. **Sanity-gate (B-1):** de statische spiegel in de app-laag én de uitkomsttoets in de DB-laag,
-   aangesloten in `scripts/cross-tenant-ci.sh` — want een controle die niet in dat script staat,
-   draait niet in de gate. Dat is bevinding C-01 uit de projecthistorie en de reden dat die regel
-   in CLAUDE.md staat.
+### 7.1 Eén canonieke definitie in het bestand
 
----
+De migratie bevat de **volledige, letterlijke** definitie van `meta_projectie()` — de huidige
+lijst plus `adapters`. Niets eraan wordt uit de doeldatabase afgeleid. Hetzelfde bestand levert
+op elke omgeving dezelfde functie op; dat is de hele reden dat het een bestand is.
+
+### 7.2 `pg_get_functiondef()` is een PREFLIGHT, geen bron
+
+Vóór de migratie draait een controle die de **actief geïnstalleerde** functie vergelijkt met wat
+wij verwachten:
+
+* komt zij overeen met de verwachte huidige definitie, of met een **expliciet toegestane
+  voorganger**, dan mag de migratie door;
+* **bij onbekende drift breekt de migratie af** — fail-closed, want dan weten wij niet wat wij
+  overschrijven, en `create or replace` is stil: hij vervangt zonder te melden wat er stond.
+
+De vergelijking gebeurt op een **genormaliseerde hash** van de functietekst, niet op de tekst
+zelf. De toegestane hashes staan als vaste lijst in de migratie. Bij een mismatch verschijnt
+**uitsluitend een inhoudsvrije foutcategorie** — bijvoorbeeld `meta_projectie_drift` — en nooit
+de functietekst, een sleutellijst of een metadatawaarde. Een migratie die bij het afbreken de
+hele functie in een logregel zet, lekt precies wat zij moet bewaken.
+
+*(Dat hier een hash wordt gebruikt is geen spanning met B-4. Daar gaat het om identifiers ván
+brondocumenten in het auditspoor; hier om een integriteitsvergelijking van onze eigen SQL, die
+nergens wordt opgeslagen.)*
+
+### 7.3 Bewijs ná de migratie, op een ephemere database
+
+De verificatie draait tegen een **uit de repo opgebouwde** wegwerpdatabase en toont vier dingen:
+
+1. **alle bestaande toegestane sleutels zijn behouden** — dit is de controle die vier eerdere
+   kopieerrondes nooit hebben gehad;
+2. **`adapters` is toegevoegd** en komt op basisniveau terug;
+3. **onbekende sleutels verdwijnen** — een proefobject met een niet-toegestane sleutel mag die
+   niet in de projectie terugzien;
+4. **de TS-allowlist en de SQL-projectie komen exact overeen** — niet "de SQL bevat ten minste
+   de TS-lijst", maar gelijkheid in beide richtingen. Een sleutel die alleen in de SQL staat is
+   even fout als een die alleen in TypeScript staat.
+
+### 7.4 De CI-gate toetst de FUNCTIE, niet het bestand
+
+De gate uit B-1 draait in de DB-laag en roept `public.meta_projectie()` werkelijk aan. Een
+tekstvergelijking tegen een migratiebestand is uitdrukkelijk **niet** voldoende: dat bewijst dat
+iemand het bestand goed heeft geschreven, niet dat de functie in de database die vorm heeft. Dat
+onderscheid is in dit project met reden een regel — er is geen migratierunner.
+
+De statische spiegel in de app-laag blijft bestaan als **vroege waarschuwing**: hij draait in
+elke CI-ronde en meldt drift vóór de DB-laag start. Hij is nadrukkelijk geen bewijs.
+
+Beide worden aangesloten in `scripts/cross-tenant-ci.sh`. Een controle die daar niet in staat,
+draait niet in de gate — dat is bevinding C-01 uit de projecthistorie en de reden dat die regel
+in CLAUDE.md staat.
+
+### 7.5 Rollback
+
+Herdefinitie naar de vorige canonieke vorm, eveneens letterlijk in het bestand, met dezelfde
+preflight ervoor. De rollback moet aantoonbaar de projectie van vóór de migratie herstellen —
+gemeten op dezelfde ephemere database, niet beredeneerd.
 
 ## 8. Bestandsgrenzen
 
@@ -270,8 +351,9 @@ Toegang via de bestaande capabilitypoort; geen service-role, geen nieuwe route b
 | `core/lib/audit-meta.ts` | één regel in `META_BASIS` |
 | `core/lib/audit-meta.sanity.ts` | de statische spiegel tegen de migratie (B-1a) |
 | `core/lib/retrieval/orkestratie.ts` | `bouwAdapterMeta()` en de aansluiting in `bouwRetrievalMeta()` |
-| `supabase/migrations/<datum>_434_meta_adapters.sql` + rollback | de projectie |
-| `supabase/checks/<datum>_434_meta_adapters.sql` | de uitkomsttoets (B-1b) |
+| `supabase/migrations/<datum>_434_meta_adapters.sql` | één canonieke definitie + de fail-closed preflight (§7.1-7.2) |
+| `supabase/rollbacks/<datum>_434_meta_adapters_ROLLBACK.sql` | idem, terug naar de vorige canonieke vorm (§7.5) |
+| `supabase/checks/<datum>_434_meta_adapters.sql` | het bewijs ná de migratie: behoud, toevoeging, weren, en gelijkheid TS↔SQL (§7.3) |
 | `scripts/cross-tenant-ci.sh` | de nieuwe DB-suite aansluiten |
 | beheerpagina + statusroute | §6 |
 
@@ -285,8 +367,11 @@ activeringstranche.
 * **Of `meta_projectie()` geneste objecten ongewijzigd doorlaat** (B-3). Ik heb de kop van de
   functie gelezen, niet haar volledige body. Dat moet vóór het ontwerp worden nagerekend, en het
   voorstel in B-3 — alles plat — is er juist op gericht dat die vraag er niet meer toe doet.
-* **Welke definitie van `meta_projectie()` op Preview en Productie actief is** (B-2). Twee
-  migraties definiëren haar; er is geen migratierunner. Dat is een uitvoeringsstap, geen aanname.
+* **Welke definitie van `meta_projectie()` op Preview en Productie actief is.** Vijf migraties
+  herdefiniëren haar en er is geen migratierunner, dus dit is uit de repo niet vast te stellen.
+  Het is nu wél BELEGD in plaats van open: de preflight uit §7.2 stelt het vast op het moment
+  van migreren en breekt fail-closed af bij onbekende drift. Wat deze review niet weet, weet de
+  migratie straks wel — en zij gaat niet door zolang zij het niet weet.
 * **Of de karakteriseringsgoldens ongewijzigd blijven.** `adapters` is optioneel en alleen
   aanwezig wanneer er iets te melden is, dus de verwachting is dat zij niet bewegen — maar dat is
   een verwachting. Ontstaat er een diff, dan is die een blokkade die eerst inhoudelijk wordt
