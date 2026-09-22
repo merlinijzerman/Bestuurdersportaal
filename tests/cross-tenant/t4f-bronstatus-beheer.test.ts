@@ -17,9 +17,11 @@ import { aggregeerAdapterMeta } from "../../core/lib/retrieval/adaptermeta-behee
 import {
   leesAdapterstand,
   ADAPTERSTATUS_LIMIET,
+  ADAPTERSTAND_RPC,
   type MetaBron,
   type MetaQuery,
 } from "../../core/lib/retrieval/adapterstatus-lezer";
+import { ROL_CAPABILITIES } from "../../core/lib/capabilities-map";
 import {
   ADAPTERMETA_NAMEN,
   ADAPTERMETA_RESULTATEN,
@@ -205,26 +207,70 @@ test("de aggregatie hanteert DEZELFDE gesloten vorm als het schrijfpad", () => {
 // ── 6. Autorisatie en tenantisolatie — WERKELIJK GEDRAG ────────────────────
 
 /**
- * Een eerlijke namaak-queryketen: zij past ALLEEN de filters toe die de code
- * daadwerkelijk zet. Laat het leespad `.eq("fonds_id", …)` weg, dan komen de
- * rijen van het andere fonds gewoon terug en gaat de test rood — dat is de
- * negatieve controle, ingebakken in de fixture.
+ * De kolommen die `governance_log` WERKELIJK heeft, gelezen uit de
+ * schemabaseline.
+ *
+ * Dit is geen franje. De eerste versie van dit leespad sorteerde op
+ * `aangemaakt_op` — een kolom die op diverse andere tabellen bestaat maar niet
+ * op deze. PostgREST faalt daar pas op de server op, dus de route gaf in de
+ * praktijk 503 terwijl de testsuite groen stond: de namaakketen slikte elke
+ * kolomnaam. Een namaak die alles accepteert, toetst niets.
  */
-function namaakBron(rijen: { fonds_id: string; retrieval_meta: unknown }[]) {
-  const gezien = { filters: [] as [string, string][], limiet: 0, tabel: "", geselecteerd: "" };
+function kolommenVanGovernanceLog(): Set<string> {
+  const baseline = lees("supabase/baseline/2026_08_14_preview_public.sql");
+  const start = baseline.indexOf('CREATE TABLE IF NOT EXISTS "public"."governance_log" (');
+  assert.ok(start > 0, "de schemabaseline kent governance_log niet meer");
+  const blok = baseline.slice(start, baseline.indexOf(");", start));
+  const namen = [...blok.matchAll(/^\s+"([a-z_]+)"/gm)].map((m) => m[1]);
+  assert.ok(namen.length > 5, "kolommen niet herkend — de baseline-vorm is veranderd");
+  return new Set(namen);
+}
+
+const GOVERNANCE_LOG_KOLOMMEN = kolommenVanGovernanceLog();
+
+/**
+ * Een eerlijke namaak-queryketen: zij past ALLEEN de filters toe die de code
+ * daadwerkelijk zet, en zij weigert een kolomnaam die niet bestaat. Laat het
+ * leespad `.eq("fonds_id", …)` weg, dan komen de rijen van het andere fonds
+ * gewoon terug en gaat de test rood — dat is de negatieve controle, ingebakken
+ * in de fixture.
+ */
+function namaakBron(
+  rijen: { fonds_id: string; retrieval_meta: unknown }[],
+  rpcUitkomst: { data: unknown; error: unknown } = { data: null, error: { message: "42883" } }
+) {
+  const gezien = {
+    filters: [] as [string, string][],
+    limiet: 0,
+    tabel: "",
+    geselecteerd: "",
+    sortering: "",
+    rpc: [] as [string, Record<string, unknown>][],
+  };
+  const eisKolom = (kolom: string) => {
+    assert.ok(
+      GOVERNANCE_LOG_KOLOMMEN.has(kolom),
+      `het leespad noemt kolom "${kolom}", die governance_log niet heeft`
+    );
+  };
   const maakQuery = (huidig: typeof rijen): MetaQuery => ({
     select(kolommen) {
+      for (const k of kolommen.split(",")) eisKolom(k.trim());
       gezien.geselecteerd = kolommen;
       return maakQuery(huidig);
     },
     eq(kolom, waarde) {
+      eisKolom(kolom);
       gezien.filters.push([kolom, waarde]);
       return maakQuery(huidig.filter((r) => (r as Record<string, unknown>)[kolom] === waarde));
     },
-    not(_kolom, _operator, _waarde) {
+    not(kolom, _operator, _waarde) {
+      eisKolom(kolom);
       return maakQuery(huidig.filter((r) => r.retrieval_meta !== null));
     },
-    order() {
+    order(kolom) {
+      eisKolom(kolom);
+      gezien.sortering = kolom;
       return maakQuery(huidig);
     },
     limit(aantal) {
@@ -239,6 +285,10 @@ function namaakBron(rijen: { fonds_id: string; retrieval_meta: unknown }[]) {
     from(tabel) {
       gezien.tabel = tabel;
       return maakQuery(rijen);
+    },
+    rpc(naam, parameters) {
+      gezien.rpc.push([naam, parameters]);
+      return Promise.resolve(rpcUitkomst);
     },
   };
   return { bron, gezien };
@@ -260,13 +310,17 @@ test("een gebruiker ZONDER de capability krijgt 403 en er wordt niets gelezen", 
         gelezen += 1;
         throw new Error("het leespad mag hier nooit komen");
       },
+      rpc() {
+        gelezen += 1;
+        throw new Error("ook het fondsbrede pad mag hier nooit komen");
+      },
     },
   });
   assert.equal(uitkomst.status, 403);
   assert.equal(gelezen, 0, "er is gelezen vóórdat de capability was getoetst");
 });
 
-test("CROSS-TENANT: de stand bevat uitsluitend de eigen fondsrijen", async () => {
+test("TERUGVAL — CROSS-TENANT: de stand bevat uitsluitend de eigen fondsrijen", async () => {
   const { bron, gezien } = namaakBron([
     { fonds_id: FONDS_A, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } },
     { fonds_id: FONDS_B, retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] } },
@@ -291,6 +345,10 @@ test("CROSS-TENANT: de stand bevat uitsluitend de eigen fondsrijen", async () =>
   assert.equal(gezien.tabel, "governance_log");
   assert.equal(gezien.geselecteerd, "retrieval_meta");
   assert.equal(gezien.limiet, ADAPTERSTATUS_LIMIET);
+  assert.equal(gezien.sortering, "aangemaakt", "governance_log heeft geen kolom `aangemaakt_op`");
+  // En de stand noemt zichzelf niet fondsbreed: onder RLS ziet dit pad alleen
+  // de eigen beurten van de kijker.
+  assert.equal(uitkomst.stand.reikwijdte, "eigen_beurten");
 });
 
 test("een profiel zonder fonds leest niets en krijgt een lege, volledige stand", async () => {
@@ -301,6 +359,10 @@ test("een profiel zonder fonds leest niets en krijgt een lege, volledige stand",
     magBeheren: async () => true,
     bron: {
       from() {
+        gelezen += 1;
+        throw new Error("zonder fonds is er geen tenant om binnen te blijven");
+      },
+      rpc() {
         gelezen += 1;
         throw new Error("zonder fonds is er geen tenant om binnen te blijven");
       },
@@ -323,11 +385,156 @@ test("een leesfout levert 503 en geen half gevulde stand", async () => {
       };
       return q;
     },
+    rpc: () => Promise.resolve({ data: null, error: { message: "42883" } }),
   };
   const uitkomst = await leesAdapterstand({
     gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron: kapot,
   });
   assert.equal(uitkomst.status, 503);
+});
+
+// ── 6b. Het FONDSBREDE pad, en waarom het bestaat ─────────────────────────
+
+test("FONDSBREED: beurten van een collega tellen mee in de stand", async () => {
+  // De kern van de bevinding. De RLS-policy op governance_log is
+  // `gebruiker_id = auth.uid() or mag_audit(fonds_id)`, en `mag_audit()` eist de
+  // aparte grant `governance_audit_read` die `fonds.config.manage` niet geeft.
+  // Via het tabelpad ziet een beheerder dus alleen zichzelf. Het definer-pad
+  // levert het hele fonds, en uitsluitend de gesloten tellers.
+  const { bron, gezien } = namaakBron([], {
+    data: [
+      { adapters: [geldigeRij("supabase-rag")] },       // eigen beurt
+      { adapters: [geldigeRij("microsoft-sharepoint")] }, // beurt van een collega
+      {},                                                // beurt met één adapter
+    ],
+    error: null,
+  });
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron,
+  });
+  assert.ok(uitkomst.status === 200);
+  assert.equal(uitkomst.stand.reikwijdte, "fonds");
+  assert.deepEqual(
+    uitkomst.stand.regels.map((r) => r.naam).sort(),
+    ["microsoft-sharepoint", "supabase-rag"],
+    "de beurt van de collega ontbreekt — dan is dit geen fondsstand"
+  );
+  assert.equal(uitkomst.stand.dekking.metarijen_zonder_adapters, 1);
+  assert.equal(uitkomst.stand.volledig, true);
+  // Geen fondsparameter: de functie leidt fonds én rol af uit auth.uid(), dus
+  // er valt niets mee te geven wat de tenantgrens verplaatst.
+  assert.deepEqual(gezien.rpc, [[ADAPTERSTAND_RPC, { p_limiet: ADAPTERSTATUS_LIMIET }]]);
+  assert.equal(
+    JSON.stringify(gezien.rpc).includes(FONDS_A),
+    false,
+    "een fonds-id als parameter is een tenantgrens die de aanroeper kan verzetten"
+  );
+  // En het RLS-beperkte tabelpad is dan niet gebruikt.
+  assert.equal(gezien.tabel, "");
+});
+
+test("FONDSBREED: een onleesbare regel komt als null terug en wordt geteld", async () => {
+  // De definer-functie vangt per rij `check_violation` af en levert null. Zou
+  // zij die rij stil weglaten, dan noemde de stand zich alsnog volledig.
+  const { bron } = namaakBron([], {
+    data: [{ adapters: [geldigeRij("supabase-rag")] }, null],
+    error: null,
+  });
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron,
+  });
+  assert.ok(uitkomst.status === 200);
+  assert.equal(uitkomst.stand.volledig, false);
+  assert.equal(uitkomst.stand.dekking.metarijen_overgeslagen, 1);
+});
+
+test("zonder het fondsbrede pad valt de stand terug ÉN zegt zij dat", async () => {
+  // Supabase-eerst is de conventie, maar een code-deploy kan vóór de migratie
+  // liggen. Dan is een gelabelde, beperkte stand beter dan een lege pagina —
+  // mits zij zichzelf geen fondsstand noemt.
+  const { bron } = namaakBron(
+    [{ fonds_id: FONDS_A, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } }],
+    { data: null, error: { code: "42883", message: "function does not exist" } }
+  );
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron,
+  });
+  assert.ok(uitkomst.status === 200);
+  assert.equal(uitkomst.stand.reikwijdte, "eigen_beurten");
+  assert.equal(uitkomst.stand.regels.length, 1);
+});
+
+test("de beheerpagina TOONT de reikwijdte; zij kan hem niet vergeten", () => {
+  const pagina = lees("app/(dashboard)/beheer/adapterstatus/page.tsx");
+  assert.match(pagina, /reikwijdte === "eigen_beurten"/);
+  assert.match(pagina, /Alleen uw eigen beurten/);
+  assert.match(pagina, /governance_audit_read/, "de pagina hoort te zeggen wat zij NIET opent");
+});
+
+// ── 6c. De rolgate in SQL en het rolmodel in code lopen gelijk ─────────────
+
+test("de SQL-rolgate kent exact de rollen die `fonds.config.manage` dragen", () => {
+  // De capabilitymapping staat in code, niet in de database. De definer-functie
+  // moet de rollen dus noemen — en dat is precies waar een autorisatie stil kan
+  // verjaren: haal de capability bij een rol weg en SQL laat hem gewoon door.
+  const migratie = lees("supabase/migrations/2026_09_23_434_adapterstand_fonds.sql");
+  const m = /v_rol not in \(([^)]*)\)/.exec(migratie);
+  assert.ok(m, "de rolgate is niet meer als gesloten lijst te lezen");
+  const uitSql = [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort();
+  const uitCode = Object.entries(ROL_CAPABILITIES)
+    .filter(([, caps]) => caps.includes("fonds.config.manage"))
+    .map(([rol]) => rol)
+    .sort();
+  assert.deepEqual(uitSql, uitCode);
+  assert.ok(uitCode.length > 0, "geen enkele rol draagt de capability — dan klopt de aanname niet");
+});
+
+test("de definer-functie is fondsgebonden zonder fondsparameter en begrensd", () => {
+  const migratie = lees("supabase/migrations/2026_09_23_434_adapterstand_fonds.sql");
+  // Het fonds komt uit het profiel van auth.uid(); er is geen fonds-argument.
+  assert.match(migratie, /select p\.fonds_id, p\.rol into v_fonds, v_rol/);
+  assert.match(migratie, /where gl\.fonds_id = v_fonds/);
+  assert.equal(
+    /fn_adapterstand_fonds\(\s*p_fonds/.test(migratie),
+    false,
+    "een fondsparameter maakt de tenantgrens iets wat de aanroeper meegeeft"
+  );
+  // Zonder sessie is auth.uid() null; dan werpt zij. Fail-closed voor anon.
+  assert.match(migratie, /if v_uid is null then/);
+  assert.match(migratie, /p_limiet > 500/);
+  // En zij verruimt het auditinzagerecht niet. Op GEBRUIK matchen, niet op
+  // proza: de migratiekop LEGT UIT waarom `mag_audit()` hier niet deugt, en een
+  // naïeve regex vindt juist die uitleg. Dezelfde val als bij de
+  // service-role-assertie een ronde eerder.
+  // Ook `comment on … is '…'` eruit: dat is documentatie IN de database en
+  // noemt de grant die deze functie juist NIET nodig heeft.
+  const zonderCommentaar = migratie
+    .replace(/^\s*--.*$/gm, "")
+    .replace(/comment on function[\s\S]*?';/g, "");
+  assert.equal(/mag_audit\(/.test(zonderCommentaar), false);
+  assert.equal(/governance_audit_grants/.test(zonderCommentaar), false);
+  assert.equal(/governance_audit_read/.test(zonderCommentaar), false);
+  // Positieve controle op de strip zelf: de functiekop moet er nog staan,
+  // anders zou deze test groen zijn omdat er niets meer te matchen viel.
+  assert.match(zonderCommentaar, /create or replace function public\.fn_adapterstand_fonds/);
+  // Alleen de gesloten projectie verlaat de functie.
+  assert.match(migratie, /return next public\.meta_adapters_projectie\(r\.retrieval_meta\);/);
+  for (const verboden of ["gl.vraag", "gl.antwoord", "gl.bronnen", "gl.gebruiker_id", "gl.gebruiker_naam"]) {
+    assert.equal(migratie.includes(verboden), false, `de functie geeft ${verboden} vrij`);
+  }
+});
+
+test("het nieuwe databaseobject staat in de grants-allowlist", () => {
+  // De V3-grants-gate gaat anders rood met "LEK onbekend object"; die regel
+  // staat in de Definition of Done en is vorige ronde al een keer gemist.
+  const tsv = lees("supabase/checks/allowlist-grants.tsv");
+  for (const [rol, recht] of [["anon", "-"], ["authenticated", "EXECUTE"], ["service_role", "EXECUTE"]]) {
+    assert.ok(
+      tsv.includes(`FUNC\tpublic\tfn_adapterstand_fonds(p_limiet integer)\tfunction\t${rol}\t${recht}`),
+      `allowlist mist de regel voor ${rol}`
+    );
+  }
+  assert.match(lees("supabase/checks/allowlist-grants.toelichting.md"), /fn_adapterstand_fonds/);
 });
 
 test("de beheerroute en de beheerpagina delen één leespad en dragen geen service-role", () => {

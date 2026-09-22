@@ -206,6 +206,11 @@ SQL_EVIDENCE_AUDIT="supabase/checks/2026_09_12_368_evidence_auditprojectie.sql"
 # HARD FAALT — stil weglaten zou een antwoord volledig ogend maken terwijl juist
 # de informatie over een niet-geraadpleegde bron is verdwenen.
 SQL_ADAPTERMETA="supabase/checks/2026_09_22_434_meta_adapters.sql"
+# #434 T4-F — de FONDSBREDE adapterstand onder echte RLS. Toetst de bevinding
+# zelf: zonder de grant `governance_audit_read` levert het tabelpad alleen eigen
+# beurten, en de definer-functie levert het hele fonds zonder ook maar iets
+# anders dan de gesloten adaptertellers vrij te geven.
+SQL_ADAPTERSTAND="supabase/checks/2026_09_23_434_adapterstand_fonds.sql"
 # Microsoft 365 fase 2A — delta/cursor/run-integriteit en private Outlook-ACL.
 SQL_M365F2A="supabase/checks/2026_09_04_microsoft_outlook_fase2a.sql"
 # Microsoft 365 fase 3A (#321) — fondsgebonden SharePoint-bron, private ACL,
@@ -472,6 +477,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_TOELATING"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_RETRIEVAL_IDENTITEIT"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_EVIDENCE_AUDIT"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ADAPTERMETA"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ADAPTERSTAND"
 echo
 
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"

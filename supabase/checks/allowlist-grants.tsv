@@ -33,6 +33,9 @@ FUNC	public	documenten_claim_ingest_jobs(p_worker_id text, p_limit integer, p_le
 FUNC	public	fn_access_token_hook(event jsonb)	function	anon	-
 FUNC	public	fn_access_token_hook(event jsonb)	function	authenticated	-
 FUNC	public	fn_access_token_hook(event jsonb)	function	service_role	-
+FUNC	public	fn_adapterstand_fonds(p_limiet integer)	function	anon	-
+FUNC	public	fn_adapterstand_fonds(p_limiet integer)	function	authenticated	EXECUTE
+FUNC	public	fn_adapterstand_fonds(p_limiet integer)	function	service_role	EXECUTE
 FUNC	public	fn_afschrift_bevries_kolommen()	function	anon	-
 FUNC	public	fn_afschrift_bevries_kolommen()	function	authenticated	EXECUTE
 FUNC	public	fn_afschrift_bevries_kolommen()	function	service_role	EXECUTE

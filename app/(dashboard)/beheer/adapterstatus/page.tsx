@@ -22,7 +22,9 @@ import {
 //
 //  DE DEKKING STAAT BOVENAAN, NIET ONDERAAN. Is de stand niet volledig, dan zijn
 //  de cijfers een ondergrens. Dat moet je zien vóórdat je de tabel leest, niet
-//  erna.
+//  erna. Hetzelfde geldt voor de REIKWIJDTE: als het fondsbrede leespad niet
+//  beschikbaar is, toont deze pagina alleen de eigen beurten van de kijker, en
+//  dan mag zij zich geen fondsstand noemen.
 // ============================================================================
 export const dynamic = "force-dynamic";
 
@@ -61,10 +63,10 @@ export default async function AdapterstatusPagina() {
       <div className="mb-6">
         <h1 className="font-serif text-2xl font-bold text-ink">Adapterstand — retrieval</h1>
         <p className="text-muted text-sm mt-1">
-          Wat de bronadapters in de laatste {ADAPTERSTATUS_LIMIET} vastgelegde beurten van dit
-          fonds hebben gedaan. Dit is het AUDITSPOOR, niet de stand van nu: er wordt geen
-          bron bevraagd om deze pagina te tonen. Er staat geen documentinhoud, geen
-          bestandsnaam en geen identifier in — alleen tellingen.
+          Wat de bronadapters in de laatste {ADAPTERSTATUS_LIMIET} vastgelegde beurten hebben
+          gedaan. Dit is het AUDITSPOOR, niet de stand van nu: er wordt geen bron bevraagd om
+          deze pagina te tonen. Er staat geen documentinhoud, geen bestandsnaam en geen
+          identifier in — alleen tellingen.
         </p>
       </div>
 
@@ -74,6 +76,19 @@ export default async function AdapterstatusPagina() {
         </p>
       ) : (
         <>
+          {uitkomst.stand.reikwijdte === "eigen_beurten" && (
+            <div role="status" className="mb-6 rounded-xl border border-line bg-white px-5 py-4">
+              <div className="font-semibold text-ink">Alleen uw eigen beurten</div>
+              <p className="text-sm text-muted mt-0.5">
+                Het fondsbrede leespad is op deze omgeving niet beschikbaar. U ziet uitsluitend
+                de beurten die u zelf hebt gedaan — beurten van collega&apos;s ontbreken. Dit is
+                dus geen fondsstand. Het auditinzagerecht op de volledige logregels
+                (<code>governance_audit_read</code>) staat hier bewust los van en is met deze
+                pagina niet te verkrijgen.
+              </p>
+            </div>
+          )}
+
           {!uitkomst.stand.volledig && (
             <div
               role="status"
@@ -91,7 +106,9 @@ export default async function AdapterstatusPagina() {
           )}
 
           <p className="text-sm text-muted mb-4">
-            Gelezen: {uitkomst.stand.dekking.metarijen_gelezen} logregel(s) met
+            Reikwijdte:{" "}
+            {uitkomst.stand.reikwijdte === "fonds" ? "alle beurten van dit fonds" : "alleen uw eigen beurten"}
+            {" "}· gelezen: {uitkomst.stand.dekking.metarijen_gelezen} logregel(s) met
             adapterdiagnostiek
             {uitkomst.stand.dekking.metarijen_zonder_adapters > 0 && (
               <>
