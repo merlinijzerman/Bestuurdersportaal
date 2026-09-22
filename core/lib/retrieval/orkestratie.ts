@@ -85,9 +85,22 @@ export interface Spoor {
    *
    * Het veld staat op het spoor maar geldt de ADAPTERGROEP: een adapter faalt
    * één keer, niet één keer per spoor. Gemengde standen binnen één groep zijn
-   * daarom ongeldig en werpen vóór elke aanroep; wordt die controle omzeild,
-   * dan wint `"stop"`. Default `"stop"` — fail-closed is de enige veilige kant,
-   * want `"meld"` laat een beurt doorgaan met minder bronnen.
+   * daarom ongeldig en werpen vóór elke aanroep.
+   *
+   * DE DRIEDELING, en er is géén eenvoudige default:
+   *   • `"stop"` (expliciet) — altijd fail-closed, ook bij één adaptergroep;
+   *   • `"meld"` (expliciet) — doorgaan, maar UITSLUITEND met een zichtbare
+   *     `bronstatus` op de uitkomst;
+   *   • NIET GEZET — bij één adaptergroep het bestaande gedrag (lege uitslag
+   *     die haar `fout` meedraagt), bij meerdere groepen fail-closed.
+   *
+   * Dat laatste onderscheid is geen slordigheid. Het gevaar dat dit veld moet
+   * afdekken is stille degradatie naar een volledig ogend antwoord uit alleen de
+   * OVERIGE bronnen; met één groep bestaan die overige bronnen niet, en een lege
+   * uitslag mét `fout` is dan geen terugval maar gewoon het bestaande contract —
+   * dat de byte-identiteitseis van #426 beschermt.
+   *
+   * Zie `stoptBijFout()` voor de beslissing zelf.
    */
   bijBronfout?: "stop" | "meld";
 }

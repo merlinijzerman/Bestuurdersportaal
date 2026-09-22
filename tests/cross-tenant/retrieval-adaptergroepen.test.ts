@@ -594,3 +594,116 @@ test("`meld` gaat door, maar UITSLUITEND met een zichtbare bronstatus", async ()
   assert.ok(uit.bronstatus && uit.bronstatus.length === 1, "`meld` zonder bronstatus is stille degradatie");
   assert.equal(uit.bronstatus[0].reden, "providerfout");
 });
+
+// ── 7. De driedeling van `bijBronfout`, expliciet vastgelegd ───────────────
+
+test("EXPLICIET `stop` werpt ook bij ÉÉN adaptergroep", async () => {
+  // De één-/meergroepsregel geldt alleen voor een NIET-GEZET veld. Wie het
+  // expliciet op "stop" zet, kiest fail-closed — ook als er geen andere bron is
+  // om stil naar terug te vallen. Zonder deze test zou de groepstelling de
+  // expliciete keuze stilzwijgend kunnen overrulen.
+  const stuk = stub({ namespace: "ns-a", perQuery: { primair: [] }, fout: "providerfout" });
+  await assert.rejects(
+    voerVolledigeRetrievalUit(
+      CTX,
+      { adapter: stuk, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN, adapter: stuk, bijBronfout: "stop" }] },
+      CITAAT,
+    ),
+    (e: unknown) => {
+      assert.equal((e as Error).name, "BronNietGeraadpleegd");
+      return true;
+    },
+  );
+});
+
+test("NIET GEZET bij één adaptergroep houdt de bestaande foutuitkomst", async () => {
+  // Het spiegelbeeld van de test hierboven, en samen leggen ze de driedeling
+  // vast: dezelfde providerfout, dezelfde enkele groep, en toch een andere
+  // uitkomst — omdat de aanroeper het ene geval expliciet heeft gekozen.
+  const stuk = stub({ namespace: "ns-a", perQuery: { primair: [] }, fout: "providerfout" });
+  const uit = await voerVolledigeRetrievalUit(
+    CTX,
+    { adapter: stuk, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN, adapter: stuk }] },
+    CITAAT,
+  );
+  assert.equal(uit.fout, "providerfout");
+  assert.deepEqual(uit.geselecteerd, []);
+  assert.ok(uit.bronstatus && uit.bronstatus.length === 1, "de ontbrekende bron hoort zichtbaar te zijn");
+});
+
+test("EXPLICIET `meld` bij één groep gaat door en stopt dus níét", async () => {
+  const stuk = stub({ namespace: "ns-a", perQuery: { primair: [] }, fout: "providerfout" });
+  const uit = await voerVolledigeRetrievalUit(
+    CTX,
+    { adapter: stuk, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN, adapter: stuk, bijBronfout: "meld" }] },
+    CITAAT,
+  );
+  assert.ok(uit.bronstatus && uit.bronstatus.length === 1);
+});
+
+// ── 8. De orkestratie zet haar EIGEN grendelbudget in de adaptercontext ────
+
+test("de adapter krijgt `resterendMs` uit de grendel van DEZE beurt", async () => {
+  // De adaptertests vullen `resterendMs` met de hand en bewijzen daarmee niets
+  // over de verbinding met de request-lokale grendel. Hier wordt die verbinding
+  // zelf gemeten: de adapter leest wat de ORKESTRATIE heeft gezet.
+  const metingen: (number | undefined)[] = [];
+  const basis = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const kijker: RetrievalAdapter = {
+    ...basis,
+    async zoek(ctx, q) {
+      metingen.push(ctx.resterendMs?.());
+      // Even wachten en opnieuw meten: een LEVEND handvat op de beurtklok loopt
+      // terug. Een constante die toevallig ooit is ingevuld, doet dat niet.
+      await new Promise((r) => setTimeout(r, 60));
+      metingen.push(ctx.resterendMs?.());
+      return basis.zoek(ctx, q);
+    },
+  };
+
+  await voerVolledigeRetrievalUit(
+    CTX,
+    { adapter: kijker, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }], timeoutMs: 8_000 },
+    CITAAT,
+  );
+
+  const [eerste, tweede] = metingen;
+  assert.equal(typeof eerste, "number", "de orkestratie zet `resterendMs` niet in de context");
+  assert.equal(typeof tweede, "number");
+  assert.ok(eerste! <= 8_000, `resterend ${eerste} hoort binnen het beurtbudget te vallen`);
+  assert.ok(eerste! > 7_000, `resterend ${eerste} lijkt niet op een net gestarte beurt van 8 s`);
+  assert.ok(
+    tweede! < eerste! && eerste! - tweede! >= 40,
+    `het budget liep niet terug: ${eerste} → ${tweede}`,
+  );
+});
+
+test("`resterendMs` hangt aan DEZELFDE grendel als het signaal", async () => {
+  // Twee klokken die los worden meegegeven, bewaken vroeg of laat verschillende
+  // dingen. Na een beurtafbreking hoort het budget nul te zijn — dat kan alleen
+  // als het handvat dezelfde grendel leest als `signal`.
+  let gemeten: number | undefined;
+  let signaalAf = false;
+  const basis = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const ac = new AbortController();
+  const kijker: RetrievalAdapter = {
+    ...basis,
+    async zoek(ctx, q) {
+      ac.abort();
+      await new Promise((r) => setTimeout(r, 10));
+      signaalAf = ctx.signal?.aborted ?? false;
+      gemeten = ctx.resterendMs?.();
+      return basis.zoek(ctx, q);
+    },
+  };
+
+  await assert.rejects(
+    voerVolledigeRetrievalUit(
+      { ...CTX, signal: ac.signal },
+      { adapter: kijker, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }], timeoutMs: 8_000 },
+      CITAAT,
+    ),
+  );
+  assert.equal(signaalAf, true, "het signaal van de grendel ging niet af");
+  assert.equal(gemeten, 0, "het budget staat nog open terwijl de grendel al dicht is");
+});
