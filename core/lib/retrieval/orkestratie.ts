@@ -31,7 +31,11 @@ import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEF
 import type { Afbreekgrendel } from "./afbreken";
 import { maakDocumentIdentiteit } from "./identiteit";
 import { BronNietGeraadpleegd } from "./contract";
-import { valideerAdapterMeta } from "./adaptermeta";
+import {
+  ADAPTERMETA_FOUTCATEGORIE,
+  AdaptermetadataOngeldig,
+  valideerAdapterMeta,
+} from "./adaptermeta";
 import type {
   AdapterCapabilities,
   AdapterUitkomst,
@@ -848,9 +852,23 @@ export async function voerVolledigeRetrievalUit(
   }
 }
 
-/** Vertaalt een afbreking naar de contract-foutcategorie (§4.4). */
-export function foutcategorieVoor(e: unknown): "timeout" | "annulering" | null {
-  return isAfbreking(e) ? redenVan(e) : null;
+/**
+ * Vertaalt een gestopte beurt naar de genormaliseerde foutcategorie (§4.4).
+ *
+ * #434 — `adaptermetadata_ongeldig` hoort hier bij, ook al is het geen
+ * afbreking. De reden is de bestemming: de aanroepers van deze functie zijn
+ * precies de plekken die de categorie DUURZAAM vastleggen op
+ * `ai_actie.resultaat_ref`. Bleef deze fout buiten de union, dan viel zij in de
+ * generieke `else`-tak, stopte de beurt zonder spoor, en was achteraf niet te
+ * onderscheiden van een willekeurige serverfout — terwijl dit juist de
+ * weigering is die zichtbaar moet zijn.
+ */
+export function foutcategorieVoor(
+  e: unknown
+): "timeout" | "annulering" | typeof ADAPTERMETA_FOUTCATEGORIE | null {
+  if (isAfbreking(e)) return redenVan(e);
+  if (e instanceof AdaptermetadataOngeldig) return ADAPTERMETA_FOUTCATEGORIE;
+  return null;
 }
 
 /**

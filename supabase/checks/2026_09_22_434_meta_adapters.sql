@@ -70,6 +70,15 @@ begin
       case when v ? 'adapters' then 'doorgelaten' else 'stil weggevallen' end;
   exception when sqlstate '23514' then null;
   end;
+  -- `methode` was vrije tekst met een lengtegrens van 40. Deze waarde is 12
+  -- tekens en paste daar dus moeiteloos in: een providerfoutcode die het
+  -- auditspoor in glipt via het enige veld dat géén gesloten verzameling had.
+  begin
+    v := public.meta_basisniveau('{"adapters":[{"naam":"supabase-rag","methode":"AADSTS700016","resultaat":"treffers","netwerkpogingen":1,"latency_ms":12,"downloads":0,"bytes":0,"throttles":0,"retries":0,"kandidaten_voor_poort":20,"kandidaten_na_poort":8,"afwijzing_root":0,"afwijzing_mapping":0,"afwijzing_binding":0,"afwijzing_rechten":0,"afwijzing_versie":0,"afwijzing_download":0,"afwijzing_extractie":0,"afwijzing_lokalisatie":0,"afwijzing_grens":0,"opgenomen_passages":3,"opgenomen_documenten":2}]}'::jsonb);
+    raise exception 'T4-F: vijandige vorm "vrije tekst in methode" werd NIET geweigerd (uitkomst: %)',
+      case when v ? 'adapters' then 'doorgelaten' else 'stil weggevallen' end;
+  exception when sqlstate '23514' then null;
+  end;
   begin
     v := public.meta_basisniveau('{"adapters":[{"naam":"supabase-rag","methode":"hybride_rrf","resultaat":"treffers","netwerkpogingen":1,"latency_ms":12,"downloads":0,"bytes":0,"throttles":0,"retries":0,"kandidaten_voor_poort":20,"kandidaten_na_poort":8,"afwijzing_root":0,"afwijzing_mapping":0,"afwijzing_binding":0,"afwijzing_rechten":0,"afwijzing_versie":0,"afwijzing_download":0,"afwijzing_extractie":0,"afwijzing_lokalisatie":0,"afwijzing_grens":0,"opgenomen_passages":3,"opgenomen_documenten":2,"extra":1}]}'::jsonb);
     raise exception 'T4-F: vijandige vorm "extra veld" werd NIET geweigerd (uitkomst: %)',

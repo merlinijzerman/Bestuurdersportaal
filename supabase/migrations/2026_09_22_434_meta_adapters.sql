@@ -32,6 +32,9 @@ begin
     return '{}'::jsonb;
   end if;
 
+  -- Rijgrens 8 = ADAPTERMETA_MAX_RIJEN in TypeScript. Beide lagen hanteren
+  -- hem, zodat een te lange array al in de applicatie faalt met de eigen
+  -- inhoudsvrije foutcategorie in plaats van hier met een databasefout.
   if jsonb_typeof(v_adapters) <> 'array' or jsonb_array_length(v_adapters) > 8 then
     raise exception 'adaptermetadata_ongeldig' using errcode = 'check_violation';
   end if;
@@ -49,7 +52,15 @@ begin
         or jsonb_typeof(e->'resultaat') is distinct from 'string'
         or e->>'resultaat' not in ('treffers','leeg','niet_geraadpleegd')
         or jsonb_typeof(e->'methode') is distinct from 'string'
-        or length(e->>'methode') not between 1 and 40
+        -- GESLOTEN, niet "een korte string". Een lengtegrens is geen vorm: elke
+        -- tekst tot 40 tekens paste erin, en juist een korte tekst is een prima
+        -- drager voor een identifier of een providerfoutmelding. Deze lijst is
+        -- gelijk aan ADAPTERMETA_METHODEN in TypeScript; een pariteitsgate leest
+        -- beide en gaat rood zodra ze uiteenlopen.
+        or e->>'methode' not in (
+             'hybride_rrf','fts_dutch_ranked','fts_dutch_terugval','fts_plain',
+             'ilike','geen','sharepoint_live'
+           )
         -- Tellers: niet-negatieve GEHELE getallen.
         or jsonb_typeof(e->'netwerkpogingen') is distinct from 'number'
         or (e->>'netwerkpogingen')::numeric < 0

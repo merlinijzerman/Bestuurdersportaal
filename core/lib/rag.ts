@@ -587,7 +587,16 @@ export interface DocumentChunk {
  */
 export interface AdapterMeta {
   naam: "supabase-rag" | "microsoft-sharepoint";
-  methode: string;
+  /**
+   * GESLOTEN, niet vrije tekst. De waardenlijst staat als
+   * `ADAPTERMETA_METHODEN` in `retrieval/adaptermeta.ts` en een assertie daar
+   * laat de typecheck falen zodra dit type en die lijst uiteenlopen. Was dit
+   * `string`, dan paste elke korte tekst erin — en een korte tekst is een
+   * prima drager voor een identifier of een providerfoutmelding.
+   */
+  methode:
+    | RetrievalMeta["methode"]
+    | "sharepoint_live";
   resultaat: "treffers" | "leeg" | "niet_geraadpleegd";
   // Beurtbreed — onafhankelijk van de citaatafkapping.
   netwerkpogingen: number;

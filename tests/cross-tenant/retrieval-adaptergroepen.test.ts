@@ -10,7 +10,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { citeer, voerRetrievalUit, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
-import { ADAPTERMETA_VELDEN, valideerAdapterMeta } from "../../core/lib/retrieval/adaptermeta";
+import {
+  ADAPTERMETA_MAX_RIJEN,
+  ADAPTERMETA_VELDEN,
+  valideerAdapterMeta,
+} from "../../core/lib/retrieval/adaptermeta";
 import type {
   AdapterUitkomst,
   Bronresultaat,
@@ -778,6 +782,14 @@ test("VIJANDIG: elke ongeldige vorm faalt fail-closed — geen antwoord, geen ci
     ["extra veld", { ...geldig(), extra: 1 }],
     ["identifier", { ...geldig(), bron_id: "https://host/pad/doc.docx" }],
     ["genest object", { ...geldig(), afwijzingen: { root: 1 } }],
+    // `methode` was vrije tekst met een lengtegrens van 40 tekens. Deze code is
+    // er 12 en paste dus moeiteloos: een providerfoutmelding die het auditspoor
+    // in glipt via het enige veld zonder gesloten verzameling.
+    ["vrije tekst in methode", { ...geldig(), methode: "AADSTS700016" }],
+    // SQL eist floor(x) = x. Liet TypeScript een breuk door, dan faalde de
+    // beurt pas bij het wegschrijven met een databasefout in plaats van met de
+    // eigen inhoudsvrije foutcategorie.
+    ["niet-geheel getal", { ...geldig(), bytes: 1.5 }],
   ];
   for (const [naam, vorm] of vormen) {
     assert.throws(
@@ -795,6 +807,29 @@ test("VIJANDIG: elke ongeldige vorm faalt fail-closed — geen antwoord, geen ci
       `${naam} werd niet geweigerd`,
     );
   }
+});
+
+test("VIJANDIG: meer rijen dan de SQL-grens wordt al in TypeScript geweigerd", () => {
+  // De grens 8 stond alleen in SQL. Daardoor kon TypeScript een array
+  // accepteren die de database weigerde, en faalde de beurt pas bij het
+  // wegschrijven — met een databasefout in plaats van deze categorie.
+  const geldig = {
+    naam: "supabase-rag" as const,
+    methode: "hybride_rrf" as const,
+    resultaat: "treffers" as const,
+    netwerkpogingen: 0, latency_ms: 0, downloads: 0, bytes: 0, throttles: 0, retries: 0,
+    kandidaten_voor_poort: 0, kandidaten_na_poort: 0,
+    afwijzing_root: 0, afwijzing_mapping: 0, afwijzing_binding: 0, afwijzing_rechten: 0,
+    afwijzing_versie: 0, afwijzing_download: 0, afwijzing_extractie: 0,
+    afwijzing_lokalisatie: 0, afwijzing_grens: 0,
+    opgenomen_passages: 0, opgenomen_documenten: 0,
+  };
+  // Positieve controle: precies op de grens mag wél.
+  valideerAdapterMeta(Array.from({ length: ADAPTERMETA_MAX_RIJEN }, () => ({ ...geldig })));
+  assert.throws(
+    () => valideerAdapterMeta(Array.from({ length: ADAPTERMETA_MAX_RIJEN + 1 }, () => ({ ...geldig }))),
+    (e: unknown) => (e as Error).name === "AdaptermetadataOngeldig",
+  );
 });
 
 test("een ongeldige vorm levert GEEN uitkomst op in de volledige keten", async () => {

@@ -81,6 +81,25 @@ export default async function BeheerPage() {
         </Link>
       )}
 
+      {/* #434 T4-F — de adapterstand uit het auditspoor. Dezelfde capability als
+          de fonds-configuratie hieronder; het leespad toetst hem opnieuw. */}
+      {magConfigBeheren && (
+        <Link
+          href="/beheer/adapterstatus"
+          className="mb-8 flex items-center justify-between rounded-xl border border-line bg-white px-5 py-4 hover:bg-app-bg"
+        >
+          <div>
+            <div className="font-semibold text-ink">Adapterstand — retrieval</div>
+            <div className="text-sm text-muted mt-0.5">
+              Wat de bronadapters in de vastgelegde beurten deden: treffers, afwijzingen,
+              downloads en niet-geraadpleegde bronnen. Uit het auditspoor; er wordt geen bron
+              bevraagd.
+            </div>
+          </div>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
+
       <BeheerClient />
 
       {/* Fonds-configuratie (T8): huisstijl, modules, feature flags + historie.

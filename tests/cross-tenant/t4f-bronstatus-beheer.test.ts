@@ -2,18 +2,51 @@
 //  #434 T4-F — route/status en beheerweergave.
 // ----------------------------------------------------------------------------
 //  Hermetisch: geen netwerk, geen database.
+//
+//  De autorisatie- en tenanttests in §6 draaien het ECHTE leespad met een
+//  onbevoegde gebruiker en met twee fondsen in de dataset. Een eerdere versie
+//  van deze suite las daarvoor de broncode van de route met een reguliere
+//  expressie; dat bewijst dat een regel STAAT, niet dat er iets GEBEURT.
 // ============================================================================
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { bouwBronstatusDto } from "../../core/lib/retrieval/bronstatus-dto";
+import { bouwBronstatusDto, BRONSTATUS_ONBEKEND } from "../../core/lib/retrieval/bronstatus-dto";
 import { aggregeerAdapterMeta } from "../../core/lib/retrieval/adaptermeta-beheer";
-import { ADAPTERMETA_NAMEN, ADAPTERMETA_RESULTATEN } from "../../core/lib/retrieval/adaptermeta";
+import {
+  leesAdapterstand,
+  ADAPTERSTATUS_LIMIET,
+  type MetaBron,
+  type MetaQuery,
+} from "../../core/lib/retrieval/adapterstatus-lezer";
+import {
+  ADAPTERMETA_NAMEN,
+  ADAPTERMETA_RESULTATEN,
+  ADAPTERMETA_METHODEN,
+  ADAPTERMETA_MAX_RIJEN,
+  ADAPTERMETA_DUURZAME_REF,
+  ADAPTERMETA_FOUTCATEGORIE,
+  AdaptermetadataOngeldig,
+} from "../../core/lib/retrieval/adaptermeta";
+import { foutcategorieVoor } from "../../core/lib/retrieval/orkestratie";
 import { maakZoekRespons } from "../../core/lib/retrieval/productiepaden-core";
 import type { Bronstatus } from "../../core/lib/retrieval/contract";
 
 const lees = (pad: string) => readFileSync(fileURLToPath(new URL(`../../${pad}`, import.meta.url)), "utf8");
+
+/** Een volledig geldige adapterrij; tests wijzigen er telkens één veld in. */
+const geldigeRij = (naam: string = "microsoft-sharepoint") => ({
+  naam,
+  methode: "sharepoint_live",
+  resultaat: "treffers",
+  netwerkpogingen: 2, latency_ms: 40, downloads: 1, bytes: 1024, throttles: 0, retries: 1,
+  kandidaten_voor_poort: 10, kandidaten_na_poort: 4,
+  afwijzing_root: 1, afwijzing_mapping: 2, afwijzing_binding: 0, afwijzing_rechten: 0,
+  afwijzing_versie: 0, afwijzing_download: 0, afwijzing_extractie: 0,
+  afwijzing_lokalisatie: 0, afwijzing_grens: 0,
+  opgenomen_passages: 3, opgenomen_documenten: 2,
+});
 
 // ── 1. Legacy: zonder bronstatus blijft de respons byte-identiek ───────────
 
@@ -53,6 +86,42 @@ test("een bron die WEL is geraadpleegd en niets vond, wordt niet gemeld", () => 
   assert.equal(dto, undefined);
 });
 
+// ── 3. Een onbekende waarde laat de WAARSCHUWING staan ─────────────────────
+
+test("een onbekende reden of bronsoort wordt afgevlakt, NIET weggelaten", () => {
+  // Dit was de vorige keuze en die was fout: de rij bestaat juist omdát een
+  // bron ontbrak. Wie hem weggooit, gooit de waarschuwing weg en niet het
+  // risico — het antwoord oogt dan weer volledig.
+  const dto = bouwBronstatusDto([
+    { adapter: "supabase-rag", bronsoort: "verzonnen", geraadpleegd: false, reden: "providerfout" },
+    { adapter: "supabase-rag", bronsoort: "fonds", geraadpleegd: false, reden: "vrije tekst met AADSTS700016" },
+  ] as unknown as Bronstatus[]);
+  assert.ok(dto, "de melding mag niet verdwijnen omdat één veld onbekend is");
+  assert.equal(dto.length, 2, "beide ontbrekende bronnen blijven zichtbaar");
+  assert.deepEqual(dto[0], {
+    categorie: "bron_niet_geraadpleegd",
+    bronsoort: BRONSTATUS_ONBEKEND,
+    reden: "providerfout",
+  });
+  assert.deepEqual(dto[1], {
+    categorie: "bron_niet_geraadpleegd",
+    bronsoort: "fonds",
+    reden: BRONSTATUS_ONBEKEND,
+  });
+  // En de onbekende tekst zelf gaat nog steeds niet mee naar de client.
+  assert.equal(JSON.stringify(dto).includes("AADSTS"), false, "de vrije tekst lekt naar de route");
+});
+
+test("een rij waarvan `geraadpleegd` geen boolean is, wordt gemeld en niet genegeerd", () => {
+  // Van een onleesbare rij kunnen we niet vaststellen DÁT de bron geraadpleegd
+  // is. Fail-closed betekent hier: melden.
+  const dto = bouwBronstatusDto([
+    { adapter: "supabase-rag", bronsoort: "fonds", reden: "providerfout" },
+  ] as unknown as Bronstatus[]);
+  assert.ok(dto);
+  assert.equal(dto.length, 1);
+});
+
 // ── 4. Geen interne of providerdata via de route ───────────────────────────
 
 test("VIJANDIG: extra velden op het interne object bereiken de route niet", () => {
@@ -81,86 +150,278 @@ test("VIJANDIG: extra velden op het interne object bereiken de route niet", () =
   }
 });
 
-test("een reden of bronsoort buiten de gesloten verzameling wordt weggelaten", () => {
-  const dto = bouwBronstatusDto([
-    { adapter: "supabase-rag", bronsoort: "verzonnen", geraadpleegd: false, reden: "providerfout" },
-    { adapter: "supabase-rag", bronsoort: "fonds", geraadpleegd: false, reden: "vrije tekst" },
-  ] as unknown as Bronstatus[]);
-  assert.equal(dto, undefined, "een onbekende waarde hoort niet naar de client te gaan");
-});
-
-// ── 5. Beheerweergave: uitsluitend gesloten velden ─────────────────────────
+// ── 5. Beheerweergave: gesloten velden én een eerlijke dekking ─────────────
 
 test("de beheeraggregatie levert alleen gesloten velden en eindige tellers", () => {
-  const rij = {
-    naam: "microsoft-sharepoint", methode: "sharepoint_live", resultaat: "treffers",
-    netwerkpogingen: 2, latency_ms: 40, downloads: 1, bytes: 1024, throttles: 0, retries: 1,
-    kandidaten_voor_poort: 10, kandidaten_na_poort: 4,
-    afwijzing_root: 1, afwijzing_mapping: 2, afwijzing_binding: 0, afwijzing_rechten: 0,
-    afwijzing_versie: 0, afwijzing_download: 0, afwijzing_extractie: 0,
-    afwijzing_lokalisatie: 0, afwijzing_grens: 0,
-    opgenomen_passages: 3, opgenomen_documenten: 2,
-  };
+  const rij = geldigeRij();
   const uit = aggregeerAdapterMeta([{ adapters: [rij, rij] }]);
-  assert.equal(uit.length, 1);
-  assert.equal(uit[0].beurten, 2);
-  assert.equal(uit[0].afwijzingen_totaal, 6, "afwijzingen worden over de gronden opgeteld");
-  for (const [veld, waarde] of Object.entries(uit[0])) {
+  assert.equal(uit.regels.length, 1);
+  assert.equal(uit.regels[0].beurten, 2);
+  assert.equal(uit.regels[0].afwijzingen_totaal, 6, "afwijzingen worden over de gronden opgeteld");
+  assert.equal(uit.volledig, true);
+  assert.equal(uit.dekking.metarijen_gelezen, 1);
+  for (const [veld, waarde] of Object.entries(uit.regels[0])) {
     if (veld === "naam") assert.ok((ADAPTERMETA_NAMEN as readonly string[]).includes(waarde as string));
     else assert.ok(typeof waarde === "number" && Number.isFinite(waarde) && waarde >= 0, veld);
   }
-  const serie = JSON.stringify(uit);
+  const serie = JSON.stringify(uit.regels);
   assert.equal(serie.includes("sharepoint_live"), false, "methode is geen beheerveld en hoort er niet in");
 });
 
-test("een onleesbare rij wordt OVERGESLAGEN, niet met nullen ingevuld", () => {
-  // Een beheerstand die een kapotte rij aanvult, toont een werkelijkheid die er
-  // niet was. Overslaan is het eerlijke alternatief.
+test("een onleesbare rij wordt overgeslagen én GETELD, en de stand heet niet volledig", () => {
+  // Overslaan zonder tellen is de stille degradatie in beheervorm: de stand
+  // ziet er compleet uit en niemand kan zien dat hij het niet is. Aanvullen met
+  // nullen is even fout — dat toont een werkelijkheid die er niet was.
   const uit = aggregeerAdapterMeta([
-    { adapters: [{ naam: "onbekend", resultaat: "treffers" }] },
+    { adapters: [{ ...geldigeRij(), naam: "onbekend" }] },
     { adapters: "geen array" },
     null,
-    { adapters: [{ naam: "supabase-rag", resultaat: "leeg" }] },
+    { adapters: [geldigeRij("supabase-rag")] },
+    // Geen `adapters`: een beurt met één adaptergroep. GEEN degradatie.
+    { methode: "hybride_rrf" },
   ]);
-  assert.equal(uit.length, 1);
-  assert.equal(uit[0].naam, "supabase-rag");
-  assert.equal(uit[0].leeg, 1);
+  assert.equal(uit.regels.length, 1);
+  assert.equal(uit.regels[0].naam, "supabase-rag");
+  assert.equal(uit.regels[0].treffers, 1);
+  assert.equal(uit.volledig, false, "de stand verzwijgt dat er iets ontbreekt");
+  assert.equal(uit.dekking.adapterrijen_overgeslagen, 1);
+  assert.equal(uit.dekking.metarijen_overgeslagen, 2, "«geen array» en «null» zijn kapotte regels");
+  assert.equal(uit.dekking.metarijen_zonder_adapters, 1, "één adapter is geen kapotte regel");
+  assert.equal(uit.dekking.metarijen_gelezen, 2);
 });
 
-// ── 6. Autorisatie en tenantisolatie ───────────────────────────────────────
+test("de aggregatie hanteert DEZELFDE gesloten vorm als het schrijfpad", () => {
+  // Een eigen, lossere toets in de beheerlaag is precies hoe een beheerstand
+  // iets anders kan tonen dan het auditspoor bevat. Deze rij heeft een geldige
+  // naam en een geldig resultaat — de oude toets keek niet verder.
+  const uit = aggregeerAdapterMeta([
+    { adapters: [{ naam: "supabase-rag", resultaat: "treffers", bron_url: "https://host/doc.docx" }] },
+  ]);
+  assert.equal(uit.regels.length, 0, "een rij met een identifier erin is geen bruikbare rij");
+  assert.equal(uit.dekking.adapterrijen_overgeslagen, 1);
+  assert.equal(uit.volledig, false);
+});
 
-test("de beheerroute draagt de bestaande capability, een inline poort én een fondsfilter", () => {
-  const bron = lees("app/api/beheer/adapterstatus/route.ts");
-  assert.match(bron, /capability: "fonds\.config\.manage"/, "geen nieuw leesrecht, de bestaande capability");
-  assert.match(bron, /requireCapability\(ctx\.gebruikerId, "fonds\.config\.manage"\)/, "de wrapperdeclaratie is een belofte; de inline poort is de weigering");
-  assert.match(bron, /\.eq\("fonds_id", ctx\.fondsId\)/, "cross-tenant leesbaarheid mag niet alleen van RLS afhangen");
-  // Op GEBRUIK matchen, niet op proza: de route bevat zelf een commentaarregel
-  // die zegt dát er geen service-role is, en een naïeve regex vindt juist die.
-  const zonderCommentaar = bron.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.equal(
-    /SERVICE_ROLE|createServiceRole|service_role/i.test(zonderCommentaar),
-    false,
-    "geen service-role in een fondsroute"
+// ── 6. Autorisatie en tenantisolatie — WERKELIJK GEDRAG ────────────────────
+
+/**
+ * Een eerlijke namaak-queryketen: zij past ALLEEN de filters toe die de code
+ * daadwerkelijk zet. Laat het leespad `.eq("fonds_id", …)` weg, dan komen de
+ * rijen van het andere fonds gewoon terug en gaat de test rood — dat is de
+ * negatieve controle, ingebakken in de fixture.
+ */
+function namaakBron(rijen: { fonds_id: string; retrieval_meta: unknown }[]) {
+  const gezien = { filters: [] as [string, string][], limiet: 0, tabel: "", geselecteerd: "" };
+  const maakQuery = (huidig: typeof rijen): MetaQuery => ({
+    select(kolommen) {
+      gezien.geselecteerd = kolommen;
+      return maakQuery(huidig);
+    },
+    eq(kolom, waarde) {
+      gezien.filters.push([kolom, waarde]);
+      return maakQuery(huidig.filter((r) => (r as Record<string, unknown>)[kolom] === waarde));
+    },
+    not(_kolom, _operator, _waarde) {
+      return maakQuery(huidig.filter((r) => r.retrieval_meta !== null));
+    },
+    order() {
+      return maakQuery(huidig);
+    },
+    limit(aantal) {
+      gezien.limiet = aantal;
+      return Promise.resolve({
+        data: huidig.slice(0, aantal).map((r) => ({ retrieval_meta: r.retrieval_meta })),
+        error: null,
+      });
+    },
+  });
+  const bron: MetaBron = {
+    from(tabel) {
+      gezien.tabel = tabel;
+      return maakQuery(rijen);
+    },
+  };
+  return { bron, gezien };
+}
+
+const FONDS_A = "11111111-1111-4111-8111-111111111111";
+const FONDS_B = "22222222-2222-4222-8222-222222222222";
+
+test("een gebruiker ZONDER de capability krijgt 403 en er wordt niets gelezen", async () => {
+  // De volgorde is de eis: een weigering ná de query heeft de rijen al
+  // opgehaald. Daarom telt deze test de aanroepen van de bron.
+  let gelezen = 0;
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "zonder-recht",
+    fondsId: FONDS_A,
+    magBeheren: async () => false,
+    bron: {
+      from() {
+        gelezen += 1;
+        throw new Error("het leespad mag hier nooit komen");
+      },
+    },
+  });
+  assert.equal(uitkomst.status, 403);
+  assert.equal(gelezen, 0, "er is gelezen vóórdat de capability was getoetst");
+});
+
+test("CROSS-TENANT: de stand bevat uitsluitend de eigen fondsrijen", async () => {
+  const { bron, gezien } = namaakBron([
+    { fonds_id: FONDS_A, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } },
+    { fonds_id: FONDS_B, retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] } },
+    { fonds_id: FONDS_B, retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] } },
+  ]);
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "beheerder-a",
+    fondsId: FONDS_A,
+    magBeheren: async () => true,
+    bron,
+  });
+  assert.equal(uitkomst.status, 200);
+  assert.ok(uitkomst.status === 200);
+  assert.deepEqual(
+    uitkomst.stand.regels.map((r) => r.naam),
+    ["supabase-rag"],
+    "de beheerstand van fonds A toont een adapter die alleen bij fonds B draaide"
   );
-  assert.match(bron, /hostGuard: "afdwingen"/);
+  assert.equal(uitkomst.stand.dekking.metarijen_gelezen, 1);
+  // En het filter is werkelijk gezet — niet alleen in de uitkomst zichtbaar.
+  assert.deepEqual(gezien.filters, [["fonds_id", FONDS_A]]);
+  assert.equal(gezien.tabel, "governance_log");
+  assert.equal(gezien.geselecteerd, "retrieval_meta");
+  assert.equal(gezien.limiet, ADAPTERSTATUS_LIMIET);
 });
 
-// ── 7. Eén enumverzameling over route, audit en beheer ─────────────────────
+test("een profiel zonder fonds leest niets en krijgt een lege, volledige stand", async () => {
+  let gelezen = 0;
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "beheerder-zonder-fonds",
+    fondsId: null,
+    magBeheren: async () => true,
+    bron: {
+      from() {
+        gelezen += 1;
+        throw new Error("zonder fonds is er geen tenant om binnen te blijven");
+      },
+    },
+  });
+  assert.equal(gelezen, 0);
+  assert.ok(uitkomst.status === 200);
+  assert.deepEqual(uitkomst.stand.regels, []);
+});
 
-test("route, auditprojectie en beheerweergave delen dezelfde gesloten enums", () => {
-  // Drie plekken die uiteen kunnen lopen: de TS-validator, de SQL-projectie en
-  // de beheeraggregatie. Loopt er één uit de pas, dan toont de beheerstand iets
-  // anders dan het auditspoor bevat.
+test("een leesfout levert 503 en geen half gevulde stand", async () => {
+  const kapot: MetaBron = {
+    from: () => {
+      const q: MetaQuery = {
+        select: () => q,
+        eq: () => q,
+        not: () => q,
+        order: () => q,
+        limit: () => Promise.resolve({ data: null, error: { message: "rls" } }),
+      };
+      return q;
+    },
+  };
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron: kapot,
+  });
+  assert.equal(uitkomst.status, 503);
+});
+
+test("de beheerroute en de beheerpagina delen één leespad en dragen geen service-role", () => {
+  // Structurele controle, NIET het autorisatiebewijs: dat staat hierboven en
+  // draait de code. Wat hier wordt vastgelegd, is dat route en scherm niet
+  // ieder hun eigen query krijgen — twee leespaden is hoe een scherm iets
+  // anders gaat tonen dan de API teruggeeft.
+  for (const pad of [
+    "app/api/beheer/adapterstatus/route.ts",
+    "app/(dashboard)/beheer/adapterstatus/page.tsx",
+  ]) {
+    const bron = lees(pad);
+    assert.match(bron, /leesAdapterstand\(/, `${pad} bouwt een eigen leespad`);
+    assert.match(bron, /"fonds\.config\.manage"/, `${pad} draagt de bestaande capability niet`);
+    assert.equal(/\.from\(["']governance_log["']\)/.test(bron), false, `${pad} bevraagt zelf de tabel`);
+    // Op GEBRUIK matchen, niet op proza: de bestanden bevatten zelf een
+    // commentaarregel die zegt dát er geen service-role is.
+    const zonderCommentaar = bron.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    assert.equal(
+      /SERVICE_ROLE|createServiceRole|service_role/i.test(zonderCommentaar),
+      false,
+      `geen service-role in ${pad}`
+    );
+  }
+  assert.match(lees("app/api/beheer/adapterstatus/route.ts"), /hostGuard: "afdwingen"/);
+});
+
+// ── 7. De foutcategorie bereikt het DUURZAME spoor ─────────────────────────
+
+test("een geweigerde adaptermetadatavorm is een genormaliseerde foutcategorie", () => {
+  // Droeg alleen het Error-object de categorie, dan bestond de weigering na
+  // afloop van het verzoek nergens meer. Via `foutcategorieVoor()` belandt zij
+  // op `ai_actie.resultaat_ref` — hetzelfde pad als timeout en annulering.
+  assert.equal(foutcategorieVoor(new AdaptermetadataOngeldig("bytes")), ADAPTERMETA_FOUTCATEGORIE);
+  assert.equal(foutcategorieVoor(new Error("iets anders")), null);
+  // De duurzame verwijzing draagt de categorie en NOOIT het afgewezen veld.
+  assert.equal(ADAPTERMETA_DUURZAME_REF, `retrieval:${ADAPTERMETA_FOUTCATEGORIE}`);
+  assert.equal(ADAPTERMETA_DUURZAME_REF.includes("bytes"), false);
+
+  // Structureel: de chatroute schrijft de categorie strikt weg (met alarm) en
+  // meldt de gebruiker dat er daarom geen antwoord is.
+  const chat = lees("app/api/chat/route.ts");
+  assert.match(chat, /rondAfStrikt\(\s*supabase,\s*aiActieId,\s*"mislukt",\s*`\$\{fase\}:\$\{afbreekreden\}`/);
+  assert.match(chat, /afbreekreden === "adaptermetadata_ongeldig"/);
+  // En `fase` is op het retrievalmoment nog "retrieval", dus de duurzame
+  // verwijzing is letterlijk ADAPTERMETA_DUURZAME_REF. Dat is een
+  // VOLGORDE-feit in het bestand, geen formulering: de omschakeling naar
+  // "generatie" staat ná de retrievalaanroep.
+  assert.ok(
+    chat.indexOf('voerVolledigeRetrievalUit(') < chat.indexOf('fase = "generatie"'),
+    "de fase schakelt vóór de retrieval om; dan draagt het spoor de verkeerde fase"
+  );
+  const zoeken = lees("app/api/zoeken/route.ts");
+  assert.match(zoeken, /afbreking === ADAPTERMETA_FOUTCATEGORIE/);
+});
+
+// ── 8. Eén gesloten contract over TypeScript, SQL en beheer ────────────────
+
+test("de TS-validator en de SQL-vormcontrole hanteren DEZELFDE gesloten regels", () => {
+  // Liepen de twee uiteen, dan accepteerde de ene laag wat de andere weigerde:
+  // de beurt faalde dan pas bij het wegschrijven, met een databasefout in
+  // plaats van de eigen inhoudsvrije foutcategorie.
   const migratie = lees("supabase/migrations/2026_09_22_434_meta_adapters.sql");
-  for (const naam of ADAPTERMETA_NAMEN) {
-    assert.ok(migratie.includes(`'${naam}'`), `SQL kent adapternaam ${naam} niet`);
-  }
-  for (const resultaat of ADAPTERMETA_RESULTATEN) {
-    assert.ok(migratie.includes(`'${resultaat}'`), `SQL kent resultaatcategorie ${resultaat} niet`);
-  }
-  // En de andere kant op: de SQL mag geen waarde kennen die TypeScript niet kent.
-  const naamlijst = /e->>'naam' not in \(([^)]*)\)/.exec(migratie);
-  assert.ok(naamlijst);
-  const uitSql = [...naamlijst[1].matchAll(/'([a-z-]+)'/g)].map((m) => m[1]).sort();
-  assert.deepEqual(uitSql, [...ADAPTERMETA_NAMEN].sort());
+
+  const uitSql = (veld: string) => {
+    const m = new RegExp(`e->>'${veld}' not in \\(([\\s\\S]*?)\\)`).exec(migratie);
+    assert.ok(m, `SQL kent geen gesloten verzameling voor ${veld}`);
+    return [...m[1].matchAll(/'([a-z_-]+)'/g)].map((x) => x[1]).sort();
+  };
+  assert.deepEqual(uitSql("naam"), [...ADAPTERMETA_NAMEN].sort());
+  assert.deepEqual(uitSql("resultaat"), [...ADAPTERMETA_RESULTATEN].sort());
+  assert.deepEqual(
+    uitSql("methode"),
+    [...ADAPTERMETA_METHODEN].sort(),
+    "`methode` moet in beide lagen dezelfde gesloten lijst zijn — niet een lengtegrens"
+  );
+  // De rijgrens.
+  const grens = /jsonb_array_length\(v_adapters\) > (\d+)/.exec(migratie);
+  assert.ok(grens);
+  assert.equal(Number(grens[1]), ADAPTERMETA_MAX_RIJEN);
+  // En de gehele-getallen-eis staat in SQL per teller; TypeScript doet hem met
+  // Number.isInteger. Bewijs dat de SQL-regel er nog is voor élke teller.
+  const tellers = [...migratie.matchAll(/floor\(\(e->>'([a-z_]+)'\)::numeric\)/g)].map((m) => m[1]);
+  assert.equal(tellers.length, 19, "niet elke teller draagt de gehele-getallen-eis meer");
+});
+
+test("de gesloten lijsten laten geen vrije tekst meer door", () => {
+  // De scherpe vorm: een providerfoutcode van 12 tekens paste moeiteloos in de
+  // oude lengtegrens van 40.
+  const migratie = lees("supabase/migrations/2026_09_22_434_meta_adapters.sql");
+  assert.equal(
+    /length\(e->>'methode'\)/.test(migratie),
+    false,
+    "een lengtegrens is geen gesloten vorm"
+  );
+  assert.equal((ADAPTERMETA_METHODEN as readonly string[]).includes("AADSTS700016"), false);
 });

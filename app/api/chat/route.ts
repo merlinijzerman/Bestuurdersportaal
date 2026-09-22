@@ -4993,6 +4993,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                     : "Het zoeken in de bronnen duurde te lang. Probeer het opnieuw of stel uw vraag gerichter.",
               });
             }
+            // #434 — een geweigerde adaptermetadatavorm is GEEN afbreking maar
+            // een interne invariant die brak. De beurt stopt fail-closed, en de
+            // gebruiker hoort dat te zien: zonder deze melding sluit de stream
+            // zonder antwoord én zonder uitleg, wat als een hapering leest.
+            // De categorie zelf staat inmiddels op `ai_actie.resultaat_ref`.
+            if (afbreekreden === "adaptermetadata_ongeldig") {
+              send({
+                type: "error",
+                error:
+                  "De verantwoording over de geraadpleegde bronnen kon niet worden vastgesteld. " +
+                  "Er is daarom geen antwoord gegeven. Probeer het opnieuw; blijft dit terugkomen, meld het dan bij beheer.",
+              });
+            }
             console.warn(`[chat] beurt afgebroken (${fase}:${afbreekreden}) — correlatie ${ctx.requestId}`);
           } else {
             console.error("Chat stream fout:", streamFout);

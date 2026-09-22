@@ -8,13 +8,23 @@
 //
 //  De uitvoer is GESLOTEN en inhoudsvrij, net als de invoer. Er wordt niets
 //  toegevoegd wat niet al in `meta.adapters` stond — geen identifiers, geen
-//  namen, geen paden. De invoer is bovendien al tweemaal gevalideerd: door de
-//  TypeScript-validator vóór het wegschrijven en door de SQL-vormcontrole bij
-//  het lezen. Deze functie vertrouwt daar niet blind op en filtert zelf nog
-//  eens op de gesloten enums — een rij uit een handmatig geschreven logregel
-//  hoort de weergave niet te kunnen sturen.
+//  namen, geen paden.
+//
+//  ÉÉN LEESBAARHEIDSREGEL, NIET EEN DERDE. Deze weergave toetst met dezelfde
+//  `valideerAdapterMeta()` als het schrijfpad en als de SQL-projectie. Een
+//  eigen, lossere toets (naam en resultaat en verder maar zien) was precies de
+//  manier waarop een beheerstand iets anders kan tonen dan het auditspoor
+//  bevat.
+//
+//  EN: WAT WORDT OVERGESLAGEN, WORDT GETELD. Een onleesbare rij vult deze
+//  functie niet aan met nullen — dat zou een werkelijkheid tonen die er niet
+//  was. Maar stil overslaan is even misleidend: dan toont de stand een
+//  onvolledig beeld dat er volledig uitziet. Daarom draagt de uitkomst haar
+//  eigen dekkingsverklaring, en die is geen optioneel extraatje: `volledig`
+//  staat in het type, dus een weergave kan hem niet vergeten te lezen zonder
+//  dat de typecheck erover valt.
 // ============================================================================
-import { ADAPTERMETA_NAMEN, ADAPTERMETA_RESULTATEN } from "./adaptermeta";
+import { valideerAdapterMeta } from "./adaptermeta";
 import type { AdapterMeta } from "../rag";
 
 export interface AdapterBeheerregel {
@@ -35,6 +45,33 @@ export interface AdapterBeheerregel {
   retries: number;
   afwijzingen_totaal: number;
   opgenomen_passages: number;
+}
+
+/** De dekking van de stand: waarop is hij gebouwd, en wat ontbreekt eraan. */
+export interface AdapterBeheerdekking {
+  /** Logregels met een bruikbare `adapters`-array. */
+  metarijen_gelezen: number;
+  /**
+   * Logregels zonder `adapters`. GEEN degradatie: een beurt met één
+   * adaptergroep kent de sleutel niet. Apart geteld zodat "niet aanwezig" niet
+   * met "onleesbaar" wordt verward.
+   */
+  metarijen_zonder_adapters: number;
+  /** Logregels die `adapters` wél droegen maar niet in bruikbare vorm. */
+  metarijen_overgeslagen: number;
+  /** Losse adapterrijen die de gesloten vorm niet haalden. */
+  adapterrijen_overgeslagen: number;
+}
+
+export interface AdapterBeheerstand {
+  regels: AdapterBeheerregel[];
+  dekking: AdapterBeheerdekking;
+  /**
+   * Is er niets overgeslagen? Alleen dan beschrijven de regels de volledige
+   * gelezen periode. Is dit false, dan MOET de weergave dat tonen — de cijfers
+   * zijn dan een ondergrens, geen stand.
+   */
+  volledig: boolean;
 }
 
 const TELLERS = [
@@ -59,39 +96,59 @@ const AFWIJZINGEN = [
   "afwijzing_grens",
 ] as const;
 
+/**
+ * Dezelfde gesloten vorm als het schrijfpad en als SQL. Werpt de validator, dan
+ * is de rij onleesbaar — niet half leesbaar, want een rij waarvan één veld niet
+ * klopt, is een rij waarvan we de rest ook niet kunnen vertrouwen.
+ */
 function isBruikbaar(rij: unknown): rij is AdapterMeta {
-  if (typeof rij !== "object" || rij === null) return false;
-  const r = rij as Record<string, unknown>;
-  return (
-    typeof r.naam === "string" &&
-    (ADAPTERMETA_NAMEN as readonly string[]).includes(r.naam) &&
-    typeof r.resultaat === "string" &&
-    (ADAPTERMETA_RESULTATEN as readonly string[]).includes(r.resultaat)
-  );
+  try {
+    valideerAdapterMeta([rij]);
+    return true;
+  } catch {
+    return false;
+  }
 }
-
-const getal = (waarde: unknown): number =>
-  typeof waarde === "number" && Number.isFinite(waarde) && waarde >= 0 ? waarde : 0;
 
 /**
  * Aggregeert de `adapters`-rijen uit een reeks duurzame metaobjecten.
  *
- * Rijen die niet aan de gesloten vorm voldoen worden OVERGESLAGEN, niet
- * gerepareerd: een beheerstand die een onleesbare rij invult met nullen, toont
- * een werkelijkheid die er niet was.
+ * Rijen die niet aan de gesloten vorm voldoen worden OVERGESLAGEN én GETELD.
+ * Overslaan zonder tellen is de stille degradatie in beheervorm: de stand ziet
+ * er compleet uit, en niemand kan zien dat hij het niet is.
  */
-export function aggregeerAdapterMeta(
-  metaRijen: readonly unknown[]
-): AdapterBeheerregel[] {
+export function aggregeerAdapterMeta(metaRijen: readonly unknown[]): AdapterBeheerstand {
   const perAdapter = new Map<string, AdapterBeheerregel>();
+  const dekking: AdapterBeheerdekking = {
+    metarijen_gelezen: 0,
+    metarijen_zonder_adapters: 0,
+    metarijen_overgeslagen: 0,
+    adapterrijen_overgeslagen: 0,
+  };
 
   for (const meta of metaRijen) {
-    if (typeof meta !== "object" || meta === null) continue;
+    if (typeof meta !== "object" || meta === null || Array.isArray(meta)) {
+      dekking.metarijen_overgeslagen += 1;
+      continue;
+    }
+    if (!("adapters" in meta)) {
+      dekking.metarijen_zonder_adapters += 1;
+      continue;
+    }
     const adapters = (meta as { adapters?: unknown }).adapters;
-    if (!Array.isArray(adapters)) continue;
+    if (!Array.isArray(adapters)) {
+      // De sleutel was er wél, maar niet als array. Dat is een kapotte regel,
+      // niet een beurt met één adapter.
+      dekking.metarijen_overgeslagen += 1;
+      continue;
+    }
+    dekking.metarijen_gelezen += 1;
 
     for (const rij of adapters) {
-      if (!isBruikbaar(rij)) continue;
+      if (!isBruikbaar(rij)) {
+        dekking.adapterrijen_overgeslagen += 1;
+        continue;
+      }
       const huidig =
         perAdapter.get(rij.naam) ??
         ({
@@ -112,16 +169,18 @@ export function aggregeerAdapterMeta(
 
       huidig.beurten += 1;
       huidig[rij.resultaat] += 1;
-      for (const teller of TELLERS) {
-        huidig[teller] += getal((rij as unknown as Record<string, unknown>)[teller]);
-      }
-      for (const grond of AFWIJZINGEN) {
-        huidig.afwijzingen_totaal += getal((rij as unknown as Record<string, unknown>)[grond]);
-      }
+      for (const teller of TELLERS) huidig[teller] += rij[teller];
+      for (const grond of AFWIJZINGEN) huidig.afwijzingen_totaal += rij[grond];
       perAdapter.set(rij.naam, huidig);
     }
   }
 
-  // Deterministische volgorde; anders verschilt de weergave per aanroep.
-  return [...perAdapter.values()].sort((a, b) => (a.naam < b.naam ? -1 : a.naam > b.naam ? 1 : 0));
+  return {
+    // Deterministische volgorde; anders verschilt de weergave per aanroep.
+    regels: [...perAdapter.values()].sort((a, b) =>
+      a.naam < b.naam ? -1 : a.naam > b.naam ? 1 : 0
+    ),
+    dekking,
+    volledig: dekking.metarijen_overgeslagen === 0 && dekking.adapterrijen_overgeslagen === 0,
+  };
 }
