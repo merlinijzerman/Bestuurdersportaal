@@ -532,9 +532,9 @@ test("T2-1 — parent-verrijking krijgt de peildatum van het spoor, niet die van
   const basis = nepAdapter({ perQuery: { primair: [sharepointBron(1, "doc-a", "A")] } });
   const adapter: RetrievalAdapter = {
     ...basis,
-    async verrijkSelectie(_ctx, geselecteerd, opties) {
+    async verrijkKandidaten(_ctx, kandidaten, opties) {
       gezienPeildatum = opties.peildatum;
-      return { resultaten: geselecteerd };
+      return { resultaten: kandidaten };
     },
   };
   await voerRetrievalUit(CTX, {
@@ -602,9 +602,9 @@ test("T2-1 — zonder filter krijgt de parent-verrijking de effectieve peildatum
   const basis = nepAdapter({ perQuery: { primair: [sharepointBron(1, "doc-a", "A")] } });
   const adapter: RetrievalAdapter = {
     ...basis,
-    async verrijkSelectie(_ctx, geselecteerd, opties) {
+    async verrijkKandidaten(_ctx, kandidaten, opties) {
       gezien = opties.peildatum;
-      return { resultaten: geselecteerd };
+      return { resultaten: kandidaten };
     },
   };
   // Query ZONDER peildatumfilter.

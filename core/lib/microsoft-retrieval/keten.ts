@@ -183,9 +183,31 @@ function grenzenVan(gedeeltelijk: Partial<KetenGrenzen> | undefined): KetenGrenz
  * Eén bevestigde treffer. Alles hierin komt uit onze eigen registratie, uit een
  * verse Graph-lezing of uit onze eigen extractie — niets uit de Copilot-respons.
  */
+/**
+ * De GRONDSLAG waaronder deze treffer is toegelaten, zoals die bij de laatste
+ * GESLAAGDE grondslagcontrole is vastgesteld.
+ *
+ * Waarom dit uit de keten moet komen en niet later kan worden samengesteld: de
+ * centrale toelatingspoort eist een `Toegangsbewijs` met een controlemoment, een
+ * configuratieversie en een bronregistratiereferentie. Zou de adapterlaag die
+ * zelf verzinnen, dan is `gecontroleerdOp` het moment waarop díé laag toevallig
+ * draaide in plaats van het moment waarop de grondslag werkelijk is vastgesteld
+ * — en toetst V4 een venster dat niets meer bewaakt.
+ */
+export interface KetenGrondslag {
+  /** Opaque bronregistratiereferentie; providerneutraal voor de poort. */
+  bronregistratieRef: string;
+  /** De versie waaronder is toegelaten; V5 vergelijkt hierop. */
+  configuratieversie: number;
+  /** ISO-tijdstip van de LAATSTE GESLAAGDE grondslagcontrole. */
+  vastgesteldOp: string;
+}
+
 export interface KetenTreffer {
   /** Registerreferentie; hiermee bouwt de adapter later zijn bronverwijzing. */
   ref: string;
+  /** Waaronder deze treffer is toegelaten; zie `KetenGrondslag`. */
+  grondslag: KetenGrondslag;
   /** Naam uit de VERSE lezing, niet uit de mogelijk verouderde registratie. */
   naam: string;
   mappad: string;
@@ -833,6 +855,14 @@ async function verwerkDocument(
   if (!bronNu || !bronOngewijzigd(bron, bronNu)) {
     return { ok: false, verbruikt: true, afwijzing: "rechten_configuratie", grondslagWeg: true };
   }
+  // HIER, en niet eerder of later: dit is het moment waarop de grondslag voor
+  // het laatst en met succes is vastgesteld. Elk ander tijdstip zou een venster
+  // beschrijven dat niet is gecontroleerd.
+  const grondslag: KetenGrondslag = {
+    bronregistratieRef: bronNu.id,
+    configuratieversie: bronNu.configuratieversie,
+    vastgesteldOp: new Date().toISOString(),
+  };
 
   // DE LAATSTE POORT, en bewust ná de grondslag: dit is een LOKALE controle op
   // onze eigen klok, geen externe lezing. De lokalisatie hierboven is synchroon
@@ -845,7 +875,7 @@ async function verwerkDocument(
   return {
     ok: true,
     verbruikt: true,
-    treffer: maakTreffer(groep, bevestigd.naam, type, bevestigd.versie, lokalisatie.lokalisatie),
+    treffer: maakTreffer(groep, bevestigd.naam, type, bevestigd.versie, lokalisatie.lokalisatie, grondslag),
   };
 }
 
@@ -860,9 +890,11 @@ function maakTreffer(
   bestandstype: Bestandstype,
   versie: Versiebewijs,
   lokalisatie: Lokalisatie,
+  grondslag: KetenGrondslag,
 ): KetenTreffer {
   return {
     ref: groep.document.ref,
+    grondslag,
     naam,
     mappad: groep.document.mappad,
     bestandstype,

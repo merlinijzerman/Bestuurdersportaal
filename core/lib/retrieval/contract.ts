@@ -60,6 +60,19 @@ export interface RetrievalContext {
   verzoekStartOp: string;
   /** T2-1/PR-B: de samengestelde afbraak- én deadlinegrendel over de hele keten. */
   signal?: AbortSignal;
+  /**
+   * #426 — wat er van het BEURTbudget over is, in milliseconden.
+   *
+   * Gezet door de orkestratie, naast `signal`, uit dezelfde grendel. Een
+   * deelketen met een eigen, kortere klok (de Copilot-keten van T4-C) leest hem
+   * hier en nergens anders: zou hij als losse adapterdependency worden
+   * meegegeven, dan kan hij aan een ándere klok hangen dan het signaal, en dan
+   * bewaken die twee verschillende dingen.
+   *
+   * Een adapter die hem nodig heeft en niet aantreft, hoort fail-closed te
+   * stoppen — niet terug te vallen op een eigen standaard.
+   */
+  resterendMs?: () => number;
 }
 
 /**
@@ -195,6 +208,19 @@ export interface Bronresultaat {
   bronregistratieRef?: string;
   /** Verplicht zodra de adapter `permissionProof` claimt (§4.2.1). */
   toegangscontrole?: Toegangsbewijs;
+  /**
+   * #426 D-2 — een BEWERING van de adapter dat dit resultaat hetzelfde
+   * onderliggende document beschrijft als een ander resultaat met dezelfde
+   * waarde. Opaque en providerneutraal.
+   *
+   * DIT VELD ALLEEN LEIDT NOOIT TOT DEDUPLICATIE. Het is een aanwijzing, geen
+   * bewijs. Zou de orkestratie erop dedupliceren, dan kan adapter A de bron van
+   * adapter B laten verdwijnen door diens waarde te claimen, en is "zichtbaar
+   * tellen" de enige mitigatie — een logregel die het verlies niet herstelt.
+   * Dedup mag pas als de orkestratie de documentbinding ONAFHANKELIJK van beide
+   * adapters heeft vastgesteld; die binding bestaat vandaag niet.
+   */
+  equivalentieClaim?: string;
   locator: { pagina?: number | null; paragraaf?: string | null; mappad?: string; chunkIndex?: number };
   /** Geneutraliseerd en begrensd. */
   passage: string;
@@ -241,6 +267,43 @@ export interface Bronresultaat {
   };
 }
 
+/**
+ * #426 — waarom een GEVRAAGDE bron niet in dit antwoord zit. Gesloten en
+ * inhoudsvrij: geen providerteksten, geen identifiers.
+ */
+export type Bronstatusreden =
+  | "bewust_uit"
+  | "readiness_ontbreekt"
+  | "token_ongeldig"
+  | "providerfout"
+  | "timeout"
+  | "geannuleerd"
+  | "geen_resultaten";
+
+export interface Bronstatus {
+  adapter: RetrievalAdapter["naam"];
+  bronsoort: Bronsoort;
+  geraadpleegd: boolean;
+  reden: Bronstatusreden;
+}
+
+/**
+ * #426 — een GEVRAAGDE bron kon niet worden geraadpleegd, en het beleid van die
+ * adaptergroep is `"stop"`.
+ *
+ * Dit is een EIGEN fout en geen afbreking: `isAfbreking()` mag hem niet
+ * herkennen, want dan zou een fail-closed bronfout als annulering eindigen. De
+ * boodschap is inhoudsvrij; wat de route mag tonen staat in `bronstatus`.
+ */
+export class BronNietGeraadpleegd extends Error {
+  readonly bronstatus: Bronstatus[];
+  constructor(bronstatus: Bronstatus[]) {
+    super("retrieval: een gevraagde bron kon niet worden geraadpleegd");
+    this.name = "BronNietGeraadpleegd";
+    this.bronstatus = bronstatus;
+  }
+}
+
 export type RetrievalFoutcategorie =
   | "geen_resultaten"
   | "buiten_scope"
@@ -251,6 +314,29 @@ export type RetrievalFoutcategorie =
   | "providerfout"
   | "truncatie"
   | "annulering";
+
+/**
+ * #426 — wat een adapter ná de toelatingspoort nog met een bron MAG doen.
+ *
+ * Gesloten opsomming, en dat is het hele punt. `verrijkWeergave()` draait ná
+ * V1–V5; een hook die het volledige `Bronresultaat` terugkreeg kon identiteit,
+ * versie, bewijs, passage, status of bronsoort herschrijven en daarmee precies
+ * de binding vervangen waarop de poort heeft geoordeeld — vóórdat de bron in de
+ * prompt en de citaties belandt. Acht ontwerprondes probeerden dat met steeds
+ * strakkere regels af te dekken; het probleem zat in de vorm. Zolang de adapter
+ * het toegelaten resultaat vasthoudt, is elke regel een afspraak in plaats van
+ * een grens.
+ */
+export type WeergaveVerrijking =
+  | { type: "behouden" }
+  | { type: "weglaten" }
+  | { type: "verrijkt"; weergave: Bronresultaat["weergave"] };
+
+/** De MINIMALE, read-only projectie die de post-poorthook te zien krijgt. */
+export interface WeergaveKandidaat {
+  readonly ref: string;
+  readonly weergave: Readonly<Bronresultaat["weergave"]> | undefined;
+}
 
 export interface AdapterCapabilities {
   bronsoorten: Bronsoort[];
@@ -321,6 +407,14 @@ export interface RetrievalTussenresultaat {
   meta: RetrievalMeta;
   /** De gezaghebbende contextgrens, overgenomen van de primaire query. */
   maxContextTekens: number;
+  /**
+   * #426 — waarom een GEVRAAGDE bron niet in dit antwoord zit. Alleen aanwezig
+   * als er werkelijk iets te melden is; een veld dat altijd bestaat zou elke
+   * bestaande snapshot veranderen zonder iets te zeggen.
+   *
+   * WIE DIT VELD NEGEERT, PRESENTEERT EEN KLEINERE BRONSET ALS VOLLEDIG.
+   */
+  bronstatus?: Bronstatus[];
   /**
    * De afbreekgrendel van DEZE beurt — een LEVEND handvat, geen waarde. Hij is
    * GELEEND: `voerVolledigeRetrievalUit()` maakt hem, geeft hem aan beide fasen
@@ -411,24 +505,51 @@ export interface RetrievalAdapter {
     refs: readonly string[]
   ): Promise<Map<string, Bronregistratiestand>>;
   /**
-   * Providerspecifieke uitbreiding van de SELECTIE — voor Supabase de
-   * parent-context (siblings uit `document_chunks`). Draait per spoor, direct
-   * ná de selectie. Een adapter die niets uit te breiden heeft, laat hem weg.
+   * #426 D-6 — PROVIDERVERRIJKING VÓÓR DE POORT. Vervangt het oude
+   * `verrijkSelectie()`, dat ná V1–V5 draaide.
+   *
+   * Voor Supabase gaan hier de parent-context (siblings uit `document_chunks`),
+   * de notulenlabels en de documentmetadata doorheen. Die verrijking raakt niet
+   * alleen `weergave`: `chunkAlsBronresultaat()` leidt `bronsoort` af uit
+   * `chunk.notulen`, en de notulenverrijking zet dat veld. Een bron die als
+   * `fonds` door de poort kwam, werd zo ná die poort `notulen` — precies het
+   * veld waarop `binnenCentraleServergrens()` beslist.
+   *
+   * Daarom staat deze hook vóór de definitieve servergrens en vóór V1–V5: de
+   * poort beoordeelt de kandidaat zoals die werkelijk naar selectie, prompt en
+   * citatie kan gaan. De hook mag kandidaten verrijken of weglaten en geeft een
+   * VOLLEDIG `Bronresultaat` terug — juist die vorm wordt hierna beoordeeld.
+   *
+   * Hij draait per SPOOR en niet per adaptergroep, omdat de peildatum per spoor
+   * verschilt: een historische retrieval mag niet met de datum van nu worden
+   * verrijkt. Eén aanroep per groep zou die twee peildata moeten samenvoegen.
    */
-  verrijkSelectie?(
+  verrijkKandidaten?(
     ctx: RetrievalContext,
-    geselecteerd: Bronresultaat[],
-    /** De peildatum van DIT spoor. Nooit "vandaag" afleiden: dan zou een
-     *  historische retrieval ongemerkt met de datum van nu worden verrijkt. */
+    kandidaten: Bronresultaat[],
+    /** De peildatum van DIT spoor. Nooit "vandaag" afleiden. */
     opties: { peildatum: string }
   ): Promise<{ resultaten: Bronresultaat[]; meta?: Partial<RetrievalMeta> }>;
   /**
-   * Providerspecifieke WEERGAVEMETADATA aanvullen (notulenlabel, documenttype,
-   * de uitgebreide parent-passage). De adapter levert gegevens; hij bouwt GEEN
-   * citaties. Nummering, sentinel, neutralisatie en `BronVerwijzing` zijn
-   * exclusief van de orkestratie.
+   * Providerspecifieke WEERGAVEMETADATA aanvullen. De adapter levert gegevens;
+   * hij bouwt GEEN citaties. Nummering, sentinel, neutralisatie en
+   * `BronVerwijzing` zijn exclusief van de orkestratie.
+   *
+   * DE HOOK KRIJGT HET `Bronresultaat` NIET IN HANDEN. Hij ziet een read-only
+   * projectie en levert een gesloten patch, POSITIONEEL en exact even lang als
+   * de invoer. De orkestratie houdt het toegelaten resultaat zelf, maakt per
+   * occurrence een verse instantie en past alleen `weergave` toe. Zo kan geen
+   * adapter ná de poort bij identiteit, bewijs, versie, passage, status,
+   * bronsoort of rang.
+   *
+   * `undefined`, een gat in een sparse array of een lengteverschil is een
+   * configuratiefout — geen "best effort", want elke andere uitleg raadt welke
+   * bron bedoeld was.
    */
-  verrijkWeergave?(ctx: RetrievalContext, geselecteerd: Bronresultaat[]): Promise<Bronresultaat[]>;
+  verrijkWeergave?(
+    ctx: RetrievalContext,
+    kandidaten: readonly WeergaveKandidaat[]
+  ): Promise<WeergaveVerrijking[]>;
 }
 
 /** Hulptype voor de orkestratie: de modus die de filters dragen. */
