@@ -190,6 +190,8 @@ export function maakZoekRespons(input: {
   geselecteerd: number;
   modus: string;
   toelating?: import("./toelatingspoort").Toelatingssamenvatting;
+  /** #434 — alleen aanwezig als een GEVRAAGDE bron niet is geraadpleegd. */
+  bronstatus?: import("./bronstatus-dto").BronstatusDto[];
 }) {
   return {
     resultaten: input.resultaten,
@@ -202,6 +204,9 @@ export function maakZoekRespons(input: {
       // Nieuw maar conditioneel: alleen zichtbaar als de centrale poort echt
       // iets weigerde. Succesresponses houden exact het historische contract.
       ...(input.toelating ? { toelating: input.toelating } : {}),
+      // #434 — idem conditioneel: ontbreekt de status, dan ontbreekt het veld,
+      // zodat het bestaande single-adapterpad byte-identiek blijft.
+      ...(input.bronstatus ? { bronstatus: input.bronstatus } : {}),
     },
   };
 }

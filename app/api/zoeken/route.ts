@@ -26,6 +26,7 @@ import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { bouwBronstatusDto } from "@/core/lib/retrieval/bronstatus-dto";
 import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import {
@@ -187,6 +188,7 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
       geselecteerd: voltooid.meta.geselecteerd,
       modus,
       toelating: voltooid.meta.toelating,
+      bronstatus: bouwBronstatusDto(voltooid.bronstatus),
     }));
   } catch (e) {
     const afbreking = foutcategorieVoor(e);

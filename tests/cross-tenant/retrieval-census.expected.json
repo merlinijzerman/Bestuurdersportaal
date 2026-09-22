@@ -151,6 +151,15 @@
         "document_chunks"
       ]
     },
+    "core/lib/retrieval/adaptermeta-beheer.ts": {
+      "modules": {
+        "rag": [
+          "AdapterMeta"
+        ]
+      },
+      "rpcs": [],
+      "tabellen": []
+    },
     "core/lib/retrieval/adaptermeta.ts": {
       "modules": {
         "rag": [
