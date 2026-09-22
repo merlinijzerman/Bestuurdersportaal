@@ -67,6 +67,15 @@ export interface SupabaseRetrieval {
 export interface SupabaseAdapterDependencies {
   zoek?: typeof zoekRelevanteChunksMetMeta;
   leesVersies?: typeof leesSupabaseVersies;
+  /**
+   * #426 — injecteerbaar sinds de verrijking naar FASE 1 verhuisde. Voorheen
+   * draaiden deze twee in `verrijkWeergave()`, dus alleen in fase 2; een test
+   * die bij fase 1 stopte raakte ze nooit. Nu draaien ze vóór de poort, en dan
+   * moet een hermetische test ze kunnen sturen in plaats van een databaseclient
+   * nodig te hebben.
+   */
+  verrijkNotulen?: typeof verrijkNotulenChunks;
+  verrijkDocumentmeta?: typeof verrijkDocumentmetadata;
 }
 
 export function maakSupabaseAdapter(
@@ -83,6 +92,8 @@ export function maakSupabaseAdapter(
   const lokaalDocumentPerIdentiteit = new Map<string, string>();
   const zoek = dependencies.zoek ?? zoekRelevanteChunksMetMeta;
   const leesVersies = dependencies.leesVersies ?? leesSupabaseVersies;
+  const doeNotulen = dependencies.verrijkNotulen ?? verrijkNotulenChunks;
+  const doeDocumentmeta = dependencies.verrijkDocumentmeta ?? verrijkDocumentmetadata;
 
   const behoudIdentiteit = (bron: Bronresultaat): Bronresultaat => {
     const eerder = identiteitPerRef.get(bron.ref);
@@ -190,43 +201,51 @@ export function maakSupabaseAdapter(
      * Supabase-werk, dus een adapterhook — de orkestratie roept hem per spoor
      * aan, direct ná de selectie, op exact dezelfde plek als vóór T2-1.
      */
-    async verrijkSelectie(ctx: RetrievalContext, geselecteerd: Bronresultaat[], opties: { peildatum: string }) {
-      if (!vlaggen.parentRetrieval) return { resultaten: geselecteerd };
-      const chunks = geselecteerd
+    async verrijkKandidaten(
+      ctx: RetrievalContext,
+      kandidaten: Bronresultaat[],
+      opties: { peildatum: string }
+    ): Promise<{ resultaten: Bronresultaat[]; meta?: Partial<RetrievalMeta> }> {
+      // #426 D-6 — ALLE verrijking die meer dan `weergave` raakt, gebeurt hier:
+      // vóór de definitieve servergrens en vóór V1–V5. Voorheen stond de
+      // notulen- en documentmetadataverrijking in `verrijkWeergave()`, ná de
+      // poort. Dat was niet onschuldig: `chunkAlsBronresultaat()` leidt
+      // `bronsoort` af uit `chunk.notulen`, en `verrijkNotulenChunks()` zet dat
+      // veld. Een bron die als `fonds` door de poort kwam, werd zo ná die poort
+      // `notulen` — precies het veld waarop `binnenCentraleServergrens()` en het
+      // bronbeleid van het fonds beslissen.
+      let chunks = kandidaten
         .map((b) => chunkPerRef.get(b.ref))
         .filter((c): c is DocumentChunk => Boolean(c));
-      if (chunks.length === 0) return { resultaten: geselecteerd };
-      // De peildatum van HET SPOOR, nooit "vandaag": anders zou een historische
-      // retrieval ongemerkt met de datum van nu worden verrijkt.
-      const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum, {
-        signal: ctx.signal,
-        verwachteVersies: new Map(geselecteerd.map((bron) => {
-          const chunk = chunkPerRef.get(bron.ref);
-          return [chunk?.id ?? bron.ref, bron.versie] as const;
-        })),
-      });
-      const resultaten = p.chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)));
-      for (const [index, bron] of resultaten.entries()) chunkPerRef.set(bron.ref, p.chunks[index]);
-      return { resultaten, meta: { parent: p.meta } };
-    },
+      if (chunks.length === 0) return { resultaten: kandidaten };
 
-    /**
-     * Providerspecifieke WEERGAVEMETADATA: notulenlabels en documenttype. De
-     * adapter levert gegevens; de citaatopbouw — nummering, sentinel,
-     * neutralisatie, BronVerwijzing — is exclusief van de orkestratie
-     * (core/lib/retrieval/citatie.ts).
-     */
-    async verrijkWeergave(ctx: RetrievalContext, geselecteerd: Bronresultaat[]): Promise<Bronresultaat[]> {
-      let chunks = geselecteerd
-        .map((b) => chunkPerRef.get(b.ref))
-        .filter((c): c is DocumentChunk => Boolean(c));
-      if (chunks.length === 0) return geselecteerd;
-      chunks = await verrijkNotulenChunks(chunks, ctx.signal);
-      chunks = await verrijkDocumentmetadata(chunks, ctx.fondsId, ctx.signal);
+      let parentMeta: Partial<RetrievalMeta> | undefined;
+      if (vlaggen.parentRetrieval) {
+        // De peildatum van HET SPOOR, nooit "vandaag": anders zou een
+        // historische retrieval ongemerkt met de datum van nu worden verrijkt.
+        const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum, {
+          signal: ctx.signal,
+          verwachteVersies: new Map(kandidaten.map((bron) => {
+            const chunk = chunkPerRef.get(bron.ref);
+            return [chunk?.id ?? bron.ref, bron.versie] as const;
+          })),
+        });
+        chunks = p.chunks;
+        parentMeta = { parent: p.meta };
+      }
+
+      chunks = await doeNotulen(chunks, ctx.signal);
+      chunks = await doeDocumentmeta(chunks, ctx.fondsId, ctx.signal);
+
       const resultaten = chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)));
       for (const [index, bron] of resultaten.entries()) chunkPerRef.set(bron.ref, chunks[index]);
-      return resultaten;
+      return parentMeta ? { resultaten, meta: parentMeta } : { resultaten };
     },
+
+    // GEEN `verrijkWeergave()` MEER. Die hook draait ná de toelatingspoort en
+    // mag daarom uitsluitend `weergave` patchen; alles wat deze adapter te
+    // verrijken heeft, raakt méér dan dat en staat nu in `verrijkKandidaten()`.
+    // Een lege hook toevoegen zou een aanroep zijn die niets doet.
   };
 
   return {

@@ -458,8 +458,15 @@ test("PR-C — V5: een hook die GOOIT weigert, en is te onderscheiden van een on
   assert.equal(categorieVan("v5_hook_fout"), "providerfout");
 });
 
-test("#367 — deadline in rechtenherlezing stopt vóór selectie- en weergave-I/O", async () => {
+test("#367/#426 — na de deadline in de rechtenherlezing start GEEN I/O meer", async () => {
+  // VOLGORDE GEWIJZIGD IN #426, EIGENSCHAP NIET. De kandidaatverrijking draait
+  // sinds besluit D-6 vóór de toelatingspoort, want zij raakt velden waarop de
+  // poort beslist (`bronsoort`). Zij loopt hier dus één keer, en wel vóór de
+  // deadline — dat is geen I/O ná de afbreking. Wat de test bewaakt is
+  // onveranderd: zodra de deadline is gevallen, start er niets meer. De
+  // weergaveverrijking staat ná de poort en moet daarom op nul blijven.
   const deadline = new RetrievalAfgebroken("timeout");
+  const volgorde: string[] = [];
   let selectieverrijkingen = 0;
   let weergaveverrijkingen = 0;
   const a = adapter({
@@ -470,15 +477,17 @@ test("#367 — deadline in rechtenherlezing stopt vóór selectie- en weergave-I
       latencyMs: 0,
       opgehaald: 1,
     }),
-    hook: async () => { throw deadline; },
+    hook: async () => { volgorde.push("v5"); throw deadline; },
   });
-  a.verrijkSelectie = async (_ctx, geselecteerd) => {
+  a.verrijkKandidaten = async (_ctx, kandidaten) => {
     selectieverrijkingen++;
-    return { resultaten: geselecteerd };
+    volgorde.push("verrijkKandidaten");
+    return { resultaten: kandidaten };
   };
-  a.verrijkWeergave = async (_ctx, geselecteerd) => {
+  a.verrijkWeergave = async (_ctx, kandidaten) => {
     weergaveverrijkingen++;
-    return geselecteerd;
+    volgorde.push("verrijkWeergave");
+    return kandidaten.map(() => ({ type: "behouden" as const }));
   };
   const { voerVolledigeRetrievalUit } = await import("../../core/lib/retrieval/orkestratie");
 
@@ -491,8 +500,13 @@ test("#367 — deadline in rechtenherlezing stopt vóór selectie- en weergave-I
     (e: unknown) => e === deadline,
     "de deadline mag niet als v5_hook_fout worden geslikt"
   );
-  assert.equal(selectieverrijkingen, 0, "selectie-I/O mag na de deadline niet starten");
+  // De kandidaatverrijking draaide VÓÓR de poort, precies één keer.
+  assert.equal(selectieverrijkingen, 1, "de kandidaatverrijking hoort vóór de poort te draaien");
   assert.equal(weergaveverrijkingen, 0, "weergave-I/O mag na de deadline niet starten");
+  // En de volgorde zelf is de eigenlijke bewering: verrijken, dan de poort, en
+  // daarna niets meer. Zou de verrijking ná de deadline staan, dan eindigde deze
+  // reeks op "verrijkKandidaten" en niet op "v5".
+  assert.deepEqual(volgorde, ["verrijkKandidaten", "v5"]);
 });
 
 test("PR-C — V5 herleest onder de referentie VAN HET RESULTAAT, niet uit het bewijs", async () => {
