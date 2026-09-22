@@ -1,6 +1,19 @@
 # T4-F planreview — beheer, status en duurzame auditprojectie (#434)
 
-**Status:** versie 3, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 4, ter beoordeling. Geen productiecode geschreven.
+
+**Wijziging t.o.v. versie 3 — een CORRECTIE op een goedgekeurde review.** Versie 3 concludeerde
+op basis van een **onvolledige code-inventarisatie** dat de pariteitsgate tussen de TS-allowlist
+en `meta_projectie()` ontbrak. Dat is onjuist: die gate bestaat, in
+`tests/cross-tenant/retrieval-toelatingspoort.test.ts`, en hij vergelijkt beide lijsten in twee
+richtingen. B-1 is ingetrokken.
+
+Daarmee verviel ook de migratiestrategie die op die aanname rustte. §7 is volledig vervangen: de
+byte-gepinde `meta_projectie()` blijft ongemoeid, `adapters` gaat via `meta_basisniveau()` en
+`meta_bronniveau()` volgens het patroon dat #367 al gebruikte, de `pg_get_functiondef()`-
+hashpreflight en de canonieke herdefinitie zijn geschrapt, en er komt een onafhankelijke
+SQL-vormvalidator plus gedragstests tegen de werkelijk geïnstalleerde wrappers. De bestaande
+gate wordt uitgebreid, niet gedupliceerd.
 
 **Wijziging t.o.v. versie 2:** de validatie van `adapters` is **fail-closed** geworden. Versie 2
 liet de sleutel weg en ging door; dat maakt een beurt volledig ogend terwijl juist de informatie
@@ -12,9 +25,8 @@ antwoord en zonder citaten; het duurzame spoor krijgt alleen de categorie
 
 **Wijzigingen t.o.v. versie 1:** het voorstel om de migratie te laten vertrekken vanuit
 `pg_get_functiondef()` is **ingetrokken** — dat maakt de inhoud van een migratiebestand
-afhankelijk van de omgeving waarin zij draait (B-2, §7.1). De functie krijgt één canonieke
-definitie in het bestand; `pg_get_functiondef()` is nu uitsluitend een fail-closed preflight op
-een genormaliseerde hash, met een inhoudsvrije foutcategorie (§7.2). Verder: het bewijs ná de
+afhankelijk van de omgeving waarin zij draait. *(De vervanging die versie 2 daarvoor koos — één
+canonieke definitie plus een hashpreflight — is in versie 4 op haar beurt ingetrokken; zie §7.)* Verder: het bewijs ná de
 migratie op een ephemere database met vier expliciete controles (§7.3), de CI-gate die de
 werkelijk geïnstalleerde functie aanroept in plaats van bestandstekst te vergelijken (§7.4), de
 eis dat `adapters` een gesloten array van platte records is met validatie vóór de auditlaag
@@ -84,33 +96,37 @@ deze vier levert een andere, stille fout op.
 
 ## 3. Blokkerende bevindingen
 
-### B-1 — de gate die #434 vraagt, bestaat niet
+### B-1 — INGETROKKEN: de pariteitsgate bestaat wél
 
-`core/lib/audit-meta.sanity.ts` vergelijkt `META_BASIS`, `META_BRON` en `META_INHOUD` onderling
-en toetst ze tegen een verbodenlijst. **Zij leest geen enkele SQL.** Er is in dat bestand geen
-verwijzing naar `supabase/migrations`, naar `.sql` of naar `c_basis`.
+**Deze bevinding was onjuist en is de aanleiding voor versie 4.**
 
-Wat er wél is: een commentaarregel in een van de migraties — *"Wijzig deze lijst NOOIT los van
-audit-meta.ts."* Inmiddels is de functie **vijf keer** volledig herdefinieerd, elke keer met een
-handmatige kopie van de hele lijst (B-2). Dat is een instructie aan de volgende lezer, en de
-projecthistorie weet wat zulke instructies waard zijn: de les uit #322 luidt letterlijk dat een
-nieuwe metasleutel zowel de TS-allowlist als de migratie op `meta_projectie` vereist — een les
-die is geleerd doordat het een keer mis ging.
+Versie 3 stelde dat de gate die #434 vraagt niet bestond. Dat berustte op een **onvolledige
+code-inventarisatie**: ik keek in `core/lib/audit-meta.sanity.ts`, vond daar geen enkele
+verwijzing naar SQL, en concludeerde daaruit dat er nergens in het project zo'n controle was.
+Die conclusie volgde niet uit die waarneming.
 
-**De gate moet dus worden gebouwd, niet uitgebreid.** Twee lagen, en de tweede is de
-gezaghebbende:
+**Wat er werkelijk staat**, in `tests/cross-tenant/retrieval-toelatingspoort.test.ts`:
 
-* **(a) app-laag, statisch.** Parse de `c_basis`-array uit de nieuwste migratie die
-  `meta_projectie()` definieert en vergelijk hem met `META_BASIS`. Goedkoop, draait in elke
-  CI-ronde, en vangt drift vóór de DB-laag überhaupt start.
-* **(b) DB-laag, gezaghebbend.** Roep `public.meta_projectie()` aan op een proefobject en toets
-  de UITKOMST: komt `adapters` terug op basisniveau, en komt geen enkel verboden veld terug.
+> `test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in meta_projectie()")`
 
-Waarom (b) en niet alleen (a): CLAUDE.md is hier ondubbelzinnig — *"Toets de uitkomst in de
-database, niet de intentie in de migratie. Een `revoke`, een policy of een comment in een
-migratiebestand bewijst niets over productie: er is geen migratierunner en migraties worden
-handmatig geplakt."* Een statische parse toetst een bestand; hij bewijst niets over de functie
-die er werkelijk staat. (a) is dus een vroege waarschuwing, geen bewijs.
+Die gate leest de **nieuwste** migratie die `meta_projectie()` definieert, parseert de arrays
+`c_basis` en `c_bron`, telt de cumulatieve wrapper-uitbreidingen erbij op, en vergelijkt beide
+lijsten **in twee richtingen** met `META_BASIS` en `META_BRON` — een sleutel die alleen in de SQL
+staat is er even fout als een die alleen in TypeScript staat.
+
+Hij is bovendien precies om deze reden gebouwd. Zijn eigen commentaar noemt twee gevallen waarin
+het misging: `toelating` stond alleen in de TS-allowlist, werd opgeslagen en verdween bij het
+lezen; `gateway` (#311 T3) verkeerde in dezelfde toestand.
+
+**En hij werkt.** Op de implementatiebranch is hij de enige rode test, precies omdat `adapters`
+in `META_BASIS` staat en nog niet in de databaseprojectie.
+
+**Gevolg voor T4-F:** er wordt **geen tweede gate gebouwd**. De bestaande wordt uitgebreid. Twee
+gates die hetzelfde bewaken, is één gate die de andere kan tegenspreken.
+
+Wat van de oorspronkelijke bevinding overeind blijft, staat in §7.4: deze gate is **statisch** —
+hij leest migratiebestanden, niet de geïnstalleerde functie. Dat gat is echt, maar het is een
+aanvulling op een bestaande gate en niet de afwezigheid ervan.
 
 ### B-2 — `c_basis` moet volledig worden herschreven, niet aangevuld
 
@@ -136,14 +152,15 @@ repo of de CI merkt dat op. **En welke definitie op Preview en Productie werkeli
 uit de repo niet af te leiden** — er is geen migratierunner en migraties worden handmatig
 geplakt.
 
-**Een eerdere versie van deze review stelde voor de migratie te laten VERTREKKEN vanuit
-`pg_get_functiondef()` op de doeldatabase. Dat is ingetrokken.** De review wees terecht aan
-waarom: dan is de inhoud van de migratie afhankelijk van de omgeving waarin zij draait, en kan
-hetzelfde bestand op Preview en Productie verschillende SQL opleveren. Precies het probleem dat
-zij moest oplossen, één laag dieper.
+**Versie 4: deze bevinding is grotendeels opgelost door de conventie zelf.** Het overtypen van
+`c_basis` is niet meer aan de orde, want `meta_projectie()` wordt niet meer herdefinieerd — zij
+is byte-gepind en uitbreidingen lopen via de wrappers (§7). De vijf historische kopieerrondes
+blijven een feit, en de bestaande pariteitsgate dekt ze al af in twee richtingen.
 
-De migratie draagt dus **één canonieke definitie**, letterlijk in het bestand. Wat
-`pg_get_functiondef()` wél mag zijn, is een **fail-closed preflight** — zie §7.
+Wat van B-2 overblijft is dus geen ontwerpvraag maar een observatie: **vijf keer overtypen is
+vijf gelegenheden geweest om iets te laten vallen**, en de gate die dat had moeten opmerken is
+er pas ná die rondes gekomen. De gedragstests uit §7.5 toetsen daarom expliciet dat álle
+bestaande toegestane sleutels nog terugkomen — niet alleen de nieuwe.
 
 Dit versterkt B-1: de gate die #434 vraagt zou niet alleen de nieuwe sleutel bewaken, maar voor
 het eerst ook aantonen dat de vier bestaande kopieerrondes niets hebben laten vallen.
@@ -309,66 +326,104 @@ Toegang via de bestaande capabilitypoort; geen service-role, geen nieuwe route b
 
 ---
 
-## 7. Migratie, preflight, verificatie, rollback
+## 7. De migratie volgt het BESTAANDE wrapperpatroon
 
-### 7.1 Eén canonieke definitie in het bestand
+**Versie 3 schreef hier een canonieke herdefinitie van `meta_projectie()` voor, met een
+`pg_get_functiondef()`-hashpreflight. Dat is volledig ingetrokken.** Beide waren gebouwd op de
+onjuiste aanname uit B-1, en beide wijken af van een conventie die in dit project al bestaat en
+al is afgedwongen.
 
-De migratie bevat de **volledige, letterlijke** definitie van `meta_projectie()` — de huidige
-lijst plus `adapters`. Niets eraan wordt uit de doeldatabase afgeleid. Hetzelfde bestand levert
-op elke omgeving dezelfde functie op; dat is de hele reden dat het een bestand is.
+### 7.1 `meta_projectie()` blijft ongemoeid — zij is byte-gepind
 
-### 7.2 `pg_get_functiondef()` is een PREFLIGHT, geen bron
+De uitgebrachte definitie in `2026_09_11_toelating_auditprojectie.sql` is **vastgelegd op
+sha256** in `retrieval-toelatingspoort.test.ts` (`#367 — uitgebrachte migratie/check blijven
+bytegelijk`). Zij kan dus niet worden gewijzigd, en dat is opzet.
 
-Vóór de migratie draait een controle die de **actief geïnstalleerde** functie vergelijkt met wat
-wij verwachten:
+De conventie staat letterlijk in de pariteitsgate: *"Uitgebrachte `meta_projectie` blijft
+immutabel. Latere uitbreidingen lopen daarom via de twee publieke wrappers en worden als
+cumulatieve sleutelset meegenomen in deze pariteitsgate."*
 
-* komt zij overeen met de verwachte huidige definitie, of met een **expliciet toegestane
-  voorganger**, dan mag de migratie door;
-* **bij onbekende drift breekt de migratie af** — fail-closed, want dan weten wij niet wat wij
-  overschrijven, en `create or replace` is stil: hij vervangt zonder te melden wat er stond.
+Dat is geen theorie: #367 heeft langs precies die weg vier sleutels toegevoegd —
+`correlation_id`, `contextbron_resolutie`, `evidence_audit` en `modelcontext_audit`.
 
-De vergelijking gebeurt op een **genormaliseerde hash** van de functietekst, niet op de tekst
-zelf. De toegestane hashes staan als vaste lijst in de migratie. Bij een mismatch verschijnt
-**uitsluitend een inhoudsvrije foutcategorie** — bijvoorbeeld `meta_projectie_drift` — en nooit
-de functietekst, een sleutellijst of een metadatawaarde. Een migratie die bij het afbreken de
-hele functie in een logregel zet, lekt precies wat zij moet bewaken.
+### 7.2 `adapters` gaat via `meta_basisniveau()` en `meta_bronniveau()`
 
-*(Dat hier een hash wordt gebruikt is geen spanning met B-4. Daar gaat het om identifiers ván
-brondocumenten in het auditspoor; hier om een integriteitsvergelijking van onze eigen SQL, die
-nergens wordt opgeslagen.)*
+Een additieve migratie die **ná** de uitgebrachte sorteert, zodat een upgrade en een verse,
+alfabetisch afgespeelde reeks dezelfde wrappers opleveren. Zij herdefinieert de twee wrappers,
+die elk `meta_projectie()` aanroepen en daar de nieuwe sleutel **voorwaardelijk** aan toevoegen.
 
-### 7.3 Bewijs ná de migratie, op een ephemere database
+Geen hashpreflight, geen functieherdefinitie, geen vergelijking met de live installatie. Die
+waren er om een risico af te dekken dat bij dit patroon niet bestaat: de uitgebrachte functie
+wordt niet aangeraakt, dus er valt niets stil te overschrijven.
 
-De verificatie draait tegen een **uit de repo opgebouwde** wegwerpdatabase en toont vier dingen:
+### 7.3 De SQL-vormvalidator — een tweede, onafhankelijke grendel
 
-1. **alle bestaande toegestane sleutels zijn behouden** — dit is de controle die vier eerdere
-   kopieerrondes nooit hebben gehad;
-2. **`adapters` is toegevoegd** en komt op basisniveau terug;
-3. **onbekende sleutels verdwijnen** — een proefobject met een niet-toegestane sleutel mag die
-   niet in de projectie terugzien;
-4. **de TS-allowlist en de SQL-projectie komen exact overeen** — niet "de SQL bevat ten minste
-   de TS-lijst", maar gelijkheid in beide richtingen. Een sleutel die alleen in de SQL staat is
-   even fout als een die alleen in TypeScript staat.
+De sleutel wordt **alleen toegevoegd als haar vorm klopt**, getoetst in SQL. Dat is niet dubbelop
+met de TypeScript-validator maar een tweede net: de TS-kant bewaakt wat wij schrijven, de
+SQL-kant bewaakt wat er uit de database terugkomt — ook voor rijen die al bestonden.
 
-### 7.4 De CI-gate toetst de FUNCTIE, niet het bestand
+Het patroon bestaat al. `contextbron_resolutie` toetst per veld het type, toetst de reden tegen
+een gesloten lijst, en eist dat er **geen extra sleutels** zijn:
 
-De gate uit B-1 draait in de DB-laag en roept `public.meta_projectie()` werkelijk aan. Een
-tekstvergelijking tegen een migratiebestand is uitdrukkelijk **niet** voldoende: dat bewijst dat
-iemand het bestand goed heeft geschreven, niet dat de functie in de database die vorm heeft. Dat
-onderscheid is in dit project met reden een regel — er is geen migratierunner.
+```sql
+and ((p_meta->'contextbron_resolutie') - 'volledig'::text - 'reden'::text - 'kandidaatcap'::text) = '{}'::jsonb
+```
 
-De statische spiegel in de app-laag blijft bestaan als **vroege waarschuwing**: hij draait in
-elke CI-ronde en meldt drift vóór de DB-laag start. Hij is nadrukkelijk geen bewijs.
+Voor `adapters` dwingt de validator minimaal af:
 
-Beide worden aangesloten in `scripts/cross-tenant-ci.sh`. Een controle die daar niet in staat,
-draait niet in de gate — dat is bevinding C-01 uit de projecthistorie en de reden dat die regel
-in CLAUDE.md staat.
+1. **`adapters` is een BEGRENSDE array** — `jsonb_typeof = 'array'` met een harde bovengrens op
+   het aantal elementen. Een ongelimiteerde array is een plek waar een beurt onbeperkt kan
+   groeien;
+2. **ieder element is een PLAT object met exact de toegestane sleutels** — het `- 'sleutel'`-
+   patroon hierboven, toegepast op de volledige verzameling, zodat een extra of genest veld de
+   hele sleutel laat vervallen;
+3. **adapter-, status- en foutcategorieën komen uit gesloten enums** — `naam` en `resultaat`
+   tegen een `in (...)`-lijst;
+4. **tellers zijn niet-negatieve gehele getallen** — `jsonb_typeof = 'number'`, `>= 0`, en
+   `floor() = waarde`. Een `NaN` overleeft JSON-serialisatie niet (hij wordt `null`) en valt
+   daarmee al op de typecontrole;
+5. **geen extra, geneste of identificerende waarden** — volgt uit (2), en de enige stringvelden
+   zijn de drie enums uit (3). Er is dus geen veld waarin een URL, ref, pad of identifier kán
+   staan.
 
-### 7.5 Rollback
+Valt de vorm af, dan verschijnt `adapters` **niet** in de projectie. Dat is de SQL-kant van
+fail-closed: liever geen sleutel dan een sleutel waarvan de vorm niet vaststaat.
 
-Herdefinitie naar de vorige canonieke vorm, eveneens letterlijk in het bestand, met dezelfde
-preflight ervoor. De rollback moet aantoonbaar de projectie van vóór de migratie herstellen —
-gemeten op dezelfde ephemere database, niet beredeneerd.
+### 7.4 De BESTAANDE pariteitsgate wordt uitgebreid
+
+Geen tweede gate. De bestaande in `retrieval-toelatingspoort.test.ts` herkent wrapper-
+uitbreidingen al met een patroon per sleutel:
+
+```js
+if (/meta_basisniveau[\s\S]*?jsonb_build_object\('evidence_audit'/.test(aanvullingen)) basis.add("evidence_audit");
+```
+
+`adapters` krijgt dezelfde regel. Daarmee blijft de tweerichtingsvergelijking intact: een sleutel
+die alleen in TypeScript of alleen in de SQL staat, blijft rood.
+
+**Wat die gate niet kan**, en dat is het enige dat van B-1 overeind blijft: hij leest
+migratie**bestanden**. Dat bewijst dat iemand het bestand goed heeft geschreven, niet dat de
+database die vorm heeft — en er is in dit project geen migratierunner. Daarom komen er
+**gedragstests tegen de werkelijk geïnstalleerde wrappers**, in de DB-laag.
+
+### 7.5 Gedragstests tegen de geïnstalleerde wrappers
+
+Tegen een uit de repo opgebouwde wegwerpdatabase, aangesloten in
+`scripts/cross-tenant-ci.sh` — een controle die daar niet in staat, draait niet in de gate:
+
+1. een geldige `adapters`-waarde komt via `meta_basisniveau()` terug op basisniveau;
+2. **alle bestaande toegestane sleutels komen nog steeds terug** — de controle die vier eerdere
+   uitbreidingsrondes nooit hebben gehad;
+3. onbekende sleutels verdwijnen;
+4. elk van de vijf vormschendingen uit §7.3 laat `adapters` **vervallen** in plaats van
+   gedeeltelijk door te laten;
+5. `meta_bronniveau()` gedraagt zich gelijk aan `meta_basisniveau()` voor deze sleutel.
+
+### 7.6 Rollback
+
+Herdefinitie van beide wrappers naar hun vorige vorm — hetzelfde patroon, één stap terug. De
+uitgebrachte `meta_projectie()` blijft ook bij een rollback ongemoeid. De rollback wordt
+**gemeten** op dezelfde wegwerpdatabase, niet beredeneerd.
 
 ## 8. Bestandsgrenzen
 
@@ -378,9 +433,10 @@ gemeten op dezelfde ephemere database, niet beredeneerd.
 | `core/lib/audit-meta.ts` | één regel in `META_BASIS` |
 | `core/lib/audit-meta.sanity.ts` | de statische spiegel tegen de migratie (B-1a) |
 | `core/lib/retrieval/orkestratie.ts` | `bouwAdapterMeta()` en de aansluiting in `bouwRetrievalMeta()` |
-| `supabase/migrations/<datum>_434_meta_adapters.sql` | één canonieke definitie + de fail-closed preflight (§7.1-7.2) |
-| `supabase/rollbacks/<datum>_434_meta_adapters_ROLLBACK.sql` | idem, terug naar de vorige canonieke vorm (§7.5) |
-| `supabase/checks/<datum>_434_meta_adapters.sql` | het bewijs ná de migratie: behoud, toevoeging, weren, en gelijkheid TS↔SQL (§7.3) |
+| `supabase/migrations/<datum>_434_meta_adapters.sql` | herdefinitie van `meta_basisniveau()` en `meta_bronniveau()` met de SQL-vormvalidator (§7.2-7.3). **Raakt `meta_projectie()` niet** |
+| `supabase/rollbacks/<datum>_434_meta_adapters_ROLLBACK.sql` | beide wrappers één stap terug (§7.6) |
+| `supabase/checks/<datum>_434_meta_adapters.sql` | gedragstests tegen de geïnstalleerde wrappers (§7.5) |
+| `tests/cross-tenant/retrieval-toelatingspoort.test.ts` | één regel in de BESTAANDE pariteitsgate (§7.4) — geen tweede gate |
 | `scripts/cross-tenant-ci.sh` | de nieuwe DB-suite aansluiten |
 | beheerpagina + statusroute | §6 |
 
@@ -394,11 +450,10 @@ activeringstranche.
 * **Of `meta_projectie()` geneste objecten ongewijzigd doorlaat** (B-3). Ik heb de kop van de
   functie gelezen, niet haar volledige body. Dat moet vóór het ontwerp worden nagerekend, en het
   voorstel in B-3 — alles plat — is er juist op gericht dat die vraag er niet meer toe doet.
-* **Welke definitie van `meta_projectie()` op Preview en Productie actief is.** Vijf migraties
-  herdefiniëren haar en er is geen migratierunner, dus dit is uit de repo niet vast te stellen.
-  Het is nu wél BELEGD in plaats van open: de preflight uit §7.2 stelt het vast op het moment
-  van migreren en breekt fail-closed af bij onbekende drift. Wat deze review niet weet, weet de
-  migratie straks wel — en zij gaat niet door zolang zij het niet weet.
+* **Welke definitie van `meta_projectie()` op Preview en Productie actief is.** Nog steeds niet
+  uit de repo vast te stellen — maar het is niet langer relevant: T4-F raakt die functie niet.
+  Wat wél wordt getoetst, is het gedrag van de geïnstalleerde WRAPPERS (§7.5), en dat is
+  precies de laag die T4-F wijzigt.
 * **Of de karakteriseringsgoldens ongewijzigd blijven.** `adapters` is optioneel en alleen
   aanwezig wanneer er iets te melden is, dus de verwachting is dat zij niet bewegen — maar dat is
   een verwachting. Ontstaat er een diff, dan is die een blokkade die eerst inhoudelijk wordt
