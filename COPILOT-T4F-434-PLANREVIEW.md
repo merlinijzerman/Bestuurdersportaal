@@ -1,6 +1,14 @@
 # T4-F planreview — beheer, status en duurzame auditprojectie (#434)
 
-**Status:** versie 2, ter beoordeling. Geen productiecode geschreven.
+**Status:** versie 3, ter beoordeling. Geen productiecode geschreven.
+
+**Wijziging t.o.v. versie 2:** de validatie van `adapters` is **fail-closed** geworden. Versie 2
+liet de sleutel weg en ging door; dat maakt een beurt volledig ogend terwijl juist de informatie
+over een niet-geraadpleegde bron is verdwenen — dezelfde stille degradatie die T4-E moest
+uitsluiten. Een ongeldige vorm levert nu een vaste, inhoudsvrije `configuratiefout`, zonder
+antwoord en zonder citaten; het duurzame spoor krijgt alleen de categorie
+`adaptermetadata_ongeldig`. De single-adapterroute blijft buiten het mechanisme en byte-identiek
+(§4).
 
 **Wijzigingen t.o.v. versie 1:** het voorstel om de migratie te laten vertrekken vanuit
 `pg_get_functiondef()` is **ingetrokken** — dat maakt de inhoud van een migratiebestand
@@ -224,13 +232,32 @@ constructie onmogelijk. Daarbovenop komt een totale validator die vóór het ove
 dat élke veldnaam in de gesloten set zit en élke enumwaarde in haar eigen gesloten set, en dat
 elk getal `Number.isFinite` is.
 
-Wat die validator doet als hij afgaat, is een afweging die ik expliciet maak: hij **laat de
-sleutel `adapters` weg** en breekt de beurt níét af. Telemetrie mag een retrievalbeurt niet
-onderuithalen. De prijs is dat een programmeerfout de sleutel stil kan verliezen, en daarvoor
-zijn twee netten: `splitsRetrievalMeta()` rapporteert een sleutel die buiten de allowlist valt
-al als `onbekend`, en een sanity-test houdt de gedeclareerde veldverzameling en de werkelijk
-geconstrueerde verzameling tegen elkaar. Wie dat te zacht vindt, kan de validator laten werpen;
-dan is de prijs dat een telemetriebug een beurt kost.
+**Wat die validator doet als hij afgaat: de beurt stopt fail-closed.** Een ongeldige vorm levert
+een vaste, inhoudsvrije `configuratiefout`; er vertrekt geen antwoord en er worden geen citaten
+gevormd.
+
+Versie 2 van deze review koos hier nog voor "de sleutel weglaten en doorgaan", met als argument
+dat telemetrie een retrievalbeurt niet mag onderuithalen. **Dat argument is onjuist zodra T4-F
+landt, en de review wees dat terecht aan.** Ná deze tranche is `adapters` geen vrijblijvende
+telemetrie meer: hij draagt de zichtbare bronstatus en het duurzame auditspoor. De sleutel stil
+weglaten maakt een beurt **volledig ogend terwijl juist de informatie over een niet-geraadpleegde
+bron is verdwenen** — precies de stille degradatie die T4-E moest uitsluiten. Ik redeneerde over
+telemetrie in het algemeen en verloor uit het oog dat deze tranche verandert wát die sleutel is.
+
+De regels:
+
+* een ongeldige vorm → vaste, inhoudsvrije `configuratiefout`;
+* **geen routeantwoord en geen citaatvorming**;
+* het duurzame foutspoor bevat uitsluitend een vaste categorie — `adaptermetadata_ongeldig` —
+  en **nooit de afgewezen waarde**. Een validator die logt wát hij weigerde, lekt precies wat hij
+  moest tegenhouden;
+* **de bestaande single-adapterroute blijft hier buiten.** Het mechanisme grijpt alleen aan op
+  het moment dat er een `adapters`-sleutel wordt geconstrueerd. Een beurt die er geen produceert,
+  loopt ongewijzigd — byte-identiek, zoals de DoD eist.
+
+**Vijandige test (vereist):** bied achtereenvolgens `NaN`, een onbekende enumwaarde, een extra
+veld, een identifier en een genest object aan. Verwacht per geval: geen routeantwoord, geen
+inhoudslekkage in respons of auditspoor, en wél de vaste foutcategorie.
 
 **Twee soorten tellers, en het onderscheid is niet cosmetisch.** `bouwRetrievalMeta()` draait
 tweemaal: in fase 1 over de selectie, en in `citeer()` opnieuw over `c.opgenomen` — ná de
