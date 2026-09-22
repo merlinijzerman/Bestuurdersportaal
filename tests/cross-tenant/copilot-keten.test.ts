@@ -1217,7 +1217,13 @@ test("dezelfde invoer levert twee keer exact dezelfde uitkomst", async () => {
   const tweede = wereld(docs);
   const a = await voerKetenUit(opdrachtVoor(eerste, kandidaten(eerste)));
   const b = await voerKetenUit(opdrachtVoor(tweede, kandidaten(tweede)));
-  assert.deepEqual(a, b);
+  // `grondslag.vastgesteldOp` is een WANDKLOKtijdstip en dus per definitie niet
+  // deterministisch. Het wordt hier genormaliseerd — niet weggelaten, want dan
+  // zou een treffer die zijn grondslag verliest deze test niet meer raken. Dat
+  // het tijdstip werkelijk het grondslagmoment is, meet de test hieronder.
+  const zonderKlok = (r: typeof a) =>
+    JSON.parse(JSON.stringify(r, (sleutel, waarde) => (sleutel === "vastgesteldOp" ? "<klok>" : waarde)));
+  assert.deepEqual(zonderKlok(a), zonderKlok(b));
   controleerBalans(a);
   assert.ok(a.ok);
   assert.equal(a.treffers.length, 1);
@@ -1705,4 +1711,44 @@ test("een meegegeven deadline wordt geklemd op wat een beurt mág duren", async 
   // De klem is niet waarneembaar aan de duur van een snelle beurt; meet hem
   // daarom rechtstreeks op de grenzenfunctie via de publieke constante.
   assert.equal(KETEN_DEADLINE_MAX_MS, TIMEOUT_MAX_MS);
+});
+
+// ── 20. De grondslag die de centrale poort straks toetst ───────────────────
+
+test("de treffer draagt de grondslag van de LAATSTE GESLAAGDE controle", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  let voorHerlezing = 0;
+  let naHerlezing = 0;
+  const resultaat = await voerKetenUit(
+    opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)], {
+      herleesBron: async () => {
+        voorHerlezing = Date.now();
+        const bron = await w.herleesBron();
+        naHerlezing = Date.now();
+        return bron;
+      },
+    }),
+  );
+  assert.ok(resultaat.ok);
+  const grondslag = resultaat.treffers[0].grondslag;
+  assert.equal(grondslag.bronregistratieRef, BRON.id);
+  assert.equal(grondslag.configuratieversie, BRON.configuratieversie);
+
+  // HET TIJDSTIP MOET IN HET HERLEZINGSVENSTER VALLEN. Zou het van vóór de
+  // download komen, of van ná de lokalisatie, dan beschrijft het een venster
+  // dat niet is gecontroleerd — en toetst V4 straks iets anders dan het meent.
+  const t = Date.parse(grondslag.vastgesteldOp);
+  assert.ok(Number.isFinite(t), `geen geldig ISO-tijdstip: ${grondslag.vastgesteldOp}`);
+  assert.ok(voorHerlezing > 0 && naHerlezing >= voorHerlezing);
+  assert.ok(
+    t >= voorHerlezing - 1 && t <= naHerlezing + 50,
+    `vastgesteldOp ${t} valt buiten het herlezingsvenster [${voorHerlezing}, ${naHerlezing}]`,
+  );
+});
+
+test("zonder geslaagde grondslagcontrole is er geen treffer en dus geen grondslag", async () => {
+  const w = wereld([{ itemId: "item-a", naam: "A.docx", tekst: ZIN }]);
+  w.bronNu.waarde = undefined;
+  const resultaat = await voerKetenUit(opdrachtVoor(w, [hit(w.url("A.docx"), EXTRACT)]));
+  assert.equal(resultaat.ok, false);
 });
