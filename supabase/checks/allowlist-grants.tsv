@@ -420,6 +420,9 @@ FUNC	public	mag_audit_redacties(p_fonds uuid)	function	service_role	EXECUTE
 FUNC	public	mag_handelingen_lezen(p_fonds uuid)	function	anon	-
 FUNC	public	mag_handelingen_lezen(p_fonds uuid)	function	authenticated	EXECUTE
 FUNC	public	mag_handelingen_lezen(p_fonds uuid)	function	service_role	EXECUTE
+FUNC	public	meta_adapters_projectie(p_meta jsonb)	function	anon	-
+FUNC	public	meta_adapters_projectie(p_meta jsonb)	function	authenticated	EXECUTE
+FUNC	public	meta_adapters_projectie(p_meta jsonb)	function	service_role	EXECUTE
 FUNC	public	meta_basisniveau(p_meta jsonb)	function	anon	-
 FUNC	public	meta_basisniveau(p_meta jsonb)	function	authenticated	EXECUTE
 FUNC	public	meta_basisniveau(p_meta jsonb)	function	service_role	EXECUTE

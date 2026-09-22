@@ -337,3 +337,20 @@ wordt volledig door `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` bewe
   `authenticator`, `USAGE` op `public`, uitsluitend kolom-`SELECT` op
   `public.profielen(id, fonds_id, rol, naam)` en één policy die haar tot de eigen rij beperkt — wordt
   volledig bewezen in `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql` (DEEL 1 en M19).
+
+## #434 T4-F — `public.meta_adapters_projectie(p_meta jsonb)`
+
+Nieuwe `immutable` functie zonder `security definer`: zij leest niets, schrijft
+niets en raakt geen enkele tabel. Haar hele taak is de vorm van `meta.adapters`
+toetsen en de sleutel doorgeven of **werpen**.
+
+De rechten zijn identiek aan die van `meta_basisniveau`/`meta_bronniveau`, en dat
+is geen gemak maar noodzaak: die twee roepen haar aan, dus wie hén mag
+uitvoeren moet ook haar mogen uitvoeren. `anon` krijgt niets — de leesprojectie
+is voor ingelogde gebruikers.
+
+Waarom deze functie bestaat naast de bestaande wrappers: `adapters` mag bij een
+ongeldige vorm niet stil wegvallen zoals `evidence_audit` dat doet. Zij draagt
+de zichtbare bronstatus, en stil weglaten zou een antwoord volledig ogend maken
+terwijl juist de informatie over een niet-geraadpleegde bron is verdwenen. Een
+`language sql`-wrapper kan niet werpen; daarom een eigen `plpgsql`-functie.
