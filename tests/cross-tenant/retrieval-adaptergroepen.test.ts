@@ -10,6 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { citeer, voerRetrievalUit, voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
+import { ADAPTERMETA_VELDEN, valideerAdapterMeta } from "../../core/lib/retrieval/adaptermeta";
 import type {
   AdapterUitkomst,
   Bronresultaat,
@@ -706,4 +707,124 @@ test("`resterendMs` hangt aan DEZELFDE grendel als het signaal", async () => {
   );
   assert.equal(signaalAf, true, "het signaal van de grendel ging niet af");
   assert.equal(gemeten, 0, "het budget staat nog open terwijl de grendel al dicht is");
+});
+
+// ── 9. #434 — meta.adapters: gesloten vorm, fail-closed validatie ──────────
+
+test("bij ÉÉN adaptergroep ontstaat de sleutel `adapters` NIET", async () => {
+  // Dat is de byte-identiteitsgarantie: wat niet wordt geconstrueerd, wordt niet
+  // gevalideerd en verandert dus ook geen bestaande snapshot.
+  const a = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const uit = await voerVolledigeRetrievalUit(
+    CTX,
+    { adapter: a, sporen: [{ query: QUERY("primair"), grenzen: GRENZEN }] },
+    CITAAT,
+  );
+  assert.equal("adapters" in uit.meta, false, "`adapters` hoort bij één adapter afwezig te zijn");
+  assert.equal("adaptersBasis" in uit.metaBasis, false);
+});
+
+test("bij TWEE adaptergroepen verschijnt `adapters`, gesloten en inhoudsvrij", async () => {
+  const a = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const b = stub({ namespace: "ns-b", perQuery: { aanvullend: [bron("ns-b", "doc-2", 1)] } });
+  const uit = await voerVolledigeRetrievalUit(
+    CTX,
+    {
+      adapter: a,
+      sporen: [
+        { query: QUERY("primair"), grenzen: GRENZEN, adapter: a },
+        { query: QUERY("aanvullend"), grenzen: GRENZEN, adapter: b },
+      ],
+    },
+    CITAAT,
+  );
+  const rijen = uit.meta.adapters;
+  assert.ok(Array.isArray(rijen) && rijen.length === 2);
+  for (const rij of rijen) {
+    assert.deepEqual(Object.keys(rij).sort(), [...ADAPTERMETA_VELDEN].sort());
+    for (const [veld, waarde] of Object.entries(rij)) {
+      if (veld === "naam" || veld === "resultaat" || veld === "methode") {
+        assert.equal(typeof waarde, "string", veld);
+      } else {
+        assert.ok(typeof waarde === "number" && Number.isFinite(waarde) && waarde >= 0, veld);
+      }
+    }
+  }
+  // Inhoudsvrij: geen enkele waarde mag een identifier of URL bevatten.
+  const serie = JSON.stringify(rijen);
+  for (const verdacht of ["ns-a", "ns-b", "doc-1", "doc-2", "http", "/"]) {
+    assert.equal(serie.includes(verdacht), false, `\`adapters\` lekt "${verdacht}"`);
+  }
+});
+
+test("VIJANDIG: elke ongeldige vorm faalt fail-closed — geen antwoord, geen citaten", async () => {
+  // De vijf vormen uit de planreview. De validator is totaal: hij werpt, en de
+  // beurt levert dan niets op. Stil weglaten zou een antwoord volledig ogend
+  // maken terwijl juist de bronstatus is verdwenen.
+  const geldig = () => ({
+    naam: "supabase-rag" as const,
+    methode: "hybride_rrf",
+    resultaat: "treffers" as const,
+    netwerkpogingen: 0, latency_ms: 0, downloads: 0, bytes: 0, throttles: 0, retries: 0,
+    kandidaten_voor_poort: 0, kandidaten_na_poort: 0,
+    afwijzing_root: 0, afwijzing_mapping: 0, afwijzing_binding: 0, afwijzing_rechten: 0,
+    afwijzing_versie: 0, afwijzing_download: 0, afwijzing_extractie: 0,
+    afwijzing_lokalisatie: 0, afwijzing_grens: 0,
+    opgenomen_passages: 0, opgenomen_documenten: 0,
+  });
+  const vormen: [string, unknown][] = [
+    ["NaN", { ...geldig(), bytes: Number.NaN }],
+    ["onbekende enum", { ...geldig(), resultaat: "onbekend" }],
+    ["extra veld", { ...geldig(), extra: 1 }],
+    ["identifier", { ...geldig(), bron_id: "https://host/pad/doc.docx" }],
+    ["genest object", { ...geldig(), afwijzingen: { root: 1 } }],
+  ];
+  for (const [naam, vorm] of vormen) {
+    assert.throws(
+      () => valideerAdapterMeta([vorm]),
+      (e: unknown) => {
+        assert.equal((e as Error).name, "AdaptermetadataOngeldig", naam);
+        // Het duurzame spoor krijgt UITSLUITEND de vaste categorie.
+        assert.equal((e as { categorie: string }).categorie, "adaptermetadata_ongeldig", naam);
+        // En nooit de afgewezen waarde — ook niet in de boodschap.
+        const tekst = `${(e as Error).message} ${JSON.stringify(e)}`;
+        assert.equal(tekst.includes("https://"), false, `${naam}: de melding lekt de waarde`);
+        assert.equal(tekst.includes("doc.docx"), false, `${naam}: de melding lekt de waarde`);
+        return true;
+      },
+      `${naam} werd niet geweigerd`,
+    );
+  }
+});
+
+test("een ongeldige vorm levert GEEN uitkomst op in de volledige keten", async () => {
+  // Niet alleen de validator, maar de beurt als geheel: geen antwoord, geen
+  // citaten. Een adapter die een verboden teller terugstuurt is het vehikel.
+  const a = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
+  const b = stub({ namespace: "ns-b", perQuery: { aanvullend: [bron("ns-b", "doc-2", 1)] } });
+  const stuk: RetrievalAdapter = {
+    ...b,
+    async zoek(ctx, q) {
+      const uit = await b.zoek(ctx, q);
+      return { ...uit, tellers: { bytes: Number.NaN } };
+    },
+  };
+  await assert.rejects(
+    voerVolledigeRetrievalUit(
+      CTX,
+      {
+        adapter: a,
+        sporen: [
+          { query: QUERY("primair"), grenzen: GRENZEN, adapter: a },
+          { query: QUERY("aanvullend"), grenzen: GRENZEN, adapter: stuk },
+        ],
+      },
+      CITAAT,
+    ),
+    (e: unknown) => {
+      assert.equal((e as Error).name, "AdaptermetadataOngeldig");
+      assert.equal((e as { categorie: string }).categorie, "adaptermetadata_ongeldig");
+      return true;
+    },
+  );
 });
