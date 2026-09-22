@@ -728,6 +728,11 @@ test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in `meta_proje
   if (/meta_basisniveau[\s\S]*?jsonb_build_object\('contextbron_resolutie'/.test(aanvullingen)) basis.add("contextbron_resolutie");
   if (/meta_basisniveau[\s\S]*?jsonb_build_object\('evidence_audit'/.test(aanvullingen)) basis.add("evidence_audit");
   if (/meta_basisniveau[\s\S]*?jsonb_build_object\('modelcontext_audit'/.test(aanvullingen)) basis.add("modelcontext_audit");
+  // #434 — `adapters` wordt niet rechtstreeks in de wrapper toegevoegd maar in
+  // de vormcontrole `meta_adapters_projectie()`, die hard faalt op een ongeldige
+  // vorm in plaats van de sleutel stil te laten vallen. Het patroon matcht
+  // daarom op die helper.
+  if (/meta_adapters_projectie[\s\S]*?jsonb_build_object\('adapters'/.test(aanvullingen)) basis.add("adapters");
   const { META_BASIS, META_BRON } = await import("../../core/lib/audit-meta");
   const verschil = (a: Iterable<string>, b: Set<string>) => [...a].filter((x) => !b.has(x)).sort();
   assert.deepEqual(verschil(META_BASIS as readonly string[], basis), [], `basis ontbreekt in ${laatste} plus wrappers`);
