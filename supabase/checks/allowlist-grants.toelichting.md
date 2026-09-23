@@ -163,6 +163,30 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    rest van het platform-beheerde `storage`-schema (punt 7). Komt de feature ooit op
    Productie/Preview, dan is dat zichtbaar in de omgeving, niet als een gate-verschil.
 
+8a. **Storage-objectversioningvorm (23-09-2026).** Supabase heeft op Preview
+   zelfstandig Storage-migraties 68–72 uitgevoerd. Zes bestaande
+   functiebeschrijvingen kregen extra versie-/lifecycleparameters en twee
+   triggerfuncties kwamen erbij. Dit gebeurde vóór de toepassing van #369 en
+   is geen wijziging uit onze migratie. De oude vorm blijft in
+   `allowlist-grants.tsv` voor de ephemere CI- en mogelijk oudere hosted
+   platformversie; de acht nieuwe exacte signaturen en hun rechten per rol
+   staan in `allowlist-grants-storage-objectversioning.tsv`. V3 kiest de nieuwe
+   vorm zodra één van die signaturen aanwezig is. Een mengvorm, een ontbrekend
+   object, een onbekende signatuur of een afwijkend recht blijft rood. Bij de
+   nieuwe vorm moeten alle functies eigendom van `supabase_storage_admin` zijn
+   en `SECURITY INVOKER` blijven.
+
+   Read-only gemeten op `portal_preview`: de acht functies hebben
+   `proacl = NULL` en `EXECUTE` voor `anon`, `authenticated` en `service_role`,
+   net als de zes vervangen platformfuncties. De twee nieuwe functies retourneren
+   `trigger` en kunnen niet als gewone RPC worden aangeroepen. Dit is een
+   expliciete erkenning van de Supabase-platformstand, **geen grantwijziging**
+   door ons. We wijzigen geen object of recht in het beheerde `storage`-schema.
+   De gate blijft alle `public`-objecten, Storage-relaties, buckets en policies
+   ongewijzigd exact toetsen. De latere automatische Storage-upgrade op een
+   andere omgeving vraagt opnieuw vergelijking; deze twee bekende vormen zijn
+   geen algemene uitzondering voor platformfuncties.
+
 9. **#214-a1 schrijfpoort (besluit 0194) — PRODUCTIEFIX.** `procedure_stappen` toont
    `authenticated=SELECT,INSERT,DELETE` — **geen tabel-brede UPDATE** — omdat de drie
    bewaakte kolommen (`status`, `voltooid_op`, `voltooid_door`) aan `authenticated`
