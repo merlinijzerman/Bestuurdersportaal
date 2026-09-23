@@ -357,24 +357,26 @@ terwijl juist de informatie over een niet-geraadpleegde bron is verdwenen. Een
 
 ## #434 T4-F — `public.fn_adapterstand_fonds(p_limiet integer)`
 
-Nieuw, en bewust een `security definer`: dit is het smalle fondsbrede leespad
-voor de beheerstand. Dezelfde rechtenvorm als de overige definer-RPC's — `anon`
-niets, `authenticated` EXECUTE — want de autorisatie zit **in** de functie, niet
-in de grant.
+Nieuw, en bewust een `security definer`: dit is het leespad voor de beheerstand.
+Dezelfde rechtenvorm als de overige definer-RPC's — `anon` niets,
+`authenticated` EXECUTE — want de autorisatie zit **in** de functie, niet in de
+grant.
 
 Waarom zij bestaat en waarom het leesrecht op `governance_log` NIET is verruimd:
-de selectpolicy daar is `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`
-en `mag_audit()` vereist de afzonderlijke grant `governance_audit_read`. Die
-grant opent vraag, antwoord, bronnen en het volledige auditspoor van collega's;
-dat is een bestuurlijk inzagerecht met eigen administratie en vier-ogen-
-procedure. Een beheerweergave over tellers is geen reden om het uit te delen.
-Deze functie leest daarom fondsbreed en geeft uitsluitend de uitvoer van
-`meta_adapters_projectie()` terug: de gesloten adaptertellers, nooit inhoud.
+de selectpolicy daar is `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`.
+Zonder de grant `governance_audit_read` levert een gewone tabelquery alleen de
+eigen beurten, en die werden als de stand van het fonds getoond.
 
-Drie dingen dragen de veiligheid, en alle drie zijn gemeten in
+De functie volgt besluit 0119 in plaats van er een uitzondering op te maken.
+Zonder `governance_audit_read`: alleen de eigen beurten, en geen inzageregel —
+je eigen spoor inzien is geen inzage in dat van een ander. Mét die capability:
+het hele fonds, en één append-only regel in `governance_audit_inzage`. De rol
+`beheerder` geeft hier dus geen fondsbrede inzage; dat is precies het
+alternatief dat 0119 heeft verworpen. Zie besluit 0214.
+
+Vier dingen dragen de veiligheid, en alle vier zijn gemeten in
 `supabase/checks/2026_09_23_434_adapterstand_fonds.sql`: het fonds komt uit het
-profiel van `auth.uid()` en is geen parameter; de rolgate laat uitsluitend de
-rollen door die in de applicatie `fonds.config.manage` dragen (met een
-pariteitsgate tegen `core/lib/capabilities-map.ts`); en de limiet is begrensd,
-zodat een definer-leespad geen onbegrensde kost kan krijgen.
-
+profiel van `auth.uid()` en is geen parameter; de capabilitypoort is
+`mag_audit()` en niets anders; de inzageregel wordt daadwerkelijk geschreven én
+blijft achterwege bij een eigen-standlezing; en de limiet is begrensd, zodat een
+definer-leespad geen onbegrensde kost kan krijgen.

@@ -25,7 +25,7 @@ begin
     ('aqlab_log_download(p_export_id uuid, p_herkomst text)', 'productbreed', 'Logt uitsluitend download van productbreed vrijgegeven rapport.'),
     ('contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)', 'publiek_begrensd', 'Publieke contactinzending; alleen INSERT met server-side IP-venster, geen leespad.'),
     ('contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)', 'publiek_begrensd', 'Alleen recente, nog niet gemarkeerde contactrij; uitsluitend twee operationele velden.'),
-    ('fn_adapterstand_fonds(p_limiet integer)', 'rol_fonds', 'Beheerstand over adaptertellers: rolgate (dezelfde rollen die fonds.config.manage dragen) plus fonds uit auth.uid(); geen fondsparameter, en uitsluitend meta_adapters_projectie() verlaat de functie.'),
+    ('fn_adapterstand_fonds(p_limiet integer)', 'rol_fonds', 'Adapterstand: fondsbrede inzage vereist governance_audit_read (0119) en schrijft een inzageregel; zonder die capability alleen de eigen beurten. Fonds uit auth.uid(), geen fondsparameter, en uitsluitend meta_adapters_projectie() verlaat de functie.'),
     ('fn_afschrift_bevries_kolommen()', 'trigger', 'BEFORE UPDATE-trigger; directe aanroep heeft geen NEW/TG-context.'),
     ('fn_ai_actie_afronden(p_actie_id uuid, p_status text, p_resultaat_ref text)', 'eigen_context', 'Een sessie kan uitsluitend de eigen AI-actie afronden.'),
     ('fn_ai_actietype_spec(p_actietype text)', 'productbreed', 'Read-only vaste actietypespecificatie, zonder fondsobject.'),

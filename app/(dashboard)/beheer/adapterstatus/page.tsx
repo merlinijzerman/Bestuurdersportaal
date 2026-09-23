@@ -22,9 +22,9 @@ import {
 //
 //  DE DEKKING STAAT BOVENAAN, NIET ONDERAAN. Is de stand niet volledig, dan zijn
 //  de cijfers een ondergrens. Dat moet je zien vóórdat je de tabel leest, niet
-//  erna. Hetzelfde geldt voor de REIKWIJDTE: als het fondsbrede leespad niet
-//  beschikbaar is, toont deze pagina alleen de eigen beurten van de kijker, en
-//  dan mag zij zich geen fondsstand noemen.
+//  erna. Hetzelfde geldt voor de REIKWIJDTE: zonder het auditrecht
+//  `governance_audit_read` toont deze pagina alleen de eigen beurten van de
+//  kijker (besluit 0119), en dan mag zij zich geen fondsstand noemen.
 // ============================================================================
 export const dynamic = "force-dynamic";
 
@@ -80,11 +80,12 @@ export default async function AdapterstatusPagina() {
             <div role="status" className="mb-6 rounded-xl border border-line bg-white px-5 py-4">
               <div className="font-semibold text-ink">Alleen uw eigen beurten</div>
               <p className="text-sm text-muted mt-0.5">
-                Het fondsbrede leespad is op deze omgeving niet beschikbaar. U ziet uitsluitend
-                de beurten die u zelf hebt gedaan — beurten van collega&apos;s ontbreken. Dit is
-                dus geen fondsstand. Het auditinzagerecht op de volledige logregels
-                (<code>governance_audit_read</code>) staat hier bewust los van en is met deze
-                pagina niet te verkrijgen.
+                U ziet uitsluitend de beurten die u zelf hebt gedaan — beurten van
+                collega&apos;s ontbreken. Dit is dus geen fondsstand. Inzage in de beurten van
+                anderen vraagt het afzonderlijke auditrecht{" "}
+                <code>governance_audit_read</code>, dat per persoon en per periode wordt
+                toegekend en niet aan een rol hangt (besluit 0119). Wie dat recht heeft, ziet
+                hier het hele fonds, en elke zo&apos;n inzage wordt vastgelegd.
               </p>
             </div>
           )}

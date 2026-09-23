@@ -21,7 +21,6 @@ import {
   type MetaBron,
   type MetaQuery,
 } from "../../core/lib/retrieval/adapterstatus-lezer";
-import { ROL_CAPABILITIES } from "../../core/lib/capabilities-map";
 import {
   ADAPTERMETA_NAMEN,
   ADAPTERMETA_RESULTATEN,
@@ -237,7 +236,7 @@ const GOVERNANCE_LOG_KOLOMMEN = kolommenVanGovernanceLog();
  */
 function namaakBron(
   rijen: { fonds_id: string; retrieval_meta: unknown }[],
-  rpcUitkomst: { data: unknown; error: unknown } = { data: null, error: { message: "42883" } }
+  rpcUitkomst: { data: unknown; error: unknown } = { data: null, error: { code: "PGRST202" } }
 ) {
   const gezien = {
     filters: [] as [string, string][],
@@ -385,7 +384,7 @@ test("een leesfout levert 503 en geen half gevulde stand", async () => {
       };
       return q;
     },
-    rpc: () => Promise.resolve({ data: null, error: { message: "42883" } }),
+    rpc: () => Promise.resolve({ data: null, error: { code: "PGRST202" } }),
   };
   const uitkomst = await leesAdapterstand({
     gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron: kapot,
@@ -402,11 +401,14 @@ test("FONDSBREED: beurten van een collega tellen mee in de stand", async () => {
   // Via het tabelpad ziet een beheerder dus alleen zichzelf. Het definer-pad
   // levert het hele fonds, en uitsluitend de gesloten tellers.
   const { bron, gezien } = namaakBron([], {
-    data: [
-      { adapters: [geldigeRij("supabase-rag")] },       // eigen beurt
-      { adapters: [geldigeRij("microsoft-sharepoint")] }, // beurt van een collega
-      {},                                                // beurt met één adapter
-    ],
+    data: {
+      fondsbreed: true,
+      rijen: [
+        { adapters: [geldigeRij("supabase-rag")] },         // eigen beurt
+        { adapters: [geldigeRij("microsoft-sharepoint")] }, // beurt van een collega
+        {},                                                 // beurt met één adapter
+      ],
+    },
     error: null,
   });
   const uitkomst = await leesAdapterstand({
@@ -437,7 +439,7 @@ test("FONDSBREED: een onleesbare regel komt als null terug en wordt geteld", asy
   // De definer-functie vangt per rij `check_violation` af en levert null. Zou
   // zij die rij stil weglaten, dan noemde de stand zich alsnog volledig.
   const { bron } = namaakBron([], {
-    data: [{ adapters: [geldigeRij("supabase-rag")] }, null],
+    data: { fondsbreed: true, rijen: [{ adapters: [geldigeRij("supabase-rag")] }, null] },
     error: null,
   });
   const uitkomst = await leesAdapterstand({
@@ -464,6 +466,37 @@ test("zonder het fondsbrede pad valt de stand terug ÉN zegt zij dat", async () 
   assert.equal(uitkomst.stand.regels.length, 1);
 });
 
+test("een RPC-fout die GÉÉN ontbrekende functie is, levert 503 en geen terugval", async () => {
+  // Een weigering, een defecte functie of een mislukte inzageregel mag niet
+  // lijken op een normale, beperkte stand. Dat zou dezelfde stille degradatie
+  // zijn in een nieuwe vermomming: de kijker ziet cijfers en merkt niets.
+  for (const fout of [
+    { code: "42501", message: "insufficient privilege" },
+    { code: "P0001", message: "iets anders stuk" },
+    { message: "zonder code" },
+  ]) {
+    const { bron, gezien } = namaakBron(
+      [{ fonds_id: FONDS_A, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } }],
+      { data: null, error: fout }
+    );
+    const uitkomst = await leesAdapterstand({
+      gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron,
+    });
+    assert.equal(uitkomst.status, 503, `fout ${JSON.stringify(fout)} leverde geen 503`);
+    assert.equal(gezien.tabel, "", "er is stilletjes op het tabelpad teruggevallen");
+  }
+});
+
+test("een onherkenbaar RPC-antwoord levert 503, geen halve stand", async () => {
+  for (const data of [null, [], { rijen: [] }, { fondsbreed: "ja", rijen: [] }, "tekst"]) {
+    const { bron } = namaakBron([], { data, error: null });
+    const uitkomst = await leesAdapterstand({
+      gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron,
+    });
+    assert.equal(uitkomst.status, 503, `antwoord ${JSON.stringify(data)} werd geaccepteerd`);
+  }
+});
+
 test("de beheerpagina TOONT de reikwijdte; zij kan hem niet vergeten", () => {
   const pagina = lees("app/(dashboard)/beheer/adapterstatus/page.tsx");
   assert.match(pagina, /reikwijdte === "eigen_beurten"/);
@@ -471,57 +504,57 @@ test("de beheerpagina TOONT de reikwijdte; zij kan hem niet vergeten", () => {
   assert.match(pagina, /governance_audit_read/, "de pagina hoort te zeggen wat zij NIET opent");
 });
 
-// ── 6c. De rolgate in SQL en het rolmodel in code lopen gelijk ─────────────
+// ── 6c. Het auditbeleid van 0119 wordt gevolgd, niet uitgezonderd ─────────
 
-test("de SQL-rolgate kent exact de rollen die `fonds.config.manage` dragen", () => {
-  // De capabilitymapping staat in code, niet in de database. De definer-functie
-  // moet de rollen dus noemen — en dat is precies waar een autorisatie stil kan
-  // verjaren: haal de capability bij een rol weg en SQL laat hem gewoon door.
-  const migratie = lees("supabase/migrations/2026_09_23_434_adapterstand_fonds.sql");
-  const m = /v_rol not in \(([^)]*)\)/.exec(migratie);
-  assert.ok(m, "de rolgate is niet meer als gesloten lijst te lezen");
-  const uitSql = [...m[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort();
-  const uitCode = Object.entries(ROL_CAPABILITIES)
-    .filter(([, caps]) => caps.includes("fonds.config.manage"))
-    .map(([rol]) => rol)
-    .sort();
-  assert.deepEqual(uitSql, uitCode);
-  assert.ok(uitCode.length > 0, "geen enkele rol draagt de capability — dan klopt de aanname niet");
+test("de poort is de CAPABILITY, niet een rol", async () => {
+  // Besluit 0119 heeft "rol beheerder als autorisatie" expliciet verworpen. De
+  // functie beslist zelf op `mag_audit()` en meldt welke stand zij leverde;
+  // deze laag leidt de reikwijdte NIET af, want dat zou een gok zijn.
+  const { bron, gezien } = namaakBron([], {
+    data: { fondsbreed: false, rijen: [{ adapters: [geldigeRij("supabase-rag")] }] },
+    error: null,
+  });
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: "beheerder-zonder-grant", fondsId: FONDS_A, magBeheren: async () => true, bron,
+  });
+  assert.ok(uitkomst.status === 200);
+  assert.equal(uitkomst.stand.reikwijdte, "eigen_beurten");
+  assert.equal(uitkomst.stand.regels.length, 1);
+  // En er is NIET alsnog stiekem op het tabelpad overgestapt.
+  assert.equal(gezien.tabel, "");
 });
 
-test("de definer-functie is fondsgebonden zonder fondsparameter en begrensd", () => {
+test("de SQL-poort is `mag_audit()` en schrijft een inzageregel", () => {
   const migratie = lees("supabase/migrations/2026_09_23_434_adapterstand_fonds.sql");
-  // Het fonds komt uit het profiel van auth.uid(); er is geen fonds-argument.
-  assert.match(migratie, /select p\.fonds_id, p\.rol into v_fonds, v_rol/);
-  assert.match(migratie, /where gl\.fonds_id = v_fonds/);
-  assert.equal(
-    /fn_adapterstand_fonds\(\s*p_fonds/.test(migratie),
-    false,
-    "een fondsparameter maakt de tenantgrens iets wat de aanroeper meegeeft"
-  );
-  // Zonder sessie is auth.uid() null; dan werpt zij. Fail-closed voor anon.
-  assert.match(migratie, /if v_uid is null then/);
-  assert.match(migratie, /p_limiet > 500/);
-  // En zij verruimt het auditinzagerecht niet. Op GEBRUIK matchen, niet op
-  // proza: de migratiekop LEGT UIT waarom `mag_audit()` hier niet deugt, en een
-  // naïeve regex vindt juist die uitleg. Dezelfde val als bij de
-  // service-role-assertie een ronde eerder.
-  // Ook `comment on … is '…'` eruit: dat is documentatie IN de database en
-  // noemt de grant die deze functie juist NIET nodig heeft.
   const zonderCommentaar = migratie
     .replace(/^\s*--.*$/gm, "")
     .replace(/comment on function[\s\S]*?';/g, "");
-  assert.equal(/mag_audit\(/.test(zonderCommentaar), false);
-  assert.equal(/governance_audit_grants/.test(zonderCommentaar), false);
-  assert.equal(/governance_audit_read/.test(zonderCommentaar), false);
-  // Positieve controle op de strip zelf: de functiekop moet er nog staan,
-  // anders zou deze test groen zijn omdat er niets meer te matchen viel.
   assert.match(zonderCommentaar, /create or replace function public\.fn_adapterstand_fonds/);
-  // Alleen de gesloten projectie verlaat de functie.
-  assert.match(migratie, /return next public\.meta_adapters_projectie\(r\.retrieval_meta\);/);
-  for (const verboden of ["gl.vraag", "gl.antwoord", "gl.bronnen", "gl.gebruiker_id", "gl.gebruiker_naam"]) {
-    assert.equal(migratie.includes(verboden), false, `de functie geeft ${verboden} vrij`);
-  }
+  assert.match(zonderCommentaar, /v_fondsbreed := public\.mag_audit\(v_fonds\);/);
+  assert.match(zonderCommentaar, /insert into public\.governance_audit_inzage/);
+  // GEEN rolgate meer: dat was precies het verworpen alternatief uit 0119.
+  assert.equal(
+    /p\.rol|'beheerder'|'voorzitter'/.test(zonderCommentaar),
+    false,
+    "een rol is permanent en grofmazig; 0119 heeft dat alternatief verworpen"
+  );
+  // De inzageregel hoort bij de FONDSBREDE tak, niet bij een eigen-standlezing.
+  assert.match(
+    zonderCommentaar,
+    /if v_fondsbreed then[\s\S]*?insert into public\.governance_audit_inzage/
+  );
+  // Basisniveau, dus geen motivering — conform de CHECK op de inzagetabel.
+  assert.match(zonderCommentaar, /false, null\);/);
+});
+
+test("het besluit is vastgelegd en verwijst naar 0119", () => {
+  // De keuze om deze tellers NIET uit te zonderen is een governancebesluit, geen
+  // implementatiedetail. Zonder vastlegging staat er over een jaar een rolgate
+  // terug omdat niemand meer weet waarom die er niet mocht staan.
+  const besluit = lees("decisions/0214-adapterstand-volgt-het-auditbeleid.md");
+  assert.match(besluit, /\[\[0119\]\]/);
+  assert.match(besluit, /fn_adapterstand_fonds/);
+  assert.match(besluit, /governance_audit_inzage/);
 });
 
 test("het nieuwe databaseobject staat in de grants-allowlist", () => {

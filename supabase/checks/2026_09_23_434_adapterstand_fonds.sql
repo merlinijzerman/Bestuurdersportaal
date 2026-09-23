@@ -1,29 +1,36 @@
 -- ============================================================================
--- #434 T4-F — fondsbrede adapterstand: gedragstest onder ÉCHTE RLS.
+-- #434 T4-F — adapterstand onder het auditbeleid van 0119: gedragstest.
 -- ----------------------------------------------------------------------------
--- Dit is de test die de vorige ronde ontbrak. Het applicatiepad bewees het
--- FONDSFILTER, maar niet het leesrecht eronder: de selectpolicy op
--- `governance_log` is `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`
--- en `mag_audit()` vereist de aparte grant `governance_audit_read`, die
--- `fonds.config.manage` niet geeft. Een beheerder zag dus alleen zijn EIGEN
--- beurten en kreeg die gepresenteerd als de stand van het fonds.
+-- Dit is de test die twee reviewrondes achtereen ontbrak. Ronde 1 bewees het
+-- FONDSFILTER maar niet het leesrecht eronder. Ronde 2 loste dat op met een
+-- ROLGATE — precies het alternatief dat besluit 0119 heeft verworpen, en zonder
+-- de inzageregel die dat besluit eist.
+--
+-- Wat hier wordt gemeten is dus niet "werkt de functie", maar "houdt zij zich
+-- aan 0119". Zie besluit 0214: operationele tellers zijn géén uitzondering.
 --
 -- Getoetste scenario's:
---   F1 — BASELINE: een beheerder ziet via de gewone tabel maar ÉÉN van de twee
---        fondsregels. Dit is de bevinding zelf, hier vastgelegd zodat zij niet
---        stil terug kan komen.
---   F2 — De definer-functie levert BEIDE fondsregels: eigen beurt én die van de
---        collega.
---   F3 — CROSS-TENANT: geen enkele regel van fonds B komt mee.
---   F4 — ROLGATE: een bestuurder van hetzelfde fonds wordt geweigerd (42501).
---   F5 — ZONDER SESSIE: anon wordt geweigerd (28000); de functie is niet via
---        de service-role of een lege sessie te misbruiken.
---   F6 — De uitvoer draagt UITSLUITEND `adapters`; geen modus, model,
---        gebruiker, correlatie of welke andere metasleutel dan ook.
---   F7 — Een onleesbare regel komt als NULL terug in plaats van de hele stand
---        te laten klappen — en is dus telbaar als overgeslagen.
---   F8 — De limiet is begrensd; een aanroeper kan er geen onbegrensde lezing
---        van maken.
+--   F1  — BASELINE: een beheerder ziet via de gewone tabel maar ÉÉN van de twee
+--         fondsregels. Dit is de bevinding zelf, hier vastgelegd zodat zij niet
+--         stil terug kan komen.
+--   F2  — ZONDER `governance_audit_read`: de functie levert alleen de eigen
+--         beurten, meldt `fondsbreed = false` én schrijft GEEN inzageregel — je
+--         eigen spoor inzien is geen inzage in dat van een ander. De ROL doet er
+--         daarbij niet toe: de kijker is beheerder.
+--   F3  — MÉT de capability: het hele fonds, inclusief de beurt van de collega,
+--         en `fondsbreed = true`.
+--   F4  — De inzageregel wordt daadwerkelijk geschreven: precies één, met
+--         `bronniveau = false` en een scope zonder inhoud.
+--   F5  — CROSS-TENANT: geen enkele regel van fonds B komt mee, ook niet met de
+--         capability — `mag_audit()` is per fonds.
+--   F6  — Een grant op fonds B opent fonds A niet.
+--   F7  — ZONDER SESSIE: anon wordt geweigerd (28000).
+--   F8  — De uitvoer draagt UITSLUITEND `adapters`; geen modus, model,
+--         gebruiker, correlatie of welke andere metasleutel dan ook.
+--   F9  — Een onleesbare regel komt als JSON-null terug in plaats van de hele
+--         stand te laten klappen — en is dus telbaar als overgeslagen.
+--   F10 — De limiet is begrensd; een aanroeper kan er geen onbegrensde lezing
+--         van maken.
 --
 -- Self-seeding (2 fondsen + 3 users via de auth-trigger), alles in één
 -- transactie met ROLLBACK — laat niets achter.
@@ -33,7 +40,7 @@
 
 -- ----------------------------------------------------------------------------
 -- ROL: postgres voor opbouw en afbraak, authenticated per scenario — de meting
---      gebeurt onder RLS, niet onder BYPASSRLS. Bij F5 expliciet anon.
+--      gebeurt onder RLS, niet onder BYPASSRLS. Bij F7 expliciet anon.
 --      (verplicht en machineleesbaar — zie ROL-1 in
 --       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
 -- ----------------------------------------------------------------------------
@@ -92,7 +99,6 @@ declare n_eigen int; n_totaal int;
 begin
   select count(*) into n_eigen from public.governance_log
    where fonds_id = 'd1111111-1111-4111-8111-111111111111';
-  -- 2 eigen regels (de geldige en de onleesbare); die van het A-lid ontbreekt.
   if n_eigen <> 2 then
     raise exception 'F1: verwacht 2 EIGEN regels via de tabel, kreeg % — de RLS-aanname klopt niet meer', n_eigen;
   end if;
@@ -104,72 +110,140 @@ begin
 end $$;
 
 -- ════════════════════════════════════════════════════════════════════════════
--- F2/F3/F6/F7 — de definer-functie: fondsbreed, tenantdicht, inhoudsvrij.
+-- F2 — ZONDER de capability: eigen beurten, fondsbreed = false, GEEN inzage.
+--      De kijker is BEHEERDER. Dat is het hele punt: de rol geeft geen inzage.
 -- ════════════════════════════════════════════════════════════════════════════
 do $$
 declare
-  n_rijen   int;
-  n_null    int;
-  n_adapter int;
+  v         jsonb;
+  n_inzage  int;
   v_namen   text[];
-  v_sleutel text;
 begin
-  select count(*), count(*) filter (where r is null)
-    into n_rijen, n_null
-    from public.fn_adapterstand_fonds() r;
+  select count(*) into n_inzage from public.governance_audit_inzage;
 
-  -- Drie regels van fonds A: twee leesbaar, één onleesbaar (NULL).
-  if n_rijen <> 3 then
-    raise exception 'F2: verwacht 3 regels uit fonds A, kreeg %', n_rijen;
+  v := public.fn_adapterstand_fonds();
+
+  if (v ->> 'fondsbreed') <> 'false' then
+    raise exception 'F2: een beheerder ZONDER governance_audit_read kreeg de fondsbrede stand';
   end if;
-  if n_null <> 1 then
-    raise exception 'F7: een onleesbare regel hoort als NULL terug te komen; kreeg % NULL(s)', n_null;
+  if jsonb_array_length(v -> 'rijen') <> 2 then
+    raise exception 'F2: verwacht 2 eigen regels, kreeg %', jsonb_array_length(v -> 'rijen');
   end if;
 
-  -- F2 — de beurt van de COLLEGA zit erbij. Zonder deze regel is het geen
-  -- fondsstand maar een persoonlijke stand met een fondslabel.
   select array_agg(distinct e ->> 'naam' order by e ->> 'naam')
     into v_namen
-    from public.fn_adapterstand_fonds() r,
+    from jsonb_array_elements(v -> 'rijen') r,
          lateral jsonb_array_elements(coalesce(r -> 'adapters', '[]'::jsonb)) e;
-  if v_namen is distinct from array['microsoft-sharepoint','supabase-rag'] then
-    raise exception 'F2: verwacht beide adapters van fonds A, kreeg %', v_namen;
+  if v_namen is distinct from array['supabase-rag'] then
+    raise exception 'F2: de stand bevat een beurt van een ander (%)', v_namen;
   end if;
 
-  -- F3 — CROSS-TENANT. De regel van fonds B draagt herkenbare tellers (7777
-  -- bytes, 7 downloads); die mogen nergens opduiken.
-  if exists (
-    select 1 from public.fn_adapterstand_fonds() r,
-         lateral jsonb_array_elements(coalesce(r -> 'adapters', '[]'::jsonb)) e
-     where (e ->> 'bytes') = '7777' or (e ->> 'downloads') = '7'
-  ) then
-    raise exception 'F3: LEK — een regel van fonds B komt mee in de stand van fonds A';
+  if (select count(*) from public.governance_audit_inzage) <> n_inzage then
+    raise exception 'F2: er is een inzageregel geschreven voor een EIGEN-standlezing';
   end if;
-
-  -- F6 — uitsluitend de sleutel `adapters`. Geen modus, model, methode,
-  -- opgehaald, geselecteerd of correlatie: dit pad is geen auditinzage.
-  select string_agg(distinct k, ',')
-    into v_sleutel
-    from public.fn_adapterstand_fonds() r,
-         lateral jsonb_object_keys(r) k;
-  if v_sleutel is distinct from 'adapters' then
-    raise exception 'F6: de functie geeft meer vrij dan `adapters` (sleutels: %)', v_sleutel;
-  end if;
-
-  -- En de rij zelf is de gesloten vorm: 22 velden, geen identifier.
-  select count(*) into n_adapter
-    from public.fn_adapterstand_fonds() r,
-         lateral jsonb_array_elements(coalesce(r -> 'adapters', '[]'::jsonb)) e,
-         lateral jsonb_object_keys(e) k;
-  if n_adapter <> 44 then
-    raise exception 'F6: verwacht 2 rijen van 22 velden, kreeg % velden', n_adapter;
-  end if;
-
-  raise notice 'OK F2/F3/F6/F7: fondsbreed, tenantdicht, uitsluitend gesloten adaptertellers.';
+  raise notice 'OK F2: zonder capability alleen eigen beurten, geen inzageregel — ondanks rol beheerder.';
 end $$;
 
 -- ════════════════════════════════════════════════════════════════════════════
--- F8 — de limiet is begrensd.
+-- F3/F4/F5/F8/F9 — MÉT de capability. Toekennen als tabel-eigenaar: de
+--      grants-tabel is deny-by-default en voor authenticated onleesbaar.
+-- ════════════════════════════════════════════════════════════════════════════
+reset role;
+insert into public.governance_audit_grants (gebruiker_id, fonds_id, capability, motivering)
+values ('da111111-1111-4111-8111-111111111111',
+        'd1111111-1111-4111-8111-111111111111',
+        'governance_audit_read', 'F434-test: fondsbrede adapterstand');
+
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"da111111-1111-4111-8111-111111111111"}';
+
+do $$
+declare
+  v         jsonb;
+  n_inzage  int;
+  v_namen   text[];
+  n_null    int;
+  v_sleutel text;
+  n_velden  int;
+  v_scope   jsonb;
+  v_bron    boolean;
+begin
+  select count(*) into n_inzage from public.governance_audit_inzage;
+
+  v := public.fn_adapterstand_fonds();
+
+  -- F3 — fondsbreed, inclusief de beurt van de collega.
+  if (v ->> 'fondsbreed') <> 'true' then
+    raise exception 'F3: met governance_audit_read werd toch de eigen stand geleverd';
+  end if;
+  if jsonb_array_length(v -> 'rijen') <> 3 then
+    raise exception 'F3: verwacht 3 regels uit fonds A, kreeg %', jsonb_array_length(v -> 'rijen');
+  end if;
+  select array_agg(distinct e ->> 'naam' order by e ->> 'naam')
+    into v_namen
+    from jsonb_array_elements(v -> 'rijen') r,
+         lateral jsonb_array_elements(coalesce(r -> 'adapters', '[]'::jsonb)) e;
+  if v_namen is distinct from array['microsoft-sharepoint','supabase-rag'] then
+    raise exception 'F3: verwacht beide adapters van fonds A, kreeg % — zonder de beurt van de collega is dit geen fondsstand', v_namen;
+  end if;
+
+  -- F4 — precies één inzageregel, inhoudsvrij en op basisniveau.
+  if (select count(*) from public.governance_audit_inzage) <> n_inzage + 1 then
+    raise exception 'F4: verwacht precies één nieuwe inzageregel, kreeg %',
+      (select count(*) from public.governance_audit_inzage) - n_inzage;
+  end if;
+  select scope, bronniveau into v_scope, v_bron
+    from public.governance_audit_inzage
+   order by tijdstip desc limit 1;
+  if v_bron then
+    raise exception 'F4: de inzageregel claimt bronniveau; deze uitvoer is basisniveau';
+  end if;
+  if v_scope ->> 'weergave' is distinct from 'adapterstand' then
+    raise exception 'F4: de inzageregel benoemt de weergave niet (scope: %)', v_scope;
+  end if;
+
+  -- F5 — CROSS-TENANT. De regel van fonds B draagt herkenbare tellers (7777
+  -- bytes, 7 downloads); die mogen nergens opduiken, ook niet mét de grant.
+  if exists (
+    select 1 from jsonb_array_elements(v -> 'rijen') r,
+         lateral jsonb_array_elements(coalesce(r -> 'adapters', '[]'::jsonb)) e
+     where (e ->> 'bytes') = '7777' or (e ->> 'downloads') = '7'
+  ) then
+    raise exception 'F5: LEK — een regel van fonds B komt mee in de stand van fonds A';
+  end if;
+
+  -- F8 — uitsluitend de sleutel `adapters` per regel.
+  -- De onleesbare regel is JSON-null en heeft geen sleutels; die overslaan,
+  -- anders werpt jsonb_object_keys op een scalar.
+  select string_agg(distinct k, ',')
+    into v_sleutel
+    from (select r from jsonb_array_elements(v -> 'rijen') r
+           where jsonb_typeof(r) = 'object') o,
+         lateral jsonb_object_keys(o.r) k;
+  if v_sleutel is distinct from 'adapters' then
+    raise exception 'F8: de functie geeft meer vrij dan `adapters` (sleutels: %)', v_sleutel;
+  end if;
+  select count(*) into n_velden
+    from jsonb_array_elements(v -> 'rijen') r,
+         lateral jsonb_array_elements(coalesce(r -> 'adapters', '[]'::jsonb)) e,
+         lateral jsonb_object_keys(e) k;
+  if n_velden <> 44 then
+    raise exception 'F8: verwacht 2 rijen van 22 velden, kreeg % velden', n_velden;
+  end if;
+
+  -- F9 — de onleesbare regel is JSON-null, niet weggelaten.
+  select count(*) into n_null
+    from jsonb_array_elements(v -> 'rijen') r
+   where jsonb_typeof(r) = 'null';
+  if n_null <> 1 then
+    raise exception 'F9: een onleesbare regel hoort als JSON-null terug te komen; kreeg % null(s)', n_null;
+  end if;
+
+  raise notice 'OK F3/F4/F5/F8/F9: fondsbreed met inzageregel, tenantdicht, uitsluitend gesloten adaptertellers.';
+end $$;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- F10 — de limiet is begrensd.
 -- ════════════════════════════════════════════════════════════════════════════
 do $$
 declare gelukt boolean := false;
@@ -180,34 +254,40 @@ begin
   exception when sqlstate '22023' then gelukt := false;
   end;
   if gelukt then
-    raise exception 'F8: een onbegrensde limiet werd geaccepteerd';
+    raise exception 'F10: een onbegrensde limiet werd geaccepteerd';
   end if;
-  -- Positieve controle: binnen bereik mag wél, anders bewijst F8 niets.
+  -- Positieve controle: binnen bereik mag wél, anders bewijst F10 niets.
   perform public.fn_adapterstand_fonds(1);
-  raise notice 'OK F8: limiet begrensd (1 mag, 100000 niet).';
+  raise notice 'OK F10: limiet begrensd (1 mag, 100000 niet).';
 end $$;
 
 -- ════════════════════════════════════════════════════════════════════════════
--- F4 — ROLGATE: een bestuurder van HETZELFDE fonds wordt geweigerd.
+-- F6 — een grant op fonds B opent fonds A niet. `mag_audit()` is per fonds.
 -- ════════════════════════════════════════════════════════════════════════════
+reset role;
+insert into public.governance_audit_grants (gebruiker_id, fonds_id, capability, motivering)
+values ('da222222-2222-4222-8222-222222222222',
+        'd2222222-2222-4222-8222-222222222222',
+        'governance_audit_read', 'F434-test: grant op het VERKEERDE fonds');
+
+set local role authenticated;
 set local request.jwt.claims to '{"sub":"da222222-2222-4222-8222-222222222222"}';
 
 do $$
-declare gelukt boolean := false;
+declare v jsonb;
 begin
-  begin
-    perform public.fn_adapterstand_fonds();
-    gelukt := true;
-  exception when sqlstate '42501' then gelukt := false;
-  end;
-  if gelukt then
-    raise exception 'F4: een bestuurder kreeg de fondsbrede adapterstand';
+  v := public.fn_adapterstand_fonds();
+  if (v ->> 'fondsbreed') <> 'false' then
+    raise exception 'F6: een grant op fonds B gaf fondsbrede inzage in fonds A';
   end if;
-  raise notice 'OK F4: rolgate weigert een bestuurder van hetzelfde fonds.';
+  if jsonb_array_length(v -> 'rijen') <> 1 then
+    raise exception 'F6: verwacht uitsluitend de ene eigen regel, kreeg %', jsonb_array_length(v -> 'rijen');
+  end if;
+  raise notice 'OK F6: een grant op een ander fonds opent het eigen fonds niet.';
 end $$;
 
 -- ════════════════════════════════════════════════════════════════════════════
--- F5 — ZONDER SESSIE: anon wordt geweigerd. auth.uid() is dan null.
+-- F7 — ZONDER SESSIE: anon wordt geweigerd. auth.uid() is dan null.
 -- ════════════════════════════════════════════════════════════════════════════
 set local role anon;
 set local request.jwt.claims to '';
@@ -221,13 +301,13 @@ begin
   exception when others then gelukt := false;
   end;
   if gelukt then
-    raise exception 'F5: zonder sessie werd de fondsbrede adapterstand geleverd';
+    raise exception 'F7: zonder sessie werd de adapterstand geleverd';
   end if;
-  raise notice 'OK F5: zonder sessie geweigerd (geen execute-recht of geen auth.uid()).';
+  raise notice 'OK F7: zonder sessie geweigerd (geen execute-recht of geen auth.uid()).';
 end $$;
 
 reset role;
 
-select 'T4-F fondsbrede adapterstand: alle gedragstests geslaagd' as uitkomst;
+select 'T4-F adapterstand onder 0119: alle gedragstests geslaagd' as uitkomst;
 
 rollback;

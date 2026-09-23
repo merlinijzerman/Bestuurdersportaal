@@ -14,25 +14,32 @@
 //  leesrecht in de praktijk lekt — via een foutmelding, een timing of een latere
 //  refactor die de weigering verplaatst.
 //
-//  ── WAAROM ER TWEE PADEN ZIJN ──────────────────────────────────────────────
+//  ── WAAROM HET FONDSBREDE PAD EEN RPC IS ───────────────────────────────────
 //  De RLS-policy op `governance_log` luidt
-//  `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`, en `mag_audit()`
-//  vereist de afzonderlijke grant `governance_audit_read`. De beheercapability
-//  `fonds.config.manage` verleent die grant NIET. Een gewone tabelquery levert
-//  een beheerder dus alleen zijn EIGEN beurten op — en presenteerde die als de
-//  stand van het fonds. Dat is precies de stille degradatie die deze tranche
-//  moest uitsluiten, nu in beheervorm.
+//  `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`. Een gewone
+//  tabelquery levert een beheerder dus alleen zijn EIGEN beurten — en
+//  presenteerde die als de stand van het fonds. Dat is de stille degradatie die
+//  deze tranche moest uitsluiten, nu in beheervorm.
 //
-//  Het leesrecht verruimen was geen optie: `governance_audit_read` opent vraag,
-//  antwoord en bronnen van collega's. Daarom `fn_adapterstand_fonds()` — een
-//  definer-functie die fondsbreed leest en uitsluitend de gesloten
-//  adaptertellers teruggeeft.
+//  `fn_adapterstand_fonds()` lost dat op ZONDER het auditbeleid te verruimen.
+//  Zij volgt besluit 0119 letterlijk: zonder `governance_audit_read` krijgt de
+//  kijker alleen zijn eigen beurten en wordt er niets gelogd; mét die capability
+//  het hele fonds, en dan schrijft zij een regel in `governance_audit_inzage`.
+//  De rol `beheerder` geeft hier dus GEEN fondsbrede inzage — dat is precies het
+//  alternatief dat 0119 heeft verworpen.
 //
-//  Het tabelpad blijft bestaan als TERUGVAL voor de omgeving waar die migratie
-//  nog niet draait (de conventie hier is Supabase-eerst, maar een code-deploy
-//  kan er niettemin vóór liggen). Die terugval is GELABELD en niet stil:
-//  `reikwijdte` is een verplicht veld, dus een weergave kan hem niet vergeten te
-//  lezen zonder dat de typecheck erover valt.
+//  DE REIKWIJDTE KOMT VAN DE SERVER. `fondsbreed` staat in het antwoord van de
+//  functie; deze laag leidt hem niet af. Zou zij dat wel doen, dan gokt zij over
+//  reikwijdte, en een gok over reikwijdte is hoe een eigen stand als fondsstand
+//  op het scherm komt.
+//
+//  TERUGVAL ALLEEN BIJ EEN ONTBREKENDE FUNCTIE. De conventie is Supabase-eerst,
+//  maar een code-deploy kan vóór de migratie liggen; dan is een gelabelde,
+//  beperkte stand beter dan een lege pagina. Elke ANDERE fout — een weigering,
+//  een defecte functie, een schrijffout op de inzageregel — levert 503. Een
+//  brede terugval zou een geweigerde of kapotte inzage laten lijken op een
+//  normale, beperkte stand, en dat is dezelfde stille degradatie in een nieuwe
+//  vermomming.
 // ============================================================================
 import { aggregeerAdapterMeta, type AdapterBeheerstand } from "./adaptermeta-beheer";
 
@@ -45,12 +52,43 @@ export const ADAPTERSTAND_RPC = "fn_adapterstand_fonds" as const;
 /**
  * Waarover gaat deze stand werkelijk?
  *
- * `fonds` — alle vastgelegde beurten van het fonds, via het definer-pad.
- * `eigen_beurten` — uitsluitend de beurten van de kijker zelf, omdat het
- * fondsbrede pad niet beschikbaar was. De stand is dan geen fondsstand, en de
- * weergave MOET dat zeggen.
+ * `fonds` — alle vastgelegde beurten van het fonds. Alleen met de capability
+ * `governance_audit_read`, en er staat dan een regel in
+ * `governance_audit_inzage`.
+ * `eigen_beurten` — uitsluitend de beurten van de kijker zelf: hij heeft die
+ * capability niet, of het fondsbrede pad bestaat nog niet op deze omgeving. De
+ * stand is dan geen fondsstand, en de weergave MOET dat zeggen.
  */
 export type Adapterstandreikwijdte = "fonds" | "eigen_beurten";
+
+/**
+ * De foutcodes die betekenen: de functie bestaat hier (nog) niet.
+ *
+ * `42883` is Postgres' `undefined_function`; `PGRST202` is PostgREST' eigen
+ * melding dat de RPC niet in de schema-cache staat. Uitsluitend deze twee
+ * rechtvaardigen een terugval — al het andere is een fout en hoort als fout te
+ * eindigen.
+ */
+const ONTBREKENDE_FUNCTIE: readonly string[] = ["42883", "PGRST202"];
+
+function functieOntbreekt(fout: unknown): boolean {
+  if (typeof fout !== "object" || fout === null) return false;
+  const code = (fout as { code?: unknown }).code;
+  return typeof code === "string" && ONTBREKENDE_FUNCTIE.includes(code);
+}
+
+/** Het antwoord van `fn_adapterstand_fonds()`. */
+interface Adapterstandantwoord {
+  fondsbreed: boolean;
+  rijen: unknown[];
+}
+
+function alsAntwoord(data: unknown): Adapterstandantwoord | null {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  const d = data as { fondsbreed?: unknown; rijen?: unknown };
+  if (typeof d.fondsbreed !== "boolean" || !Array.isArray(d.rijen)) return null;
+  return { fondsbreed: d.fondsbreed, rijen: d.rijen };
+}
 
 export interface Adapterstand extends AdapterBeheerstand {
   reikwijdte: Adapterstandreikwijdte;
@@ -130,19 +168,35 @@ export async function leesAdapterstand(
     };
   }
 
-  // ── 1. Het fondsbrede pad ────────────────────────────────────────────────
-  // De functie kent geen fondsparameter: zij leidt fonds én rol af uit
-  // `auth.uid()`. Er valt hier dus niets mee te geven wat de tenantgrens
+  // ── 1. Het pad dat het auditbeleid van 0119 volgt ────────────────────────
+  // De functie kent geen fondsparameter: zij leidt het fonds af uit
+  // `auth.uid()` en beslist zelf, op de capability, of het fondsbreed mag. Er
+  // valt hier dus niets mee te geven wat de tenantgrens of de reikwijdte
   // verplaatst.
   const viaRpc = await deps.bron.rpc(ADAPTERSTAND_RPC, { p_limiet: ADAPTERSTATUS_LIMIET });
-  if (!viaRpc.error && Array.isArray(viaRpc.data)) {
+  if (!viaRpc.error) {
+    const antwoord = alsAntwoord(viaRpc.data);
+    // Fail-closed: een antwoord in een vorm die we niet herkennen, is geen
+    // reden om stilletjes op een ander pad over te stappen.
+    if (!antwoord) return { status: 503, fout: "De adapterstand kon niet worden gelezen." };
     return {
       status: 200,
-      stand: { ...aggregeerAdapterMeta(viaRpc.data), reikwijdte: "fonds" },
+      stand: {
+        ...aggregeerAdapterMeta(antwoord.rijen),
+        reikwijdte: antwoord.fondsbreed ? "fonds" : "eigen_beurten",
+      },
     };
+  }
+  // Een weigering, een defecte functie of een mislukte inzageregel is een FOUT.
+  // Alleen "de functie bestaat hier nog niet" rechtvaardigt het oude pad.
+  if (!functieOntbreekt(viaRpc.error)) {
+    return { status: 503, fout: "De adapterstand kon niet worden gelezen." };
   }
 
   // ── 2. Terugval: RLS-beperkt, en als zodanig GELABELD ────────────────────
+  // Onder RLS levert dit pad uitsluitend de eigen beurten van de kijker, tenzij
+  // hij `governance_audit_read` heeft. We kunnen dat hier niet vaststellen, dus
+  // is `eigen_beurten` de eerlijke ondergrens: nooit méér claimen dan zeker is.
   const { data, error } = await deps.bron
     .from("governance_log")
     .select("retrieval_meta")
