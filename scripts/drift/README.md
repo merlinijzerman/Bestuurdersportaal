@@ -58,10 +58,13 @@ daar zijn vrijwel altijd een platformversieverschil en geen gemiste migratie.
 Ze worden gemeten maar apart gerapporteerd, zodat ze het signaal uit `public`
 niet overstemmen.
 
-**Verwijderende migraties.** Een contractmigratie als `423b` dropt een oude
-functiesignatuur. Die werd eerst als "alleen data of commentaar" weggezet — dat
-was fout: zij is juist te meten, namelijk aan de AFWEZIGHEID van wat zij
-verwijdert. Categorie `verwijdert-objecten` noemt nu het gedropte object.
+**Verwijderende migraties, nu ook gecontroleerd.** Een contractmigratie als
+`423b` dropt een oude functiesignatuur. Die werd eerst als "alleen data of
+commentaar" weggezet — fout: zij is juist te meten, namelijk aan de AFWEZIGHEID
+van wat zij verwijdert. Rapport 4 toetst dat nu actief voor 8 objecten. De
+generator filtert daarbij in twee passes: wat een migratie dropt én meteen weer
+aanmaakt, telt niet mee. Zonder die tweede pass meldde de controle 8 valse
+bevindingen op een omgeving waar alles correct stond.
 
 ## Wat dit nog steeds NIET kan
 
@@ -71,9 +74,12 @@ verwijdert. Categorie `verwijdert-objecten` noemt nu het gedropte object.
   gemeten. Migraties die daar hun objecten maken, komen als
   `buiten-scope-schema` in de niet-meetbare lijst — `423a`/`423b` zijn daar het
   voorbeeld van, en moesten met de hand worden geverifieerd.
-- **De afwezigheid die `verwijdert-objecten` belooft, wordt nog niet getoetst.**
-  De categorie benoemt wat er weg hoort te zijn; het script controleert dat niet
-  actief. Dat is de volgende stap, geen opgeloste stap.
+- **Waaróm een vorm onbekend is, zegt dit gereedschap niet.** Matcht een
+  afwijkend object geen enkele historische vorm, dan meldt het rapport de
+  gemeten vingerafdruk en verder niets. Een waarschijnlijke oorzaak is dat het
+  migratiebestand ná toepassing nog is herzien — `2026_09_07_microsoft_login_beleidsmodus.sql`
+  kreeg vijf revisies op één dag — maar dat natrekken vraagt een replay over de
+  GIT-historie van het bestand, en die bestaat nog niet.
 
 ## Herbouwen
 
@@ -95,4 +101,5 @@ het driftscript tegen een verouderde verwachting.
 | `meta_basisniveau` teruggezet naar de #367-vorm | precies dat ene object `afwijkend` |
 | Functie gedropt + vreemde tabel toegevoegd | `ontbreekt` respectievelijk `onbekend`, met de juiste migratie erbij |
 | `fn_access_token_hook` teruggezet naar de `2026_09_06`-vorm | `afwijkend`, **met de duiding "doel draagt nog de vorm van `2026_09_06_microsoft_login_fase1b.sql`"** — de ontbrekende schakel wordt dus benoemd |
+| Afwezigheidscontrole op de referentie | 8 van 8 `correct afwezig`; de 8 drop-gevolgd-door-create-gevallen worden vooraf uitgefilterd, anders waren dat 8 valse bevindingen |
 | Stapsgewijze replay | 89 van 89 migraties afgespeeld; faalt er één, dan stopt de generator met exitcode ≠ 0 in plaats van een onvolledige historie op te leveren |

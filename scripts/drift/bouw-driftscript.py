@@ -19,6 +19,10 @@ zonder = list(csv.DictReader(io.open("supabase/checks/440-migraties-zonder-kenme
 # vorm draagt het doel dan wél, en sinds welke migratie loopt het achter?
 historie = list(csv.DictReader(io.open("supabase/checks/440-historische-vormen.generated.tsv",
                                        encoding="utf-8"), delimiter="\t"))
+# Wat migraties VERWIJDEREN en wat na de volledige keten werkelijk weg is.
+# Een contractmigratie is daaraan te meten, en aan niets anders.
+afwezig = list(csv.DictReader(io.open("supabase/checks/440-afwezig-verwacht.generated.tsv",
+                                      encoding="utf-8"), delimiter="\t"))
 meting = io.open("scripts/drift/vingerafdruk.sql", encoding="utf-8").read()
 # De kop van de meetquery eruit; alleen het SELECT-deel is herbruikbaar.
 meting = meting[meting.index("select sectie, sch, obj"):].rstrip().rstrip(";")
@@ -85,6 +89,9 @@ verwacht_values = ",\n    ".join(
                               q(r["vingerafdruk"]), q(r["migratie"] or ""))
     for r in verwacht)
 
+afwezig_values = ",\n    ".join(
+    "({},{},{})".format(q(r["soort"]), q(r["object"]), q(r["migratie"])) for r in afwezig)
+
 historie_values = ",\n    ".join(
     "({},{},{},{},{})".format(q(r["sectie"]), q(r["sch"]), q(r["obj"]),
                               q(r["vingerafdruk"]), q(r["migratie"]))
@@ -131,7 +138,12 @@ select '1. OBJECTVERSCHILLEN' as rapport,
        -- wijziging op de doelomgeving - een andere bevinding, en een ergere.
        case when v.oordeel <> 'afwijkend' then ''
             when h.migratie is null then 'vorm onbekend in de keten — handmatig gewijzigd?'
-            else 'doel draagt nog de vorm van ' || h.migratie end as duiding
+            else 'doel draagt nog de vorm van ' || h.migratie end as duiding,
+       -- De gemeten vingerafdruk zelf. Bij 'vorm onbekend' is dit het enige
+       -- aanknopingspunt om achteraf uit te zoeken WELKE vorm het dan wel is —
+       -- bijvoorbeeld een tussenversie van een migratiebestand dat na
+       -- toepassing nog is herzien.
+       coalesce(v.actueel_vp, '') as gemeten_vingerafdruk
   from vergelijk v
   left join historie h
     on h.sectie = v.sectie and h.sch = v.sch and h.obj = v.obj
@@ -211,3 +223,25 @@ select '3. SAMENVATTING' as rapport,
 io.open("supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql", "w",
         encoding="utf-8").write(kop + body)
 print(f"geschreven: {len(verwacht)} verwachte objecten, {len(zonder)} niet-meetbare migraties")
+
+body += f"""
+-- ── 4. Afwezigheidscontrole: wat verwijderd HOORT te zijn ───────────────────
+--  Een contractmigratie laat geen nieuw object achter; zij is uitsluitend te
+--  meten aan de afwezigheid van wat zij dropt. Staat het er nog, dan is die
+--  migratie niet (volledig) toegepast.
+with verwacht_afwezig(soort, object, migratie) as (
+  values
+    {afwezig_values}
+)
+select '4. AFWEZIGHEIDSCONTROLE' as rapport,
+       migratie, soort, object,
+       case when soort = 'FUNC' and to_regprocedure(object) is not null then 'NOG AANWEZIG'
+            when soort = 'REL'  and to_regclass(object)     is not null then 'NOG AANWEZIG'
+            else 'correct afwezig' end as oordeel
+  from verwacht_afwezig
+ order by 5 desc, 2, 4;
+"""
+
+io.open("supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql", "w",
+        encoding="utf-8").write(kop + body)
+print(f"+ afwezigheidscontrole over {len(afwezig)} gedropte objecten")
