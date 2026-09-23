@@ -340,12 +340,14 @@ jobs:
           echo "hybride-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
-      # #369: vijfde Next-proces met uitsluitend de vergelijkvlag aan. De
+      # #369: vijfde Next-proces met de vergelijkvlag én vaste testfonds-binding.
+      # De per-fonds-opt-in wordt in zetVergelijkGolden op de ephemere DB gezet. De
       # succesvolle golden controleert HTTP-respons, centrale bronprovenance,
       # append-only runaudit en providergrens drie keer op herhaalbaarheid.
       - name: Vergelijkpad karakteriseren (VERGELIJKMODUS aan)
         env:
           VERGELIJKMODUS: "on"
+          VERGELIJK_FONDS_ID: "00000000-0000-4000-8000-000000000001"
           APP_BASE_URL: "http://127.0.0.1:3004"
         run: |
           t0=$(date +%s)

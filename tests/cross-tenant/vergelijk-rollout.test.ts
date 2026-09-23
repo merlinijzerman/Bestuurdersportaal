@@ -71,3 +71,11 @@ test("beide productie-ingangen gebruiken dezelfde fondsgrens", () => {
   assert.match(chat, /await vergelijkmodusVoorFondsAan\(fondsId\)/);
   assert.equal(VERGELIJK_FONDS_FLAG, "vergelijkmodus");
 });
+
+test("de positieve karakterisering opent beide fondsgebonden testpoorten", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const workflow = readFileSync(join(root, ".github/workflows/karakterisering.yml"), "utf8");
+  const scenarios = readFileSync(join(root, "tests/karakterisering/scenarios.mjs"), "utf8");
+  assert.match(workflow, /VERGELIJK_FONDS_ID: "00000000-0000-4000-8000-000000000001"/);
+  assert.match(scenarios, /flag_key: "vergelijkmodus", waarde: true/);
+});
