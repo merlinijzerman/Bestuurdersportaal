@@ -176,6 +176,7 @@ export const LEZINGKLASSE = {
   "core/lib/fonds-sessie.ts::profielen": { klassen: ["configuratie"], doel: "fonds_id en rol voor de tenantbepaling" },
   "core/lib/profiel.ts::profielen": { klassen: ["configuratie"], doel: "identiteit van de actor" },
   "core/lib/fonds-config.ts::fonds_feature_flags": { klassen: ["configuratie"], doel: "retrievalvlaggen per fonds" },
+  "core/lib/vergelijk-rollout.ts::fonds_feature_flags": { klassen: ["configuratie"], doel: "strikte fonds-opt-in voor vergelijking; geen modelcontext" },
   "core/lib/fonds-config.ts::fonds_config_log": { klassen: ["configuratie"], doel: "configuratiehistorie" },
   "core/lib/fonds-config.ts::fonds_content_overrides": { klassen: ["configuratie"], doel: "teksten per fonds" },
   "core/lib/fonds-config.ts::fonds_module_manifest": { klassen: ["configuratie"], doel: "welke modules aanstaan" },

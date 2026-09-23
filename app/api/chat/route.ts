@@ -97,6 +97,7 @@ import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
 // testbaar); deze route is enkel de confidence-gated ingang + governance-logging.
 import { bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "@/core/lib/vergelijk-intent";
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
+import { vergelijkmodusVoorFondsAan } from "@/core/lib/vergelijk-rollout";
 import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
 import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/vergelijk-productie";
 // AQL-2 / spike 1 — de answer-generation-kern (toon-systeemprompt, per-modus
@@ -2186,15 +2187,18 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // Alleen `blokkerend` retourneert vroeg met de terugvraag. Bij `antwoord_eerst`
     // en `uit` loopt de beurt door (fondsgericht); antwoord_eerst biedt de chips
     // ónder het antwoord aan (meta-event bronkeuze_aanbod).
-    // ── T5 — Vergelijkmodus (confidence-gated, achter VERGELIJKMODUS) ────────
+    // ── T5 — Vergelijkmodus (confidence-gated, achter drie rolloutpoorten) ───
     // Een expliciete vergelijkvraag ("vergelijk X met Y") pre-empt de bron-
     // verduidelijking: eenduidig → direct de service draaien en het resultaat als
     // {type:"vergelijking"} streamen; twee mogelijke doelbronnen → een gerichte
     // {type:"vergelijking_verduidelijking"} (nooit gokken). Flag uit → deze tak doet
     // niets en de chat verloopt exact als voorheen (terugdraaibaarheid). fondsId is
     // hier al server-side afgeleid en non-null (guard hierboven).
-    const vergelijkIntent = vergelijkmodusAan()
+    const mogelijkVergelijkIntent = vergelijkmodusAan()
       ? bepaalVergelijkIntent(effectieveVraag)
+      : { isVergelijk: false, bronHint: null, doelHint: null, vertrouwen: "onzeker" as const };
+    const vergelijkIntent = mogelijkVergelijkIntent.isVergelijk && await vergelijkmodusVoorFondsAan(fondsId)
+      ? mogelijkVergelijkIntent
       : { isVergelijk: false, bronHint: null, doelHint: null, vertrouwen: "onzeker" as const };
     if (vergelijkIntent.isVergelijk) {
       const streamHeaders = {
