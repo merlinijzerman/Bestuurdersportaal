@@ -7,13 +7,16 @@
 //  Daarom is dit een aparte module met één ingang. De rendering krijgt een
 //  DICHTGETIMMERD object mee — geen `unknown`, geen doorgeefluik, geen
 //  `JSON.stringify(alles)` — zodat er geen pad is waarlangs een webUrl, een
-//  bestandsnaam, een extract of een token in de tekst kan sijpelen. De
+//  bestandsnaam, een extract of een token in de tekst kan sijpelen.
+//  Uitzondering voor uitsluitend de lokale labrun: UUID-correlatie-id's van de
+//  provider. Geen URL, token, foutboodschap of documentidentiteit. De
 //  bijbehorende test toetst dat op de gerenderde uitvoer zelf, met een echte
 //  labachtige respons als invoer: een controle die alleen naar het type kijkt,
 //  merkt niets van een veld dat later wordt toegevoegd.
 // ============================================================================
 import type { RetrievalFoutcategorie } from "../../../core/lib/retrieval/contract";
 import type { CopilotFoutcode } from "../../../core/lib/microsoft-retrieval/fouten";
+import type { VeiligeProviderDiagnostiek } from "./diagnostiek";
 import type { Driftbevinding, Hitcategorie, Poortoordeel, Retrievaluitslag } from "./smoke";
 
 export interface Scanregel {
@@ -54,9 +57,11 @@ export interface Smokerapport {
   /**
    * De fail-closed afwijzing van de Retrieval API, als die er was. Draagt per
    * constructie alleen een vaste code en een HTTP-status — nooit een
-   * providerboodschap, body of identifier.
+   * providerboodschap of body. Correlatie-id's staan apart en alleen lokaal.
    */
   retrievalFout?: { code: CopilotFoutcode; categorie: RetrievalFoutcategorie; httpStatus: number | null };
+  /** Uitsluitend voor deze lokale labrun; nooit in productie- of auditmetadata. */
+  providerDiagnostiek?: VeiligeProviderDiagnostiek;
   /** Feitelijke netwerkpogingen naar de Retrieval API, ook als die faalden. */
   retrievalPogingen?: number;
   /**
@@ -180,6 +185,11 @@ export function rapporteer(rapport: Smokerapport): string {
     regels.push(`- uitkomst: **afgewezen** — \`${rapport.retrievalFout.code}\``);
     regels.push(`- foutcategorie: \`${rapport.retrievalFout.categorie}\``);
     regels.push(`- HTTP-status: ${rapport.retrievalFout.httpStatus ?? "geen"}`);
+    if (rapport.providerDiagnostiek) {
+      regels.push(`- Microsoft-foutcode (gesloten label): \`${rapport.providerDiagnostiek.foutcode}\``);
+      regels.push(`- Graph request-id: \`${rapport.providerDiagnostiek.requestId ?? "niet ontvangen"}\``);
+      regels.push(`- client-request-id: \`${rapport.providerDiagnostiek.clientRequestId}\``);
+    }
     regels.push("");
     regels.push(
       "Een afwijzing is geen kwaliteitsoordeel over de bron: er is geen kandidaat"

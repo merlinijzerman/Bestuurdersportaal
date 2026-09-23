@@ -176,6 +176,13 @@ een rapport met de vaste foutcode, de foutcategorie, de HTTP-status en het
 aantal **feitelijk verbruikte** netwerkpogingen. Dat laatste is de reden dat het
 moet: het ene toegestane verzoek is dan op, en zonder rapport staat dat nergens.
 
+Bij 401/403 legt uitsluitend deze **lokale** runner bovendien een gesloten
+Microsoft-foutlabel en geldige UUID-correlatie-id's vast. De foutbody wordt
+hoogstens 8 KiB en één seconde gelezen; vrije fouttekst, token, URL en
+documentinhoud komen nooit in het rapport. Een onbekende providerfout blijft
+`onbekend`. De productieclient en het duurzame auditspoor krijgen deze
+diagnostiek niet. Dit verandert de grens van één Retrieval-poging niet.
+
 Een afbreking (Ctrl-C, verlopen deadline) is géén afwijzing, en het moment
 waarop zij valt bepaalt wat er gebeurt:
 
