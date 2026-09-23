@@ -1,0 +1,25 @@
+sectie	sch	obj	klasse	rol	rechten
+FUNC	storage	enforce_bucket_lifecycle_service_role()	function	anon	EXECUTE
+FUNC	storage	enforce_bucket_lifecycle_service_role()	function	authenticated	EXECUTE
+FUNC	storage	enforce_bucket_lifecycle_service_role()	function	service_role	EXECUTE
+FUNC	storage	get_size_by_bucket(noncurrent_versions text, delete_markers text)	function	anon	EXECUTE
+FUNC	storage	get_size_by_bucket(noncurrent_versions text, delete_markers text)	function	authenticated	EXECUTE
+FUNC	storage	get_size_by_bucket(noncurrent_versions text, delete_markers text)	function	service_role	EXECUTE
+FUNC	storage	list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer, next_key_token text, next_upload_token text, raw_prefix_param text)	function	anon	EXECUTE
+FUNC	storage	list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer, next_key_token text, next_upload_token text, raw_prefix_param text)	function	authenticated	EXECUTE
+FUNC	storage	list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer, next_key_token text, next_upload_token text, raw_prefix_param text)	function	service_role	EXECUTE
+FUNC	storage	list_objects_with_delimiter(_bucket_id text, prefix_param text, delimiter_param text, max_keys integer, start_after text, next_token text, sort_order text, noncurrent_versions text, delete_markers text, next_token_archived_at timestamp with time zone, next_token_version text)	function	anon	EXECUTE
+FUNC	storage	list_objects_with_delimiter(_bucket_id text, prefix_param text, delimiter_param text, max_keys integer, start_after text, next_token text, sort_order text, noncurrent_versions text, delete_markers text, next_token_archived_at timestamp with time zone, next_token_version text)	function	authenticated	EXECUTE
+FUNC	storage	list_objects_with_delimiter(_bucket_id text, prefix_param text, delimiter_param text, max_keys integer, start_after text, next_token text, sort_order text, noncurrent_versions text, delete_markers text, next_token_archived_at timestamp with time zone, next_token_version text)	function	service_role	EXECUTE
+FUNC	storage	protect_bucket_control_columns()	function	anon	EXECUTE
+FUNC	storage	protect_bucket_control_columns()	function	authenticated	EXECUTE
+FUNC	storage	protect_bucket_control_columns()	function	service_role	EXECUTE
+FUNC	storage	search(prefix text, bucketname text, limits integer, levels integer, offsets integer, search text, sortcolumn text, sortorder text, noncurrent_versions text, delete_markers text)	function	anon	EXECUTE
+FUNC	storage	search(prefix text, bucketname text, limits integer, levels integer, offsets integer, search text, sortcolumn text, sortorder text, noncurrent_versions text, delete_markers text)	function	authenticated	EXECUTE
+FUNC	storage	search(prefix text, bucketname text, limits integer, levels integer, offsets integer, search text, sortcolumn text, sortorder text, noncurrent_versions text, delete_markers text)	function	service_role	EXECUTE
+FUNC	storage	search_by_timestamp(p_prefix text, p_bucket_id text, p_limit integer, p_level integer, p_start_after text, p_sort_order text, p_sort_column text, p_sort_column_after text, noncurrent_versions text, delete_markers text, p_start_after_version text)	function	anon	EXECUTE
+FUNC	storage	search_by_timestamp(p_prefix text, p_bucket_id text, p_limit integer, p_level integer, p_start_after text, p_sort_order text, p_sort_column text, p_sort_column_after text, noncurrent_versions text, delete_markers text, p_start_after_version text)	function	authenticated	EXECUTE
+FUNC	storage	search_by_timestamp(p_prefix text, p_bucket_id text, p_limit integer, p_level integer, p_start_after text, p_sort_order text, p_sort_column text, p_sort_column_after text, noncurrent_versions text, delete_markers text, p_start_after_version text)	function	service_role	EXECUTE
+FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels integer, start_after text, sort_order text, sort_column text, sort_column_after text, noncurrent_versions text, delete_markers text, start_after_archived_at timestamp with time zone, start_after_version text, start_after_is_continuation boolean)	function	anon	EXECUTE
+FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels integer, start_after text, sort_order text, sort_column text, sort_column_after text, noncurrent_versions text, delete_markers text, start_after_archived_at timestamp with time zone, start_after_version text, start_after_is_continuation boolean)	function	authenticated	EXECUTE
+FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels integer, start_after text, sort_order text, sort_column text, sort_column_after text, noncurrent_versions text, delete_markers text, start_after_archived_at timestamp with time zone, start_after_version text, start_after_is_continuation boolean)	function	service_role	EXECUTE

@@ -496,6 +496,7 @@ echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_V3"
+V3_TEST_DATABASE_URL="$DB_URL" node scripts/test-v3-storage-platform-variant.mjs
 echo
 
 echo "============================================================================"
