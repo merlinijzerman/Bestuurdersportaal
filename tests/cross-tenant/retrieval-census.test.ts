@@ -122,12 +122,12 @@ test("F4-context — elke bereikte lezing is geclassificeerd", () => {
 
 test("F4-context — de klassenverdeling per lezing is hard gepind", () => {
   const k = lezingenPerKlasse() as Record<string, string[]>;
-  assert.equal(lezingen().length, 46, "het aantal lezingen op het antwoordpad is gewijzigd");
+  assert.equal(lezingen().length, 47, "het aantal lezingen op het antwoordpad is gewijzigd");
   assert.equal(k.evidence.length, 8, `evidence: ${k.evidence.join(", ")}`);
   assert.equal(k.modelcontext.length, 26, `modelcontext: ${k.modelcontext.join(", ")}`);
-  assert.equal(k.configuratie.length, 11, `configuratie: ${k.configuratie.join(", ")}`);
+  assert.equal(k.configuratie.length, 12, `configuratie: ${k.configuratie.join(", ")}`);
   assert.equal(k.audit.length, 3, `audit: ${k.audit.join(", ")}`);
-  assert.equal(Object.keys(LEZINGKLASSE).length, 46, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
+  assert.equal(Object.keys(LEZINGKLASSE).length, 47, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
 });
 
 test("F4-context — één tabel kan meerdere hoedanigheden hebben", () => {
