@@ -22,8 +22,8 @@ De vaststelling is gemeten tegen de code en de migraties op `5e787f8`.
 | Normgewicht | `normgewicht` | Hergebruik. Wetsgeschiedenis staat vast op `informatief` (app én DB). |
 | Status, actief/geïndexeerd, versievervanging | `status`, `bronstatus`, `actief`, `geindexeerd`, `vervangt_/vervangen_door_document_id`, actie `curatieVervangen` | Hergebruik, ongewijzigd. |
 | Documenttype | `documenten.documenttype` + CHECK; al gedenormaliseerd naar `document_chunks.documenttype` | Uitgebreid met `wetgeving` en `wetsgeschiedenis`. |
-| Soort parlementair stuk | — | **Nieuw:** `wetsgeschiedenis_subtype` (nullable). |
-| Wetgevingsdossier | — | **Nieuw:** `dossiernummer` (nullable, genormaliseerd). |
+| Soort parlementair stuk | — | **Nieuw:** `wetsgeschiedenis_subtype` (nullable): `memorie_van_toelichting`, `aangenomen_amendement`, `nota_van_wijziging`, `nota_naar_aanleiding_van_het_verslag`, `memorie_van_antwoord` (ook nadere MvA), `nota_van_toelichting` (AMvB). |
+| Wetgevingsdossier | — | **Nieuw:** `dossiernummer` (nullable, genormaliseerd). Verplicht bij wetsgeschiedenis, behalve bij `nota_van_toelichting` (identificatie via het Staatsbladnummer in de titel). |
 | Tekststructuur | `document_chunks.structuur_type` / `structuur_label` (R1.1) | Hergebruik. Er komt geen nieuw chunkveld bij. |
 | Audit | `withPlatform` (`platform_event_log`, twee fasen) + append-only `document_metadata_log` | Hergebruik, ongewijzigd. De nieuwe velden lopen mee in de bestaande diff. |
 
@@ -33,7 +33,7 @@ Niet toegevoegd, zoals de opdracht vraagt: publicatiekenmerk, behandelingsstatus
 
 | Bestand | Reden |
 |---|---|
-| `supabase/migrations/2026_09_23_wetsgeschiedenis_a_light_foundation.sql` (nieuw) | Twee nullable kolommen, uitgebreide documenttype-CHECK, waarde-CHECKs op subtype en dossiernummer, en twee combinatie-CHECKs: juridische typen alleen generiek; wetsgeschiedenis ⇒ subtype + dossier + `informatief`. |
+| `supabase/migrations/2026_09_23_wetsgeschiedenis_a_light_foundation.sql` (nieuw) | Twee nullable kolommen, uitgebreide documenttype-CHECK, waarde-CHECKs op subtype en dossiernummer, en twee combinatie-CHECKs: juridische typen alleen generiek; wetsgeschiedenis ⇒ subtype + `informatief` + dossier (behalve bij `nota_van_toelichting`). |
 | `supabase/rollbacks/2026_09_23_wetsgeschiedenis_a_light_foundation_ROLLBACK.sql` (nieuw) | Fail-closed rollback: weigert zolang er juridische documenten bestaan. |
 | `supabase/checks/2026_09_23_wetsgeschiedenis_foundation.sql` (nieuw) | DB-invarianten W1–W10, waaronder W8 onder echte RLS en W10 voor de denormalisatie. |
 | `scripts/cross-tenant-ci.sh` | Nieuwe check aangesloten, direct na T6 (generieke contentlaag). |
@@ -41,7 +41,7 @@ Niet toegevoegd, zoals de opdracht vraagt: publicatiekenmerk, behandelingsstatus
 | `core/lib/wetsgeschiedenis.ts` (nieuw) | Pure domeinlogica: typen, subtypen, labels, dossiernormalisatie en -weergave, combinatievalidatie, duiding geldend recht vs. wetsgeschiedenis. |
 | `core/lib/generiek-curatie-juridisch.ts` (nieuw) | `valideerGeneriekeCuratie`: wrapper om het ongewijzigde `valideerCuratie`. Zie afwijking A-2. |
 | `core/lib/wetsgeschiedenis-structuur.ts` (nieuw) | Pure, conservatieve structurering: algemeen deel, artikelsgewijze toelichting (artikel/onderdeel), amendement-wijziging/-toelichting. Levert `StructuurUnit` op. **Niet aangesloten** op de ingest. |
-| `core/lib/wetsgeschiedenis.sanity.ts`, `core/lib/wetsgeschiedenis-structuur.sanity.ts` (nieuw) | 26 + 11 sanity-tests, met synthetische fixtures. |
+| `core/lib/wetsgeschiedenis.sanity.ts`, `core/lib/wetsgeschiedenis-structuur.sanity.ts` (nieuw) | 33 + 12 sanity-tests, met synthetische fixtures. |
 | `app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts` | Leest de 4 velden in, valideert via de wrapper en neemt ze op in de bewerk-diff (auditspoor). `documenttype`/`wettelijk_regime` zijn `rag_impact`; subtype en dossier niet. |
 | `app/(platform)/platform/(beveiligd)/generieke-bibliotheek/_components/GeneriekeBibliotheekClient.tsx` | Velden Documenttype, Wettelijk regime en, bij wetsgeschiedenis, Soort stuk + Dossiernummer. Vooraf een melding met de vereisten. Normgewicht staat vast op Informatief bij wetsgeschiedenis. Type-/dossier-/regimeregel in de lijst. Een historisch fondstype op een bestaand generiek document blijft behouden. |
 | `app/(platform)/platform/(beveiligd)/generieke-bibliotheek/page.tsx` | Leest de 4 kolommen mee in. |
@@ -70,8 +70,8 @@ Rollback: eerst juridische documenten herclassificeren of verwijderen via de cur
 |---|---|
 | `tsc --noEmit --skipLibCheck` | exit 0 |
 | `npm run sanity` (alle suites, incl. 2 nieuwe) | groen: "Alle resterende sanity-suites groen." |
-| `core/lib/wetsgeschiedenis.sanity.ts` | 26/26 |
-| `core/lib/wetsgeschiedenis-structuur.sanity.ts` | 11/11 |
+| `core/lib/wetsgeschiedenis.sanity.ts` | 33/33 |
+| `core/lib/wetsgeschiedenis-structuur.sanity.ts` | 12/12 |
 | `core/lib/generiek-curatie.sanity.ts` (regressie) | 10/10 |
 | `tests/cross-tenant/retrieval-census.test.ts` | 11/11 (zie afwijking A-2) |
 | `bash scripts/cross-tenant-ci.sh` volledig, lokale ephemere Supabase (CLI 2.114.0), migraties uit de repo | GROEN (exit 0), zie §4a |
@@ -84,10 +84,12 @@ Niet uitgevoerd: een live smoke tegen Preview, Productie, Microsoft of SharePoin
 
 ### 4a. Volledige suite, negatieve controle en idempotentie
 
+- **Hertest na A-7 (MvA/NvT, 23-09-2026)**: alle onderstaande controles opnieuw gedraaid op een verse lokale DB, met dezelfde uitkomst; sanity 33 + 12.
 - **Volledige §15-suite** (`TEST_DATABASE_URL` = lokale stack, verse DB): `GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)`. App-laag: 1025/1025. DB-laag inclusief de R1-structurele gates en de V3-grants-gate (geen allowlistwijziging nodig). De ROL-1-rolverklaring van de nieuwe check is groen.
 - **Negatieve controle** (in een teruggerolde transactie):
   - zonder `documenten_wetsgeschiedenis_combinatie_check` → `LEK W2: wetsgeschiedenis met normgewicht bindend aanvaard` (rood, zoals bedoeld);
   - zonder `documenten_juridisch_generiek_check` → `LEK W7: fondsdocument als wetgeving geclassificeerd` (rood, zoals bedoeld).
+  - met een te ruime dossier-uitzondering (dossier optioneel voor álle subtypen) → `LEK W3: wetsgeschiedenis zonder dossiernummer aanvaard` (rood, zoals bedoeld).
 - **Idempotentie**: de migratie tweemaal toegepast gaf exit 0.
 - **Rollback**: met een juridisch document geweigerd (`Rollback geweigerd: 1 document(en)…`). Op een lege set: exit 0, beide kolommen weg. Opnieuw toepassen gaf exit 0; W1–W10 daarna 10× `OK`.
 - De eerste suite-run was rood op `retrieval-census.test.ts` (134 → 136 bestanden in de antwoordpadgraaf). Dat is verholpen door afwijking A-2; zie §5.
@@ -96,16 +98,16 @@ Niet uitgevoerd: een live smoke tegen Preview, Productie, Microsoft of SharePoin
 
 - **A-1 — regime via `wettelijk_regime`, niet via `toepassingsgebied`.** De instructie noemt `toepassingsgebied` voor PW/Wvb/beide. In de code is dat een inert vrije-tekstveld. Het echte, gecontroleerde en al gedenormaliseerde regimefacet is `wettelijk_regime` (T4). Dat stond nog niet in het curatieformulier en is nu toegevoegd: optioneel voor gewone generieke documenten, verplicht (`pw|wvb|beide`) voor juridische typen. Gevolg: bij `REGIME_WEGING` aan kan een gecureerd regime het bestaande demotiegedrag voeden. Dat is bestaand retrievalgedrag op data; er is geen codewijziging.
 - **A-2 — juridische validatie in een wrapper, niet in `generiek-curatie.ts`.** De eerste versie breidde `valideerCuratie` uit. Daarmee groeide de bevroren importgraaf van het antwoordpad van 134 naar 136 bestanden (`retrieval-census.test.ts` rood), omdat `rag.ts` die module importeert. Dat is een raakvlak met de retrieval-release. Daarom staat de logica nu in `generiek-curatie-juridisch.ts` en blijft `generiek-curatie.ts` byte-identiek. Post-release kan dit worden samengevoegd, met een bewuste regeneratie van het census-register.
-- **A-3 — extra servereisen voor juridische typen:** een officiële URL (beide typen), plus documentdatum en dossiernummer in de titel (wetsgeschiedenis). Dit volgt uit de werkticket-eisen "kamerstuknummer, datum, officiële link". Alleen de app-laag dwingt dit af; de DB niet.
+- **A-3 — extra servereisen voor juridische typen:** een officiële URL (beide typen), plus documentdatum en dossiernummer in de titel (wetsgeschiedenis), of het Staatsbladnummer in de titel (nota van toelichting). Dit volgt uit de werkticket-eisen "kamerstuknummer, datum, officiële link". Alleen de app-laag dwingt dit af; de DB niet.
 - **A-4 — subtype en dossiernummer niet gedenormaliseerd naar `document_chunks`.** `documenttype` staat al op de chunk en volstaat voor het onderscheid wet/wetsgeschiedenis. Uitbreiden vereist een wijziging aan `fn_chunk_denorm` (retrievalterrein); zie post-release stap R-1.
 - **A-5 — geen type-/subtypefilter in de bibliotheeklijst.** Het werkticket noemt filters; de agentinstructie vraagt invoeren, tonen, wijzigen en auditen. De lijst toont type, dossier en regime per document. Een filter is een kleine post-releaseaanvulling (B-1).
 - **A-6 — dossiernummerformaat.** Opslag: 3–6 cijfers, optioneel `-SUFFIX` (bv. `36200-XV`). Aanname: dit dekt de pilotdossiers. Controleer het tegen de broncuratielijst vóór de import.
-- **A-7 — de pilotset past niet volledig in de vier verplichte subtypen (open, beslissing nodig vóór import).** De broninventaris §3.2/§3.4 noemt P0-stukken die geen van de vier subtypen zijn:
+- **A-7 — OPGELOST (besluit opdrachtgever 23-09-2026).** Subtypen `memorie_van_antwoord` (ook voor een nadere memorie van antwoord; het onderscheid staat in de titel) en `nota_van_toelichting` zijn toegevoegd aan de bestaande foundationmigratie. Die was nog nergens uitgevoerd of gepusht, dus er is geen tweede migratie nodig. Dossiernummer is alleen optioneel bij `nota_van_toelichting`; dan moet het Staatsbladnummer in de titel staan (servervalidatie) en is de officiële URL verplicht. Beide subtypen zijn `wetsgeschiedenis` met `normgewicht = informatief` (app én DB). Bijgewerkt: CHECKs, servervalidatie, UI-opties en -hint, schema.sql, sanity-tests en DB-check W3. Audit loopt ongewijzigd mee via de bestaande diff. Oorspronkelijke bevinding: De broninventaris §3.2/§3.4 noemt P0-stukken die geen van de vier subtypen zijn:
   - *Memorie van antwoord* en *nadere memorie van antwoord* (EK, 36 067 H en K);
   - *Nota van toelichting* bij het Besluit toekomst pensioenen (Stb. 2023, 217) en bij het Besluit transitietermijnen (Stb. 2025, 423). Deze stukken hebben bovendien geen Kamerstukdossier, terwijl de foundation bij wetsgeschiedenis een dossiernummer (en dat nummer in de titel) verplicht stelt.
 
   De *nota naar aanleiding van het nader verslag* (36 067 nr. 11) valt redelijkerwijs onder `nota_naar_aanleiding_van_het_verslag`. De instructie vraagt "minimaal" de vier subtypen, dus uitbreiden kan. **Voorstel:** additieve migratie met `memorie_van_antwoord` en `nota_van_toelichting`, en het dossiernummer optioneel voor `nota_van_toelichting` (verwijzing via Stb.-nummer in de titel). Niet uitgevoerd: dit is een scopekeuze voor de opdrachtgever.
-- **A-8 — broninventaris §8 wijkt af van het werkticket.** De inventaris noemt metadatavelden `publication_reference`, `legal_status` en `amendment_status`. Het werkticket (leidend) en deze foundation voegen die bewust níet toe: de verwijzing staat in de titel, aangenomen = subtype, en de statuscontrole hoort in de broncuratielijst. Werk bij een volgende versie van de inventaris §8 bij, zodat die niet als eis wordt gelezen.
+- **A-8 — OPGELOST.** §8 van de broninventaris is bijgewerkt: `publication_reference` staat in `titel`, `legal_status` via `status`/`bronstatus`, `amendment_status` via subtype `aangenomen_amendement`, `dossier_number` verplicht behalve bij `nota_van_toelichting`. Oorspronkelijke bevinding: broninventaris §8 week af van het werkticket. De inventaris noemt metadatavelden `publication_reference`, `legal_status` en `amendment_status`. Het werkticket (leidend) en deze foundation voegen die bewust níet toe: de verwijzing staat in de titel, aangenomen = subtype, en de statuscontrole hoort in de broncuratielijst. Werk bij een volgende versie van de inventaris §8 bij, zodat die niet als eis wordt gelezen.
 
 ## 6. Raakvlakken met de Microsoft-release
 

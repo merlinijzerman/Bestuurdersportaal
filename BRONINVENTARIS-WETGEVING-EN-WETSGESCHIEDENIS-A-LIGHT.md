@@ -188,19 +188,23 @@ daarom geen bruikbare selectieheuristiek.
 
 ## 8. Minimale metadata per document
 
+De velden hieronder zijn afgestemd op het werkticket en de foundation
+(migratie `2026_09_23_wetsgeschiedenis_a_light_foundation.sql`). Waar een
+bestaand veld volstaat, komt er geen apart veld.
+
 | Veld | Voorbeeld / regel |
 |---|---|
-| `source_id` | `BWBR0020809` of `kst-36067-3` |
-| `document_type` | `wetgeving` of `wetsgeschiedenis` |
-| `subtype` | wet, AMvB, MvT, nota van wijziging, nota n.a.v. verslag, amendement |
-| `dossier_number` | `36067` |
-| `publication_reference` | `Kamerstukken II 2021/22, 36 067, nr. 3` |
-| `official_url` | Permanente officiële URL |
-| `document_date` | Datum document/publicatie |
-| `legal_status` | geldend, ingetrokken, in behandeling, ketenreferentie |
-| `amendment_status` | aangenomen, verworpen, ingetrokken, onbekend, n.v.t. |
-| `norm_weight` | bindend of informatief |
-| `regime` | Pensioenwet, Wvb, beide, lagere regelgeving |
+| `source_id` | `BWBR0020809` of `kst-36067-3`; staat in de officiële URL en de titel |
+| `document_type` | `wetgeving` of `wetsgeschiedenis` (`documenttype`) |
+| `subtype` | Alleen bij wetsgeschiedenis (`wetsgeschiedenis_subtype`): `memorie_van_toelichting`, `aangenomen_amendement`, `nota_van_wijziging`, `nota_naar_aanleiding_van_het_verslag` (ook voor het nader verslag), `memorie_van_antwoord` (ook voor een nadere memorie van antwoord), `nota_van_toelichting` (AMvB) |
+| `dossier_number` | `36067` (`dossiernummer`). Verplicht voor parlementaire stukken, ook de memorie van antwoord; optioneel alleen bij `nota_van_toelichting` |
+| `publication_reference` | **Geen apart veld.** De officiële verwijzing staat in `titel`, bv. `Memorie van toelichting — Kamerstukken II 2021/22, 36 067, nr. 3`; bij een nota van toelichting met het Staatsbladnummer, bv. `Stb. 2023, 217` |
+| `official_url` | Permanente officiële URL (`extern_url`), verplicht |
+| `document_date` | Datum document/publicatie (`documentdatum`) |
+| `legal_status` | **Geen apart veld.** Gebruik de bestaande velden `status` en `bronstatus` (en versievervanging) |
+| `amendment_status` | **Geen apart veld.** Alleen aangenomen amendementen worden geïmporteerd, met subtype `aangenomen_amendement`; de controle staat in de broncuratielijst |
+| `norm_weight` | `bindend` voor actuele wetgeving; wetsgeschiedenis altijd `informatief` (in de database afgedwongen) |
+| `regime` | `wettelijk_regime`: `pw`, `wvb` of `beide` (verplicht voor juridische bronnen) |
 | `active_for_retrieval` | ja/nee |
 | `valid_from` | Alleen voor normatieve geconsolideerde regelingen |
 | `retrieved_at` | Ophaaldatum van de officiële bron |
