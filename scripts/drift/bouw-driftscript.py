@@ -67,22 +67,43 @@ kop = """-- ====================================================================
 --
 --  ROL: database-eigenaar/postgres. Deze inventarisatie meet de STAND van de
 --    catalogus, niet het gedrag van één sessie.
+--  DOEL: {doel}. Deze uitvoer is uitsluitend voor {omgeving}; de SQL
+--    weigert de andere omgeving voordat een catalogusmeting begint.
 -- ============================================================================
 
 -- ── 0. DOELBEVESTIGING. Eerst, en fail-closed ───────────────────────────────
 do $$
 begin
-  if not exists (select 1 from public.tenant_domains
+  if {doelcontrole}
+  then
+    raise exception '#440 VERKEERDE DOELOMGEVING: verwacht {omgeving}; geen meting uitgevoerd.';
+  end if;
+  raise notice '#440 doel bevestigd: {doel}.';
+end $$;
+"""
+
+# Twee editor-klare bestanden, één meetbody. Een vrij invulbare parameter in de
+# SQL Editor zou de doelgrendel tot een afspraak maken; de doelkeuze staat
+# daarom vast in de bestandsnaam én in de voorafgaande SQL-controle.
+DOELEN = {
+    "preview": {
+        "doel": "portal_preview",
+        "omgeving": "Preview",
+        "doelcontrole": """not exists (select 1 from public.tenant_domains
                   where host = 'app.preview.bestuurdersportaal.com' and actief)
      or exists (select 1 from public.tenant_domains
                  where host like '%.bestuurdersportaal.com'
-                   and host not like '%.preview.bestuurdersportaal.com')
-  then
-    raise exception '#440 VERKEERDE DOELOMGEVING: Preview-fingerprint ontbreekt of er staat een productiehost. Deze inventarisatie hoort op portal_preview te draaien; pas de doelcontrole bewust aan vóór een meting op een andere omgeving.';
-  end if;
-  raise notice '#440 doel bevestigd: Preview.';
-end $$;
-"""
+                   and host not like '%.preview.bestuurdersportaal.com')""",
+    },
+    "productie": {
+        "doel": "portal_production",
+        "omgeving": "Productie",
+        "doelcontrole": """not exists (select 1 from public.tenant_domains
+                  where host = 'app.bestuurdersportaal.com' and actief)
+     or exists (select 1 from public.tenant_domains
+                 where host like '%.preview.bestuurdersportaal.com')""",
+    },
+}
 
 verwacht_values = ",\n    ".join(
     "({},{},{},{},{})".format(q(r["sectie"]), q(r["sch"]), q(r["obj"]),
@@ -220,10 +241,6 @@ select '3. SAMENVATTING' as rapport,
   from vergelijk group by 2, oordeel order by 2, 3;
 """
 
-io.open("supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql", "w",
-        encoding="utf-8").write(kop + body)
-print(f"geschreven: {len(verwacht)} verwachte objecten, {len(zonder)} niet-meetbare migraties")
-
 body += f"""
 -- ── 4. Afwezigheidscontrole: wat verwijderd HOORT te zijn ───────────────────
 --  Een contractmigratie laat geen nieuw object achter; zij is uitsluitend te
@@ -242,6 +259,10 @@ select '4. AFWEZIGHEIDSCONTROLE' as rapport,
  order by 5 desc, 2, 4;
 """
 
-io.open("supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql", "w",
-        encoding="utf-8").write(kop + body)
-print(f"+ afwezigheidscontrole over {len(afwezig)} gedropte objecten")
+for naam, doel in DOELEN.items():
+    pad = ("supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql"
+           if naam == "preview" else
+           "supabase/checks/2026_09_23_440_driftinventarisatie_productie.generated.sql")
+    io.open(pad, "w", encoding="utf-8").write(kop.format(**doel) + body)
+    print(f"geschreven: {pad} ({len(verwacht)} objecten, "
+          f"{len(zonder)} niet-meetbare migraties, {len(afwezig)} gedropte objecten)")

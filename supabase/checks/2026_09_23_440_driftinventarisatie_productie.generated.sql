@@ -38,7 +38,7 @@
 --
 --  ROL: database-eigenaar/postgres. Deze inventarisatie meet de STAND van de
 --    catalogus, niet het gedrag van één sessie.
---  DOEL: portal_preview. Deze uitvoer is uitsluitend voor Preview; de SQL
+--  DOEL: portal_production. Deze uitvoer is uitsluitend voor Productie; de SQL
 --    weigert de andere omgeving voordat een catalogusmeting begint.
 -- ============================================================================
 
@@ -46,14 +46,13 @@
 do $$
 begin
   if not exists (select 1 from public.tenant_domains
-                  where host = 'app.preview.bestuurdersportaal.com' and actief)
+                  where host = 'app.bestuurdersportaal.com' and actief)
      or exists (select 1 from public.tenant_domains
-                 where host like '%.bestuurdersportaal.com'
-                   and host not like '%.preview.bestuurdersportaal.com')
+                 where host like '%.preview.bestuurdersportaal.com')
   then
-    raise exception '#440 VERKEERDE DOELOMGEVING: verwacht Preview; geen meting uitgevoerd.';
+    raise exception '#440 VERKEERDE DOELOMGEVING: verwacht Productie; geen meting uitgevoerd.';
   end if;
-  raise notice '#440 doel bevestigd: portal_preview.';
+  raise notice '#440 doel bevestigd: portal_production.';
 end $$;
 
 -- ── 1. Objectverschillen ────────────────────────────────────────────────────

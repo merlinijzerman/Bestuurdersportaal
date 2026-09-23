@@ -26,7 +26,7 @@
     "test:vitest": "vitest run --project node && node scripts/verify-vitest-parity.mjs",
     "test:component": "vitest run --project component",
     "test:coverage": "vitest run --coverage && node scripts/verify-vitest-parity.mjs",
-    "test:contract": "npm run test:xtenant && npm run test:seed-guard && npm run test:nightly-fidelity-contract && npm run test:coverage-contract && npm run test:e2e:guard && npm run test:lint-quality-contract && npm run test:ci-ownership-contract && npm run test:spike-boundary && npm run test:spike-fixture-contract && npm run test:smoke-copilot-lab",
+    "test:contract": "npm run test:xtenant && npm run test:seed-guard && npm run test:nightly-fidelity-contract && npm run test:coverage-contract && npm run test:e2e:guard && npm run test:lint-quality-contract && npm run test:ci-ownership-contract && node --test scripts/drift/doelgrendels.test.mjs && npm run test:spike-boundary && npm run test:spike-fixture-contract && npm run test:smoke-copilot-lab",
     "test:nightly-fidelity-contract": "node --test scripts/nightly-fidelity-workflow.test.mjs",
     "test:coverage-contract": "node --test scripts/vitest-coverage-workflow.test.mjs",
     "test:lint-quality-contract": "node --test scripts/lint-quality-baseline.test.mjs",

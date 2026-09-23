@@ -1,4 +1,4 @@
-# #440 — Preview-driftinventarisatie
+# #440 — Preview- en Productie-driftinventarisatie
 
 Meet welke migraties uit `supabase/migrations/` werkelijk op een doelomgeving
 zijn toegepast. Nodig omdat de migraties geen CLI-timestamp dragen, handmatig
@@ -82,6 +82,11 @@ bevindingen op een omgeving waar alles correct stond.
   migratiebestand ná toepassing nog is herzien — `2026_09_07_microsoft_login_beleidsmodus.sql`
   kreeg vijf revisies op één dag — maar dat natrekken vraagt een replay over de
   GIT-historie van het bestand, en die bestaat nog niet.
+- **Een functiehash is tekstgevoelig.** `pg_get_functiondef()` neemt ook
+  commentaar en witruimte mee. Een hashverschil bewijst dus een andere
+  catalogustekst, niet automatisch ander uitvoeringsgedrag; de inhoudelijke
+  duiding van de drie Preview-vormen loopt onder #445. De vingerafdruklogica
+  blijft in deze doeluitbreiding ongewijzigd.
 
 ## Herbouwen
 
@@ -91,6 +96,20 @@ TEST_DATABASE_URL='postgresql://…' bash scripts/testdb-apply-migrations.sh
 TEST_DATABASE_URL='postgresql://…' bash scripts/drift/genereer.sh
 ```
 
+De generator schrijft twee volledige, zelfstandig in de SQL Editor te plakken
+bestanden met **dezelfde meetbody**:
+
+| Doel | Bestand | Verplichte doelbevestiging |
+|---|---|---|
+| `portal_preview` | `supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql` | actieve `app.preview.bestuurdersportaal.com`, geen Productiehost |
+| `portal_production` | `supabase/checks/2026_09_23_440_driftinventarisatie_productie.generated.sql` | actieve `app.bestuurdersportaal.com`, geen Previewhost |
+
+De eerste SQL-stap weigert een verkeerd doel. Kies het bestand op grond van het
+**onafhankelijk geverifieerde projectref** uit de centrale registry; een
+hostrij alleen bewijst niet welk Supabase-project in de browser openstaat. Het
+Productiebestand is voorbereiding, **geen opdracht om nu op Productie te
+meten**. Beide bestanden zijn read-only en bevatten geen psql-metacommando's.
+
 Opnieuw draaien na **elke** migratie die de catalogus verandert. Anders meet
 het driftscript tegen een verouderde verwachting.
 
@@ -99,6 +118,7 @@ het driftscript tegen een verouderde verwachting.
 | Bewijs | Uitkomst |
 |---|---|
 | Verkeerd doel (geen Preview-fingerprint) | breekt fail-closed af — **proven-red** |
+| Verkeerd doel (Preview-SQL op Productiefingerprint en andersom) | beide breken vóór rapport 1 af — **proven-red** op een ephemere DB |
 | Schone referentie | 1904 van 1904 `gelijk` (1817 applicatie, 87 platform), nul valse meldingen |
 | `meta_basisniveau` teruggezet naar de #367-vorm | precies dat ene object `afwijkend` |
 | Functie gedropt + vreemde tabel toegevoegd | `ontbreekt` respectievelijk `onbekend`, met de juiste migratie erbij |

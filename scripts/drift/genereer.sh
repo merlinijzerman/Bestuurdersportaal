@@ -66,6 +66,7 @@ echo "  supabase/checks/440-verwachte-stand.generated.tsv"
 echo "  supabase/checks/440-migraties-zonder-kenmerk.generated.tsv"
 echo "  supabase/checks/440-afwezig-verwacht.generated.tsv"
 echo "  supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql"
+echo "  supabase/checks/2026_09_23_440_driftinventarisatie_productie.generated.sql"
 echo
 echo "LET OP: draai scripts/drift/historische-vormen.sh op een VERSE wegwerp-DB"
 echo "        om 440-historische-vormen.generated.tsv bij te werken; die bevat"
