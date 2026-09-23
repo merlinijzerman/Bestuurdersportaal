@@ -5,7 +5,7 @@
 | **Branch** | `codex/wetsgeschiedenis-a-light-foundation` (lokaal; **niet gepusht**) |
 | **Worktree** | `…/MVP bestuurdersportaal/mvp-wetsgeschiedenis-foundation` |
 | **Basis** | `origin/preview` @ `5e787f8` (merge #444, 23-09-2026). Keuze bevestigd door de opdrachtgever. `main` (`3fafe45`) loopt 166 commits achter. |
-| **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md`, `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md`, `AGENTINSTRUCTIE-WETSGESCHIEDENIS-A-LIGHT-FOUNDATION.md`. Ze staan ongecommit in de hoofdworktree en zitten niet in deze branch. |
+| **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md` en `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md` (in deze branch, aparte documentatiecommit). De tijdelijke agentinstructie blijft bewust buiten de PR: die bevat release-specifieke uitvoeringsafspraken. |
 | **Status** | PR-klaar, getest, **niet gemerged, niet gedeployd, niet live gemigreerd, niets geïmporteerd.** |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
@@ -100,7 +100,12 @@ Niet uitgevoerd: een live smoke tegen Preview, Productie, Microsoft of SharePoin
 - **A-4 — subtype en dossiernummer niet gedenormaliseerd naar `document_chunks`.** `documenttype` staat al op de chunk en volstaat voor het onderscheid wet/wetsgeschiedenis. Uitbreiden vereist een wijziging aan `fn_chunk_denorm` (retrievalterrein); zie post-release stap R-1.
 - **A-5 — geen type-/subtypefilter in de bibliotheeklijst.** Het werkticket noemt filters; de agentinstructie vraagt invoeren, tonen, wijzigen en auditen. De lijst toont type, dossier en regime per document. Een filter is een kleine post-releaseaanvulling (B-1).
 - **A-6 — dossiernummerformaat.** Opslag: 3–6 cijfers, optioneel `-SUFFIX` (bv. `36200-XV`). Aanname: dit dekt de pilotdossiers. Controleer het tegen de broncuratielijst vóór de import.
-- **Open:** de functionele bronbestanden (werkticket, broninventaris, agentinstructie) zijn niet gecommit. Beslis of ze mee in de PR gaan.
+- **A-7 — de pilotset past niet volledig in de vier verplichte subtypen (open, beslissing nodig vóór import).** De broninventaris §3.2/§3.4 noemt P0-stukken die geen van de vier subtypen zijn:
+  - *Memorie van antwoord* en *nadere memorie van antwoord* (EK, 36 067 H en K);
+  - *Nota van toelichting* bij het Besluit toekomst pensioenen (Stb. 2023, 217) en bij het Besluit transitietermijnen (Stb. 2025, 423). Deze stukken hebben bovendien geen Kamerstukdossier, terwijl de foundation bij wetsgeschiedenis een dossiernummer (en dat nummer in de titel) verplicht stelt.
+
+  De *nota naar aanleiding van het nader verslag* (36 067 nr. 11) valt redelijkerwijs onder `nota_naar_aanleiding_van_het_verslag`. De instructie vraagt "minimaal" de vier subtypen, dus uitbreiden kan. **Voorstel:** additieve migratie met `memorie_van_antwoord` en `nota_van_toelichting`, en het dossiernummer optioneel voor `nota_van_toelichting` (verwijzing via Stb.-nummer in de titel). Niet uitgevoerd: dit is een scopekeuze voor de opdrachtgever.
+- **A-8 — broninventaris §8 wijkt af van het werkticket.** De inventaris noemt metadatavelden `publication_reference`, `legal_status` en `amendment_status`. Het werkticket (leidend) en deze foundation voegen die bewust níet toe: de verwijzing staat in de titel, aangenomen = subtype, en de statuscontrole hoort in de broncuratielijst. Werk bij een volgende versie van de inventaris §8 bij, zodat die niet als eis wordt gelezen.
 
 ## 6. Raakvlakken met de Microsoft-release
 
