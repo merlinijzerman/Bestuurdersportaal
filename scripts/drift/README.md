@@ -44,13 +44,14 @@ De meting op `portal_preview` van 23-09 leverde drie verbeteringen op die geen
 van alle cosmetisch waren.
 
 **Laag 3 — historische vormen.** De eerste versie kon alleen zeggen "de eindvorm
-klopt niet", niet wélke schakel ontbrak. `scripts/drift/historische-vormen.sh`
-speelt de keten nu migratie voor migratie af en legt per object elke vorm vast
-die ooit is opgeleverd. Een afwijkend object wordt daarmee geduid: *"doel draagt
-nog de vorm van `2026_09_06_microsoft_login_fase1b.sql`"* — en dus is
-`2026_09_07` de ontbrekende migratie. Herkent de historie de vorm niet, dan is
-het géén achterstand maar een handmatige wijziging op de doelomgeving: een
-andere bevinding, en een ergere.
+klopt niet". `scripts/drift/historische-vormen.sh` speelt de huidige
+repo-migratieketen stap voor stap af en legt per object de opgeleverde vormen
+vast. Een match met een voorgangervorm is een aanwijzing voor een ontbrekende
+schakel, geen bewijs dat juist die migratie veilig opnieuw kan worden gedraaid.
+Matcht de doelvingerafdruk geen enkele vorm uit deze keten, dan is eenvoudig
+achterlopen op de huidige keten weerlegd. Wat er wél staat blijft open: een
+tussenrevisie van een later aangepast migratiebestand, een handmatige wijziging
+of een ander herschrijfpad. De git-revisiediagnose loopt afzonderlijk via #445.
 
 **Platform en applicatie gescheiden.** Objecten in `storage` worden door het
 Supabase-platform beheerd en lopen niet mee met onze migratieketen; verschillen
@@ -70,13 +71,14 @@ bevindingen op een omgeving waar alles correct stond.
 
 - **Migraties vóór de baseline-cutoff** zitten in `supabase/baseline/` en worden
   nooit los toegepast; zij vallen buiten het oordeel.
-- **Schema's buiten `public`/`storage`** (zoals `microsoft_private`) worden niet
-  gemeten. Migraties die daar hun objecten maken, komen als
-  `buiten-scope-schema` in de niet-meetbare lijst — `423a`/`423b` zijn daar het
-  voorbeeld van, en moesten met de hand worden geverifieerd.
+- **Schema's buiten `public`/`storage`** (zoals `microsoft_private`) vallen buiten
+  de definitievingerafdrukken. Migraties die daar hun objecten maken, komen als
+  `buiten-scope-schema` in de niet-meetbare lijst. Rapport 4 toetst wel apart de
+  afwezigheid van de oude `bewaar_koppeling`-signatuur uit `423b`; dat bewijst
+  niet de volledige vorm van alle objecten uit `423a`/`423b`.
 - **Waaróm een vorm onbekend is, zegt dit gereedschap niet.** Matcht een
   afwijkend object geen enkele historische vorm, dan meldt het rapport de
-  gemeten vingerafdruk en verder niets. Een waarschijnlijke oorzaak is dat het
+  gemeten vingerafdruk en verder niets. Een mogelijke oorzaak is dat het
   migratiebestand ná toepassing nog is herzien — `2026_09_07_microsoft_login_beleidsmodus.sql`
   kreeg vijf revisies op één dag — maar dat natrekken vraagt een replay over de
   GIT-historie van het bestand, en die bestaat nog niet.
@@ -100,6 +102,15 @@ het driftscript tegen een verouderde verwachting.
 | Schone referentie | 1904 van 1904 `gelijk` (1817 applicatie, 87 platform), nul valse meldingen |
 | `meta_basisniveau` teruggezet naar de #367-vorm | precies dat ene object `afwijkend` |
 | Functie gedropt + vreemde tabel toegevoegd | `ontbreekt` respectievelijk `onbekend`, met de juiste migratie erbij |
-| `fn_access_token_hook` teruggezet naar de `2026_09_06`-vorm | `afwijkend`, **met de duiding "doel draagt nog de vorm van `2026_09_06_microsoft_login_fase1b.sql`"** — de ontbrekende schakel wordt dus benoemd |
+| `fn_access_token_hook` in de test teruggezet naar de `2026_09_06`-vorm | `afwijkend`, met de duiding dat de doelvorm overeenkomt met `2026_09_06_microsoft_login_fase1b.sql`; dit is een synthetisch herkenningsbewijs, geen conclusie over Preview |
 | Afwezigheidscontrole op de referentie | 8 van 8 `correct afwezig`; de 8 drop-gevolgd-door-create-gevallen worden vooraf uitgefilterd, anders waren dat 8 valse bevindingen |
 | Stapsgewijze replay | 89 van 89 migraties afgespeeld; faalt er één, dan stopt de generator met exitcode ≠ 0 in plaats van een onvolledige historie op te leveren |
+
+## Live afwezigheidsmeting op Preview
+
+Op 23-09-2026 om 09:43:23 UTC is uitsluitend rapport 4 op `portal_preview`
+(`swviwoytzvaqypieqgji`) gedraaid, met de Preview-doelgrendel en een read-only
+transactie. Alle acht verwachte verwijderde functies waren `correct afwezig`;
+geen enkele stond op `NOG AANWEZIG`. Het [meetbewijs bij #440](https://github.com/merlinijzerman/Bestuurdersportaal/issues/440#issuecomment-5792619498)
+legt de exacte grens vast. De ontbrekende #369-eindvorm en de drie onbekende
+functievormen blijven afzonderlijk open onder #443 en #445.
