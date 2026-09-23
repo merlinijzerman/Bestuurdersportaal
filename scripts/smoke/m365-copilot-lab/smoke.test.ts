@@ -18,6 +18,7 @@ import {
   RETRIEVAL_REQUESTBUDGET,
   SCENARIO,
   EXACTE_CANARY_SCENARIO,
+  EXACTE_CANARY_VRAAG,
   INHOUDSCAN_TERM,
   StopFail,
   VERWACHTE_FIXTURE,
@@ -341,6 +342,7 @@ test("een geslaagde meting doet precies één poging en scopet de filter server-
 
   assert.equal(pogingen, 1);
   assert.equal(uitslag.netwerkpogingen, 1);
+  assert.deepEqual(uitslag.responsTelling, { retrievalHitsVeld: "array", ruweHits: 1, hitsZonderLocator: 0 });
   assert.equal(uitslag.scenario, SCENARIO.code);
   assert.equal(uitslag.verwachteFixture, VERWACHTE_FIXTURE);
   assert.equal(uitslag.verwachteFixtureStatus, "actueel");
@@ -369,7 +371,8 @@ test("exacte canary verstuurt één vaste inhoudsvraag met dezelfde serverfilter
   assert.equal(uitslag.netwerkpogingen, 1);
   assert.equal(uitslag.scenario, EXACTE_CANARY_SCENARIO);
   assert.equal(uitslag.uitslag.verwachteFixtureGevonden, true);
-  assert.equal(verstuurd.queryString, INHOUDSCAN_TERM);
+  assert.equal(verstuurd.queryString, EXACTE_CANARY_VRAAG);
+  assert.ok(EXACTE_CANARY_VRAAG.includes(INHOUDSCAN_TERM));
   assert.equal(verstuurd.filterExpression, `path:"https://${HOST}/sites/PGBRetrievalLab/Shared%20Documents"`);
   assert.ok(!verstuurd.filterExpression.includes(INHOUDSCAN_TERM));
 });
@@ -389,8 +392,17 @@ test("exacte canary herhaalt niet na 429", async () => {
 test("een lege uitslag is een kwaliteitsuitkomst en geen fout", async () => {
   const uitslag = await meetMet((async () => jsonRespons({ retrievalHits: [] })) as unknown as typeof fetch);
   assert.equal(uitslag.kandidaten, 0);
+  assert.deepEqual(uitslag.responsTelling, { retrievalHitsVeld: "array", ruweHits: 0, hitsZonderLocator: 0 });
   assert.equal(uitslag.uitslag.verwachteFixtureGevonden, false);
   assert.deepEqual(uitslag.uitslag.fixturecodes, []);
+});
+
+test("nul kandidaten onderscheidt nul providerhits van hits zonder locator", async () => {
+  const uitslag = await meetMet((async () => jsonRespons({
+    retrievalHits: [{ extracts: [{ text: "niet rapporteren" }] }, { webUrl: "" }],
+  })) as unknown as typeof fetch);
+  assert.equal(uitslag.kandidaten, 0);
+  assert.deepEqual(uitslag.responsTelling, { retrievalHitsVeld: "array", ruweHits: 2, hitsZonderLocator: 2 });
 });
 
 // ---------------------------------------------------------------------------
@@ -402,6 +414,7 @@ test("het rapport bevat geen URL, bestandsnaam, extract of token", async () => {
   const retrieval = await meetMet((async () =>
     jsonRespons({
       retrievalHits: [
+        { extracts: [{ text: "GEHEIM_ZONDER_LOCATOR" }], providerDetail: "https://verboden.example/geheim" },
         { webUrl: fixtureUrl(VERWACHTE_FIXTURE), extracts: [{ text: geheimExtract }] },
         { webUrl: `https://${HOST}/sites/AndereSite/Shared%20Documents/geheim-verslag.docx`, extracts: [{ text: geheimExtract }] },
       ],
@@ -435,6 +448,10 @@ test("het rapport bevat geen URL, bestandsnaam, extract of token", async () => {
   assert.ok(!tekst.includes(".docx"), "een bestandsnaam lekte in het rapport");
   assert.ok(!tekst.includes("geheim-verslag"), "een bestandsnaam lekte in het rapport");
   assert.ok(!tekst.includes("test-token"), "een token lekte in het rapport");
+  assert.ok(!tekst.includes("GEHEIM_ZONDER_LOCATOR"), "een hit zonder locator lekte in het rapport");
+  assert.match(tekst, /ruwe hits in de respons: 3/);
+  assert.match(tekst, /ruwe hits zonder locator: 1/);
+  assert.match(tekst, /bruikbare kandidaten met locator: 2/);
   // En het rapport bevat wél waar het voor bedoeld is.
   assert.ok(tekst.includes(VERWACHTE_FIXTURE));
   assert.ok(tekst.includes("buiten bronroot"));

@@ -189,7 +189,7 @@ test("exacte canary in dry-run houdt de open poort en doet nul Retrieval-poginge
   const { deps, spionnen } = bouw({ dryRun: true, modus: "exacte_canary" });
   const { rapport, exitcode } = await voerSmokeUit(deps);
   assert.equal(rapport.poort.doorgelaten, true);
-  assert.equal(rapport.scenario, "CANARY_INDEX_101");
+  assert.equal(rapport.scenario, "CANARY_INDEX_101_ZIN");
   assert.deepEqual(spionnen.retrievalPogingen, []);
   assert.equal(spionnen.akkoordGevraagd, 0);
   assert.equal(rapport.retrieval, null);
@@ -222,8 +222,8 @@ test("een canaryrapport is niet als SEM01-meting te lezen", async () => {
   const { deps } = bouw({ vraagAkkoord: async () => true, modus: "exacte_canary" });
   const { rapport, exitcode } = await voerSmokeUit(deps);
   assert.equal(exitcode, EXIT.klaar);
-  assert.equal(rapport.scenario, "CANARY_INDEX_101");
-  assert.equal(rapport.retrieval?.scenario, "CANARY_INDEX_101");
+  assert.equal(rapport.scenario, "CANARY_INDEX_101_ZIN");
+  assert.equal(rapport.retrieval?.scenario, "CANARY_INDEX_101_ZIN");
 });
 
 // ---------------------------------------------------------------------------

@@ -69,6 +69,7 @@ test("de call gaat naar het vastgepinde endpoint met een server-side body", asyn
     { webUrl: `https://${HOST}/sites/pgb/a.docx`, extracts: ["een passage"] },
   ]);
   assert.equal(uitkomst.netwerkpogingen, 1);
+  assert.deepEqual(uitkomst.responsTelling, { retrievalHitsVeld: "array", ruweHits: 1, hitsZonderLocator: 0 });
 });
 
 test("een ongeldige root of lege vraag laat GEEN call vertrekken", async () => {
@@ -166,10 +167,15 @@ test("een onbekende responsvorm faalt gesloten en wordt niet herhaald", async ()
 });
 
 test("een ontbrekend retrievalHits is een lege uitslag, geen fout", async () => {
-  for (const body of [{}, { retrievalHits: null }, { retrievalHits: [] }]) {
+  for (const [body, veld] of [
+    [{}, "ontbreekt"],
+    [{ retrievalHits: null }, "null"],
+    [{ retrievalHits: [] }, "array"],
+  ] as const) {
     const { impl } = stubFetch([json(body)]);
     const uitkomst = await roepCopilotRetrievalAan(basis({ fetchImpl: impl }));
     assert.deepEqual(uitkomst.kandidaten, []);
+    assert.deepEqual(uitkomst.responsTelling, { retrievalHitsVeld: veld, ruweHits: 0, hitsZonderLocator: 0 });
   }
 });
 
@@ -189,6 +195,7 @@ test("hits zonder bruikbare locator vallen stil af; lege extracts blijven leeg",
     { webUrl: `https://${HOST}/sites/pgb/b.docx`, extracts: ["goed"] },
     { webUrl: `https://${HOST}/sites/pgb/c.docx`, extracts: [] },
   ]);
+  assert.deepEqual(uitkomst.responsTelling, { retrievalHitsVeld: "array", ruweHits: 4, hitsZonderLocator: 2 });
 });
 
 test("het aantal kandidaten blijft binnen het gevraagde plafond", async () => {
@@ -196,6 +203,7 @@ test("het aantal kandidaten blijft binnen het gevraagde plafond", async () => {
   const { impl } = stubFetch([json({ retrievalHits: hits })]);
   const uitkomst = await roepCopilotRetrievalAan(basis({ fetchImpl: impl, maxKandidaten: 5 }));
   assert.equal(uitkomst.kandidaten.length, 5);
+  assert.deepEqual(uitkomst.responsTelling, { retrievalHitsVeld: "array", ruweHits: 40, hitsZonderLocator: 0 });
 });
 
 test("een te groot antwoord wordt geweigerd op content-length, zonder te lezen", async () => {

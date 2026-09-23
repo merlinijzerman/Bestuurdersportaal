@@ -116,7 +116,10 @@ Voor een **afzonderlijk indexbewijs** bestaat een gesloten canarymodus. De
 SharePoint-inhoudscan op `Zandloperbaken 12` is alleen een preflight: de gewone
 run verstuurt SEM01, niet die term, naar de Retrieval API. De canarymodus
 verstuurt na dezelfde drift-, root- en indexpoorten precies één Retrieval-vraag
-met de vaste term en rapporteert `CANARY_INDEX_101`, nooit `SEM01`. Eerst de
+met een vaste natuurlijke zin die de canaryterm bevat en rapporteert
+`CANARY_INDEX_101_ZIN`, nooit `SEM01`. Dit onderscheidt de hertest van de eerdere
+losse-termmeting (`CANARY_INDEX_101`). Het rapport telt afzonderlijk ruwe hits,
+hits zonder locator en bruikbare kandidaten; het bewaart geen responsinhoud. Eerst de
 dry-run; een live call vereist een afzonderlijk akkoord op actuele identiteit,
 entitlement/kosten en het ene mogelijke quotumverbruik.
 
