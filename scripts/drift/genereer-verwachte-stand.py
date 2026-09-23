@@ -134,7 +134,19 @@ def main():
                          if m not in IN_SCOPE and m not in ("if", "or", "not")})
         if vreemd:
             return "buiten-scope-schema", "creëert in schema: " + ", ".join(vreemd[:3])
-        # (c) raakt alleen rechten, commentaar of data.
+        # (c) VERWIJDERT objecten. Dat is wel degelijk catalogus-DDL: een
+        #     contractmigratie als 423b dropt een oude functiesignatuur. Zo'n
+        #     migratie eerder als "alleen data of commentaar" wegzetten was
+        #     onjuist — zij is juist te meten, namelijk aan de AFWEZIGHEID van
+        #     wat zij heeft verwijderd.
+        drops = sorted({m for m in re.findall(
+            r"drop\s+(?:function|table|view|materialized\s+view|policy|trigger|index|type|sequence)"
+            r"\s+(?:if\s+exists\s+)?(?:concurrently\s+)?\"?([\w\.]+)\"?", laag)})
+        if drops:
+            return "verwijdert-objecten", (
+                "dropt: " + ", ".join(drops[:4])
+                + " — meetbaar aan de afwezigheid daarvan, niet aan een nieuw object")
+        # (d) raakt alleen rechten, commentaar of data.
         if not re.search(r"create\s+(or\s+replace\s+)?(function|table|view|policy|trigger|index)", laag) \
            and not re.search(r"alter\s+table[\s\S]{0,120}?(add|alter)\s+column", laag):
             if re.search(r"\b(grant|revoke)\b", laag):
@@ -147,14 +159,6 @@ def main():
     io.open("supabase/checks/440-migraties-zonder-kenmerk.generated.tsv", "w", encoding="utf-8").write(
         "migratie\tcategorie\ttoelichting\n"
         + "\n".join("\t".join(r) for r in geclassificeerd) + "\n")
-    io.open("supabase/checks/440-migraties-zonder-kenmerk.generated.txt", "w", encoding="utf-8").write(
-        "# #440 — migraties zonder waarneembaar catalogus-kenmerk.\n"
-        "# Deze horen als 'niet vast te stellen' te worden gemeld, NOOIT als 'aanwezig'.\n"
-        "# Reden: zij corrigeren data, trekken uitsluitend rechten in, zetten\n"
-        "# commentaar, of hun effect is door een latere migratie overschreven.\n"
-        "# Uitsluitend migraties NA de baseline-cutoff; wat daarvoor ligt zit al\n"
-        "# in de schemabaseline en wordt nooit los toegepast.\n"
-        + "\n".join(f"{f}\t{c}\t{t}" for f, c, t in geclassificeerd) + "\n")
 
     print(json.dumps({
         "baseline_cutoff": cutoff(),

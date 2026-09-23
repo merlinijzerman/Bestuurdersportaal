@@ -38,17 +38,42 @@ De vier redenen worden gegenereerd, niet geraden: `later-herdefinieerd`,
 migratie die niet te meten is, hoort dat te zeggen in plaats van als
 `aanwezig` door te glippen.
 
-## Wat dit NIET kan
+## Drie lagen, na de eerste meting op Preview
 
-- **Toewijzing wijst de laatste schrijver aan, niet de ontbrekende migratie.**
-  Is een functie drie keer herdefinieerd en klopt de eindvorm niet, dan meldt
-  het rapport de láátste migratie als `afwijkend`. Dat is het actionabele feit
-  ("de eindstand klopt niet"), maar het zegt niet wélke schakel oversloeg.
-- **Migraties vóór de baseline-cutoff** zitten in `supabase/baseline/` en
-  worden nooit los toegepast; zij vallen buiten het oordeel.
+De meting op `portal_preview` van 23-09 leverde drie verbeteringen op die geen
+van alle cosmetisch waren.
+
+**Laag 3 — historische vormen.** De eerste versie kon alleen zeggen "de eindvorm
+klopt niet", niet wélke schakel ontbrak. `scripts/drift/historische-vormen.sh`
+speelt de keten nu migratie voor migratie af en legt per object elke vorm vast
+die ooit is opgeleverd. Een afwijkend object wordt daarmee geduid: *"doel draagt
+nog de vorm van `2026_09_06_microsoft_login_fase1b.sql`"* — en dus is
+`2026_09_07` de ontbrekende migratie. Herkent de historie de vorm niet, dan is
+het géén achterstand maar een handmatige wijziging op de doelomgeving: een
+andere bevinding, en een ergere.
+
+**Platform en applicatie gescheiden.** Objecten in `storage` worden door het
+Supabase-platform beheerd en lopen niet mee met onze migratieketen; verschillen
+daar zijn vrijwel altijd een platformversieverschil en geen gemiste migratie.
+Ze worden gemeten maar apart gerapporteerd, zodat ze het signaal uit `public`
+niet overstemmen.
+
+**Verwijderende migraties.** Een contractmigratie als `423b` dropt een oude
+functiesignatuur. Die werd eerst als "alleen data of commentaar" weggezet — dat
+was fout: zij is juist te meten, namelijk aan de AFWEZIGHEID van wat zij
+verwijdert. Categorie `verwijdert-objecten` noemt nu het gedropte object.
+
+## Wat dit nog steeds NIET kan
+
+- **Migraties vóór de baseline-cutoff** zitten in `supabase/baseline/` en worden
+  nooit los toegepast; zij vallen buiten het oordeel.
 - **Schema's buiten `public`/`storage`** (zoals `microsoft_private`) worden niet
   gemeten. Migraties die daar hun objecten maken, komen als
-  `buiten-scope-schema` in de niet-meetbare lijst.
+  `buiten-scope-schema` in de niet-meetbare lijst — `423a`/`423b` zijn daar het
+  voorbeeld van, en moesten met de hand worden geverifieerd.
+- **De afwezigheid die `verwijdert-objecten` belooft, wordt nog niet getoetst.**
+  De categorie benoemt wat er weg hoort te zijn; het script controleert dat niet
+  actief. Dat is de volgende stap, geen opgeloste stap.
 
 ## Herbouwen
 
@@ -66,6 +91,8 @@ het driftscript tegen een verouderde verwachting.
 | Bewijs | Uitkomst |
 |---|---|
 | Verkeerd doel (geen Preview-fingerprint) | breekt fail-closed af — **proven-red** |
-| Schone referentie | 1904 van 1904 objecten `gelijk`, nul valse meldingen |
-| `meta_basisniveau` teruggezet naar de #367-vorm | precies dat ene object `afwijkend` — de drift die werkelijk optrad |
+| Schone referentie | 1904 van 1904 `gelijk` (1817 applicatie, 87 platform), nul valse meldingen |
+| `meta_basisniveau` teruggezet naar de #367-vorm | precies dat ene object `afwijkend` |
 | Functie gedropt + vreemde tabel toegevoegd | `ontbreekt` respectievelijk `onbekend`, met de juiste migratie erbij |
+| `fn_access_token_hook` teruggezet naar de `2026_09_06`-vorm | `afwijkend`, **met de duiding "doel draagt nog de vorm van `2026_09_06_microsoft_login_fase1b.sql`"** — de ontbrekende schakel wordt dus benoemd |
+| Stapsgewijze replay | 89 van 89 migraties afgespeeld; faalt er één, dan stopt de generator met exitcode ≠ 0 in plaats van een onvolledige historie op te leveren |

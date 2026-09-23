@@ -14,6 +14,11 @@ verwacht = list(csv.DictReader(io.open("supabase/checks/440-verwachte-stand.gene
                                        encoding="utf-8"), delimiter="\t"))
 zonder = list(csv.DictReader(io.open("supabase/checks/440-migraties-zonder-kenmerk.generated.tsv",
                                      encoding="utf-8"), delimiter="\t"))
+# De historie: per object ELKE vorm die de keten ooit heeft opgeleverd, met de
+# migratie die hem schreef. Daarmee wordt "afwijkend" beantwoordbaar: welke
+# vorm draagt het doel dan wél, en sinds welke migratie loopt het achter?
+historie = list(csv.DictReader(io.open("supabase/checks/440-historische-vormen.generated.tsv",
+                                       encoding="utf-8"), delimiter="\t"))
 meting = io.open("scripts/drift/vingerafdruk.sql", encoding="utf-8").read()
 # De kop van de meetquery eruit; alleen het SELECT-deel is herbruikbaar.
 meting = meting[meting.index("select sectie, sch, obj"):].rstrip().rstrip(";")
@@ -80,6 +85,11 @@ verwacht_values = ",\n    ".join(
                               q(r["vingerafdruk"]), q(r["migratie"] or ""))
     for r in verwacht)
 
+historie_values = ",\n    ".join(
+    "({},{},{},{},{})".format(q(r["sectie"]), q(r["sch"]), q(r["obj"]),
+                              q(r["vingerafdruk"]), q(r["migratie"]))
+    for r in historie)
+
 zonder_values = ",\n    ".join(
     "({},{},{})".format(q(r["migratie"]), q(r["categorie"]), q(r["toelichting"]))
     for r in zonder)
@@ -98,6 +108,7 @@ vergelijk as (
          coalesce(v.sch, a.sch)       as sch,
          coalesce(v.obj, a.obj)       as obj,
          v.migratie,
+         a.vingerafdruk as actueel_vp,
          case when a.obj is null then 'ontbreekt'
               when v.obj is null then 'onbekend'
               when v.vingerafdruk is distinct from a.vingerafdruk then 'afwijkend'
@@ -105,13 +116,30 @@ vergelijk as (
     from verwacht v
     full outer join actueel a
       on a.sectie = v.sectie and a.sch = v.sch and a.obj = v.obj
+),
+historie(sectie, sch, obj, vingerafdruk, migratie) as (
+  values
+    {historie_values}
 )
-select '1. OBJECTVERSCHILLEN' as rapport, oordeel, sectie, sch, obj,
-       coalesce(nullif(migratie, ''), '(baseline of niet toewijsbaar)') as migratie
-  from vergelijk
- where oordeel <> 'gelijk'
- order by case oordeel when 'ontbreekt' then 1 when 'afwijkend' then 2 else 3 end,
-          sectie, sch, obj;
+select '1. OBJECTVERSCHILLEN' as rapport,
+       case when v.sch = 'storage' then 'platform (storage)' else 'applicatie (public)' end as laag,
+       v.oordeel, v.sectie, v.sch, v.obj,
+       coalesce(nullif(v.migratie, ''), '(baseline of niet toewijsbaar)') as verwacht_uit,
+       -- Draagt het doel een OUDERE vorm? Dan zegt dit welke migratie hem
+       -- schreef, en dus waar de keten is blijven steken. Herkent de historie
+       -- de vorm niet, dan is het geen achterstand maar een handmatige
+       -- wijziging op de doelomgeving - een andere bevinding, en een ergere.
+       case when v.oordeel <> 'afwijkend' then ''
+            when h.migratie is null then 'vorm onbekend in de keten — handmatig gewijzigd?'
+            else 'doel draagt nog de vorm van ' || h.migratie end as duiding
+  from vergelijk v
+  left join historie h
+    on h.sectie = v.sectie and h.sch = v.sch and h.obj = v.obj
+   and h.vingerafdruk = v.actueel_vp
+ where v.oordeel <> 'gelijk'
+ order by case when v.sch = 'storage' then 2 else 1 end,
+          case v.oordeel when 'ontbreekt' then 1 when 'afwijkend' then 2 else 3 end,
+          v.sectie, v.sch, v.obj;
 
 -- ── 2. Oordeel per migratie ─────────────────────────────────────────────────
 with verwacht(sectie, sch, obj, vingerafdruk, migratie) as (
@@ -165,7 +193,7 @@ actueel as (
 {meting}
 ),
 vergelijk as (
-  select coalesce(v.obj, a.obj) as obj,
+  select coalesce(v.sch, a.sch) as sch, coalesce(v.obj, a.obj) as obj,
          case when a.obj is null then 'ontbreekt'
               when v.obj is null then 'onbekend'
               when v.vingerafdruk is distinct from a.vingerafdruk then 'afwijkend'
@@ -174,8 +202,10 @@ vergelijk as (
     full outer join actueel a
       on a.sectie = v.sectie and a.sch = v.sch and a.obj = v.obj
 )
-select '3. SAMENVATTING' as rapport, oordeel, count(*) as objecten
-  from vergelijk group by oordeel order by 2;
+select '3. SAMENVATTING' as rapport,
+       case when sch = 'storage' then 'platform (storage)' else 'applicatie (public)' end as laag,
+       oordeel, count(*) as objecten
+  from vergelijk group by 2, oordeel order by 2, 3;
 """
 
 io.open("supabase/checks/2026_09_23_440_driftinventarisatie.generated.sql", "w",
