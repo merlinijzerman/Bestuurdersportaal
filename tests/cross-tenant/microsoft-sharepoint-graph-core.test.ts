@@ -66,13 +66,27 @@ test("graphJson stuurt het token alleen als Bearer-header, volgt geen redirects 
   assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer geheim-token");
   assert.equal(init?.redirect, "error");
   assert.equal(init?.cache, "no-store");
-  await assert.rejects(
-    graphJson("t", "https://graph.microsoft.com/v1.0/sites/root", {
-      timeoutMs: 5,
-      fetchImpl: (_url, i) => new Promise((_resolve, reject) => { i.signal?.addEventListener("abort", () => reject(Object.assign(new Error("abort"), { name: "AbortError" }))); }),
-    }),
-    (fout: unknown) => fout instanceof SharePointGraphError && fout.categorie === "graph_timeout",
-  );
+  // `graphJson` bewaakt zijn deadline met `AbortSignal.timeout()`, en die timer
+  // houdt de event-loop BEWUST niet open — terecht, want in productie mag een
+  // deadline een lambda niet levend houden. Deze nep-`fetchImpl` lost echter
+  // nooit uit zichzelf op en registreert geen eigen timer: zonder dit anker is
+  // die niet-gerefereerde timer het enige werk dat er nog is, mag Node
+  // afsluiten, en worden de resterende tests van dit bestand `cancelled`
+  // gemeld — met `fail 0`, dus stil. Een echte fetch heeft een socket; deze
+  // niet. Zelfde oorzaak en zelfde remedie als in
+  // tests/cross-tenant/generatie-budget.test.ts.
+  const anker = setInterval(() => {}, 1_000);
+  try {
+    await assert.rejects(
+      graphJson("t", "https://graph.microsoft.com/v1.0/sites/root", {
+        timeoutMs: 5,
+        fetchImpl: (_url, i) => new Promise((_resolve, reject) => { i.signal?.addEventListener("abort", () => reject(Object.assign(new Error("abort"), { name: "AbortError" }))); }),
+      }),
+      (fout: unknown) => fout instanceof SharePointGraphError && fout.categorie === "graph_timeout",
+    );
+  } finally {
+    clearInterval(anker);
+  }
 });
 
 test("graphJson begrenst ook een chunked respons zonder Content-Length", async () => {
