@@ -40,7 +40,11 @@ begin
        'public.fn_schrijf_vergelijking(text,text,text,text,jsonb,text,jsonb,jsonb)', 'EXECUTE')
      or not has_function_privilege('service_role',
        'public.fn_schrijf_vergelijking(text,text,text,text,jsonb,text,jsonb,jsonb)', 'EXECUTE')
+     or has_function_privilege('anon',
+       'public.fn_schrijf_vergelijking(text,text,text,text,jsonb)', 'EXECUTE')
      or has_function_privilege('authenticated',
+       'public.fn_schrijf_vergelijking(text,text,text,text,jsonb)', 'EXECUTE')
+     or has_function_privilege('service_role',
        'public.fn_schrijf_vergelijking(text,text,text,text,jsonb)', 'EXECUTE') then
     raise exception '369_functiegrants_onjuist' using errcode = '23514';
   end if;
