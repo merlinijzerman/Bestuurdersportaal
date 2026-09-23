@@ -24,12 +24,13 @@ import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { COPILOT_RETRIEVAL_ENDPOINT } from "../../../core/lib/microsoft-retrieval/endpoint";
+import { parseerSmokeArgumenten } from "./args";
 import { meldAan } from "./auth";
 import { maakLeesClient } from "./graph";
 import { voerSmokeUit } from "./orkestratie";
 import { leesLabprofiel, registryMap, LAB_PROFIEL_ID } from "./registry";
 import { rapporteer } from "./rapport";
-import { SCENARIO, StopFail, VERWACHTE_FIXTURE } from "./smoke";
+import { meetinstelling, StopFail, VERWACHTE_FIXTURE, type Meetmodus } from "./smoke";
 
 /** De zin die letterlijk getypt moet worden vóór de eerste live call. */
 const AKKOORDZIN = "JA, VOER DE RETRIEVAL-CALL UIT";
@@ -46,15 +47,6 @@ function hardeLokaleGrendel(): void {
   if (process.env.CI || process.env.VERCEL || process.env.NODE_ENV === "production") {
     throw new Error("deze smoke weigert CI, Vercel en productie");
   }
-}
-
-function vlag(naam: string): boolean {
-  return process.argv.includes(`--${naam}`);
-}
-
-function waarde(naam: string): string | null {
-  const prefix = `--${naam}=`;
-  return process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length) ?? null;
 }
 
 function meld(regel: string): void {
@@ -81,7 +73,7 @@ function openBrowser(url: string): void {
  * per ongeluk te geven, en dit is de stap die geld kost en quotum verbruikt.
  * Zonder TTY is er niemand om het te vragen, en dan is het antwoord nee.
  */
-async function vraagAkkoord(): Promise<boolean> {
+async function vraagAkkoord(modus: Meetmodus): Promise<boolean> {
   if (!process.stdin.isTTY) {
     meld("Geen interactieve terminal: er kan geen akkoord worden gegeven, dus geen live call.");
     return false;
@@ -91,7 +83,9 @@ async function vraagAkkoord(): Promise<boolean> {
   meld("  AKKOORD NODIG — de volgende stap is een LIVE call naar");
   // Uit de endpointpin, niet overgetypt: één plek waar dit adres staat.
   meld(`  POST ${COPILOT_RETRIEVAL_ENDPOINT}`);
-  meld(`  scenario ${SCENARIO.code}, verwachte fixture ${VERWACHTE_FIXTURE}`);
+  const instelling = meetinstelling(modus);
+  meld(`  scenario ${instelling.scenario}, verwachte fixture ${VERWACHTE_FIXTURE}`);
+  if (modus === "exacte_canary") meld(`  vaste exacte canaryvraag: "${instelling.vraag}"`);
   meld("  precies één netwerkpoging; dit verbruikt Copilot-quotum.");
   meld("──────────────────────────────────────────────────────────────");
   const lezer = createInterface({ input: process.stdin, output: process.stderr });
@@ -105,11 +99,7 @@ async function vraagAkkoord(): Promise<boolean> {
 
 async function main(): Promise<number> {
   hardeLokaleGrendel();
-
-  const dryRun = vlag("dry-run");
-  const geenBrowser = vlag("geen-browser");
-  const rapportPad = waarde("rapport");
-  const wachtMs = Number(waarde("wacht-s") ?? "300") * 1000;
+  const { dryRun, geenBrowser, rapportPad, wachtMs, modus } = parseerSmokeArgumenten(process.argv.slice(2));
 
   const map = registryMap(REPO_ROOT);
   meld(`Registry: ${map}`);
@@ -148,10 +138,11 @@ async function main(): Promise<number> {
     aanmelden: async () => aanmelding,
     maakClient: (accessToken) =>
       maakLeesClient({ accessToken, callBudget: GRAPH_CALLBUDGET, signal: afbreker.signal }),
-    vraagAkkoord,
+    vraagAkkoord: () => vraagAkkoord(modus),
     retrievalFetch: fetch,
     signal: afbreker.signal,
     dryRun,
+    modus,
     meld: (regel) => meld(`\n${regel}`),
   });
 

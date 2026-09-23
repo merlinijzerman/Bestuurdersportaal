@@ -185,6 +185,17 @@ test("--dry-run doet bij een OPEN poort nul Retrieval-pogingen en vraagt geen ak
   assert.equal(exitcode, EXIT.klaar);
 });
 
+test("exacte canary in dry-run houdt de open poort en doet nul Retrieval-pogingen", async () => {
+  const { deps, spionnen } = bouw({ dryRun: true, modus: "exacte_canary" });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.equal(rapport.poort.doorgelaten, true);
+  assert.equal(rapport.scenario, "CANARY_INDEX_101");
+  assert.deepEqual(spionnen.retrievalPogingen, []);
+  assert.equal(spionnen.akkoordGevraagd, 0);
+  assert.equal(rapport.retrieval, null);
+  assert.equal(exitcode, EXIT.klaar);
+});
+
 test("zonder --dry-run wordt bij een open poort wél akkoord gevraagd, en 'nee' stopt de run", async () => {
   const { deps, spionnen } = bouw();
   const { rapport, exitcode } = await voerSmokeUit(deps);
@@ -205,6 +216,14 @@ test("met akkoord vertrekt er precies één Retrieval-poging naar het vastgepind
   assert.equal(rapport.retrieval?.uitslag.verwachteFixtureGevonden, true);
   assert.equal(rapport.eindstand, "gemeten");
   assert.equal(exitcode, EXIT.klaar);
+});
+
+test("een canaryrapport is niet als SEM01-meting te lezen", async () => {
+  const { deps } = bouw({ vraagAkkoord: async () => true, modus: "exacte_canary" });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  assert.equal(exitcode, EXIT.klaar);
+  assert.equal(rapport.scenario, "CANARY_INDEX_101");
+  assert.equal(rapport.retrieval?.scenario, "CANARY_INDEX_101");
 });
 
 // ---------------------------------------------------------------------------

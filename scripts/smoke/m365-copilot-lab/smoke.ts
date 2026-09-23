@@ -21,7 +21,7 @@
 //  die eruitziet als een kwaliteitsoordeel.
 // ============================================================================
 import { roepCopilotRetrievalAan, type CopilotOpdracht } from "../../../core/lib/microsoft-retrieval/client";
-import { hitUrlBinnenRoot } from "../../spike/sharepoint-retrieval/copilot-retrieval";
+import { hitBinnenRoot } from "../../../core/lib/microsoft-retrieval/mapping";
 import { VERGELIJK_SCENARIOS } from "../../spike/sharepoint-retrieval/vergelijking-scenarios";
 import { spikeFixtureStatus } from "../../spike/sharepoint-retrieval/fixturestatus";
 import type { Aanmelding } from "./auth";
@@ -29,16 +29,27 @@ import type { GraphActor, GraphBron, BestandsnaamscanUitkomst, InhoudscanUitkoms
 import type { Labprofiel } from "./registry";
 
 /**
- * Het enige scenario dat deze runner draait, en de enige fixture die hij als
- * verwacht resultaat erkent. Beide komen uit de vastgestelde #407-scenarioset;
- * ze worden hier niet opnieuw gedefinieerd maar OVERGENOMEN, zodat een
- * wijziging daar niet stilletjes langs deze runner kan.
+ * Het bestaande semantische scenario en de enige fixture die deze runner als
+ * verwacht resultaat erkent. SEM01 komt uit de vastgestelde #407-scenarioset;
+ * de afzonderlijke exacte canary heeft alleen een vaste vraag op die fixture.
  */
 export const SCENARIO = VERGELIJK_SCENARIOS.SEM01;
 export const VERWACHTE_FIXTURE = "PGB407-DOC-101";
 
 /** De canaryterm van de inhoudscan. Komt in geen enkele scenariovraag voor. */
 export const INHOUDSCAN_TERM = "Zandloperbaken 12";
+/** Afzonderlijk indexbewijs, niet te verwarren met de semantische SEM01-meting. */
+export const EXACTE_CANARY_SCENARIO = "CANARY_INDEX_101";
+export type Meetmodus = "sem01" | "exacte_canary";
+
+/** Alleen deze twee vaste vragen mogen de Retrieval API bereiken. */
+export function meetinstelling(modus: Meetmodus): { scenario: string; vraag: string } {
+  switch (modus) {
+    case "sem01": return { scenario: SCENARIO.code, vraag: SCENARIO.copilotVraag };
+    case "exacte_canary": return { scenario: EXACTE_CANARY_SCENARIO, vraag: INHOUDSCAN_TERM };
+    default: throw new StopFail("onbekende_meetmodus", "geen Retrieval-call toegestaan");
+  }
+}
 /** De naamprefix van de bestandsnaamscan; `PGB407-DOC-101*`. */
 export const BESTANDSNAAM_PREFIX = "PGB407-DOC-101";
 
@@ -284,9 +295,9 @@ export function fixturecodeUitUrl(webUrl: string): string | null {
 /**
  * Categoriseert de kandidaten van één Retrieval-call.
  *
- * `hitUrlBinnenRoot` (#407) is hier de enige toelatingsregel: alles wat niet
- * aantoonbaar binnen de geregistreerde root valt, is `buiten_bronroot` en wordt
- * nergens anders meer in meegeteld.
+ * De gedeelde canonicalisering uit #418 herkent ook Office-viewer-URL's. Een
+ * hit telt pas wanneer zijn canonieke pad binnen de geregistreerde root én op
+ * de geregistreerde SharePoint-host ligt. Sharinglinks blijven buiten scope.
  */
 export function categoriseer(
   kandidaten: Array<{ webUrl: string; extracts: string[] }>,
@@ -308,8 +319,14 @@ export function categoriseer(
       categorieen.zonder_locator++;
       continue;
     }
-    const binnen = hitUrlBinnenRoot(kandidaat.webUrl, rootWebUrl, siteHostnaam);
-    if (!binnen) {
+    // De registry bewaart een leesbare root met spaties; Graph/Copilot kan
+    // dezelfde segmenten als `%20` leveren. Lijn alleen die codering uit vóór
+    // de gedeelde, segmentbewuste canonicalisering; decodeer nooit `%2F`.
+    const binnen = hitBinnenRoot(
+      kandidaat.webUrl.replaceAll(" ", "%20"),
+      rootWebUrl.replaceAll(" ", "%20"),
+    );
+    if (!binnen || new URL(binnen).hostname !== siteHostnaam.toLowerCase()) {
       categorieen.buiten_bronroot++;
       continue;
     }
@@ -351,6 +368,7 @@ export interface MeetAfhankelijkheden {
   accessToken: string;
   signal: AbortSignal;
   fetchImpl: typeof fetch;
+  modus?: Meetmodus;
 }
 
 /**
@@ -360,8 +378,9 @@ export interface MeetAfhankelijkheden {
  * deze functie niet, komen in geen rapport en worden nergens weggeschreven.
  */
 export async function meet(profiel: Labprofiel, deps: MeetAfhankelijkheden): Promise<Retrievaluitslag> {
+  const instelling = meetinstelling(deps.modus ?? "sem01");
   const opdracht: CopilotOpdracht = {
-    vraag: SCENARIO.copilotVraag,
+    vraag: instelling.vraag,
     rootWebUrl: profiel.rootUrl,
     siteHostnaam: profiel.siteHostnaam,
     maxKandidaten: RETRIEVAL_MAX_KANDIDATEN,
@@ -374,7 +393,7 @@ export async function meet(profiel: Labprofiel, deps: MeetAfhankelijkheden): Pro
 
   const uitkomst = await roepCopilotRetrievalAan(opdracht);
   return {
-    scenario: SCENARIO.code,
+    scenario: instelling.scenario,
     verwachteFixture: VERWACHTE_FIXTURE,
     verwachteFixtureStatus: spikeFixtureStatus(VERWACHTE_FIXTURE),
     netwerkpogingen: uitkomst.netwerkpogingen,

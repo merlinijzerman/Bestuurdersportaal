@@ -17,6 +17,8 @@ import { rapporteer, type Smokerapport } from "./rapport";
 import {
   RETRIEVAL_REQUESTBUDGET,
   SCENARIO,
+  EXACTE_CANARY_SCENARIO,
+  INHOUDSCAN_TERM,
   StopFail,
   VERWACHTE_FIXTURE,
   beoordeelPoort,
@@ -83,8 +85,8 @@ function jsonRespons(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-async function meetMet(fetchImpl: typeof fetch) {
-  return meet(PROFIEL, { accessToken: "test-token", signal: new AbortController().signal, fetchImpl });
+async function meetMet(fetchImpl: typeof fetch, modus?: "sem01" | "exacte_canary") {
+  return meet(PROFIEL, { accessToken: "test-token", signal: new AbortController().signal, fetchImpl, modus });
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +234,22 @@ test("een andere fixture binnen de root is geen verwachte treffer", () => {
   assert.equal(uitslag.verwachteFixtureGevonden, false);
 });
 
+test("Office-viewer-URL binnen de root telt als canary, sharinglink en prefixlek niet", () => {
+  // De live geregistreerde root is een submap met een leesbare spatie, terwijl
+  // Copilot de URL gecodeerd en met een Office-viewerprefix kan teruggeven.
+  const root = `https://${HOST}/sites/PGBRetrievalLab/Gedeelde documenten/PGB`;
+  const viewer = `https://${HOST}/:w:/r/sites/PGBRetrievalLab/Gedeelde%20documenten/PGB/${VERWACHTE_FIXTURE}-Zandloperbaken-hersteldossier.docx`;
+  const uitslag = categoriseer([
+    { webUrl: viewer, extracts: ["fragment"] },
+    { webUrl: `https://${HOST}/:w:/s/opaque-token`, extracts: ["fragment"] },
+    { webUrl: viewer.replace("/PGB/", "/PGB-geheim/"), extracts: ["fragment"] },
+  ], root, HOST);
+  assert.equal(uitslag.categorieen.verwachte_fixture, 1);
+  assert.equal(uitslag.categorieen.buiten_bronroot, 2);
+  assert.equal(uitslag.hitsMetExtracts, 1);
+  assert.deepEqual(uitslag.fixturecodes, [VERWACHTE_FIXTURE]);
+});
+
 test("fixturecode-afleiding raadt niet en geeft nooit een bestandsnaam terug", () => {
   assert.equal(fixturecodeUitUrl(fixtureUrl(VERWACHTE_FIXTURE)), VERWACHTE_FIXTURE);
   assert.equal(fixturecodeUitUrl(`https://${HOST}/sites/x/Shared%20Documents/notulen.docx`), null);
@@ -334,6 +352,38 @@ test("een geslaagde meting doet precies één poging en scopet de filter server-
   assert.equal(verstuurd.queryString, SCENARIO.copilotVraag);
   // De vraag zit in een eigen veld en kan de scope niet raken.
   assert.ok(!verstuurd.filterExpression.includes(SCENARIO.copilotVraag));
+});
+
+test("exacte canary verstuurt één vaste inhoudsvraag met dezelfde serverfilter", async () => {
+  let verstuurd: any = null;
+  let pogingen = 0;
+  const uitslag = await meetMet((async (_invoer: any, init: any) => {
+    pogingen++;
+    verstuurd = JSON.parse(String(init.body));
+    return jsonRespons({ retrievalHits: [
+      { webUrl: fixtureUrl(VERWACHTE_FIXTURE), extracts: [{ text: "wordt niet bewaard" }] },
+    ] });
+  }) as unknown as typeof fetch, "exacte_canary");
+
+  assert.equal(pogingen, 1);
+  assert.equal(uitslag.netwerkpogingen, 1);
+  assert.equal(uitslag.scenario, EXACTE_CANARY_SCENARIO);
+  assert.equal(uitslag.uitslag.verwachteFixtureGevonden, true);
+  assert.equal(verstuurd.queryString, INHOUDSCAN_TERM);
+  assert.equal(verstuurd.filterExpression, `path:"https://${HOST}/sites/PGBRetrievalLab/Shared%20Documents"`);
+  assert.ok(!verstuurd.filterExpression.includes(INHOUDSCAN_TERM));
+});
+
+test("exacte canary herhaalt niet na 429", async () => {
+  let pogingen = 0;
+  await assert.rejects(
+    meetMet((async () => {
+      pogingen++;
+      return new Response("{}", { status: 429 });
+    }) as unknown as typeof fetch, "exacte_canary"),
+    (fout: CopilotFout) => fout.code === "copilot_rate_limit",
+  );
+  assert.equal(pogingen, 1);
 });
 
 test("een lege uitslag is een kwaliteitsuitkomst en geen fout", async () => {

@@ -112,6 +112,24 @@ Eerst de veilige stand — deze doet de scans wél en de Retrieval-call niet:
 npm run smoke:m365-copilot-lab -- --dry-run
 ```
 
+Voor een **afzonderlijk indexbewijs** bestaat een gesloten canarymodus. De
+SharePoint-inhoudscan op `Zandloperbaken 12` is alleen een preflight: de gewone
+run verstuurt SEM01, niet die term, naar de Retrieval API. De canarymodus
+verstuurt na dezelfde drift-, root- en indexpoorten precies één Retrieval-vraag
+met de vaste term en rapporteert `CANARY_INDEX_101`, nooit `SEM01`. Eerst de
+dry-run; een live call vereist een afzonderlijk akkoord op actuele identiteit,
+entitlement/kosten en het ene mogelijke quotumverbruik.
+
+```bash
+npm run smoke:m365-copilot-lab -- --exacte-canary --dry-run
+# Alleen na afzonderlijk uitvoeringsakkoord:
+npm run smoke:m365-copilot-lab -- --exacte-canary
+```
+
+Een treffer op `PGB407-DOC-101` bewijst bereikbaarheid van deze fixture via de
+API. Nul kandidaten onderscheidt index, filter en ranking nog niet definitief;
+de canary is geen semantische recallmeting. Het rapport bevat geen extracts.
+
 De volledige run. Die vraagt vlak vóór de call om akkoord; je moet dan letterlijk
 `JA, VOER DE RETRIEVAL-CALL UIT` typen:
 
@@ -131,9 +149,12 @@ npm run smoke:m365-copilot-lab -- --rapport=VERIFICATIERAPPORT-labsmoke.md
 | vlag | effect |
 | --- | --- |
 | `--dry-run` | stopt vóór de live call, ook als de poort openstaat |
+| `--exacte-canary` | vaste inhoudsterm als aparte Retrieval-meting; geen vrije vraag |
 | `--geen-browser` | opent de aanmeld-URL niet automatisch |
 | `--rapport=<pad>` | schrijft het rapport ook naar een bestand |
 | `--wacht-s=<n>` | wachttijd op de browserstap (standaard 300) |
+
+Onbekende of dubbele vlaggen worden vóór aanmelden geweigerd.
 
 ### Exitcodes
 
