@@ -4,8 +4,8 @@
 //  Pure metadata-logica voor juridische bronnen in de GENERIEKE bibliotheek:
 //  actuele geconsolideerde wetgeving (geldend recht) en wetsgeschiedenis
 //  (toelichting, nooit zelfstandig bindend). Geen DB/IO → testbaar via
-//  lib/wetsgeschiedenis.sanity.ts. Wordt geconsumeerd door valideerCuratie
-//  (lib/generiek-curatie.ts); de DB-CHECKs uit migratie
+//  lib/wetsgeschiedenis.sanity.ts. Wordt geconsumeerd door
+//  valideerGeneriekeCuratie (lib/generiek-curatie-juridisch.ts); de DB-CHECKs uit migratie
 //  2026_09_23_wetsgeschiedenis_a_light_foundation.sql spiegelen deze regels.
 //
 //  Bewust NIET hier (WERKTICKET-WETSGESCHIEDENIS-A-LIGHT):
@@ -46,6 +46,11 @@ export const WETSGESCHIEDENIS_SUBTYPEN = [
   "aangenomen_amendement",
   "nota_van_wijziging",
   "nota_naar_aanleiding_van_het_verslag",
+  // Ook voor een NADERE memorie van antwoord; het onderscheid staat in de titel.
+  "memorie_van_antwoord",
+  // Toelichting bij een AMvB: geïdentificeerd via het Staatsblad, niet via een
+  // Kamerstukdossier — het enige subtype waarbij het dossiernummer optioneel is.
+  "nota_van_toelichting",
 ] as const;
 export type WetsgeschiedenisSubtype = (typeof WETSGESCHIEDENIS_SUBTYPEN)[number];
 
@@ -54,7 +59,18 @@ export const WETSGESCHIEDENIS_SUBTYPE_LABEL: Record<WetsgeschiedenisSubtype, str
   aangenomen_amendement: "Aangenomen amendement",
   nota_van_wijziging: "Nota van wijziging",
   nota_naar_aanleiding_van_het_verslag: "Nota naar aanleiding van het verslag",
+  memorie_van_antwoord: "Memorie van antwoord",
+  nota_van_toelichting: "Nota van toelichting (AMvB)",
 };
+
+/** Subtypen zonder verplicht Kamerstukdossier (identificatie via Staatsblad). */
+export const SUBTYPEN_DOSSIER_OPTIONEEL: readonly WetsgeschiedenisSubtype[] = [
+  "nota_van_toelichting",
+];
+
+export function isDossiernummerVerplicht(subtype: string | null | undefined): boolean {
+  return !(SUBTYPEN_DOSSIER_OPTIONEEL as readonly string[]).includes(subtype ?? "");
+}
 
 export function isWetsgeschiedenisSubtype(w: unknown): w is WetsgeschiedenisSubtype {
   return (
@@ -122,6 +138,11 @@ export function formatteerDossiernummer(waarde: string | null | undefined): stri
   return suffix ? `${gegroepeerd}-${suffix}` : gegroepeerd;
 }
 
+/** Bevat de titel een Staatsbladverwijzing, bv. "Stb. 2023, 217"? */
+export function titelBevatStaatsblad(titel: string): boolean {
+  return /\b(?:Stb\.?|Staatsblad)\s*\d{4}\s*,?\s*(?:nr\.?\s*)?\d+/i.test(titel);
+}
+
 /** Komt het (cijferdeel van het) dossiernummer voor in de titel? */
 export function titelBevatDossiernummer(titel: string, dossiernummer: string): boolean {
   const cijfers = dossiernummer.split("-")[0];
@@ -154,6 +175,8 @@ export interface JuridischeUitkomst {
 
 const VOORBEELD_TITEL =
   "Memorie van toelichting — Kamerstukken II 2021/22, 36 067, nr. 3";
+const VOORBEELD_TITEL_NVT =
+  "Nota van toelichting — Besluit toekomst pensioenen, Stb. 2023, 217";
 
 /**
  * Valideert de juridische metadata-combinatie. Raakt niets als het
@@ -204,7 +227,9 @@ export function valideerJuridischeMetadata(invoer: JuridischeInvoer): Juridische
     if (!dossier.ok) {
       fouten.dossiernummer = dossier.fout;
     } else if (dossier.waarde === null) {
-      fouten.dossiernummer = "Het dossiernummer van het wetgevingsdossier is verplicht.";
+      if (isDossiernummerVerplicht(subtypeRaw)) {
+        fouten.dossiernummer = "Het dossiernummer van het wetgevingsdossier is verplicht.";
+      }
     } else {
       dossiernummer = dossier.waarde;
       if (invoer.titel && !titelBevatDossiernummer(invoer.titel, dossier.waarde)) {
@@ -212,6 +237,13 @@ export function valideerJuridischeMetadata(invoer: JuridischeInvoer): Juridische
           `Neem de volledige officiële verwijzing op in de titel, inclusief het dossiernummer ` +
           `(bv. '${VOORBEELD_TITEL}').`;
       }
+    }
+
+    // Nota van toelichting (AMvB): identificatie via het Staatsblad in de titel.
+    if (subtypeRaw === "nota_van_toelichting" && invoer.titel && !fouten.titel &&
+        !titelBevatStaatsblad(invoer.titel)) {
+      fouten.titel =
+        `Neem het Staatsbladnummer op in de titel (bv. '${VOORBEELD_TITEL_NVT}').`;
     }
 
     // Wetsgeschiedenis is nooit bindend — ook een aangenomen amendement niet.

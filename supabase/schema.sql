@@ -352,14 +352,16 @@ create table if not exists public.documenten (
   wettelijk_regime text check (wettelijk_regime is null or wettelijk_regime in
                    ('pw','wvb','beide','algemeen')),
   -- Wetsgeschiedenis A-light (migratie 2026_09_23_wetsgeschiedenis_a_light_foundation,
-  -- authoritatief). Alleen bij documenttype='wetsgeschiedenis' en daar verplicht;
-  -- dan ook normgewicht='informatief' (documenten_wetsgeschiedenis_combinatie_check).
+  -- authoritatief). Alleen bij documenttype='wetsgeschiedenis'; subtype daar verplicht,
+  -- dossiernummer ook (behalve bij nota_van_toelichting); dan altijd
+  -- normgewicht='informatief' (documenten_wetsgeschiedenis_combinatie_check).
   -- 'wetgeving'/'wetsgeschiedenis' alleen bij bibliotheek='generiek'
   -- (documenten_juridisch_generiek_check). Niet gedenorm. naar document_chunks.
   -- Geen publicatiekenmerk-/behandelingsstatusveld: verwijzing staat in de titel.
   wetsgeschiedenis_subtype text check (wetsgeschiedenis_subtype is null or wetsgeschiedenis_subtype in
                    ('memorie_van_toelichting','aangenomen_amendement','nota_van_wijziging',
-                    'nota_naar_aanleiding_van_het_verslag')),
+                    'nota_naar_aanleiding_van_het_verslag','memorie_van_antwoord',
+                    'nota_van_toelichting')),
   dossiernummer    text check (dossiernummer is null or dossiernummer ~ '^[0-9]{3,6}(-[A-Z0-9]{1,8})?$'),
   metadata_te_controleren    boolean not null default false,
   metadata_review_status     text not null default 'niet_nodig'

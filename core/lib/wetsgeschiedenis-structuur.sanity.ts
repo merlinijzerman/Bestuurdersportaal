@@ -126,6 +126,24 @@ check("'Toelichting'-kop buiten een amendement is geen deelgrens", () => {
   assert.deepEqual(kort(u), ["algemeen_deel|kop|Algemeen deel"]);
 });
 
+check("nota van toelichting (AMvB): zelfde deelstructuur als een MvT", () => {
+  const t = [
+    "NOTA VAN TOELICHTING",
+    "Algemeen",
+    "Dit besluit werkt de wet uit.",
+    "Artikelsgewijs",
+    "Artikel 1",
+    "Dit artikel bevat definities.",
+  ].join("\n");
+  const u = structureerParlementairStuk(t, "nota_van_toelichting");
+  assert.deepEqual(kort(u), [
+    "overig|tekst|-",
+    "algemeen_deel|kop|Algemeen deel",
+    "artikelsgewijze_toelichting|kop|Artikelsgewijze toelichting",
+    "artikelsgewijze_toelichting|artikel|Artikel 1",
+  ]);
+});
+
 check("niets herkend → één overig-unit (fallback op generieke chunking)", () => {
   const t = "Alleen lopende tekst zonder koppen.\nNog een regel.";
   const u = structureerParlementairStuk(t, null);

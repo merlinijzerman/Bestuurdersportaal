@@ -21,6 +21,8 @@ import {
   juridischeDuiding,
   normaliseerDossiernummer,
   titelBevatDossiernummer,
+  titelBevatStaatsblad,
+  isDossiernummerVerplicht,
   valideerJuridischeMetadata,
 } from "./wetsgeschiedenis";
 import { isStandaardZichtbaarInRag } from "./generiek-curatie";
@@ -124,8 +126,13 @@ check("MvT met volledige metadata → geldig, genormaliseerd, informatief", () =
 
 check("elk subtype is geldig bij wetsgeschiedenis", () => {
   for (const st of WETSGESCHIEDENIS_SUBTYPEN) {
-    const r = valideerCuratie({ ...MVT, wetsgeschiedenis_subtype: st });
-    assert.equal(r.ok, true, st);
+    // Een nota van toelichting vereist een Staatsbladverwijzing in de titel.
+    const titel =
+      st === "nota_van_toelichting"
+        ? "Nota van toelichting — Besluit transitietermijnen, Stb. 2025, 423 (Kamerstukken 36 067)"
+        : MVT.titel;
+    const r = valideerCuratie({ ...MVT, titel, wetsgeschiedenis_subtype: st });
+    assert.equal(r.ok, true, `${st}: ${JSON.stringify(!r.ok && r.fouten)}`);
   }
 });
 
@@ -138,6 +145,84 @@ check("actuele wetgeving kan als bindende bron worden gecureerd", () => {
     assert.equal(r.waarde.wetsgeschiedenis_subtype, null);
     assert.equal(r.waarde.dossiernummer, null);
   }
+});
+
+// ── Memorie van antwoord en nota van toelichting ───────────────────────────
+const NVT: CuratieInvoer = {
+  titel: "Nota van toelichting — Besluit toekomst pensioenen, Stb. 2023, 217",
+  documenttype: "wetsgeschiedenis",
+  wetsgeschiedenis_subtype: "nota_van_toelichting",
+  wettelijk_regime: "beide",
+  extern_url: "https://zoek.officielebekendmakingen.nl/stb-2023-217.html",
+  documentdatum: "2023-06-22",
+};
+
+check("dossiernummer alleen optioneel bij nota van toelichting", () => {
+  assert.equal(isDossiernummerVerplicht("nota_van_toelichting"), false);
+  for (const st of WETSGESCHIEDENIS_SUBTYPEN.filter((s) => s !== "nota_van_toelichting")) {
+    assert.equal(isDossiernummerVerplicht(st), true, st);
+  }
+});
+
+check("nadere memorie van antwoord (EK) → subtype memorie_van_antwoord, dossier verplicht", () => {
+  const mva: CuratieInvoer = {
+    ...MVT,
+    titel: "Nadere memorie van antwoord — Kamerstukken I 2022/23, 36 067, K",
+    wetsgeschiedenis_subtype: "memorie_van_antwoord",
+    extern_url: "https://zoek.officielebekendmakingen.nl/kst-36067-K.html",
+  };
+  const r = valideerCuratie(mva);
+  assert.equal(r.ok, true, JSON.stringify(!r.ok && r.fouten));
+  if (r.ok) {
+    assert.equal(r.waarde.wetsgeschiedenis_subtype, "memorie_van_antwoord");
+    assert.equal(r.waarde.dossiernummer, "36067");
+    assert.equal(r.waarde.normgewicht, "informatief");
+  }
+  const zonder = valideerCuratie({ ...mva, dossiernummer: "" });
+  assert.equal(zonder.ok, false);
+  if (!zonder.ok) assert.match(zonder.fouten.dossiernummer, /verplicht/);
+});
+
+check("nota van toelichting zonder dossier, met Staatsblad in titel → geldig, informatief", () => {
+  const r = valideerCuratie({ ...NVT });
+  assert.equal(r.ok, true, JSON.stringify(!r.ok && r.fouten));
+  if (r.ok) {
+    assert.equal(r.waarde.dossiernummer, null);
+    assert.equal(r.waarde.normgewicht, "informatief");
+    assert.equal(r.waarde.extern_url, NVT.extern_url);
+  }
+});
+
+check("nota van toelichting zonder Staatsbladnummer in titel → fout op titel", () => {
+  const r = valideerCuratie({ ...NVT, titel: "Nota van toelichting Besluit toekomst pensioenen" });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.match(r.fouten.titel, /Staatsbladnummer/);
+});
+
+check("nota van toelichting: bindend geweigerd, URL verplicht", () => {
+  const b = valideerCuratie({ ...NVT, normgewicht: "bindend" });
+  assert.equal(b.ok, false);
+  if (!b.ok) assert.ok(b.fouten.normgewicht);
+  const u = valideerCuratie({ ...NVT, extern_url: "" });
+  assert.equal(u.ok, false);
+  if (!u.ok) assert.ok(u.fouten.extern_url);
+});
+
+check("Staatsbladherkenning", () => {
+  for (const t of ["Stb. 2023, 217", "Stb 2025, 423", "Staatsblad 2023, nr. 217", "x — stb. 2023,217"]) {
+    assert.equal(titelBevatStaatsblad(t), true, t);
+  }
+  for (const t of ["Besluit toekomst pensioenen", "Kamerstukken II 2021/22, 36 067, nr. 3", "Stb. 23"]) {
+    assert.equal(titelBevatStaatsblad(t), false, t);
+  }
+});
+
+check("duiding MvA en NvT: wetsgeschiedenis, geen norm", () => {
+  assert.equal(
+    juridischeDuiding("wetsgeschiedenis", "memorie_van_antwoord")?.label,
+    "Memorie van antwoord — wetsgeschiedenis, geen norm"
+  );
+  assert.equal(juridischeDuiding("wetsgeschiedenis", "nota_van_toelichting")?.magNormDragen, false);
 });
 
 // ── Aangenomen amendement: informatief, nooit bindend ──────────────────────
@@ -316,6 +401,8 @@ check("migratie spiegelt subtype-lijst, documenttypen en dossierpatroon", () => 
   assert.ok(sql.includes(`'^[0-9]{3,6}(-[A-Z0-9]{1,8})?$'`), "dossierpatroon");
   assert.equal(DOSSIERNUMMER_PATROON.source, "^[0-9]{3,6}(-[A-Z0-9]{1,8})?$");
   assert.ok(/coalesce\(normgewicht, ''\) = 'informatief'/.test(sql), "informatief-plicht");
+  // Dossier-uitzondering in de DB exact gelijk aan SUBTYPEN_DOSSIER_OPTIONEEL.
+  assert.ok(/or wetsgeschiedenis_subtype = 'nota_van_toelichting'\)/.test(sql), "NvT-uitzondering");
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

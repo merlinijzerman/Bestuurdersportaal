@@ -30,6 +30,7 @@ import {
   WETTELIJKE_REGIMES,
   WETTELIJK_REGIME_LABEL,
   formatteerDossiernummer,
+  isDossiernummerVerplicht,
   isJuridischDocumenttype,
   juridischeDuiding,
 } from "@/core/lib/wetsgeschiedenis";
@@ -661,7 +662,14 @@ export default function GeneriekeBibliotheekClient({
                     ))}
                   </select>
                 </Veld>
-                <Veld label="Dossiernummer *" fout={veldfouten.dossiernummer}>
+                <Veld
+                  label={
+                    isDossiernummerVerplicht(form.wetsgeschiedenis_subtype)
+                      ? "Dossiernummer *"
+                      : "Dossiernummer (optioneel bij een nota van toelichting)"
+                  }
+                  fout={veldfouten.dossiernummer}
+                >
                   <Input
                     value={form.dossiernummer}
                     onChange={(v) => set("dossiernummer", v)}
@@ -683,10 +691,14 @@ export default function GeneriekeBibliotheekClient({
                 <>
                   Wetsgeschiedenis is <strong>nooit een zelfstandige norm</strong>: het
                   normgewicht staat vast op ‘Informatief’. Verplicht: soort stuk,
-                  dossiernummer, documentdatum, officiële URL, wettelijk regime en de
-                  volledige verwijzing in de titel, bv. ‘Memorie van toelichting —
-                  Kamerstukken II 2021/22, 36 067, nr. 3’. Amendementen alleen als de
-                  laatste, gecontroleerd aangenomen versie.
+                  documentdatum, officiële URL, wettelijk regime en de volledige
+                  verwijzing in de titel, bv. ‘Memorie van toelichting — Kamerstukken II
+                  2021/22, 36 067, nr. 3’. Parlementaire stukken vereisen een
+                  dossiernummer; een nota van toelichting bij een AMvB wordt
+                  geïdentificeerd via het Staatsblad in de titel, bv. ‘Nota van
+                  toelichting — Besluit toekomst pensioenen, Stb. 2023, 217’. Een nadere
+                  memorie van antwoord valt onder ‘Memorie van antwoord’. Amendementen
+                  alleen als de laatste, gecontroleerd aangenomen versie.
                 </>
               )}
             </div>

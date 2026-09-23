@@ -4,7 +4,8 @@
 -- WAAROM (WERKTICKET-WETSGESCHIEDENIS-A-LIGHT §4 PR 1): de generieke
 -- bibliotheek moet actuele geconsolideerde wetgeving en wetsgeschiedenis
 -- (memorie van toelichting, aangenomen amendement, nota van wijziging, nota
--- naar aanleiding van het verslag) herkenbaar kunnen cureren, met een
+-- naar aanleiding van het verslag, memorie van antwoord, nota van toelichting
+-- bij een AMvB) herkenbaar kunnen cureren, met een
 -- technisch afgedwongen onderscheid tussen norm en toelichting.
 --
 -- HERGEBRUIK (geen parallel metadatamodel): titel (volledige officiële
@@ -28,8 +29,10 @@
 --   4. Combinatie-CHECKs (governance in de DB, niet alleen in de UI):
 --        • 'wetgeving' en 'wetsgeschiedenis' alleen in de generieke
 --          bibliotheek — een fondsdocument kan zich niet als wet voordoen;
---        • subtype en dossiernummer uitsluitend bij 'wetsgeschiedenis', en
---          daar allebei verplicht;
+--        • subtype en dossiernummer uitsluitend bij 'wetsgeschiedenis';
+--          subtype daar altijd verplicht, dossiernummer verplicht behalve bij
+--          'nota_van_toelichting' (AMvB-toelichting, geïdentificeerd via het
+--          Staatsblad in de titel);
 --        • wetsgeschiedenis heeft altijd normgewicht 'informatief' — nooit
 --          bindend, dus ook een aangenomen amendement niet.
 --
@@ -68,7 +71,7 @@ alter table public.documenten
 comment on column public.documenten.wetsgeschiedenis_subtype is
   'Wetsgeschiedenis A-light: soort parlementair stuk. Alleen bij documenttype=wetsgeschiedenis.';
 comment on column public.documenten.dossiernummer is
-  'Wetsgeschiedenis A-light: Kamerstukdossier, genormaliseerd (bv. 36067 of 36200-XV). Alleen bij documenttype=wetsgeschiedenis.';
+  'Wetsgeschiedenis A-light: Kamerstukdossier, genormaliseerd (bv. 36067 of 36200-XV). Alleen bij documenttype=wetsgeschiedenis; optioneel bij subtype nota_van_toelichting.';
 
 -- ── 2. Documenttype ─────────────────────────────────────────────────────────
 alter table public.documenten drop constraint if exists documenten_documenttype_check;
@@ -83,7 +86,8 @@ alter table public.documenten drop constraint if exists documenten_wetsgeschiede
 alter table public.documenten add  constraint documenten_wetsgeschiedenis_subtype_check
   check (wetsgeschiedenis_subtype is null or wetsgeschiedenis_subtype in (
     'memorie_van_toelichting','aangenomen_amendement','nota_van_wijziging',
-    'nota_naar_aanleiding_van_het_verslag'));
+    'nota_naar_aanleiding_van_het_verslag','memorie_van_antwoord',
+    'nota_van_toelichting'));
 
 alter table public.documenten drop constraint if exists documenten_dossiernummer_check;
 alter table public.documenten add  constraint documenten_dossiernummer_check
@@ -102,7 +106,8 @@ alter table public.documenten add  constraint documenten_wetsgeschiedenis_combin
     case
       when documenttype = 'wetsgeschiedenis' then
         wetsgeschiedenis_subtype is not null
-        and dossiernummer is not null
+        and (dossiernummer is not null
+             or wetsgeschiedenis_subtype = 'nota_van_toelichting')
         and coalesce(normgewicht, '') = 'informatief'
       else
         wetsgeschiedenis_subtype is null

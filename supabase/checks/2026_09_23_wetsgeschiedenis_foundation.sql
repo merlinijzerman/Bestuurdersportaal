@@ -11,7 +11,9 @@
 --   W1  — geldige MvT (generiek, subtype, dossier, informatief) wordt aanvaard.
 --   W2  — wetsgeschiedenis met normgewicht ≠ informatief (o.a. een aangenomen
 --         amendement als 'bindend') wordt geweigerd.
---   W3  — wetsgeschiedenis zonder subtype of zonder dossiernummer: geweigerd.
+--   W3  — wetsgeschiedenis zonder subtype of zonder dossiernummer: geweigerd
+--         (ook memorie van antwoord); alleen een nota van toelichting (AMvB)
+--         mag zonder dossiernummer.
 --   W4  — subtype/dossiernummer bij een ander documenttype: geweigerd.
 --   W5  — ongeldig subtype (bv. verworpen amendement) of niet-genormaliseerd
 --         dossiernummer: geweigerd.
@@ -110,7 +112,32 @@ begin
        values (null,'generiek','Extern','MvT','wetsgeschiedenis','memorie_van_toelichting','informatief')$f$) then
     raise exception 'LEK W3: wetsgeschiedenis zonder dossiernummer aanvaard.';
   end if;
-  raise notice 'OK W3: subtype + dossiernummer verplicht.';
+  if not pg_temp.geweigerd(
+    $f$insert into public.documenten (fonds_id, bibliotheek, bron, titel, documenttype,
+         wetsgeschiedenis_subtype, normgewicht)
+       values (null,'generiek','Extern','Nadere memorie van antwoord','wetsgeschiedenis',
+         'memorie_van_antwoord','informatief')$f$) then
+    raise exception 'LEK W3: memorie van antwoord zonder dossiernummer aanvaard.';
+  end if;
+  -- Positief: nota van toelichting bij een AMvB zonder Kamerstukdossier.
+  if pg_temp.geweigerd(
+    $f$insert into public.documenten (fonds_id, bibliotheek, bron, titel, documenttype,
+         wetsgeschiedenis_subtype, normgewicht, extern_url)
+       values (null,'generiek','Extern',
+         'Nota van toelichting — Besluit toekomst pensioenen, Stb. 2023, 217',
+         'wetsgeschiedenis','nota_van_toelichting','informatief',
+         'https://zoek.officielebekendmakingen.nl/stb-2023-217.html')$f$) then
+    raise exception 'REGRESSIE W3: nota van toelichting zonder dossiernummer geweigerd.';
+  end if;
+  -- Ook een nota van toelichting blijft informatief.
+  if not pg_temp.geweigerd(
+    $f$insert into public.documenten (fonds_id, bibliotheek, bron, titel, documenttype,
+         wetsgeschiedenis_subtype, normgewicht)
+       values (null,'generiek','Extern','NvT Stb. 2025, 423','wetsgeschiedenis',
+         'nota_van_toelichting','bindend')$f$) then
+    raise exception 'LEK W3: nota van toelichting als bindend aanvaard.';
+  end if;
+  raise notice 'OK W3: subtype verplicht; dossiernummer verplicht behalve bij nota van toelichting.';
 end $$;
 
 -- ── W4: subtype/dossiernummer alleen bij wetsgeschiedenis ───────────────────
