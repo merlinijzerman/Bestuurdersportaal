@@ -78,4 +78,5 @@ test("de positieve karakterisering opent beide fondsgebonden testpoorten", () =>
   const scenarios = readFileSync(join(root, "tests/karakterisering/scenarios.mjs"), "utf8");
   assert.match(workflow, /VERGELIJK_FONDS_ID: "00000000-0000-4000-8000-000000000001"/);
   assert.match(scenarios, /flag_key: "vergelijkmodus", waarde: true/);
+  assert.match(scenarios, /onConflict: "fonds_id,flag_key", ignoreDuplicates: true/);
 });
