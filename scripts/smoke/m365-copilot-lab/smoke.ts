@@ -29,16 +29,27 @@ import type { GraphActor, GraphBron, BestandsnaamscanUitkomst, InhoudscanUitkoms
 import type { Labprofiel } from "./registry";
 
 /**
- * Het enige scenario dat deze runner draait, en de enige fixture die hij als
- * verwacht resultaat erkent. Beide komen uit de vastgestelde #407-scenarioset;
- * ze worden hier niet opnieuw gedefinieerd maar OVERGENOMEN, zodat een
- * wijziging daar niet stilletjes langs deze runner kan.
+ * Het bestaande semantische scenario en de enige fixture die deze runner als
+ * verwacht resultaat erkent. SEM01 komt uit de vastgestelde #407-scenarioset;
+ * de afzonderlijke exacte canary heeft alleen een vaste vraag op die fixture.
  */
 export const SCENARIO = VERGELIJK_SCENARIOS.SEM01;
 export const VERWACHTE_FIXTURE = "PGB407-DOC-101";
 
 /** De canaryterm van de inhoudscan. Komt in geen enkele scenariovraag voor. */
 export const INHOUDSCAN_TERM = "Zandloperbaken 12";
+/** Afzonderlijk indexbewijs, niet te verwarren met de semantische SEM01-meting. */
+export const EXACTE_CANARY_SCENARIO = "CANARY_INDEX_101";
+export type Meetmodus = "sem01" | "exacte_canary";
+
+/** Alleen deze twee vaste vragen mogen de Retrieval API bereiken. */
+export function meetinstelling(modus: Meetmodus): { scenario: string; vraag: string } {
+  switch (modus) {
+    case "sem01": return { scenario: SCENARIO.code, vraag: SCENARIO.copilotVraag };
+    case "exacte_canary": return { scenario: EXACTE_CANARY_SCENARIO, vraag: INHOUDSCAN_TERM };
+    default: throw new StopFail("onbekende_meetmodus", "geen Retrieval-call toegestaan");
+  }
+}
 /** De naamprefix van de bestandsnaamscan; `PGB407-DOC-101*`. */
 export const BESTANDSNAAM_PREFIX = "PGB407-DOC-101";
 
@@ -351,6 +362,7 @@ export interface MeetAfhankelijkheden {
   accessToken: string;
   signal: AbortSignal;
   fetchImpl: typeof fetch;
+  modus?: Meetmodus;
 }
 
 /**
@@ -360,8 +372,9 @@ export interface MeetAfhankelijkheden {
  * deze functie niet, komen in geen rapport en worden nergens weggeschreven.
  */
 export async function meet(profiel: Labprofiel, deps: MeetAfhankelijkheden): Promise<Retrievaluitslag> {
+  const instelling = meetinstelling(deps.modus ?? "sem01");
   const opdracht: CopilotOpdracht = {
-    vraag: SCENARIO.copilotVraag,
+    vraag: instelling.vraag,
     rootWebUrl: profiel.rootUrl,
     siteHostnaam: profiel.siteHostnaam,
     maxKandidaten: RETRIEVAL_MAX_KANDIDATEN,
@@ -374,7 +387,7 @@ export async function meet(profiel: Labprofiel, deps: MeetAfhankelijkheden): Pro
 
   const uitkomst = await roepCopilotRetrievalAan(opdracht);
   return {
-    scenario: SCENARIO.code,
+    scenario: instelling.scenario,
     verwachteFixture: VERWACHTE_FIXTURE,
     verwachteFixtureStatus: spikeFixtureStatus(VERWACHTE_FIXTURE),
     netwerkpogingen: uitkomst.netwerkpogingen,

@@ -387,13 +387,17 @@ test("#407-labsmoke — een afgewezen Retrieval-call levert een rapport, geen ge
   assert.match(ork, /if \(pogingen === 0\) throw fout;/);
 });
 
-test("#407-labsmoke — de runner houdt zich aan het ene scenario en de ene fixture", () => {
+test("#407-labsmoke — alleen SEM01 en de vaste exacte canary, op één fixture", () => {
   const smoke = readFileSync(resolve(root, `${SMOKEPAD}/smoke.ts`), "utf8");
+  const args = readFileSync(resolve(root, `${SMOKEPAD}/args.ts`), "utf8");
   // Scenario en fixture worden OVERGENOMEN uit de vastgestelde #407-set, niet
-  // opnieuw gedefinieerd; anders kan die set wijzigen zonder dat het hier opvalt.
+  // vrij gekozen; de canaryvraag is dezelfde vaste inhoudsterm als de preflight.
   assert.match(smoke, /VERGELIJK_SCENARIOS\.SEM01/);
   assert.match(smoke, /VERWACHTE_FIXTURE = "PGB407-DOC-101"/);
+  assert.match(smoke, /EXACTE_CANARY_SCENARIO = "CANARY_INDEX_101"/);
+  assert.match(smoke, /case "exacte_canary": return \{ scenario: EXACTE_CANARY_SCENARIO, vraag: INHOUDSCAN_TERM \}/);
   assert.match(smoke, /RETRIEVAL_REQUESTBUDGET = 1/);
+  assert.match(args, /throw new Error\("onbekend CLI-argument"\)/);
   for (const anderScenario of ["SEM02", "S04H"]) {
     assert.ok(!smoke.includes(anderScenario), `de runner noemt scenario ${anderScenario}`);
   }

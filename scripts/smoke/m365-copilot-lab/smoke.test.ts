@@ -17,6 +17,8 @@ import { rapporteer, type Smokerapport } from "./rapport";
 import {
   RETRIEVAL_REQUESTBUDGET,
   SCENARIO,
+  EXACTE_CANARY_SCENARIO,
+  INHOUDSCAN_TERM,
   StopFail,
   VERWACHTE_FIXTURE,
   beoordeelPoort,
@@ -83,8 +85,8 @@ function jsonRespons(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-async function meetMet(fetchImpl: typeof fetch) {
-  return meet(PROFIEL, { accessToken: "test-token", signal: new AbortController().signal, fetchImpl });
+async function meetMet(fetchImpl: typeof fetch, modus?: "sem01" | "exacte_canary") {
+  return meet(PROFIEL, { accessToken: "test-token", signal: new AbortController().signal, fetchImpl, modus });
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +336,38 @@ test("een geslaagde meting doet precies één poging en scopet de filter server-
   assert.equal(verstuurd.queryString, SCENARIO.copilotVraag);
   // De vraag zit in een eigen veld en kan de scope niet raken.
   assert.ok(!verstuurd.filterExpression.includes(SCENARIO.copilotVraag));
+});
+
+test("exacte canary verstuurt één vaste inhoudsvraag met dezelfde serverfilter", async () => {
+  let verstuurd: any = null;
+  let pogingen = 0;
+  const uitslag = await meetMet((async (_invoer: any, init: any) => {
+    pogingen++;
+    verstuurd = JSON.parse(String(init.body));
+    return jsonRespons({ retrievalHits: [
+      { webUrl: fixtureUrl(VERWACHTE_FIXTURE), extracts: [{ text: "wordt niet bewaard" }] },
+    ] });
+  }) as unknown as typeof fetch, "exacte_canary");
+
+  assert.equal(pogingen, 1);
+  assert.equal(uitslag.netwerkpogingen, 1);
+  assert.equal(uitslag.scenario, EXACTE_CANARY_SCENARIO);
+  assert.equal(uitslag.uitslag.verwachteFixtureGevonden, true);
+  assert.equal(verstuurd.queryString, INHOUDSCAN_TERM);
+  assert.equal(verstuurd.filterExpression, `path:"https://${HOST}/sites/PGBRetrievalLab/Shared%20Documents"`);
+  assert.ok(!verstuurd.filterExpression.includes(INHOUDSCAN_TERM));
+});
+
+test("exacte canary herhaalt niet na 429", async () => {
+  let pogingen = 0;
+  await assert.rejects(
+    meetMet((async () => {
+      pogingen++;
+      return new Response("{}", { status: 429 });
+    }) as unknown as typeof fetch, "exacte_canary"),
+    (fout: CopilotFout) => fout.code === "copilot_rate_limit",
+  );
+  assert.equal(pogingen, 1);
 });
 
 test("een lege uitslag is een kwaliteitsuitkomst en geen fout", async () => {

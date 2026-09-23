@@ -22,11 +22,12 @@ import type { Scanregel, Smokerapport } from "./rapport";
 import {
   BESTANDSNAAM_PREFIX,
   INHOUDSCAN_TERM,
-  SCENARIO,
   VERWACHTE_FIXTURE,
   beoordeelPoort,
   meet,
+  meetinstelling,
   toetsDrift,
+  type Meetmodus,
 } from "./smoke";
 
 /** Exitcodes; ook het contract van de CLI. */
@@ -53,6 +54,7 @@ export interface SmokeAfhankelijkheden {
   retrievalFetch: typeof fetch;
   signal: AbortSignal;
   dryRun: boolean;
+  modus?: Meetmodus;
   meld: (regel: string) => void;
   nu?: () => Date;
 }
@@ -65,6 +67,7 @@ export interface SmokeUitkomst {
 export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUitkomst> {
   const { profiel, meld } = deps;
   const nu = deps.nu ?? (() => new Date());
+  const instelling = meetinstelling(deps.modus ?? "sem01");
 
   const aanmelding = await deps.aanmelden();
   const client = deps.maakClient(aanmelding.accessToken);
@@ -79,7 +82,7 @@ export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUi
     tenantDomein: profiel.tenantDomein,
     actorUpn: profiel.actorUpn,
     siteHostnaam: profiel.siteHostnaam,
-    scenario: SCENARIO.code,
+    scenario: instelling.scenario,
     verwachteFixture: VERWACHTE_FIXTURE,
     geregistreerdeIndexstand: profiel.indexStatus,
     drift,
@@ -214,6 +217,7 @@ export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUi
       accessToken: aanmelding.accessToken,
       signal: deps.signal,
       fetchImpl: tellendeFetch,
+      modus: deps.modus,
     });
   } catch (fout) {
     // EEN AFBREKING IS GEEN AFWIJZING. Maar het moment waarop zij valt, maakt
