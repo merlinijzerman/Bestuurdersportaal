@@ -67,3 +67,4 @@ test-results/e2e/
 .pgb-sharepoint-fixtures.local.json
 .pgb-sharepoint-bewijs.local.ndjson
 /node_modules
+.440-tmp.*

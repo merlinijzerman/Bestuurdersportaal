@@ -1,0 +1,9 @@
+soort	object	migratie
+FUNC	login_private.open_breakglass_venster(uuid, integer, text)	2026_09_07_microsoft_login_beleidsmodus.sql
+FUNC	login_private.wachtwoordlogin_toegestaan(uuid, boolean)	2026_09_07_microsoft_login_beleidsmodus.sql
+FUNC	microsoft_private.bewaar_koppeling(uuid, uuid, text, text, text, text, text, text[], integer, text, text, text)	2026_09_21_423b_t4d_copilot_rollout_contract.sql
+FUNC	public.aqlab_log_download(uuid)	2026_08_23_h04_herkomst_auditspoor.sql
+FUNC	public.fn_decision_readiness_check(uuid, text)	2026_08_28_p3d_01_readiness_drop.sql
+FUNC	public.fn_decision_readiness_overview(uuid)	2026_08_28_p3d_01_readiness_drop.sql
+FUNC	public.fn_procedure_heropenen(uuid, text)	2026_08_31_p5d_procedure_beeindigen_bediening.sql
+FUNC	public.fn_stap_open_per_zwaarte(uuid)	2026_08_28_p3d_04_open_per_decision.sql
