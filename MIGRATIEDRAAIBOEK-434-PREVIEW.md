@@ -129,6 +129,28 @@ een vangnet voor volgordefouten, geen beoogde eindtoestand.
 
 ---
 
+## 6b. Generale repetitie — gemeten, niet aangenomen
+
+Op 23-09-2026 is dit draaiboek in zijn geheel afgespeeld op een **ephemere**
+Supabase-stack die de Preview-stand nabootst: de volledige migratieketen
+toegepast met uitzondering van de twee #434-migraties, plus de
+Preview-fingerprint. Dat is dezelfde uitgangspositie als Preview vandaag heeft.
+
+| Stap | Uitkomst |
+|---|---|
+| Preflight vóór | GROEN; `[nog doen]` noemt beide migraties, in deze volgorde |
+| Migratie 1 + controle | toegepast; `T4-F adaptersprojectie: alle gedragstests geslaagd` |
+| Migratie 2 + controle | toegepast; `T4-F adapterstand onder 0119: alle gedragstests geslaagd` |
+| Preflight ná | GROEN; `[nog doen] niets` |
+| Beide nogmaals toegepast | idempotent; de gedragssuite blijft groen |
+| Rollback 2 → rollback 1 | beide objecten weg, `adapters` weer stil uit de projectie, geen exception |
+| Preflight ná herstel | meldt beide migraties weer als openstaand |
+
+De uitvoering op Preview zelf gebeurt handmatig in de SQL-editor. Alle vijf de
+bestanden zijn daarop gecontroleerd: nul psql-metacommando's en nul eigen
+`begin`/`commit`-regels, zodat de editor zijn eigen transactie om elke run kan
+sluiten.
+
 ## 7. Akkoordmomenten
 
 1. **Vóór toepassing op Preview** — afzonderlijk akkoord vereist. Dit draaiboek
