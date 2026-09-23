@@ -131,6 +131,14 @@ async function zetVergelijkGolden(admin) {
   await wisLimiet(admin, "vergelijk");
   await wisStubVerzoeken();
 
+  // De positieve golden moet alle productiepoorten expliciet openen. Dit is
+  // alleen de ephemere testdatabase; de echte omgevingen krijgen geen flag.
+  const { error: rolloutError } = await admin.from("fonds_feature_flags").upsert(
+    { fonds_id: FONDS_ID, flag_key: "vergelijkmodus", waarde: true },
+    { onConflict: "fonds_id,flag_key" }
+  );
+  if (rolloutError) throw new Error(`preseed vergelijk-rollout: ${rolloutError.message}`);
+
   const { error: conceptenUitError } = await admin
     .from("concepts")
     .update({ status: "uitgesteld" })
