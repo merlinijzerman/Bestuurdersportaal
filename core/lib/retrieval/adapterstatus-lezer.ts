@@ -33,13 +33,19 @@
 //  reikwijdte, en een gok over reikwijdte is hoe een eigen stand als fondsstand
 //  op het scherm komt.
 //
-//  TERUGVAL ALLEEN BIJ EEN ONTBREKENDE FUNCTIE. De conventie is Supabase-eerst,
-//  maar een code-deploy kan vóór de migratie liggen; dan is een gelabelde,
-//  beperkte stand beter dan een lege pagina. Elke ANDERE fout — een weigering,
-//  een defecte functie, een schrijffout op de inzageregel — levert 503. Een
-//  brede terugval zou een geweigerde of kapotte inzage laten lijken op een
-//  normale, beperkte stand, en dat is dezelfde stille degradatie in een nieuwe
-//  vermomming.
+//  TERUGVAL ALLEEN BIJ EEN ONTBREKENDE FUNCTIE, EN ALLEEN OP DE EIGEN BEURTEN.
+//  De conventie is Supabase-eerst, maar een code-deploy kan vóór de migratie
+//  liggen; dan is een gelabelde, beperkte stand beter dan een lege pagina. Die
+//  terugval filtert EXPLICIET op `gebruiker_id`, want RLS alleen is daar niet
+//  genoeg: voor een houder van `governance_audit_read` laat de policy ook de
+//  beurten van collega's door, en dit pad schrijft geen inzageregel. Zonder dat
+//  filter zou de terugval ongelogde inzage in andermans metadata opleveren en
+//  die ook nog als "alleen uw eigen beurten" labelen.
+//
+//  Elke ANDERE fout — een weigering, een defecte functie, een schrijffout op de
+//  inzageregel — levert 503. Een brede terugval zou een geweigerde of kapotte
+//  inzage laten lijken op een normale, beperkte stand, en dat is dezelfde
+//  stille degradatie in een nieuwe vermomming.
 // ============================================================================
 import { aggregeerAdapterMeta, type AdapterBeheerstand } from "./adaptermeta-beheer";
 
@@ -193,14 +199,25 @@ export async function leesAdapterstand(
     return { status: 503, fout: "De adapterstand kon niet worden gelezen." };
   }
 
-  // ── 2. Terugval: RLS-beperkt, en als zodanig GELABELD ────────────────────
-  // Onder RLS levert dit pad uitsluitend de eigen beurten van de kijker, tenzij
-  // hij `governance_audit_read` heeft. We kunnen dat hier niet vaststellen, dus
-  // is `eigen_beurten` de eerlijke ondergrens: nooit méér claimen dan zeker is.
+  // ── 2. Terugval: EXPLICIET tot de eigen beurten beperkt ──────────────────
+  // Hier stond eerder alleen het fondsfilter, met de redenering dat
+  // `eigen_beurten` "de eerlijke ondergrens" was omdat deze laag niet kan
+  // vaststellen of de kijker de auditgrant heeft. Dat was fout. De RLS-policy
+  // is `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`: voor een
+  // HOUDER van `governance_audit_read` laat zij de beurten van collega's
+  // gewoon door. Dit pad schrijft geen inzageregel, dus zo'n lezing was inzage
+  // in andermans metadata zonder spoor — precies wat 0119 verbiedt — én zij
+  // werd aan de gebruiker gepresenteerd als "alleen uw eigen beurten".
+  //
+  // Het filter hieronder maakt dat label WAAR BIJ CONSTRUCTIE in plaats van
+  // bij aanname. Daarmee is er ook geen inzageregel nodig: je eigen spoor
+  // inzien is geen inzage in dat van een ander. Wie fondsbreed wil kijken,
+  // krijgt dat uitsluitend via de RPC — en die logt.
   const { data, error } = await deps.bron
     .from("governance_log")
     .select("retrieval_meta")
     .eq("fonds_id", deps.fondsId)
+    .eq("gebruiker_id", deps.gebruikerId)
     .not("retrieval_meta", "is", null)
     // De kolom heet `aangemaakt`. `aangemaakt_op` bestaat wél op andere
     // tabellen, en dat is precies waarom een typefout hier zo makkelijk is: de

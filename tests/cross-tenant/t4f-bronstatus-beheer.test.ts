@@ -235,7 +235,7 @@ const GOVERNANCE_LOG_KOLOMMEN = kolommenVanGovernanceLog();
  * in de fixture.
  */
 function namaakBron(
-  rijen: { fonds_id: string; retrieval_meta: unknown }[],
+  rijen: { fonds_id: string; gebruiker_id: string; retrieval_meta: unknown }[],
   rpcUitkomst: { data: unknown; error: unknown } = { data: null, error: { code: "PGRST202" } }
 ) {
   const gezien = {
@@ -295,6 +295,8 @@ function namaakBron(
 
 const FONDS_A = "11111111-1111-4111-8111-111111111111";
 const FONDS_B = "22222222-2222-4222-8222-222222222222";
+const IK = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const COLLEGA = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 test("een gebruiker ZONDER de capability krijgt 403 en er wordt niets gelezen", async () => {
   // De volgorde is de eis: een weigering ná de query heeft de rijen al
@@ -321,12 +323,12 @@ test("een gebruiker ZONDER de capability krijgt 403 en er wordt niets gelezen", 
 
 test("TERUGVAL — CROSS-TENANT: de stand bevat uitsluitend de eigen fondsrijen", async () => {
   const { bron, gezien } = namaakBron([
-    { fonds_id: FONDS_A, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } },
-    { fonds_id: FONDS_B, retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] } },
-    { fonds_id: FONDS_B, retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] } },
+    { fonds_id: FONDS_A, gebruiker_id: IK, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } },
+    { fonds_id: FONDS_B, gebruiker_id: COLLEGA, retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] } },
+    { fonds_id: FONDS_B, gebruiker_id: COLLEGA, retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] } },
   ]);
   const uitkomst = await leesAdapterstand({
-    gebruikerId: "beheerder-a",
+    gebruikerId: IK,
     fondsId: FONDS_A,
     magBeheren: async () => true,
     bron,
@@ -339,8 +341,13 @@ test("TERUGVAL — CROSS-TENANT: de stand bevat uitsluitend de eigen fondsrijen"
     "de beheerstand van fonds A toont een adapter die alleen bij fonds B draaide"
   );
   assert.equal(uitkomst.stand.dekking.metarijen_gelezen, 1);
-  // En het filter is werkelijk gezet — niet alleen in de uitkomst zichtbaar.
-  assert.deepEqual(gezien.filters, [["fonds_id", FONDS_A]]);
+  // En beide filters zijn werkelijk gezet — niet alleen in de uitkomst
+  // zichtbaar. Het fondsfilter staat náást de RLS; het gebruikersfilter maakt
+  // het label `eigen_beurten` waar bij constructie (zie de test hieronder).
+  assert.deepEqual(gezien.filters, [
+    ["fonds_id", FONDS_A],
+    ["gebruiker_id", IK],
+  ]);
   assert.equal(gezien.tabel, "governance_log");
   assert.equal(gezien.geselecteerd, "retrieval_meta");
   assert.equal(gezien.limiet, ADAPTERSTATUS_LIMIET);
@@ -455,11 +462,11 @@ test("zonder het fondsbrede pad valt de stand terug ÉN zegt zij dat", async () 
   // liggen. Dan is een gelabelde, beperkte stand beter dan een lege pagina —
   // mits zij zichzelf geen fondsstand noemt.
   const { bron } = namaakBron(
-    [{ fonds_id: FONDS_A, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } }],
+    [{ fonds_id: FONDS_A, gebruiker_id: IK, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } }],
     { data: null, error: { code: "42883", message: "function does not exist" } }
   );
   const uitkomst = await leesAdapterstand({
-    gebruikerId: "beheerder-a", fondsId: FONDS_A, magBeheren: async () => true, bron,
+    gebruikerId: IK, fondsId: FONDS_A, magBeheren: async () => true, bron,
   });
   assert.ok(uitkomst.status === 200);
   assert.equal(uitkomst.stand.reikwijdte, "eigen_beurten");
@@ -476,7 +483,7 @@ test("een RPC-fout die GÉÉN ontbrekende functie is, levert 503 en geen terugva
     { message: "zonder code" },
   ]) {
     const { bron, gezien } = namaakBron(
-      [{ fonds_id: FONDS_A, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } }],
+      [{ fonds_id: FONDS_A, gebruiker_id: IK, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } }],
       { data: null, error: fout }
     );
     const uitkomst = await leesAdapterstand({
@@ -495,6 +502,46 @@ test("een onherkenbaar RPC-antwoord levert 503, geen halve stand", async () => {
     });
     assert.equal(uitkomst.status, 503, `antwoord ${JSON.stringify(data)} werd geaccepteerd`);
   }
+});
+
+test("TERUGVAL MET AUDITGRANT: collega-beurten komen er niet in, en dat is geen aanname", async () => {
+  // Het scherpste geval, en het geval dat twee versies lang open stond:
+  // de RPC ontbreekt (migratie nog niet gedraaid) ÉN de kijker heeft
+  // `governance_audit_read`. De RLS-policy is
+  // `gebruiker_id = auth.uid() or mag_audit(fonds_id)`, dus RLS laat de beurten
+  // van collega's dan gewoon door. Dit pad schrijft geen inzageregel, dus zo'n
+  // lezing zou ongelogde inzage in andermans metadata zijn — én werd aan de
+  // gebruiker getoond als "alleen uw eigen beurten".
+  //
+  // De namaakbron past uitsluitend de filters toe die de code werkelijk zet.
+  // De collega-regel staat er dus gewoon in en komt mee zodra het expliciete
+  // `gebruiker_id`-filter ontbreekt. Dat is de negatieve controle, ingebakken.
+  const { bron, gezien } = namaakBron(
+    [
+      { fonds_id: FONDS_A, gebruiker_id: IK, retrieval_meta: { adapters: [geldigeRij("supabase-rag")] } },
+      {
+        fonds_id: FONDS_A,
+        gebruiker_id: COLLEGA,
+        retrieval_meta: { adapters: [geldigeRij("microsoft-sharepoint")] },
+      },
+    ],
+    { data: null, error: { code: "PGRST202", message: "function not found" } }
+  );
+  const uitkomst = await leesAdapterstand({
+    gebruikerId: IK, fondsId: FONDS_A, magBeheren: async () => true, bron,
+  });
+  assert.ok(uitkomst.status === 200);
+  assert.equal(uitkomst.stand.reikwijdte, "eigen_beurten");
+  assert.deepEqual(
+    uitkomst.stand.regels.map((r) => r.naam),
+    ["supabase-rag"],
+    "de beurt van de collega zit in de stand terwijl er geen inzageregel is geschreven"
+  );
+  // Het label is waar BIJ CONSTRUCTIE, niet bij aanname: het filter is gezet.
+  assert.deepEqual(gezien.filters, [
+    ["fonds_id", FONDS_A],
+    ["gebruiker_id", IK],
+  ]);
 });
 
 test("de beheerpagina TOONT de reikwijdte; zij kan hem niet vergeten", () => {

@@ -31,6 +31,10 @@
 --         stand te laten klappen — en is dus telbaar als overgeslagen.
 --   F10 — De limiet is begrensd; een aanroeper kan er geen onbegrensde lezing
 --         van maken.
+--   F11 — MÉT de capability laat de RLS-policy op de TABEL ook collega-regels
+--         door. Dat is de eigenschap waartegen de applicatie-terugval een
+--         expliciet `gebruiker_id`-filter zet: die terugval schrijft geen
+--         inzageregel, dus zonder dat filter was zij ongelogde inzage.
 --
 -- Self-seeding (2 fondsen + 3 users via de auth-trigger), alles in één
 -- transactie met ROLLBACK — laat niets achter.
@@ -156,6 +160,31 @@ values ('da111111-1111-4111-8111-111111111111',
 
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"da111111-1111-4111-8111-111111111111"}';
+
+-- F11 — WAAROM DE TERUGVAL EEN EXPLICIET GEBRUIKERSFILTER NODIG HEEFT.
+-- Met de capability laat de RLS-policy op `governance_log` óók de regels van
+-- collega's door. Het applicatiepad valt bij een ontbrekende RPC terug op deze
+-- tabel en schrijft dán geen inzageregel — dus zonder een eigen
+-- `gebruiker_id`-filter zou die terugval ongelogde inzage opleveren en zich ook
+-- nog "alleen uw eigen beurten" noemen. Dit scenario legt de RLS-eigenschap
+-- vast waar dat filter tegen beschermt; verandert zij, dan hoort dit rood te
+-- worden en niet stil te kloppen.
+do $$
+declare n_zichtbaar int; n_eigen int;
+begin
+  select count(*) into n_zichtbaar from public.governance_log
+   where fonds_id = 'd1111111-1111-4111-8111-111111111111';
+  if n_zichtbaar <> 3 then
+    raise exception 'F11: met governance_audit_read verwacht 3 zichtbare regels via de tabel, kreeg %', n_zichtbaar;
+  end if;
+  select count(*) into n_eigen from public.governance_log
+   where fonds_id = 'd1111111-1111-4111-8111-111111111111'
+     and gebruiker_id = 'da111111-1111-4111-8111-111111111111';
+  if n_eigen <> 2 then
+    raise exception 'F11: het expliciete gebruikersfilter levert % regels, verwacht 2', n_eigen;
+  end if;
+  raise notice 'OK F11: met de grant toont de TABEL 3 regels; een expliciet gebruikersfilter beperkt tot de eigen 2.';
+end $$;
 
 do $$
 declare
