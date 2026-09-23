@@ -1,6 +1,6 @@
 # 0214 — Operationele adaptertellers zijn géén uitzondering op het auditbeleid
 
-- **Status:** Voorgesteld
+- **Status:** Geaccepteerd
 - **Datum:** 2026-09-23
 - **Betrokkenen:** productverantwoordelijke, ontwikkeling
 
@@ -73,6 +73,17 @@ tonen.
   ook als de lezing daarna nul rijen oplevert. Een inzage die niets opleverde is
   nog steeds een inzage; het alternatief — pas loggen als er iets terugkomt —
   maakt het spoor afhankelijk van de uitkomst.
+
+## Aanvaarding
+
+Inhoudelijk goedgekeurd op 2026-09-23 door de productverantwoordelijke: de
+adaptertellers vallen onder het bestaande auditbeleid van [[0119]].
+
+Wat deze aanvaarding NIET is, expliciet: zij is geen toestemming om iemand
+`governance_audit_read` toe te kennen, geen toestemming om een database te
+wijzigen en geen merge-akkoord. Niemand krijgt die grant om deze pagina gevuld
+te krijgen; zonder grant hoort de pagina eerlijk "alleen uw eigen beurten" te
+tonen, en dat is het beoogde gedrag en niet een tijdelijke toestand.
 
 ## Referenties
 
