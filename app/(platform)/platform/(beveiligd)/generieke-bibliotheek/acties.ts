@@ -28,10 +28,10 @@ import type { PlatformIdentiteit } from "@/platform/lib/platform-auth";
 import { valideerUpload } from "@/core/lib/bestand-validatie";
 import { bepaalBestandstype } from "@/core/lib/document-extractie";
 import {
-  valideerCuratie,
-  type CuratieInvoer,
-  type CuratieGenormaliseerd,
-} from "@/core/lib/generiek-curatie";
+  valideerGeneriekeCuratie,
+  type JuridischeCuratieInvoer,
+  type JuridischeCuratieGenormaliseerd,
+} from "@/core/lib/generiek-curatie-juridisch";
 import {
   generiekGeldigheidsstatus,
   generiekTransitieRedenplicht,
@@ -66,6 +66,11 @@ const RAG_VELDEN = new Set([
   "geldig_tot",
   "status",
   "volgende_review",
+  // Wetsgeschiedenis A-light: documenttype en wettelijk_regime worden door
+  // fn_chunk_denorm naar de chunks gespiegeld. Subtype en dossiernummer (nog)
+  // niet — die blijven documentmetadata tot de post-release retrievalfase.
+  "documenttype",
+  "wettelijk_regime",
 ]);
 
 // Increment T10 (besluit 0053) — standaard reviewhorizon bij publicatie zonder
@@ -78,7 +83,7 @@ function standaardVolgendeReview(): string {
 }
 
 // ── FormData → CuratieInvoer ────────────────────────────────────────────────
-function leesInvoer(fd: FormData): CuratieInvoer {
+function leesInvoer(fd: FormData): JuridischeCuratieInvoer {
   const s = (k: string) => {
     const v = fd.get(k);
     return typeof v === "string" ? v : null;
@@ -99,6 +104,10 @@ function leesInvoer(fd: FormData): CuratieInvoer {
     doelgroep: s("doelgroep"),
     thema: s("thema"),
     statusinterpretatie: s("statusinterpretatie"),
+    documenttype: s("documenttype"),
+    wetsgeschiedenis_subtype: s("wetsgeschiedenis_subtype"),
+    dossiernummer: s("dossiernummer"),
+    wettelijk_regime: s("wettelijk_regime"),
     eigenaar: s("eigenaar"),
     volgende_review: s("volgende_review"),
     versie: s("versie"),
@@ -219,7 +228,7 @@ async function maakUitBuffer(
   }
 
   // 2) Metadata + bronhygiene.
-  const curatie = valideerCuratie(leesInvoer(fd));
+  const curatie = valideerGeneriekeCuratie(leesInvoer(fd));
   if (!curatie.ok) {
     return {
       ok: false,
@@ -228,7 +237,7 @@ async function maakUitBuffer(
       veldfouten: curatie.fouten,
     };
   }
-  const meta: CuratieGenormaliseerd = curatie.waarde;
+  const meta: JuridischeCuratieGenormaliseerd = curatie.waarde;
 
   // T10: publicatie zet standaard een volgende reviewdatum als er geen is
   // opgegeven, zodat verse published-content niet zónder reviewhandhaving landt.
@@ -423,7 +432,7 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
         const { data: huidig } = await svc
           .from("documenten")
           .select(
-            "id, titel, bron, bronorganisatie, extern_url, normgewicht, documentdatum, geldig_vanaf, geldig_tot, status, bronstatus, toepassingsgebied, regelingstype, doelgroep, thema, statusinterpretatie, eigenaar, volgende_review, versie, bibliotheek"
+            "id, titel, bron, bronorganisatie, extern_url, normgewicht, documentdatum, geldig_vanaf, geldig_tot, status, bronstatus, toepassingsgebied, regelingstype, doelgroep, thema, statusinterpretatie, eigenaar, volgende_review, versie, bibliotheek, documenttype, wetsgeschiedenis_subtype, dossiernummer, wettelijk_regime"
           )
           .eq("id", documentId)
           .maybeSingle();
@@ -435,7 +444,7 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
           };
         }
 
-        const curatie = valideerCuratie(leesInvoer(fd));
+        const curatie = valideerGeneriekeCuratie(leesInvoer(fd));
         if (!curatie.ok) {
           return {
             resultaat: { ok: false, foutcode: "validatie", melding: "Controleer de gemarkeerde velden.", veldfouten: curatie.fouten },
@@ -464,11 +473,12 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
         }
 
         // Diff t.o.v. de huidige waarden (alleen de bewerkbare §8.1-velden).
-        const velden: (keyof CuratieGenormaliseerd & string)[] = [
+        const velden: (keyof JuridischeCuratieGenormaliseerd & string)[] = [
           "titel", "bron", "bronorganisatie", "extern_url", "normgewicht",
           "documentdatum", "geldig_vanaf", "geldig_tot", "status", "bronstatus",
           "toepassingsgebied", "regelingstype", "doelgroep", "thema", "statusinterpretatie",
           "eigenaar", "volgende_review", "versie",
+          "documenttype", "wetsgeschiedenis_subtype", "dossiernummer", "wettelijk_regime",
         ];
         const update: Record<string, unknown> = {};
         const logRijen: LogRij[] = [];

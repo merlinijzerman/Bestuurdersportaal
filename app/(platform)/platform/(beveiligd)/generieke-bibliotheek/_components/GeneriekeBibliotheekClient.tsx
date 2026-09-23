@@ -21,6 +21,18 @@ import {
   REGELINGSTYPES,
   REGELINGSTYPE_LABEL,
 } from "@/core/lib/generiek-curatie";
+import { DOCUMENTTYPE_LABEL, type Documenttype } from "@/core/lib/document-metadata";
+import {
+  JURIDISCHE_DOCUMENTTYPEN,
+  JURIDISCH_DOCUMENTTYPE_LABEL,
+  WETSGESCHIEDENIS_SUBTYPEN,
+  WETSGESCHIEDENIS_SUBTYPE_LABEL,
+  WETTELIJKE_REGIMES,
+  WETTELIJK_REGIME_LABEL,
+  formatteerDossiernummer,
+  isJuridischDocumenttype,
+  juridischeDuiding,
+} from "@/core/lib/wetsgeschiedenis";
 import {
   generiekGeldigheidsstatus,
   GELDIGHEIDSSTATUS_LABEL,
@@ -59,6 +71,11 @@ export interface GeneriekDocument {
   doelgroep: string | null;
   thema: string | null;
   statusinterpretatie: string | null;
+  // Wetsgeschiedenis A-light — classificatie juridische bronnen.
+  documenttype: string | null;
+  wetsgeschiedenis_subtype: string | null;
+  dossiernummer: string | null;
+  wettelijk_regime: string | null;
   // Increment T6 — beheerkenmerken generieke contentlaag (§7/B3).
   eigenaar: string | null;
   volgende_review: string | null;
@@ -93,6 +110,10 @@ const LEEG_FORM = {
   doelgroep: "",
   thema: "",
   statusinterpretatie: "",
+  documenttype: "",
+  wetsgeschiedenis_subtype: "",
+  dossiernummer: "",
+  wettelijk_regime: "",
   eigenaar: "",
   volgende_review: "",
   versie: "",
@@ -127,11 +148,22 @@ function docNaarForm(d: GeneriekDocument): FormState {
     doelgroep: d.doelgroep ?? "",
     thema: d.thema ?? "",
     statusinterpretatie: d.statusinterpretatie ?? "",
+    documenttype: d.documenttype ?? "",
+    wetsgeschiedenis_subtype: d.wetsgeschiedenis_subtype ?? "",
+    dossiernummer: formatteerDossiernummer(d.dossiernummer),
+    wettelijk_regime: d.wettelijk_regime ?? "",
     eigenaar: d.eigenaar ?? "",
     volgende_review: d.volgende_review ?? "",
     versie: d.versie ?? "",
     reden: "",
   };
+}
+
+// Label voor een documenttype: juridisch type, of een historisch fondstype dat
+// een bestaand generiek document al droeg (blijft behouden bij bewerken).
+function documenttypeLabel(t: string): string {
+  if (isJuridischDocumenttype(t)) return JURIDISCH_DOCUMENTTYPE_LABEL[t];
+  return DOCUMENTTYPE_LABEL[t as Documenttype] ?? t;
 }
 
 function RagBadge({ normgewicht }: { normgewicht: string | null }) {
@@ -250,6 +282,17 @@ export default function GeneriekeBibliotheekClient({
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  // Documenttype-wissel: wetsgeschiedenis is altijd informatief; buiten
+  // wetsgeschiedenis horen subtype en dossiernummer leeg te zijn (spiegelt de
+  // server- en DB-regels, zodat de curator geen onvermijdelijke fout krijgt).
+  function zetDocumenttype(v: string) {
+    setForm((f) =>
+      v === "wetsgeschiedenis"
+        ? { ...f, documenttype: v, normgewicht: "informatief" }
+        : { ...f, documenttype: v, wetsgeschiedenis_subtype: "", dossiernummer: "" }
+    );
   }
 
   // Bouwt de (kleine) metadata-payload. Het bestand zit hier NIET meer in: dat
@@ -569,6 +612,86 @@ export default function GeneriekeBibliotheekClient({
             </Veld>
           )}
 
+          {/* Wetsgeschiedenis A-light — classificatie juridische bronnen. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Veld label="Documenttype" fout={veldfouten.documenttype}>
+              <select
+                value={form.documenttype}
+                onChange={(e) => zetDocumenttype(e.target.value)}
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+              >
+                <option value="">Geen (overig generiek kader)</option>
+                {JURIDISCHE_DOCUMENTTYPEN.map((t) => (
+                  <option key={t} value={t}>
+                    {JURIDISCH_DOCUMENTTYPE_LABEL[t]}
+                  </option>
+                ))}
+                {form.documenttype && !isJuridischDocumenttype(form.documenttype) && (
+                  <option value={form.documenttype}>{documenttypeLabel(form.documenttype)}</option>
+                )}
+              </select>
+            </Veld>
+            <Veld label="Wettelijk regime" fout={veldfouten.wettelijk_regime}>
+              <select
+                value={form.wettelijk_regime}
+                onChange={(e) => set("wettelijk_regime", e.target.value)}
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+              >
+                <option value="">Niet vastgelegd</option>
+                {WETTELIJKE_REGIMES.map((r) => (
+                  <option key={r} value={r}>
+                    {WETTELIJK_REGIME_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+            </Veld>
+            {form.documenttype === "wetsgeschiedenis" && (
+              <>
+                <Veld label="Soort parlementair stuk *" fout={veldfouten.wetsgeschiedenis_subtype}>
+                  <select
+                    value={form.wetsgeschiedenis_subtype}
+                    onChange={(e) => set("wetsgeschiedenis_subtype", e.target.value)}
+                    className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                  >
+                    <option value="">Kies…</option>
+                    {WETSGESCHIEDENIS_SUBTYPEN.map((st) => (
+                      <option key={st} value={st}>
+                        {WETSGESCHIEDENIS_SUBTYPE_LABEL[st]}
+                      </option>
+                    ))}
+                  </select>
+                </Veld>
+                <Veld label="Dossiernummer *" fout={veldfouten.dossiernummer}>
+                  <Input
+                    value={form.dossiernummer}
+                    onChange={(v) => set("dossiernummer", v)}
+                    placeholder="36 067"
+                  />
+                </Veld>
+              </>
+            )}
+          </div>
+
+          {isJuridischDocumenttype(form.documenttype) && (
+            <div className="rounded-lg border border-line bg-app-bg px-4 py-3 text-xs text-ink/70">
+              {form.documenttype === "wetgeving" ? (
+                <>
+                  Alleen de <strong>actuele geconsolideerde</strong> wettekst. Verplicht:
+                  officiële URL en wettelijk regime (Pensioenwet, Wvb of beide).
+                </>
+              ) : (
+                <>
+                  Wetsgeschiedenis is <strong>nooit een zelfstandige norm</strong>: het
+                  normgewicht staat vast op ‘Informatief’. Verplicht: soort stuk,
+                  dossiernummer, documentdatum, officiële URL, wettelijk regime en de
+                  volledige verwijzing in de titel, bv. ‘Memorie van toelichting —
+                  Kamerstukken II 2021/22, 36 067, nr. 3’. Amendementen alleen als de
+                  laatste, gecontroleerd aangenomen versie.
+                </>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Veld label="Titel *" fout={veldfouten.titel}>
               <Input value={form.titel} onChange={(v) => set("titel", v)} />
@@ -586,7 +709,8 @@ export default function GeneriekeBibliotheekClient({
               <select
                 value={form.normgewicht}
                 onChange={(e) => set("normgewicht", e.target.value)}
-                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                disabled={form.documenttype === "wetsgeschiedenis"}
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm disabled:bg-app-bg disabled:text-ink/60"
               >
                 {NORMGEWICHTEN.map((n) => (
                   <option key={n} value={n}>
@@ -710,6 +834,14 @@ export default function GeneriekeBibliotheekClient({
                 <tr key={d.id} className="border-t border-line">
                   <td className="px-4 py-2">
                     <div className="font-medium">{d.titel}</div>
+                    {d.documenttype && (
+                      <div className="text-xs text-ink/60">
+                        {juridischeDuiding(d.documenttype, d.wetsgeschiedenis_subtype)?.label ??
+                          documenttypeLabel(d.documenttype)}
+                        {d.dossiernummer && ` · dossier ${formatteerDossiernummer(d.dossiernummer)}`}
+                        {d.wettelijk_regime && ` · ${WETTELIJK_REGIME_LABEL[d.wettelijk_regime as keyof typeof WETTELIJK_REGIME_LABEL] ?? d.wettelijk_regime}`}
+                      </div>
+                    )}
                     {d.bronorganisatie && (
                       <div className="text-xs text-ink/50">{d.bronorganisatie}</div>
                     )}

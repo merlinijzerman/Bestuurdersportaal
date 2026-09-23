@@ -44,6 +44,9 @@ SQL_T5="supabase/checks/2026_07_09_t5_export_storage.sql"
 # Increment T6 — generieke contentlaag read-only + namespace-invariant. (Let op:
 # de "T6-export"-regel hieronder is een §15-matrixlabel, niet dit increment.)
 SQL_T6C="supabase/checks/2026_07_09_t6_generiek_readonly.sql"
+# Wetsgeschiedenis A-light foundation — juridische documenttypen alleen generiek,
+# wetsgeschiedenis altijd informatief, subtype/dossiernummer-combinaties.
+SQL_WG="supabase/checks/2026_09_23_wetsgeschiedenis_foundation.sql"
 # Increment T8 — config-/manifestlaag: cross-tenant + rolgate + append-only.
 SQL_T8C="supabase/checks/2026_07_09_t8_config_cross_tenant.sql"
 # Increment T10 — review-verval-gate op retrieval + generieke toestandsmachine.
@@ -334,6 +337,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T5"
 echo
 echo "-- T6 (generieke contentlaag read-only + namespace-invariant) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T6C"
+echo
+echo "-- Wetsgeschiedenis A-light (juridische typen generiek-only, MvT/amendement informatief) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_WG"
 echo
 echo "-- T8 (config-/manifestlaag: cross-tenant + rolgate + append-only) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T8C"
