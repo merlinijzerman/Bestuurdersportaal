@@ -1,9 +1,46 @@
 # #407 labsmoke — draaiboek voor de ene SEM01-retry
 
-Status: **voorbereid, niet uitgevoerd.** Er is in deze ronde geen indexscan,
-geen Retrieval-call en geen consent-, billing- of configuratiewijziging gedaan.
+Status: **UITGEVOERD op 22-09-2026.** Zie §0 voor de uitkomst. De tekst hieronder
+beschrijft het draaiboek zoals het vóór die retry is opgesteld; dat is bewust
+niet herschreven, zodat zichtbaar blijft waaróp de retry is gebaseerd.
+
+## 0. Uitkomst van de retry (22-09-2026)
+
+**De 403 is weg.** Na het propagatievenster van 48 uur is één gecontroleerde
+Retrieval-call uitgevoerd, conform V5 (één poging, ongeacht de uitkomst).
+
+| Waarneming | Uitkomst |
+|---|---|
+| Accountherkenning | M365 Copilot **Premium** |
+| Delegated scopes werkelijk aanwezig | `Files.Read.All`, `Sites.Read.All`, `User.Read` |
+| Indexpreflights | beide groen |
+| Retrieval-call | **geslaagd** — geen 401/403 meer |
+| Kandidaten voor SEM01 | **0** |
+
+**De blokkade is dus verplaatst, niet opgelost.** Zij was
+`copilot_toegang_geweigerd` (entitlement/consent) en is nu
+`endpoint_toegankelijk_semantische_query_nul_resultaten`. Dat is een ander
+soort probleem en vraagt een ander vervolg: toegang is geen verklaring meer.
+
+**Wat nul kandidaten NIET zegt.** Het endpoint is bereikbaar en de index is
+gereed verklaard, maar daaruit volgt niet of de nulmeting een semantisch
+kwaliteitsprobleem is (de query vindt de passage niet) of een index-/
+filterprobleem aan de Copilot-kant (de passage zit niet in de doorzochte set).
+Die twee vragen een verschillende oplossing en zijn met SEM01 alleen niet uit
+elkaar te houden.
+
+Daarom is een **afzonderlijke canary-call met `Zandloperbaken 12`** voorwaarde
+voor iedere volgende conclusie: die term is uniek en letterlijk aanwezig, dus
+komt hij wél terug, dan werkt de index en is SEM01 een semantische kwestie;
+komt hij niet terug, dan zoekt Copilot niet in wat wij denken.
+
+**Registry:** PR #6 mag de 403-entitlementstatus niet langer als actuele
+blokkade vastleggen. De actuele waarde is
+`endpoint_toegankelijk_semantische_query_nul_resultaten`.
 
 ## 1. Waarom dit draaiboek er is
+
+*(Historisch — de stand vóór de retry van 22-09; zie §0 voor de uitkomst.)*
 
 De labstand van 21-09 registreerde dat een Retrieval-call fail-closed eindigde
 als `copilot_toegang_geweigerd`. Van die call staat **geen rapport op schijf**.
