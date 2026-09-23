@@ -234,6 +234,22 @@ test("een andere fixture binnen de root is geen verwachte treffer", () => {
   assert.equal(uitslag.verwachteFixtureGevonden, false);
 });
 
+test("Office-viewer-URL binnen de root telt als canary, sharinglink en prefixlek niet", () => {
+  // De live geregistreerde root is een submap met een leesbare spatie, terwijl
+  // Copilot de URL gecodeerd en met een Office-viewerprefix kan teruggeven.
+  const root = `https://${HOST}/sites/PGBRetrievalLab/Gedeelde documenten/PGB`;
+  const viewer = `https://${HOST}/:w:/r/sites/PGBRetrievalLab/Gedeelde%20documenten/PGB/${VERWACHTE_FIXTURE}-Zandloperbaken-hersteldossier.docx`;
+  const uitslag = categoriseer([
+    { webUrl: viewer, extracts: ["fragment"] },
+    { webUrl: `https://${HOST}/:w:/s/opaque-token`, extracts: ["fragment"] },
+    { webUrl: viewer.replace("/PGB/", "/PGB-geheim/"), extracts: ["fragment"] },
+  ], root, HOST);
+  assert.equal(uitslag.categorieen.verwachte_fixture, 1);
+  assert.equal(uitslag.categorieen.buiten_bronroot, 2);
+  assert.equal(uitslag.hitsMetExtracts, 1);
+  assert.deepEqual(uitslag.fixturecodes, [VERWACHTE_FIXTURE]);
+});
+
 test("fixturecode-afleiding raadt niet en geeft nooit een bestandsnaam terug", () => {
   assert.equal(fixturecodeUitUrl(fixtureUrl(VERWACHTE_FIXTURE)), VERWACHTE_FIXTURE);
   assert.equal(fixturecodeUitUrl(`https://${HOST}/sites/x/Shared%20Documents/notulen.docx`), null);
