@@ -134,7 +134,9 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // voor beheerders (login.beleid.manage), met vaste invoercodes.
   // 151: #405 voegt één strikt Preview-only PGB-consenthandler toe voor de
   // tijdelijke delegated Microsoft Search-scope, achter dezelfde poorten.
-  assert.equal(HANDLERS.length, 151, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 152: #434 (T4-F) voegt de read-only beheerstand GET /api/beheer/adapterstatus toe,
+  // met de BESTAANDE capability fonds.config.manage — geen nieuw leesrecht.
+  assert.equal(HANDLERS.length, 152, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

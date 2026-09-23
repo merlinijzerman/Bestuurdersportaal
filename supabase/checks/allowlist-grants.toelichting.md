@@ -337,3 +337,46 @@ wordt volledig door `supabase/checks/2026_09_06_microsoft_login_fase1b.sql` bewe
   `authenticator`, `USAGE` op `public`, uitsluitend kolom-`SELECT` op
   `public.profielen(id, fonds_id, rol, naam)` en één policy die haar tot de eigen rij beperkt — wordt
   volledig bewezen in `supabase/checks/2026_09_07_microsoft_login_beleidsmodus.sql` (DEEL 1 en M19).
+
+## #434 T4-F — `public.meta_adapters_projectie(p_meta jsonb)`
+
+Nieuwe `immutable` functie zonder `security definer`: zij leest niets, schrijft
+niets en raakt geen enkele tabel. Haar hele taak is de vorm van `meta.adapters`
+toetsen en de sleutel doorgeven of **werpen**.
+
+De rechten zijn identiek aan die van `meta_basisniveau`/`meta_bronniveau`, en dat
+is geen gemak maar noodzaak: die twee roepen haar aan, dus wie hén mag
+uitvoeren moet ook haar mogen uitvoeren. `anon` krijgt niets — de leesprojectie
+is voor ingelogde gebruikers.
+
+Waarom deze functie bestaat naast de bestaande wrappers: `adapters` mag bij een
+ongeldige vorm niet stil wegvallen zoals `evidence_audit` dat doet. Zij draagt
+de zichtbare bronstatus, en stil weglaten zou een antwoord volledig ogend maken
+terwijl juist de informatie over een niet-geraadpleegde bron is verdwenen. Een
+`language sql`-wrapper kan niet werpen; daarom een eigen `plpgsql`-functie.
+
+## #434 T4-F — `public.fn_adapterstand_fonds(p_limiet integer)`
+
+Nieuw, en bewust een `security definer`: dit is het leespad voor de beheerstand.
+Dezelfde rechtenvorm als de overige definer-RPC's — `anon` niets,
+`authenticated` EXECUTE — want de autorisatie zit **in** de functie, niet in de
+grant.
+
+Waarom zij bestaat en waarom het leesrecht op `governance_log` NIET is verruimd:
+de selectpolicy daar is `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`.
+Zonder de grant `governance_audit_read` levert een gewone tabelquery alleen de
+eigen beurten, en die werden als de stand van het fonds getoond.
+
+De functie volgt besluit 0119 in plaats van er een uitzondering op te maken.
+Zonder `governance_audit_read`: alleen de eigen beurten, en geen inzageregel —
+je eigen spoor inzien is geen inzage in dat van een ander. Mét die capability:
+het hele fonds, en één append-only regel in `governance_audit_inzage`. De rol
+`beheerder` geeft hier dus geen fondsbrede inzage; dat is precies het
+alternatief dat 0119 heeft verworpen. Zie besluit 0214.
+
+Vier dingen dragen de veiligheid, en alle vier zijn gemeten in
+`supabase/checks/2026_09_23_434_adapterstand_fonds.sql`: het fonds komt uit het
+profiel van `auth.uid()` en is geen parameter; de capabilitypoort is
+`mag_audit()` en niets anders; de inzageregel wordt daadwerkelijk geschreven én
+blijft achterwege bij een eigen-standlezing; en de limiet is begrensd, zodat een
+definer-leespad geen onbegrensde kost kan krijgen.

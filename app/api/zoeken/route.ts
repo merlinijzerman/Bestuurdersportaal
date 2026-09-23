@@ -26,6 +26,8 @@ import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { bouwBronstatusDto } from "@/core/lib/retrieval/bronstatus-dto";
+import { ADAPTERMETA_FOUTCATEGORIE } from "@/core/lib/retrieval/adaptermeta";
 import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import {
@@ -187,6 +189,7 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
       geselecteerd: voltooid.meta.geselecteerd,
       modus,
       toelating: voltooid.meta.toelating,
+      bronstatus: bouwBronstatusDto(voltooid.bronstatus),
     }));
   } catch (e) {
     const afbreking = foutcategorieVoor(e);
@@ -197,6 +200,23 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-ei
       return NextResponse.json(
         { error: "Het zoeken duurde te lang. Probeer het opnieuw of zoek gerichter." },
         { status: 504 }
+      );
+    }
+    // #434 — fail-closed op een geweigerde adaptermetadatavorm. Deze route
+    // kent geen ai_actie en dus geen duurzaam spoor van zichzelf: de categorie
+    // gaat daarom expliciet mee in de serverlog, met de correlatie-id, zodat de
+    // weigering hier niet als een naamloze 500 verdwijnt.
+    if (afbreking === ADAPTERMETA_FOUTCATEGORIE) {
+      console.error(
+        `[zoeken][${ADAPTERMETA_FOUTCATEGORIE}] beurt geweigerd — correlatie ${ctx.requestId}`
+      );
+      return NextResponse.json(
+        {
+          error:
+            "De verantwoording over de geraadpleegde bronnen kon niet worden vastgesteld. " +
+            "Er zijn daarom geen resultaten getoond.",
+        },
+        { status: 503 }
       );
     }
     console.error("Fout in GET /api/zoeken:", e);

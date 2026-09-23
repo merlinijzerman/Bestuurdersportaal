@@ -81,6 +81,11 @@ export const META_BASIS = [
   // categorieën; nooit tekst of bronidentiteit.
   "evidence_audit",
   "modelcontext_audit",
+  // #434 T4-F — per-adapterdiagnostiek: uitsluitend gesloten enums en eindige
+  // tellers, plat. Geen URL, ref, pad, identifier, providerfouttekst of
+  // fragment — ook niet gehasht. WIJZIG DEZE REGEL NOOIT LOS van `c_basis` in
+  // `public.meta_projectie()`; de gate in de DB-laag houdt ze gelijk.
+  "adapters",
   // fondsdiscipline (defense-in-depth, increment T4)
   "toegepaste_fonds_filter",
   "namespace_conventie",
