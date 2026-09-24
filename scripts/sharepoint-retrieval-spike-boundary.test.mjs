@@ -391,11 +391,12 @@ test("#407-labsmoke — alleen SEM01 en de vaste exacte canary, op één fixture
   const smoke = readFileSync(resolve(root, `${SMOKEPAD}/smoke.ts`), "utf8");
   const args = readFileSync(resolve(root, `${SMOKEPAD}/args.ts`), "utf8");
   // Scenario en fixture worden OVERGENOMEN uit de vastgestelde #407-set, niet
-  // vrij gekozen; de canaryvraag is dezelfde vaste inhoudsterm als de preflight.
+  // vrij gekozen; de canaryvraag is een vaste zin met de inhoudsterm uit de preflight.
   assert.match(smoke, /VERGELIJK_SCENARIOS\.SEM01/);
   assert.match(smoke, /VERWACHTE_FIXTURE = "PGB407-DOC-101"/);
-  assert.match(smoke, /EXACTE_CANARY_SCENARIO = "CANARY_INDEX_101"/);
-  assert.match(smoke, /case "exacte_canary": return \{ scenario: EXACTE_CANARY_SCENARIO, vraag: INHOUDSCAN_TERM \}/);
+  assert.match(smoke, /EXACTE_CANARY_SCENARIO = "CANARY_INDEX_101_ZIN"/);
+  assert.match(smoke, /EXACTE_CANARY_VRAAG = "In welk hersteldossier staat de aanduiding Zandloperbaken 12\?"/);
+  assert.match(smoke, /case "exacte_canary": return \{ scenario: EXACTE_CANARY_SCENARIO, vraag: EXACTE_CANARY_VRAAG \}/);
   assert.match(smoke, /RETRIEVAL_REQUESTBUDGET = 1/);
   assert.match(args, /throw new Error\("onbekend CLI-argument"\)/);
   for (const anderScenario of ["SEM02", "S04H"]) {

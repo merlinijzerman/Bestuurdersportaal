@@ -53,9 +53,17 @@ export interface CopilotKandidaat {
 
 export interface CopilotUitkomst {
   kandidaten: CopilotKandidaat[];
+  /** Alleen vorm en aantallen; nooit een veldwaarde uit de providerrespons. */
+  responsTelling: CopilotResponsTelling;
   /** Feitelijke netwerkpogingen, backoff-herhalingen meegerekend. */
   netwerkpogingen: number;
   latencyMs: number;
+}
+
+export interface CopilotResponsTelling {
+  retrievalHitsVeld: "ontbreekt" | "null" | "array";
+  ruweHits: number;
+  hitsZonderLocator: number;
 }
 
 export interface CopilotTokenbron {
@@ -81,7 +89,7 @@ export interface CopilotOpdracht {
 }
 
 /** Strikte parsing: alles wat niet exact de verwachte vorm heeft, valt af. */
-function leesKandidaten(payload: unknown, max: number): CopilotKandidaat[] {
+function leesKandidaten(payload: unknown, max: number): Pick<CopilotUitkomst, "kandidaten" | "responsTelling"> {
   if (typeof payload !== "object" || payload === null) {
     throw new CopilotFout("copilot_responsvorm", "configuratiefout");
   }
@@ -89,10 +97,23 @@ function leesKandidaten(payload: unknown, max: number): CopilotKandidaat[] {
   // Een ontbrekend veld is een LEGE UITSLAG — een geldige kwaliteitsuitkomst.
   // Een veld dat er wél is maar geen array: dat is een vorm die wij niet kennen,
   // en dan stoppen we in plaats van te gokken wat ermee bedoeld was.
-  if (hits === undefined || hits === null) return [];
+  if (hits === undefined || hits === null) {
+    return {
+      kandidaten: [],
+      responsTelling: { retrievalHitsVeld: hits === null ? "null" : "ontbreekt", ruweHits: 0, hitsZonderLocator: 0 },
+    };
+  }
   if (!Array.isArray(hits)) throw new CopilotFout("copilot_responsvorm", "configuratiefout");
 
   const kandidaten: CopilotKandidaat[] = [];
+  // Tel ook hits ná het kandidaatplafond. Zo is zichtbaar of nul kandidaten
+  // werkelijk nul providerhits betekent, zonder één inhoudsveld te vervoeren.
+  const hitsZonderLocator = hits.reduce((aantal: number, hit: unknown) => {
+    const webUrl = typeof hit === "object" && hit !== null
+      ? (hit as { webUrl?: unknown }).webUrl
+      : undefined;
+    return aantal + (typeof webUrl !== "string" || webUrl.length === 0 ? 1 : 0);
+  }, 0);
   for (const hit of hits) {
     if (kandidaten.length >= max) break;
     if (typeof hit !== "object" || hit === null) {
@@ -116,7 +137,10 @@ function leesKandidaten(payload: unknown, max: number): CopilotKandidaat[] {
     }
     kandidaten.push({ webUrl, extracts });
   }
-  return kandidaten;
+  return {
+    kandidaten,
+    responsTelling: { retrievalHitsVeld: "array", ruweHits: hits.length, hitsZonderLocator },
+  };
 }
 
 /**
@@ -262,7 +286,7 @@ export async function roepCopilotRetrievalAan(opdracht: CopilotOpdracht): Promis
       throw new CopilotFout("copilot_responsvorm", "configuratiefout");
     }
     return {
-      kandidaten: leesKandidaten(payload, maximumNumberOfResults),
+      ...leesKandidaten(payload, maximumNumberOfResults),
       netwerkpogingen,
       latencyMs: Date.now() - start,
     };

@@ -20,7 +20,7 @@
 //  index landt, levert geen fout maar iets veel vervelenders — een lege uitslag
 //  die eruitziet als een kwaliteitsoordeel.
 // ============================================================================
-import { roepCopilotRetrievalAan, type CopilotOpdracht } from "../../../core/lib/microsoft-retrieval/client";
+import { roepCopilotRetrievalAan, type CopilotOpdracht, type CopilotResponsTelling } from "../../../core/lib/microsoft-retrieval/client";
 import { hitBinnenRoot } from "../../../core/lib/microsoft-retrieval/mapping";
 import { VERGELIJK_SCENARIOS } from "../../spike/sharepoint-retrieval/vergelijking-scenarios";
 import { spikeFixtureStatus } from "../../spike/sharepoint-retrieval/fixturestatus";
@@ -36,17 +36,19 @@ import type { Labprofiel } from "./registry";
 export const SCENARIO = VERGELIJK_SCENARIOS.SEM01;
 export const VERWACHTE_FIXTURE = "PGB407-DOC-101";
 
-/** De canaryterm van de inhoudscan. Komt in geen enkele scenariovraag voor. */
+/** De canaryterm van de inhoudscan. Komt niet in de semantische SEM-vraag voor. */
 export const INHOUDSCAN_TERM = "Zandloperbaken 12";
 /** Afzonderlijk indexbewijs, niet te verwarren met de semantische SEM01-meting. */
-export const EXACTE_CANARY_SCENARIO = "CANARY_INDEX_101";
+export const EXACTE_CANARY_SCENARIO = "CANARY_INDEX_101_ZIN";
+/** Vaste natuurlijke vraag voor de hertest; de indexprobe houdt zijn losse term. */
+export const EXACTE_CANARY_VRAAG = "In welk hersteldossier staat de aanduiding Zandloperbaken 12?";
 export type Meetmodus = "sem01" | "exacte_canary";
 
 /** Alleen deze twee vaste vragen mogen de Retrieval API bereiken. */
 export function meetinstelling(modus: Meetmodus): { scenario: string; vraag: string } {
   switch (modus) {
     case "sem01": return { scenario: SCENARIO.code, vraag: SCENARIO.copilotVraag };
-    case "exacte_canary": return { scenario: EXACTE_CANARY_SCENARIO, vraag: INHOUDSCAN_TERM };
+    case "exacte_canary": return { scenario: EXACTE_CANARY_SCENARIO, vraag: EXACTE_CANARY_VRAAG };
     default: throw new StopFail("onbekende_meetmodus", "geen Retrieval-call toegestaan");
   }
 }
@@ -361,6 +363,8 @@ export interface Retrievaluitslag {
   netwerkpogingen: number;
   latencyMs: number;
   kandidaten: number;
+  /** Gesloten, inhoudsvrije samenvatting van de ruwe Microsoft-respons. */
+  responsTelling: CopilotResponsTelling;
   uitslag: Hituitslag;
 }
 
@@ -399,6 +403,7 @@ export async function meet(profiel: Labprofiel, deps: MeetAfhankelijkheden): Pro
     netwerkpogingen: uitkomst.netwerkpogingen,
     latencyMs: uitkomst.latencyMs,
     kandidaten: uitkomst.kandidaten.length,
+    responsTelling: uitkomst.responsTelling,
     uitslag: categoriseer(uitkomst.kandidaten, profiel.rootUrl, profiel.siteHostnaam),
   };
 }

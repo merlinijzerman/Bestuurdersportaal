@@ -199,7 +199,10 @@ export function rapporteer(rapport: Smokerapport): string {
     const uitslag = rapport.retrieval.uitslag;
     regels.push(`- Retrieval API-netwerkpogingen: ${rapport.retrieval.netwerkpogingen}`);
     regels.push(`- latency: ${rapport.retrieval.latencyMs} ms`);
-    regels.push(`- kandidaten in de respons: ${rapport.retrieval.kandidaten}`);
+    regels.push(`- vorm retrievalHits: ${rapport.retrieval.responsTelling.retrievalHitsVeld}`);
+    regels.push(`- ruwe hits in de respons: ${rapport.retrieval.responsTelling.ruweHits}`);
+    regels.push(`- ruwe hits zonder locator: ${rapport.retrieval.responsTelling.hitsZonderLocator}`);
+    regels.push(`- bruikbare kandidaten met locator: ${rapport.retrieval.kandidaten}`);
     regels.push(`- kandidaten met tekstfragmenten: ${uitslag.hitsMetExtracts} (fragmenten zelf niet bewaard)`);
     regels.push(`- serververtrouwde status van de verwachte fixture: ${rapport.retrieval.verwachteFixtureStatus ?? "onbekend"}`);
     regels.push("");
