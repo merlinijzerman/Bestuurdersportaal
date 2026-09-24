@@ -94,7 +94,10 @@ shortcut of een expliciet andere drive kost geen lezing — dat is al vastgestel
   luistert naar de afbreking van de run, zodat Ctrl-C ook ná de browserstap
   werkt;
 - geen extract of documentinhoud verlaat het proces: het rapport draagt alleen
-  categorieën, tellingen, latency en fixturecodes.
+  categorieën, tellingen, latency, fixturecodes en veilige correlatie-UUID's;
+- iedere Retrieval-poging krijgt een eigen `client-request-id`; uit het antwoord
+  wordt alleen een UUID-vormige `request-id` overgenomen. Vrije diagnostiekheaders
+  en providertekst komen niet in het rapport.
 
 De runner wijzigt **niets**: geen SharePoint-instelling, consent, permission,
 licentie, billing, featureflag, database of deployment. Alles buiten de ene

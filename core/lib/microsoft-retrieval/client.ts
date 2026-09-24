@@ -55,9 +55,19 @@ export interface CopilotUitkomst {
   kandidaten: CopilotKandidaat[];
   /** Alleen vorm en aantallen; nooit een veldwaarde uit de providerrespons. */
   responsTelling: CopilotResponsTelling;
+  /**
+   * Uitsluitend UUID's voor supportcorrelatie. De client-id komt van onszelf;
+   * de response-id wordt alleen overgenomen als Microsoft exact een UUID geeft.
+   */
+  correlatie: CopilotCorrelatie;
   /** Feitelijke netwerkpogingen, backoff-herhalingen meegerekend. */
   netwerkpogingen: number;
   latencyMs: number;
+}
+
+export interface CopilotCorrelatie {
+  clientRequestId: string;
+  requestId: string | null;
 }
 
 export interface CopilotResponsTelling {
@@ -86,6 +96,12 @@ export interface CopilotOpdracht {
   requestBudget?: number;
   /** Uitsluitend voor tests; productie gebruikt de globale `fetch`. */
   fetchImpl?: typeof fetch;
+}
+
+const UUID_VORM = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function veiligeRequestId(waarde: string | null): string | null {
+  return waarde !== null && UUID_VORM.test(waarde) ? waarde.toLowerCase() : null;
 }
 
 /** Strikte parsing: alles wat niet exact de verwachte vorm heeft, valt af. */
@@ -247,6 +263,10 @@ export async function roepCopilotRetrievalAan(opdracht: CopilotOpdracht): Promis
     });
 
     netwerkpogingen++;
+    // Per FEITELIJKE netwerkpoging één eigen id. Zo kan Microsoft de precieze
+    // poging terugvinden zonder dat wij een providerbody of diagnostiekheader
+    // hoeven te bewaren. Een eventuele retry krijgt bewust een nieuwe id.
+    const clientRequestId = crypto.randomUUID();
     let response: Response;
     try {
       response = await doeFetch(COPILOT_RETRIEVAL_ENDPOINT, {
@@ -255,6 +275,8 @@ export async function roepCopilotRetrievalAan(opdracht: CopilotOpdracht): Promis
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
           Accept: "application/json",
+          "client-request-id": clientRequestId,
+          "return-client-request-id": "true",
         },
         body,
         signal: opdracht.signal,
@@ -287,6 +309,10 @@ export async function roepCopilotRetrievalAan(opdracht: CopilotOpdracht): Promis
     }
     return {
       ...leesKandidaten(payload, maximumNumberOfResults),
+      correlatie: {
+        clientRequestId,
+        requestId: veiligeRequestId(response.headers.get("request-id")),
+      },
       netwerkpogingen,
       latencyMs: Date.now() - start,
     };
