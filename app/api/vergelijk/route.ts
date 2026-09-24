@@ -8,7 +8,7 @@
 // Contract: POST { mode:'symmetrisch', bron_document_id, doel_document_id, dimensies? }
 //   → { comparison_run_id, mode, bron_document_id, doel_document_id, dimensies[], findings[] }
 // fonds_id komt SERVER-SIDE uit het profiel (nooit uit de body). Achter de flag
-// VERGELIJKMODUS: staat die uit, dan 404 (feature niet actief) — chat ongewijzigd.
+// Globale én fondsgebonden poorten: dicht = 404 — chat ongewijzigd.
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,7 +23,7 @@ import {
   sleutelUitRequest,
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
-import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
+import { vergelijkmodusVoorFondsAan } from "@/core/lib/vergelijk-rollout";
 import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
 import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
@@ -47,8 +47,8 @@ interface VergelijkBody {
 
 export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-eigen", audit: { handeling: "vergelijk.uitvoeren" }, capability: "vergelijk.use", label: "vergelijk.POST", schema: z.object({ "bron_document_id": z.unknown().optional(), "dimensies": z.unknown().optional(), "doel_document_id": z.unknown().optional(), "mode": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
-    // 0. Feature-flag: uit = feature niet beschikbaar (chat-ingang doet ook niets).
-    if (!vergelijkmodusAan()) {
+    // 0. Drievoudige rolloutpoort: env-kill, servergebonden fonds, fonds-opt-in.
+    if (!await vergelijkmodusVoorFondsAan(ctx.fondsId)) {
       return NextResponse.json({ error: "Vergelijkmodus is niet actief." }, { status: 404 });
     }
 

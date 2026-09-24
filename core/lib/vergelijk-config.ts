@@ -3,9 +3,9 @@
 // ----------------------------------------------------------------------------
 //  Twee onafhankelijke, fail-safe-naar-UIT vlaggen:
 //
-//   1. VERGELIJKMODUS — de hoofdschakelaar. Uit = geen vergelijking, chat volledig
-//      ongewijzigd (terugdraaibaarheid: de intentie-poort en de service-ingang doen
-//      niets). Aan = de vergelijkmodus is beschikbaar.
+//   1. VERGELIJKMODUS — de globale kill switch. Uit = geen vergelijking, chat
+//      volledig ongewijzigd. Aan is op zichzelf NIET voldoende: de serverbinding
+//      en fonds-opt-in in vergelijk-rollout.ts moeten ook open zijn.
 //
 //   2. VERGELIJK_DETERMINISTISCH_VERTROUWD — de contingentie-poort uit de werkopdracht.
 //      Het deterministische cijfer/datum-pad leunt op T8-extractie op ECHT dossier en
