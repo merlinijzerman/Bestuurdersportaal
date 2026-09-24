@@ -20,7 +20,12 @@
 //  index landt, levert geen fout maar iets veel vervelenders — een lege uitslag
 //  die eruitziet als een kwaliteitsoordeel.
 // ============================================================================
-import { roepCopilotRetrievalAan, type CopilotOpdracht, type CopilotResponsTelling } from "../../../core/lib/microsoft-retrieval/client";
+import {
+  roepCopilotRetrievalAan,
+  type CopilotOpdracht,
+  type CopilotResponsTelling,
+  type CopilotUitkomst,
+} from "../../../core/lib/microsoft-retrieval/client";
 import { hitBinnenRoot } from "../../../core/lib/microsoft-retrieval/mapping";
 import { VERGELIJK_SCENARIOS } from "../../spike/sharepoint-retrieval/vergelijking-scenarios";
 import { spikeFixtureStatus } from "../../spike/sharepoint-retrieval/fixturestatus";
@@ -365,6 +370,8 @@ export interface Retrievaluitslag {
   kandidaten: number;
   /** Gesloten, inhoudsvrije samenvatting van de ruwe Microsoft-respons. */
   responsTelling: CopilotResponsTelling;
+  /** Veilige UUID's voor Microsoft-support; geen providerdiagnostiek. */
+  correlatie: CopilotUitkomst["correlatie"];
   uitslag: Hituitslag;
 }
 
@@ -404,6 +411,7 @@ export async function meet(profiel: Labprofiel, deps: MeetAfhankelijkheden): Pro
     latencyMs: uitkomst.latencyMs,
     kandidaten: uitkomst.kandidaten.length,
     responsTelling: uitkomst.responsTelling,
+    correlatie: uitkomst.correlatie,
     uitslag: categoriseer(uitkomst.kandidaten, profiel.rootUrl, profiel.siteHostnaam),
   };
 }

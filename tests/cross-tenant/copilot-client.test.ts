@@ -49,14 +49,19 @@ function basis(extra: Partial<Parameters<typeof roepCopilotRetrievalAan>[0]> = {
 }
 
 test("de call gaat naar het vastgepinde endpoint met een server-side body", async () => {
+  const microsoftRequestId = "11111111-2222-4333-8444-555555555555";
   const hits = { retrievalHits: [{ webUrl: `https://${HOST}/sites/pgb/a.docx`, extracts: [{ text: "een passage" }] }] };
-  const { impl, aanroepen } = stubFetch([json(hits)]);
+  const { impl, aanroepen } = stubFetch([json(hits, 200, { "request-id": microsoftRequestId })]);
   const uitkomst = await roepCopilotRetrievalAan(basis({ fetchImpl: impl }));
 
   assert.equal(aanroepen.length, 1);
   assert.equal(aanroepen[0].url, COPILOT_RETRIEVAL_ENDPOINT);
   assert.equal(aanroepen[0].init.method, "POST");
   assert.equal(aanroepen[0].init.redirect, "manual");
+
+  const headers = aanroepen[0].init.headers as Record<string, string>;
+  assert.match(headers["client-request-id"], /^[0-9a-f-]{36}$/);
+  assert.equal(headers["return-client-request-id"], "true");
 
   const body = JSON.parse(String(aanroepen[0].init.body));
   assert.equal(body.dataSource, "sharePoint");
@@ -70,6 +75,19 @@ test("de call gaat naar het vastgepinde endpoint met een server-side body", asyn
   ]);
   assert.equal(uitkomst.netwerkpogingen, 1);
   assert.deepEqual(uitkomst.responsTelling, { retrievalHitsVeld: "array", ruweHits: 1, hitsZonderLocator: 0 });
+  assert.deepEqual(uitkomst.correlatie, {
+    clientRequestId: headers["client-request-id"],
+    requestId: microsoftRequestId,
+  });
+});
+
+test("alleen UUID-vormige Microsoft request-id bereikt de uitkomst", async () => {
+  const { impl } = stubFetch([
+    json({ retrievalHits: [] }, 200, { "request-id": "verboden-providertekst met documentnaam.docx" }),
+  ]);
+  const uitkomst = await roepCopilotRetrievalAan(basis({ fetchImpl: impl }));
+  assert.equal(uitkomst.correlatie.requestId, null);
+  assert.match(uitkomst.correlatie.clientRequestId, /^[0-9a-f-]{36}$/);
 });
 
 test("een ongeldige root of lege vraag laat GEEN call vertrekken", async () => {

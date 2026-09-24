@@ -205,6 +205,8 @@ export function rapporteer(rapport: Smokerapport): string {
     regels.push(`- bruikbare kandidaten met locator: ${rapport.retrieval.kandidaten}`);
     regels.push(`- kandidaten met tekstfragmenten: ${uitslag.hitsMetExtracts} (fragmenten zelf niet bewaard)`);
     regels.push(`- serververtrouwde status van de verwachte fixture: ${rapport.retrieval.verwachteFixtureStatus ?? "onbekend"}`);
+    regels.push(`- client-request-id: \`${rapport.retrieval.correlatie.clientRequestId}\``);
+    regels.push(`- Microsoft request-id: ${rapport.retrieval.correlatie.requestId ? `\`${rapport.retrieval.correlatie.requestId}\`` : "niet veilig beschikbaar"}`);
     regels.push("");
     regels.push("| categorie | aantal |");
     regels.push("| --- | ---: |");
