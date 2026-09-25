@@ -415,3 +415,15 @@ test("T2-2 — providerfout degradeert alleen in vergelijk; afbraak en auditafro
     "vergelijking/persistentie → governance-log → ai_actie-afronding"
   );
 });
+
+test("vergelijk_waarde — Opus-verzoek bevat geen niet-standaard samplingparameters", () => {
+  const service = lees("core/lib/vergelijk-productie.ts");
+  const begin = service.indexOf("async function vergelijkWaardeLLM");
+  const einde = service.indexOf("// ── Semantic units", begin);
+  assert.ok(begin >= 0 && einde > begin, "vergelijkWaardeLLM-blok ontbreekt");
+
+  const waardeCall = service.slice(begin, einde);
+  assert.match(waardeCall, /taaktype:\s*"vergelijk_waarde"/);
+  assert.doesNotMatch(waardeCall, /\btemperature\s*:/, "Opus 4.7+ geeft HTTP 400 bij temperature != 1");
+  assert.doesNotMatch(waardeCall, /\btopP\s*:/, "Opus 4.7+ geeft HTTP 400 bij top_p != 1");
+});
