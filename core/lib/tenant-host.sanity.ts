@@ -54,11 +54,10 @@ test("fondsgerichte previewhost met genest subdomein resolveert exact", () => {
   );
 });
 
-// ── Host-normalisatie: www., hoofdletters, poort → zelfde match als kaal ─────
-test("www.-prefix → zelfde match als kaal", () => {
+// ── Host-normalisatie: tenants blijven exact; alleen case is canoniek ───────
+test("www.-prefix is een andere tenanthost en faalt gesloten", () => {
   assert.deepEqual(bepaalFondsContext({ host: "www.horizon.nl", domains }), {
-    type: "gevonden",
-    fondsId: FONDS_A,
+    type: "onbekend",
   });
 });
 
@@ -69,15 +68,20 @@ test("hoofdletters → zelfde match (case-insensitive)", () => {
   });
 });
 
-test("poort (Host.NL:3000) → zelfde match, poort genegeerd", () => {
+test("poort op niet-lokale tenanthost wordt geweigerd", () => {
   assert.deepEqual(bepaalFondsContext({ host: "Horizon.NL:3000", domains }), {
-    type: "gevonden",
-    fondsId: FONDS_A,
+    type: "onbekend",
   });
-  // Combinatie www. + hoofdletters + poort.
   assert.deepEqual(bepaalFondsContext({ host: "WWW.Horizon.NL:443", domains }), {
-    type: "gevonden",
-    fondsId: FONDS_A,
+    type: "onbekend",
+  });
+});
+
+test("lokale poort werkt uitsluitend na expliciete lokale toestemming", () => {
+  const lokaal = [{ host: "fonds.localhost", fondsId: FONDS_A, actief: true }];
+  assert.deepEqual(bepaalFondsContext({ host: "fonds.localhost:3000", domains: lokaal }), { type: "onbekend" });
+  assert.deepEqual(bepaalFondsContext({ host: "fonds.localhost:3000", domains: lokaal, lokaalToegestaan: true }), {
+    type: "gevonden", fondsId: FONDS_A,
   });
 });
 
@@ -98,6 +102,12 @@ test("null/lege/whitespace host → onbekend", () => {
 test("host staat in tabel maar actief=false → onbekend (fail-closed)", () => {
   assert.deepEqual(bepaalFondsContext({ host: "oud.nl", domains }), { type: "onbekend" });
   assert.deepEqual(bepaalFondsContext({ host: "www.OUD.nl:3000", domains }), { type: "onbekend" });
+});
+
+test("malformed hostwaarden falen gesloten", () => {
+  for (const host of ["horizon.nl:443@evil.test", "user@horizon.nl", "horizon.nl/path", "horizon.nl\\evil", " horizon.nl"]) {
+    assert.deepEqual(bepaalFondsContext({ host, domains }), { type: "onbekend" }, host);
+  }
 });
 
 test("lege mapping → altijd onbekend (nooit een default-fonds)", () => {

@@ -1,0 +1,12 @@
+{
+  "_toelichting": "#407 T3 — minimale Copilot-beslispoort. Het profiel is codevast: SEM01 en SEM02, twee rondes, alle vergelijkingsarmen en maximaal vier Copilot Retrieval-POST-pogingen. rondes, armen en scenarios mogen niet in deze config worden toegevoegd.",
+  "_voorwaarde": "Een LIVE run vereist eerst het expliciete licentie-, kosten- en consentbesluit, met delegated Files.Read.All EN Sites.Read.All samen. De runner wijzigt zelf geen permission, consent, billing of featureflag.",
+  "doel": "PGB Preview-pilot",
+  "profiel": "copilot_beslispoort_4",
+  "fondsId": "00000000-0000-4000-8000-000000000000",
+  "gebruikerId": "00000000-0000-4000-8000-000000000000",
+  "fixtures": [
+    { "fixtureCode": "PGB407-DOC-101", "ref": "00000000-0000-4000-8000-000000000000", "bestandstype": "docx", "verwachteMappad": "02 Beleid en reglementen" },
+    { "fixtureCode": "PGB407-DOC-102", "ref": "00000000-0000-4000-8000-000000000000", "bestandstype": "docx", "verwachteMappad": "02 Beleid en reglementen" }
+  ]
+}

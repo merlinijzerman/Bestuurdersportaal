@@ -63,6 +63,8 @@
     "microsoft.sharepoint.bron-kiezen": "POST microsoft/sharepoint/bron",
     "microsoft.sharepoint.bron-ontkoppelen": "DELETE microsoft/sharepoint/bron",
     "microsoft.sharepoint.documenten.previewen": "POST microsoft/sharepoint/documenten/[ref]/preview",
+    "microsoft.sharepoint.retrieval-smoke.uitvoeren": "POST microsoft/sharepoint/retrieval-smoke",
+    "microsoft.sharepoint.retrieval-smoke.toestemming-uitbreiden": "GET microsoft/sharepoint/retrieval-smoke/toestemming",
     "microsoft.sharepoint.toestemming-uitbreiden": "GET microsoft/sharepoint/toestemming",
     "notulen.segmenten.bevestigen": "POST notulen/segmenten/[id]/bevestig",
     "notulen.segmenten.verwijderen": "DELETE notulen/segmenten/[id]",

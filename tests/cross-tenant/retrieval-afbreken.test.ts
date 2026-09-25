@@ -105,8 +105,8 @@ function traagAdapter(msPerCall: number, gezien: { signal?: AbortSignal }): Retr
       await slaapMetSignaal(msPerCall, ctx.signal);
       return { kandidaten: [], methode: "geen", provider: "microsoft", latencyMs: msPerCall, opgehaald: 0 };
     },
-    async verrijkWeergave(_ctx, g) {
-      return g;
+    async verrijkWeergave(_ctx, k) {
+      return k.map(() => ({ type: "behouden" as const }));
     },
   };
 }
@@ -216,13 +216,13 @@ test("PR-B — na een afbreking draait er geen enkele vervolgstap meer", async (
       ac.abort();
       return { kandidaten: [], methode: "geen", provider: "microsoft", latencyMs: 0, opgehaald: 0 };
     },
-    async verrijkSelectie(_c, g) {
-      stappen.push("verrijkSelectie");
+    async verrijkKandidaten(_c, g) {
+      stappen.push("verrijkKandidaten");
       return { resultaten: g };
     },
-    async verrijkWeergave(_c, g) {
+    async verrijkWeergave(_c, k) {
       stappen.push("verrijkWeergave");
-      return g;
+      return k.map(() => ({ type: "behouden" as const }));
     },
   };
   await assert.rejects(
@@ -285,7 +285,7 @@ test("PR-B — elke I/O in de retrievalketen draagt het signaal", async () => {
 
 // ── Reviewronde 2: de grendel dekt de HELE keten ────────────────────────────
 
-test("PR-B — een timeout tijdens verrijkSelectie stopt de keten", async () => {
+test("PR-B — een timeout tijdens verrijkKandidaten stopt de keten", async () => {
   // De naad: parent-context draait ná de selectie en doet nog database-werk.
   const stappen: string[] = [];
   const adapter: RetrievalAdapter = {
@@ -304,22 +304,22 @@ test("PR-B — een timeout tijdens verrijkSelectie stopt de keten", async () => 
       };
     },
     verifieerVersies,
-    async verrijkSelectie(ctx, g) {
-      stappen.push("verrijkSelectie");
+    async verrijkKandidaten(ctx, g) {
+      stappen.push("verrijkKandidaten");
       await slaapMetSignaal(5_000, ctx.signal); // trage sibling-fetch
-      stappen.push("verrijkSelectie-klaar");
+      stappen.push("verrijkKandidaten-klaar");
       return { resultaten: g };
     },
-    async verrijkWeergave(_c, g) {
+    async verrijkWeergave(_c, k) {
       stappen.push("verrijkWeergave");
-      return g;
+      return k.map(() => ({ type: "behouden" as const }));
     },
   };
   await assert.rejects(
     () => voerRetrievalUit(CTX, { adapter, sporen: [{ query: QUERY(), grenzen: GRENZEN }], timeoutMs: TIMEOUT_MIN_MS }),
     (e: unknown) => isAfbreking(e) && foutcategorieVoor(e) === "timeout"
   );
-  assert.deepEqual(stappen, ["zoek", "verrijkSelectie"], "de trage verrijking mag niet afronden");
+  assert.deepEqual(stappen, ["zoek", "verrijkKandidaten"], "de trage verrijking mag niet afronden");
 });
 
 test("PR-B — de deadline loopt DOOR tot en met citeer(); verrijkWeergave valt er niet buiten", async () => {
@@ -344,12 +344,12 @@ test("PR-B — de deadline loopt DOOR tot en met citeer(); verrijkWeergave valt 
       };
     },
     verifieerVersies,
-    async verrijkWeergave(ctx, g) {
+    async verrijkWeergave(ctx, k) {
       stappen.push("verrijkWeergave");
       assert.ok(ctx.signal, "de weergaveverrijking hoort het beurtsignaal te krijgen");
       await slaapMetSignaal(5_000, ctx.signal);
       stappen.push("verrijkWeergave-klaar");
-      return g;
+      return k.map(() => ({ type: "behouden" as const }));
     },
   };
   const tussen = await voerRetrievalUit(CTX, {

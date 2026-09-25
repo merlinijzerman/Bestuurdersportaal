@@ -1,0 +1,79 @@
+{
+  "doel": "PGB Preview-pilot",
+  "fondsId": "VUL-LOKAAL-IN-NA-ISSUE-354",
+  "gebruikerId": "VUL-LOKAAL-IN-NA-ISSUE-354",
+  "rondes": 2,
+  "routes": [
+    "microsoft_search",
+    "drive_search_extract",
+    "candidate_union"
+  ],
+  "fixtures": [
+    {
+      "fixtureCode": "PGB354-DOC-001",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "docx",
+      "verwachteMappad": "01 Vergaderstukken/2026-09 Bestuursvergadering"
+    },
+    {
+      "fixtureCode": "PGB354-PDF-001",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "pdf",
+      "verwachteMappad": "02 Beleid en reglementen"
+    },
+    {
+      "fixtureCode": "PGB354-PDF-002",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "pdf",
+      "verwachteMappad": "03 Historisch en vervallen"
+    },
+    {
+      "fixtureCode": "PGB354-PPT-001",
+      "ref": "VUL-LOKALE-FONDSGEBONDEN-REF-IN",
+      "bestandstype": "pptx",
+      "verwachteMappad": "01 Vergaderstukken/2026-10 Bestuursvergadering"
+    }
+  ],
+  "vragen": [
+    {
+      "code": "Q-GERICHT-01",
+      "soort": "gericht",
+      "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
+      "actualiteitsbeleid": "alleen_actueel",
+      "microsoftZoektermen": ["VUL-ORIGINELE-VRAAG-IN", "VUL-PROVIDERNEUTRALE-REFORMULATIE-IN"],
+      "verwachteFixtures": ["PGB354-DOC-001"],
+      "primaireFixture": "PGB354-DOC-001",
+      "maxKandidaten": 20
+    },
+    {
+      "code": "Q-FONDSBREED-01",
+      "soort": "fondsbreed",
+      "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
+      "actualiteitsbeleid": "alleen_actueel",
+      "microsoftZoektermen": ["VUL-ORIGINELE-VRAAG-IN", "VUL-PROVIDERNEUTRALE-REFORMULATIE-IN"],
+      "verwachteFixtures": ["PGB354-DOC-001", "PGB354-PDF-001"],
+      "primaireFixture": "PGB354-DOC-001",
+      "maxKandidaten": 20
+    },
+    {
+      "code": "Q-PPTX-01",
+      "soort": "powerpoint",
+      "vraag": "VUL-DE-VASTGESTELDE-VRAAG-UIT-ISSUE-354-IN",
+      "actualiteitsbeleid": "alleen_actueel",
+      "microsoftZoektermen": ["VUL-ORIGINELE-VRAAG-IN", "VUL-PROVIDERNEUTRALE-REFORMULATIE-IN"],
+      "verwachteFixtures": ["PGB354-PPT-001"],
+      "primaireFixture": "PGB354-PPT-001",
+      "maxKandidaten": 20
+    },
+    {
+      "code": "Q-HISTORISCH-01",
+      "soort": "versieconflict",
+      "vraag": "VUL-DE-VASTGESTELDE-HISTORISCHE-VRAAG-UIT-ISSUE-354-IN",
+      "actualiteitsbeleid": "alleen_historisch",
+      "microsoftZoektermen": ["VUL-ORIGINELE-VRAAG-IN", "VUL-PROVIDERNEUTRALE-REFORMULATIE-IN"],
+      "verwachteFixtures": ["PGB354-PDF-002"],
+      "primaireFixture": "PGB354-PDF-002",
+      "maxKandidaten": 20
+    }
+  ]
+}

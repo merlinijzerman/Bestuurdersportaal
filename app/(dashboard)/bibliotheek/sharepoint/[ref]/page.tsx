@@ -9,7 +9,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Browserpreview van een SharePoint-document. De kortlevende URL wordt per
  * paginabezoek opgehaald, alleen als iframe-bron gebruikt en nooit in de
  * adresbalk, opslag of logging gezet. Deze route heeft een eigen CSP met
- * frame-src voor *.sharepoint.com (next.config.ts). */
+ * frame-src voor de afgebakende Microsoft-previewhosts (next.config.ts). */
 export default function SharePointPreviewPagina() {
   const params = useParams<{ ref: string }>();
   const ref = typeof params?.ref === "string" && UUID.test(params.ref) ? params.ref : null;
@@ -52,7 +52,12 @@ export default function SharePointPreviewPagina() {
           title={`Preview van ${preview.naam}`}
           src={preview.url}
           className="flex-1 w-full border-0 bg-app-bg"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          // Microsoft 365 voor het web gebruikt in de zakelijke Office-flow een
+          // bovenliggende navigatie voor aanmelding en laat nieuwe vensters uit
+          // de sandbox ontsnappen. De bron blijft beperkt tot de server-
+          // gevalideerde, kortlevende SharePoint-preview-URL en de route-CSP.
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation allow-popups-to-escape-sandbox"
+          allowFullScreen
           referrerPolicy="no-referrer"
           allow=""
         />

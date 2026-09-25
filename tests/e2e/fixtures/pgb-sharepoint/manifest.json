@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "set_code": "PGB354",
+  "purpose": "PGB Preview-pilot",
+  "owner": "M365 pilotteam",
+  "review_date": "2026-12-10",
+  "library_root": "PGB",
+  "folders": [
+    {
+      "path": "01 Vergaderstukken",
+      "access": ["rol_a", "rol_b"]
+    },
+    {
+      "path": "01 Vergaderstukken/2026-09 Bestuursvergadering",
+      "access": ["rol_a", "rol_b"]
+    },
+    {
+      "path": "01 Vergaderstukken/2026-10 Bestuursvergadering",
+      "access": ["rol_a", "rol_b"]
+    },
+    {
+      "path": "02 Beleid en reglementen",
+      "access": ["rol_a", "rol_b"]
+    },
+    {
+      "path": "03 Historisch en vervallen",
+      "access": ["rol_a", "rol_b"]
+    },
+    {
+      "path": "04 Beperkt bestuur",
+      "access": ["rol_a"]
+    },
+    {
+      "path": "99 Mutatie- en intrekkingstests",
+      "access": ["rol_a", "rol_b"]
+    }
+  ],
+  "roles": {
+    "rol_a": {
+      "label": "Bevoegde testgebruiker",
+      "general_access": true,
+      "restricted_access": true
+    },
+    "rol_b": {
+      "label": "Algemene testgebruiker of testgroep",
+      "general_access": true,
+      "restricted_access": false,
+      "live_verification": "open_tot_een_tweede_interactief_account_beschikbaar_is"
+    }
+  },
+  "fixtures": [
+    {
+      "code": "PGB354-DOC-001",
+      "title": "Agenda en besluitpunten september",
+      "relative_path": "bibliotheek/01 Vergaderstukken/2026-09 Bestuursvergadering/PGB354-DOC-001-Agenda-en-besluitpunten-september.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "algemeen",
+      "search_terms": ["Koraalmaat 47", "hersteltermijn Koraalmaat"],
+      "expected_fact": "De hersteltermijn voor Koraalmaat 47 is vier werkdagen.",
+      "expected_locator": "sectie 2.2, pagina 2",
+      "access": ["rol_a", "rol_b"],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": ["S01", "S02", "S03"]
+    },
+    {
+      "code": "PGB354-PDF-001",
+      "title": "Beleggingskader actueel",
+      "relative_path": "bibliotheek/02 Beleid en reglementen/PGB354-PDF-001-Beleggingskader-actueel.pdf",
+      "file_type": "pdf",
+      "status": "actueel",
+      "folder_category": "algemeen",
+      "search_terms": ["Maananker Actueel 61", "Maananker 61", "actuele bandbreedte Maananker"],
+      "expected_fact": "De actuele bandbreedte voor Maananker 61 is 34 tot en met 38 procent.",
+      "expected_locator": "paragraaf 2.1, pagina 2",
+      "access": ["rol_a", "rol_b"],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "moet voorrang krijgen boven PGB354-PDF-002",
+      "scenarios": ["S03", "S04"]
+    },
+    {
+      "code": "PGB354-PDF-002",
+      "title": "Beleggingskader vervallen",
+      "relative_path": "bibliotheek/03 Historisch en vervallen/PGB354-PDF-002-Beleggingskader-vervallen.pdf",
+      "file_type": "pdf",
+      "status": "vervallen",
+      "folder_category": "historisch",
+      "search_terms": ["Maananker Historisch 61", "Maananker 61", "oude bandbreedte Maananker"],
+      "expected_fact": "De vervallen bandbreedte voor Maananker 61 was 28 tot en met 32 procent.",
+      "expected_locator": "paragraaf 1.2, pagina 1",
+      "access": ["rol_a", "rol_b"],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "blijft vindbaar als historische bron maar mag het actuele antwoord niet vervangen",
+      "scenarios": ["S04", "S04H"]
+    },
+    {
+      "code": "PGB354-PPT-001",
+      "title": "Kwartaalplanning oktober",
+      "relative_path": "bibliotheek/01 Vergaderstukken/2026-10 Bestuursvergadering/PGB354-PPT-001-Kwartaalplanning-oktober.pptx",
+      "file_type": "pptx",
+      "status": "actueel",
+      "folder_category": "algemeen",
+      "search_terms": ["IJsvogelkompas 73", "oefenbesluit oktober"],
+      "expected_fact": "Het oefenbesluit voor IJsvogelkompas 73 staat gepland op 23 oktober 2026.",
+      "expected_locator": "dia 3",
+      "access": ["rol_a", "rol_b"],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": ["S01", "S03"]
+    },
+    {
+      "code": "PGB354-DOC-002",
+      "title": "Besloten voorbereidingsnotitie",
+      "relative_path": "bibliotheek/04 Beperkt bestuur/PGB354-DOC-002-Besloten-voorbereidingsnotitie.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "beperkt",
+      "search_terms": ["Saffierhek 29", "oefenquorum Saffierhek"],
+      "expected_fact": "Het oefenquorum voor Saffierhek 29 is vijf teststemmen.",
+      "expected_locator": "sectie 1.1, pagina 1",
+      "access": ["rol_a"],
+      "preview": "alleen_rol_a",
+      "retrieval_error": "toegang_geweigerd_voor_rol_b",
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": ["S05"]
+    },
+    {
+      "code": "PGB354-DOC-003",
+      "title": "Hernoem en verplaatsproef",
+      "relative_path": "bibliotheek/99 Mutatie- en intrekkingstests/PGB354-DOC-003-Hernoem-en-verplaatsproef.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "mutatie",
+      "search_terms": ["Duinglas 84", "controledag Duinglas"],
+      "expected_fact": "De controledag voor Duinglas 84 is woensdag.",
+      "expected_locator": "sectie 1, pagina 1",
+      "access": ["rol_a", "rol_b"],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "naam en locatie veranderen, lokale bronreferentie blijft gelijk",
+      "scenarios": ["S06"]
+    },
+    {
+      "code": "PGB354-DOC-004",
+      "title": "Inhoudsmutatie",
+      "relative_path": "bibliotheek/99 Mutatie- en intrekkingstests/PGB354-DOC-004-Inhoudsmutatie.docx",
+      "replacement_path": "mutaties/PGB354-DOC-004-Inhoudsmutatie-v2.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "mutatie",
+      "search_terms": ["Bronzenveer 52", "controlevenster Bronzenveer"],
+      "expected_fact": "In de beginstaat valt het controlevenster voor Bronzenveer 52 op donderdag om 09.20 uur.",
+      "mutated_fact": "Na de mutatie valt het controlevenster voor Bronzenveer 52 op vrijdag om 10.35 uur.",
+      "expected_locator": "sectie 1, pagina 1",
+      "access": ["rol_a", "rol_b"],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "inhoud vervangen in hetzelfde SharePoint-item, waarna eTag en cTag veranderen",
+      "scenarios": ["S07"]
+    },
+    {
+      "code": "PGB354-DOC-005",
+      "title": "Intrekkingsproef",
+      "relative_path": "bibliotheek/04 Beperkt bestuur/PGB354-DOC-005-Intrekkingsproef.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "beperkt",
+      "search_terms": ["Nachtlelie 68", "afkaptijd Nachtlelie"],
+      "expected_fact": "De synthetische afkaptijd voor Nachtlelie 68 is 17.40 uur.",
+      "expected_locator": "sectie 1, pagina 1",
+      "access": ["rol_a"],
+      "preview": "alleen_rol_a",
+      "retrieval_error": "toegang_ingetrokken",
+      "version_behavior": "toegang voor rol_a wordt tijdens het verzoek ingetrokken en daarna hersteld",
+      "scenarios": ["S08", "S09"]
+    },
+    {
+      "code": "PGB354-PDF-003",
+      "title": "Scan zonder tekstlaag",
+      "relative_path": "bibliotheek/99 Mutatie- en intrekkingstests/PGB354-PDF-003-Scan-zonder-tekstlaag.pdf",
+      "file_type": "pdf_scan",
+      "status": "actueel",
+      "folder_category": "moeilijk",
+      "search_terms": ["Mistboei 93"],
+      "expected_fact": null,
+      "expected_locator": null,
+      "access": ["rol_a", "rol_b"],
+      "preview": "beschikbaar",
+      "retrieval_error": "tekstlaag_ontbreekt",
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": ["S10"]
+    },
+    {
+      "code": "PGB354-UNS-001",
+      "title": "Onbekend formaat",
+      "relative_path": "bibliotheek/99 Mutatie- en intrekkingstests/PGB354-UNS-001-Onbekend-formaat.bin",
+      "file_type": "application_octet_stream",
+      "status": "actueel",
+      "folder_category": "niet_ondersteund",
+      "search_terms": ["Veldkei 06"],
+      "expected_fact": null,
+      "expected_locator": null,
+      "access": ["rol_a", "rol_b"],
+      "preview": "geen_preview",
+      "retrieval_error": "bestandstype_niet_ondersteund",
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": ["S10"]
+    },
+    {
+      "code": "PGB407-DOC-101",
+      "title": "Zandloperbaken 12 hersteldossier",
+      "relative_path": "bibliotheek/02 Beleid en reglementen/PGB407-DOC-101-Zandloperbaken-hersteldossier.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "algemeen",
+      "search_terms": [
+        "Zandloperbaken 12"
+      ],
+      "expected_fact": "Bij vastgestelde onderdekking beschikt dit fonds over negen kalenderdagen om herstel volledig af te ronden.",
+      "expected_locator": "sectie 2.2",
+      "access": [
+        "rol_a",
+        "rol_b"
+      ],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": [
+        "SEM01"
+      ],
+      "scenario_bron": "scripts/spike/sharepoint-retrieval/vergelijking-scenarios.ts",
+      "semantisch": true,
+      "canary_doel": "uitsluitend indexgereedheid; komt in geen scenariovraag of zoekterm voor"
+    },
+    {
+      "code": "PGB407-DOC-102",
+      "title": "Nevelanker 30 zittingsdossier",
+      "relative_path": "bibliotheek/02 Beleid en reglementen/PGB407-DOC-102-Nevelanker-zittingsdossier.docx",
+      "file_type": "docx",
+      "status": "actueel",
+      "folder_category": "algemeen",
+      "search_terms": [
+        "Nevelanker 30"
+      ],
+      "expected_fact": "Op 12 november 2026 verzamelt dit college zich ter definitieve goedkeuring van deze oefenuitspraak.",
+      "expected_locator": "sectie 2.2",
+      "access": [
+        "rol_a",
+        "rol_b"
+      ],
+      "preview": "beschikbaar",
+      "retrieval_error": null,
+      "version_behavior": "ongewijzigd tijdens de basisronde",
+      "scenarios": [
+        "SEM02"
+      ],
+      "scenario_bron": "scripts/spike/sharepoint-retrieval/vergelijking-scenarios.ts",
+      "semantisch": true,
+      "canary_doel": "uitsluitend indexgereedheid; komt in geen scenariovraag of zoekterm voor"
+    }
+  ],
+  "scenarios": [
+    {
+      "code": "S01",
+      "title": "Lijst en preview toegestaan document",
+      "role": "rol_b",
+      "question": null,
+      "expected_sources": ["PGB354-DOC-001", "PGB354-PPT-001"],
+      "expected_result": "beide stukken staan in de lijst en openen in Preview"
+    },
+    {
+      "code": "S02",
+      "title": "Gerichte vraag met één bron",
+      "role": "rol_b",
+      "question": "Welke hersteltermijn geldt voor Koraalmaat 47?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": ["PGB354-DOC-001"],
+      "expected_result": "Vier werkdagen, met sectie 2.2 op pagina 2 als locator"
+    },
+    {
+      "code": "S03",
+      "title": "Fondsbrede vraag met meerdere bronnen",
+      "role": "rol_a",
+      "question": "Welke hersteltermijn geldt voor Koraalmaat 47 en op welke datum staat het oefenbesluit voor IJsvogelkompas 73?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": ["PGB354-DOC-001", "PGB354-PPT-001"],
+      "expected_result": "Vier werkdagen en 23 oktober 2026, elk met de eigen locator"
+    },
+    {
+      "code": "S04",
+      "title": "Actueel en historisch onderscheiden",
+      "role": "rol_b",
+      "question": "Wat is de actuele bandbreedte voor Maananker 61?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": ["PGB354-PDF-001"],
+      "forbidden_sources": ["PGB354-PDF-002"],
+      "expected_result": "34 tot en met 38 procent; de vervallen 28 tot en met 32 procent mag het antwoord niet vervangen"
+    },
+    {
+      "code": "S04H",
+      "title": "Historische bron expliciet opvragen",
+      "role": "rol_b",
+      "question": "Wat was de historische bandbreedte voor Maananker 61?",
+      "actuality_policy": "alleen_historisch",
+      "expected_sources": ["PGB354-PDF-002"],
+      "forbidden_sources": ["PGB354-PDF-001"],
+      "expected_result": "28 tot en met 32 procent uit de expliciet historische bron; de actuele bron vervangt dit historische antwoord niet"
+    },
+    {
+      "code": "S05",
+      "title": "Geen resultaat buiten rechten",
+      "role": "rol_b",
+      "question": "Wat is het oefenquorum voor Saffierhek 29?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": [],
+      "forbidden_sources": ["PGB354-DOC-002"],
+      "expected_result": "geen bron, geen passage en geen inhoudslek uit de beperkte map"
+    },
+    {
+      "code": "S06",
+      "title": "Hernoemen en verplaatsen",
+      "role": "rol_a",
+      "question": "Wat is de controledag voor Duinglas 84?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": ["PGB354-DOC-003"],
+      "expected_result": "de lokale bronreferentie blijft gelijk; naam en locatie volgen de mutatie"
+    },
+    {
+      "code": "S07",
+      "title": "Inhoudswijziging met nieuwe versie-indicator",
+      "role": "rol_a",
+      "question": "Wanneer valt het controlevenster voor Bronzenveer 52?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": ["PGB354-DOC-004"],
+      "expected_result": "eerst donderdag 09.20 uur, na vervanging vrijdag 10.35 uur; eTag en cTag zijn veranderd"
+    },
+    {
+      "code": "S08",
+      "title": "Intrekking tijdens een verzoek",
+      "role": "rol_a",
+      "question": "Wat is de afkaptijd voor Nachtlelie 68?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": [],
+      "forbidden_sources": ["PGB354-DOC-005"],
+      "expected_result": "fail-closed met genormaliseerde categorie toegang_ingetrokken; geen passage in antwoord of audit"
+    },
+    {
+      "code": "S09",
+      "title": "Replay na intrekking",
+      "role": "rol_a",
+      "question": "Herhaal het vorige antwoord over Nachtlelie 68.",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": [],
+      "forbidden_sources": ["PGB354-DOC-005"],
+      "expected_result": "geen hergebruik van eerder opgehaalde inhoud en opnieuw fail-closed"
+    },
+    {
+      "code": "S10",
+      "title": "Moeilijk en niet ondersteund bestand",
+      "role": "rol_b",
+      "question": "Wat staat in Mistboei 93 en Veldkei 06?",
+      "actuality_policy": "alleen_actueel",
+      "expected_sources": [],
+      "forbidden_sources": ["PGB354-PDF-003", "PGB354-UNS-001"],
+      "expected_result": "tekstlaag_ontbreekt voor de scan en bestandstype_niet_ondersteund voor het onbekende bestand, zonder ruwe providerfout"
+    }
+  ]
+}

@@ -1,93 +1,87 @@
 # Promotie `preview` → `main` — M365 fase 4
 
-**Peildatum:** 13 september 2026  
-**Productiebasis:** `main` op `09d473f`  
-**Geaccepteerde Preview-bron:** `ca57f5c` plus de nog te mergen docs-only PR  
-**Status:** voorbereid; niet mergen zonder afzonderlijk opdrachtgeverakkoord
+**Uitvoerdatum:** 13 september 2026
+
+**Voorafgaande productiebasis:** `09d473f` (release 11 september 2026, uitgevoerd)
+
+**Geaccepteerde Preview-bron:** `6a0456d`
+
+**Productiecommit:** `3a6d9de2d53139a50475569f95c0aa55135fc108`
+
+**Promotie-PR:** [#384](https://github.com/merlinijzerman/Bestuurdersportaal/pull/384)
+
+**Status:** uitgevoerd; afsluitings-PR naar `preview` niet mergen zonder nieuw akkoord
 
 ## Scope en releasegrens
 
-Deze promotie brengt de reeds op Preview geïntegreerde uitvoering van #367–#370 naar Productie.
-De docs-only acceptatie-PR wordt eerst naar `preview` gemerged. Daarna wordt origin opnieuw
-ververst en wordt een nieuwe PR geopend met exact `preview` als bron en `main` als doel. Een
-featurebranch rechtstreeks naar `main` is niet toegestaan.
+De promotie heeft de via #367–#370 op Preview geïntegreerde fase-4-uitvoering naar Productie
+gebracht: volledige opaque versie-/passage-/citationidentiteit, centrale orkestratie van zoeken en
+vergelijken, typed evidence-/modelcontextlezingen, een hermetische Microsoftadapterstub en drie
+additieve auditprojectiemigraties. Microsoft-, Outlook-, SharePoint- en Graphactivering, een live
+Microsoft RetrievalAdapter en Azure AI Search/Copilot bleven buiten scope.
 
-In scope:
+De huidige afsluitings-PR bevat uitsluitend Markdown en de noodzakelijke terugreconciliatie van de
+productiehistorie naar `preview`. Zij bevat geen productiecode, migratie of configuratiewijziging.
 
-- volledige opaque versie-, passage- en citation-identiteit met correlatie (#367);
-- centraal georkestreerd zoeken en vergelijken (#369);
-- hermetische Microsoft RetrievalAdapter-stub, zonder live wiring (#370);
-- typed en begrensde evidence-/modelcontextlezingen (#368);
-- drie additieve auditprojectiemigraties en bijbehorende rollbacks.
+## Uitgevoerde voorwaarden en databasevolgorde
 
-Niet in scope:
+- [x] Productiebasis `09d473f` en Preview-bron `6a0456d` exact vastgelegd.
+- [x] PR #384 na afzonderlijk opdrachtgeverakkoord gemerged naar `main`.
+- [x] Verplichte PR- en postmergechecks groen; beide Vercel-projecten `Ready`.
+- [x] Dagelijkse productiebackup en backupwatchdog groen; laatste beheerde restore-drill reeds groen
+  vastgelegd op run `32345486528` van 20 augustus 2026.
+- [x] De drie migraties in de voorgeschreven volgorde toegepast:
+  1. `2026_09_11_369_vergelijk_retrieval_audit.sql`;
+  2. `2026_09_11_z367_retrieval_identiteit_auditprojectie.sql`;
+  3. `2026_09_12_368_evidence_auditprojectie.sql`.
+- [x] T5-vergelijking, retrieval-identiteit, evidenceprojectie, R1, V3-grants en SECURITY DEFINER
+  self-gate groen.
+- [x] Geen tijdelijke productietesttabellen achtergebleven.
+- [ ] Volledige cross-tenantrunner op Productie — bewust niet uitgevoerd omdat die runner voor een
+  testdatabase is begrensd en destructieve stappen bevat; lokaal en in CI wel groen.
 
-- Microsoft-, Outlook-, SharePoint- of Graphactivering;
-- een productie-Microsoftadapter, Azure AI Search of Copilot-integratie;
-- wijzigingen aan productiecode in de documentatie-PR;
-- het sluiten van #367–#370 vóór geaccepteerde productie-uitrol.
+De #367- en #368-migraties zijn bij handmatige productie-uitvoering in expliciete transacties
+geplaatst; #369 is zelf-transactioneel. Rollbacks zijn niet op Productie uitgevoerd. De lokale
+rehearsal bewees vooraf de omgekeerde rollbackvolgorde #368 → #367 → #369 en de herapply in
+voorwaartse volgorde.
 
-## Voorwaarden vóór de promotie-PR
+## Deploy- en smoke-uitkomst
 
-- [x] `origin/main` is productiecommit `09d473f`.
-- [x] `09d473f` is ancestor van de actuele `origin/preview`.
-- [x] #367, #369, #370 en #368 zijn in afhankelijkheidsvolgorde geïntegreerd.
-- [x] Preview-commit `ca57f5c` heeft groene verplichte checks en twee geslaagde Vercel-deploys.
-- [x] Secrets-, boundaries-, structuur-, build-, test-, DB/RLS/grants- en rollbackcontroles groen.
-- [x] Live Preview zoeken, chat/evidence en governance-audit groen.
-- [ ] Deze docs-only PR is gereviewd en na expliciet akkoord naar `preview` gemerged.
-- [ ] Na die merge is de exacte nieuwe `origin/preview`-SHA vastgelegd.
+| Stap | Uitkomst |
+|---|---|
+| App-deployment | `dpl_8S5UsM6DtpqfKLw5PNjcSe5ywkGR`, `Ready`, commit `3a6d9de` |
+| Beheer-deployment | `dpl_7hcuTjv5bV7H4MWh9Pw9BkrTFpF1`, `Ready` |
+| Health | app, PGB en beheer antwoordden `{"ok":true}` |
+| Bestaande sessie | PGB-tenant en rol correct |
+| Zoeken | `ORION-4827` vond twee synthetische documenten |
+| Chat/evidence | correct antwoord met `PGB ingest-worker productietest`, pagina 1 |
+| Governance | terugvraag en generatie als twee nieuwe inhoudsarme regels; tien generatiebronnen |
+| Signalen | 0 app errors, 0 critical/high, 0 gatewaylogschrijffouten, 0 niet-OK gatewaycalls |
+| Runtime 5xx | geen 5xx in app of beheer |
 
-## Databasevolgorde vóór code-deploy
+Eén fail-safe melding op error-niveau — `Reflectietransitie geweigerd of mislukt:
+gesprek_niet_gevonden` — trad op tijdens de eerste chatbeurt, zonder gebruikersfout: de route bleef
+HTTP 200 en het antwoord was correct. Dit reeds in `09d473f` aanwezige gedrag volgt afzonderlijk in
+[#386](https://github.com/merlinijzerman/Bestuurdersportaal/issues/386).
 
-Pas als database-eigenaar, in deze volgorde, toe:
+## Eerlijk niet afzonderlijk uitgevoerd
 
-1. `supabase/migrations/2026_09_11_369_vergelijk_retrieval_audit.sql`
-2. `supabase/migrations/2026_09_11_z367_retrieval_identiteit_auditprojectie.sql`
-3. `supabase/migrations/2026_09_12_368_evidence_auditprojectie.sql`
+- verse wachtwoordlogin; de bestaande geldige PGB-sessie is hergebruikt;
+- positieve live documentvergelijking;
+- negatieve live cross-tenantaccountwissel;
+- live Microsoft/Graph-/Outlook-/SharePointretrieval;
+- de volledige destructieve cross-tenantrunner op Productie.
 
-Voer daarna minimaal uit:
+Deze omissies zijn geen geslaagde smokes en mogen niet achteraf als bewijs worden aangemerkt.
+Microsoft bleef uit en de hermetische stub werd niet product-bedraad.
 
-- `supabase/checks/2026_08_13_t5_vergelijking.sql`;
-- `supabase/checks/2026_09_11_retrieval_identiteit_auditprojectie.sql`;
-- `supabase/checks/2026_09_12_368_evidence_auditprojectie.sql`;
-- `supabase/checks/2026_07_31_r1_structurele_gates.sql`;
-- `supabase/checks/2026_08_20_v3_grants_volledig.sql`;
-- `supabase/checks/2026_08_31_secdef_self_gate.sql`;
-- de volledige cross-tenant/DB-suite.
+## Go/no-go, afsluiting en rollback
 
-De lokale acceptatie heeft de omgekeerde rollbackvolgorde #368 → #367 → #369 en daarna de
-voorwaartse volgorde #369 → #367 → #368 bewezen. Productierollback is geen routinehandeling:
-behoud auditdata en rol code/config en database alleen volgens één expliciet incidentbesluit terug.
+De productiepromotie is **GO en uitgevoerd met beperkingen**. Bij een appregressie blijft
+`09d473f` de voorafgaande codebasis; de additieve auditprojecties worden alleen na afzonderlijke
+data-/auditbeoordeling teruggerold. Microsoftvlaggen blijven uit.
 
-## Deploy- en smokevolgorde
-
-1. Controleer de database-eindmarkers en houd Microsoftvlaggen uit.
-2. Open PR `preview` → `main`; wacht alle verplichte checks af.
-3. Vraag afzonderlijk mergeakkoord en merge pas daarna.
-4. Wacht totdat app en beheer `Ready` zijn; controleer de publieke healthcheck.
-5. Smoke een bestaande sessie en tenantidentiteit op minimaal één fonds.
-6. Smoke `/zoeken` met de synthetische controlecode.
-7. Smoke chat/evidence en controleer het contentsvrije governancespoor.
-8. Smoke `/vergelijk` alleen met twee geschikte synthetische documenten.
-9. Controleer foutsignalen, gatewaylog en deploymentlogs zonder inhoud of secrets te publiceren.
-
-## Reeds bewezen en bewust niet bewezen
-
-Reeds op Preview bewezen: correcte PGB- en Meridiaan-tenantrouting met bestaande sessies, zoeken op
-`ORION-4827`, brongebonden chatantwoord en twee inhoudsarme governanceregels. Niet afzonderlijk
-bewezen: verse wachtwoordlogin, positieve live vergelijking, negatieve live accountwissel en live
-Microsoft/Graph-/Outlook-/SharePointretrieval. Die omissies mogen niet als uitgevoerd worden
-gepresenteerd en worden na deploy alleen toegevoegd als de benodigde veilige fixtures en expliciete
-activeringsscope beschikbaar zijn.
-
-## Go/no-go en rollback
-
-**GO voor het openen van de latere promotie-PR**, nadat deze docs-only PR met akkoord in `preview`
-staat. **Nog geen GO voor merge naar Productie.** No-go bij afwijkende branchrichting, ontbrekende
-database-eindmarker, rode verplichte check, ongeplande Microsoftactivering, tenant-/bronlekkage of
-inhoud in het operationele auditspoor.
-
-Bij een appregressie na deploy: houd alle Microsoftvlaggen uit, rol eerst de code terug naar
-`09d473f` en beoordeel daarna of de additieve auditprojecties veilig kunnen blijven staan. Gebruik
-de rollbacks alleen na expliciete data-/auditbeoordeling.
+De afsluitingsbranch is vanaf `origin/preview` gemaakt en met `origin/main` gereconcilieerd, zodat
+Preview de productiehistorie krijgt. De bijbehorende docs-only PR mag niet zonder nieuw akkoord
+worden gemerged. Issues #367–#370 blijven tot die documentatieacceptatie open als administratief
+vervolg; #386 is een afzonderlijk codevervolg.

@@ -200,6 +200,17 @@ SQL_RETRIEVAL_IDENTITEIT="supabase/checks/2026_09_11_retrieval_identiteit_auditp
 # #368 — gesloten evidence-/modelcontextaudit overleeft beide leesniveaus;
 # onbekende velden met vrije inhoud blijven fail-closed buiten het spoor.
 SQL_EVIDENCE_AUDIT="supabase/checks/2026_09_12_368_evidence_auditprojectie.sql"
+# #434 T4-F — `adapters` in de leesprojectie. Toetst de WERKELIJK GEÏNSTALLEERDE
+# wrappers, niet de tekst van een migratiebestand: er is geen migratierunner, dus
+# een bestand bewijst niets over de database. En hij toetst dat een ongeldige vorm
+# HARD FAALT — stil weglaten zou een antwoord volledig ogend maken terwijl juist
+# de informatie over een niet-geraadpleegde bron is verdwenen.
+SQL_ADAPTERMETA="supabase/checks/2026_09_22_434_meta_adapters.sql"
+# #434 T4-F — de FONDSBREDE adapterstand onder echte RLS. Toetst de bevinding
+# zelf: zonder de grant `governance_audit_read` levert het tabelpad alleen eigen
+# beurten, en de definer-functie levert het hele fonds zonder ook maar iets
+# anders dan de gesloten adaptertellers vrij te geven.
+SQL_ADAPTERSTAND="supabase/checks/2026_09_23_434_adapterstand_fonds.sql"
 # Microsoft 365 fase 2A — delta/cursor/run-integriteit en private Outlook-ACL.
 SQL_M365F2A="supabase/checks/2026_09_04_microsoft_outlook_fase2a.sql"
 # Microsoft 365 fase 3A (#321) — fondsgebonden SharePoint-bron, private ACL,
@@ -208,6 +219,18 @@ SQL_M365F3A="supabase/checks/2026_09_04_microsoft_sharepoint_fase3.sql"
 # Microsoft 365 fase 3B (#321) — documentregister zonder inhoud, één referentie
 # per item, fondsgebonden opzoeking en audit-poort tegen URL's/externe id's.
 SQL_M365F3B="supabase/checks/2026_09_04_microsoft_sharepoint_fase3b_documenten.sql"
+# #413 T4-C — de canonieke webUrl-locator met quarantaine. Deze suite hoort in de
+# gate en niet in een scratchpad: de migratie raakt een BESTAAND schrijfpad (de
+# documentenlijst), en juist de gevallen waarin een unieke index daarop stukloopt
+# — omwisseling van twee URL's binnen één listing, een botsing met een rij buiten
+# de listing, gelijktijdige listings — vallen in een review niet op.
+SQL_M365_WEBURL="supabase/checks/2026_09_20_413_weburl_gedrag.sql"
+# #413 T4-C — de canonicalisering bestaat TWEEMAAL: in SQL (de gegenereerde
+# kolom waartegen wordt opgezocht) en in TypeScript (waarmee wordt opgezocht).
+# Deze suite draait één gedeelde vectorlijst door de SQL-kant; de TS-test
+# `tests/cross-tenant/copilot-mapping.test.ts` bewaakt dat beide lijsten gelijk
+# blijven. Lopen ze uiteen, dan vindt de arm stil niets meer.
+SQL_M365_WEBURL_VECTOREN="supabase/checks/2026_09_20_413_weburl_canonicalisering_vectoren.sql"
 # Microsoft-login fase 1B (#335, T1, besluit 0211) — privaat schema login_private,
 # minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
 # SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
@@ -226,6 +249,9 @@ SQL_P5D_BEEINDIGEN="supabase/checks/2026_08_31_p5d_procedure_beeindigen_gedrag.s
 # auth-/fonds-/rolslot, of staat als productbreed/trigger expliciet gemotiveerd
 # op de allowlist.
 SQL_SECDEF_SELF="supabase/checks/2026_08_31_secdef_self_gate.sql"
+SQL_T4D_COPILOT="supabase/checks/2026_09_21_423_t4d_copilot_rollout.sql"
+SQL_T4D_POSTCONTRACT="supabase/checks/2026_09_21_423_t4d_postcontract_readonly.sql"
+SQL_T4D_POSTCONTRACT_KOPPELING="supabase/checks/2026_09_21_423_t4d_postcontract_met_koppeling.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -423,6 +449,8 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F2A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL_VECTOREN"
 echo
 echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
@@ -448,10 +476,18 @@ echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van he
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_TOELATING"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_RETRIEVAL_IDENTITEIT"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_EVIDENCE_AUDIT"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ADAPTERMETA"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ADAPTERSTAND"
 echo
 
 echo "-- P5d procedure beëindigen/heropenen (rolpoort, I2, snapshot en audit) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5D_BEEINDIGEN"
+echo
+
+echo "-- #423 T4-D Copilot-rolloutpoorten (rollout dicht, contractstand, rolscheiding, operatoraudit) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4D_COPILOT"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4D_POSTCONTRACT"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4D_POSTCONTRACT_KOPPELING"
 echo
 
 echo "-- #212 SECURITY DEFINER zelfsloten (inventaris + auth/fonds/rol-gates) --"
@@ -460,6 +496,7 @@ echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_V3"
+V3_TEST_DATABASE_URL="$DB_URL" node scripts/test-v3-storage-platform-variant.mjs
 echo
 
 echo "============================================================================"

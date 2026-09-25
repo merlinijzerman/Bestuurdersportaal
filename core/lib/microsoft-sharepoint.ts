@@ -256,8 +256,14 @@ export async function sharepointPreview(ctx: BronContext, ref: string) {
     const preview = await graphJson<{ getUrl?: string; postUrl?: string }>(accessToken, previewActieUrl(document.drive_id, document.item_id), { method: "POST", body: {} });
     const url = veiligeSharePointUrl(preview.getUrl);
     if (!url) throw new SharePointGraphError("graph_response");
+    // Microsoft adviseert `nb=true` voor een ingesloten Graph-preview: daarmee
+    // blijft de kortlevende embedweergave chromeless en probeert zij niet eerst
+    // een SharePoint-banner als bovenliggend document te tonen. De tokenized URL
+    // wordt nog steeds uitsluitend aan de iframe doorgegeven en nergens bewaard.
+    const previewUrl = new URL(url);
+    previewUrl.searchParams.set("nb", "true");
     await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.preview.geslaagd", correlationId: ctx.correlationId, foutcategorie: null, details: { document_ref: ref, latency_ms: Date.now() - start } }).catch(() => undefined);
-    return { url, naam: item.name?.slice(0, 240) ?? document.naam, bestandstype: document.bestandstype, webUrl: veiligeSharePointUrl(item.webUrl) };
+    return { url: previewUrl.toString(), naam: item.name?.slice(0, 240) ?? document.naam, bestandstype: document.bestandstype, webUrl: veiligeSharePointUrl(item.webUrl) };
   } catch (fout) {
     const categorie = sharepointFoutcategorie(fout);
     await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.preview.mislukt", correlationId: ctx.correlationId, foutcategorie: categorie, details: { document_ref: ref, latency_ms: Date.now() - start } }).catch(() => undefined);

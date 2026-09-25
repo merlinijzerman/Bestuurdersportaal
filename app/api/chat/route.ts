@@ -15,6 +15,7 @@ import {
 import { rondAfStrikt } from "@/core/lib/ai-actie-afronding";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { bouwBronstatusDto } from "@/core/lib/retrieval/bronstatus-dto";
 import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, bewaakNaIO, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
@@ -2822,6 +2823,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // consistent kan onderscheiden wat door het portaal is aangeleverd.
     let bronSentinel = maakBronSentinel();
     let contextGeneutraliseerd = 0;
+    // #434 — de GESLOTEN projectie van de bronstatus. `undefined` zolang er
+    // niets te melden is, zodat het bestaande antwoordcontract ongewijzigd blijft.
+    let bronstatusDto: import("@/core/lib/retrieval/bronstatus-dto").BronstatusDto[] | undefined;
     let retrievalMeta: RetrievalMeta | null = null;
     let reflectieBronsetResolutie: RetrievalMeta["contextbron_resolutie"];
 
@@ -3195,6 +3199,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // door naar respectievelijk de systeemprompt en het auditspoor.
       bronSentinel = voltooid.sentinel;
       contextGeneutraliseerd = voltooid.geneutraliseerd;
+      bronstatusDto = bouwBronstatusDto(voltooid.bronstatus);
       retrievalMeta = {
         // De HERBOUWDE meta: hij beschrijft exact de bronnen die in de context
         // staan, ook wanneer de grens blokken heeft afgekapt.
@@ -3958,6 +3963,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           send({
             type: "meta",
             bronnen,
+            // #434 — alleen aanwezig als een GEVRAAGDE bron niet is geraadpleegd.
+            // Zonder dit veld zou de gebruiker een kleinere bronset als volledig
+            // zien; mét een leeg veld zou elk bestaand antwoord veranderen.
+            ...(bronstatusDto ? { bronstatus: bronstatusDto } : {}),
             modus: effectieveModus,
             transformatie: transformatieActief,
             chunks_gevonden: chunks.length,
@@ -4986,6 +4995,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                   fase === "generatie"
                     ? "Het opstellen van het antwoord duurde te lang. Probeer het opnieuw of stel uw vraag gerichter."
                     : "Het zoeken in de bronnen duurde te lang. Probeer het opnieuw of stel uw vraag gerichter.",
+              });
+            }
+            // #434 — een geweigerde adaptermetadatavorm is GEEN afbreking maar
+            // een interne invariant die brak. De beurt stopt fail-closed, en de
+            // gebruiker hoort dat te zien: zonder deze melding sluit de stream
+            // zonder antwoord én zonder uitleg, wat als een hapering leest.
+            // De categorie zelf staat inmiddels op `ai_actie.resultaat_ref`.
+            if (afbreekreden === "adaptermetadata_ongeldig") {
+              send({
+                type: "error",
+                error:
+                  "De verantwoording over de geraadpleegde bronnen kon niet worden vastgesteld. " +
+                  "Er is daarom geen antwoord gegeven. Probeer het opnieuw; blijft dit terugkomen, meld het dan bij beheer.",
               });
             }
             console.warn(`[chat] beurt afgebroken (${fase}:${afbreekreden}) — correlatie ${ctx.requestId}`);

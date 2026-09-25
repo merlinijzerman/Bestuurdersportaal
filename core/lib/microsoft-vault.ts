@@ -47,8 +47,14 @@ export async function leesVerbinding(fondsId: string, gebruikerId: string): Prom
   const r = await db().query("select * from microsoft_private.lees_verbinding($1,$2)", [fondsId, gebruikerId]);
   return r.rows[0] as Verbinding | undefined;
 }
-export async function bewaarKoppeling(args: Omit<Verbinding, "id" | "laatst_getest_op" | "gekoppeld_op" | "status"> & { cache: VersleuteldBlob }) {
-  await db().query("select microsoft_private.bewaar_koppeling($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", [args.fonds_id,args.gebruiker_id,args.tenant_id,args.microsoft_object_id,args.home_account_id,args.display_name,args.masked_username,args.scopes,args.cache.sleutelVersie,args.cache.iv,args.cache.tag,args.cache.ciphertext]);
+// #423 T4-D: de 13e parameter is de appregistratie waaronder deze consent is
+// verleend. Verplicht, niet optioneel — zonder dat zou de contractmigratie (die
+// de oude 12-parameterversie dropt) de draaiende koppelflow breken, en zou
+// client_id nooit gevuld raken. `client_id` staat bewust niet in `Verbinding`:
+// `lees_verbinding` levert die kolom niet, en een type dat meer belooft dan de
+// functie teruggeeft is een leugen die later iemand kost.
+export async function bewaarKoppeling(args: Omit<Verbinding, "id" | "laatst_getest_op" | "gekoppeld_op" | "status"> & { cache: VersleuteldBlob; client_id: string }) {
+  await db().query("select microsoft_private.bewaar_koppeling($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", [args.fonds_id,args.gebruiker_id,args.tenant_id,args.microsoft_object_id,args.home_account_id,args.display_name,args.masked_username,args.scopes,args.cache.sleutelVersie,args.cache.iv,args.cache.tag,args.cache.ciphertext,args.client_id]);
 }
 export async function leesCache(fondsId: string, gebruikerId: string) {
   const r = await db().query("select * from microsoft_private.lees_cache($1,$2)", [fondsId, gebruikerId]);
@@ -152,6 +158,17 @@ export async function upsertSharePointDocumenten(args: { fondsId: string; bronId
 }
 export async function leesSharePointDocument(fondsId: string, ref: string): Promise<SharePointDocument | undefined> {
   const r = await db().query("select * from microsoft_private.sharepoint_lees_document($1,$2)", [fondsId, ref]);
+  return r.rows[0] as SharePointDocument | undefined;
+}
+/**
+ * #413 — locatoropzoeking voor de Copilot-arm: van een canonieke webUrl naar
+ * HOOGSTENS ÉÉN geregistreerd document. De DB-functie dwingt `count = 1` af en
+ * negeert rijen in quarantaine (`mapping_status <> 'actief'`), dus een URL die
+ * bij twee documenten hoort levert niets op. De canonicalisering gebeurt in de
+ * database, met exact de functie die ook de gegenereerde kolom voedt.
+ */
+export async function zoekSharePointDocumentOpWebUrl(fondsId: string, bronId: string, webUrl: string): Promise<SharePointDocument | undefined> {
+  const r = await db().query("select * from microsoft_private.sharepoint_zoek_document_op_weburl($1,$2,$3)", [fondsId, bronId, webUrl]);
   return r.rows[0] as SharePointDocument | undefined;
 }
 export async function markeerSharePointDocument(fondsId: string, ref: string, status: "gezien" | "verwijderd" | "ontoegankelijk") {

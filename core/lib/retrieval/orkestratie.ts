@@ -17,12 +17,12 @@
 //  orkestratie doet dat hier bewust net zo: selectie per query, dan samenvoegen.
 // ============================================================================
 import { effectievePeildatum } from "../rag";
-import type { RetrievalMeta } from "../rag";
+import type { AdapterMeta, AdapterTellers, RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bouwCitaties } from "./citatie";
 import {
-  verifieerToelating,
+  verifieerToelatingPerGroep,
   nietOndersteundeFilters,
   vatToelatingSamen,
   type Weigering,
@@ -30,11 +30,22 @@ import {
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type { Afbreekgrendel } from "./afbreken";
 import { maakDocumentIdentiteit } from "./identiteit";
+import { BronNietGeraadpleegd } from "./contract";
+import {
+  ADAPTERMETA_FOUTCATEGORIE,
+  AdaptermetadataOngeldig,
+  valideerAdapterMeta,
+} from "./adaptermeta";
 import type {
   AdapterCapabilities,
   AdapterUitkomst,
   Bronresultaat,
   Bronsoort,
+  Bronstatus,
+  Bronstatusreden,
+  RetrievalFoutcategorie,
+  WeergaveKandidaat,
+  WeergaveVerrijking,
   CitaatOpdracht,
   Queries,
   RetrievalAdapter,
@@ -66,6 +77,66 @@ export interface SelectiegrenzenPerQuery {
 export interface Spoor {
   query: RetrievalQuery;
   grenzen: SelectiegrenzenPerQuery;
+  /**
+   * #426 — de adapter VOOR DIT SPOOR. Ontbreekt hij, dan geldt
+   * `opdracht.adapter`. Dat is geen gemak maar de byte-identiteitsgarantie:
+   * zolang geen enkel spoor dit veld zet, is er precies één adaptergroep en kan
+   * de orkestratie niet anders lopen dan vóór T4-E.
+   */
+  adapter?: RetrievalAdapter;
+  /**
+   * Wat er gebeurt als DEZE bron niet kon worden geraadpleegd. Gesloten
+   * opsomming, geen providerboodschap.
+   *
+   * Het veld staat op het spoor maar geldt de ADAPTERGROEP: een adapter faalt
+   * één keer, niet één keer per spoor. Gemengde standen binnen één groep zijn
+   * daarom ongeldig en werpen vóór elke aanroep.
+   *
+   * DE DRIEDELING, en er is géén eenvoudige default:
+   *   • `"stop"` (expliciet) — altijd fail-closed, ook bij één adaptergroep;
+   *   • `"meld"` (expliciet) — doorgaan, maar UITSLUITEND met een zichtbare
+   *     `bronstatus` op de uitkomst;
+   *   • NIET GEZET — bij één adaptergroep het bestaande gedrag (lege uitslag
+   *     die haar `fout` meedraagt), bij meerdere groepen fail-closed.
+   *
+   * Dat laatste onderscheid is geen slordigheid. Het gevaar dat dit veld moet
+   * afdekken is stille degradatie naar een volledig ogend antwoord uit alleen de
+   * OVERIGE bronnen; met één groep bestaan die overige bronnen niet, en een lege
+   * uitslag mét `fout` is dan geen terugval maar gewoon het bestaande contract —
+   * dat de byte-identiteitseis van #426 beschermt.
+   *
+   * Zie `stoptBijFout()` voor de beslissing zelf.
+   */
+  bijBronfout?: "stop" | "meld";
+}
+
+/** #426 — waar één resultaatINSTANTIE vandaan komt. Request-lokaal. */
+export interface Herkomst {
+  groep: number;
+  ordinal: number;
+  primair: boolean;
+}
+
+/**
+ * De request-lokale herkomststaat.
+ *
+ * EIGENAAR is `voerVolledigeRetrievalUit()` — dezelfde eigenaar als de
+ * `Afbreekgrendel` — die hem via een private parameter uitleent aan beide fasen.
+ * Bewust géén moduleglobale `WeakMap`: die overleeft het verzoek en wordt gedeeld
+ * door élke gelijktijdige beurt in hetzelfde proces. De objectsleutels botsen
+ * niet, dus het zou waarschijnlijk wérken — en juist daarom zou een
+ * tenantoverschrijdende structuur niet opvallen. Bewust ook géén veld op
+ * `RetrievalTussenresultaat`: dat type zit via `Omit<…>` in `RetrievalUitkomst`
+ * en verlaat dus de orkestratie.
+ */
+export interface HerkomstStaat {
+  readonly kaart: WeakMap<Bronresultaat, Herkomst>;
+  /** Index = adaptergroep. Gevuld door fase 1, gelezen door fase 2. */
+  adapters: readonly RetrievalAdapter[];
+}
+
+export function maakHerkomstStaat(): HerkomstStaat {
+  return { kaart: new WeakMap(), adapters: [] };
 }
 
 export interface Orkestratieopdracht {
@@ -177,10 +248,20 @@ export function binnenCentraleServergrens(
  */
 function bouwRetrievalMeta(
   opgenomen: Bronresultaat[],
-  basis: RetrievalTussenresultaat["metaBasis"]
+  basis: RetrievalTussenresultaat["metaBasis"],
+  /**
+   * #426 — welke opgenomen bronnen primair zijn. Zonder staat valt hij terug op
+   * `primaireRefs`; dat is het pad van vóór T4-E en blijft byte-identiek. MET
+   * staat leest hij de herkomst van de INSTANTIE, want een `ref` uit groep B die
+   * gelijk is aan een primaire `ref` uit groep A zou anders als primair tellen.
+   */
+  primairVan?: (bron: Bronresultaat) => boolean,
+  /** #434 — welke adaptergroep een opgenomen bron had; alleen bij >1 groep. */
+  groepVan?: (bron: Bronresultaat) => number
 ): RetrievalMeta {
-  const primair = opgenomen.filter((b) => basis.primaireRefs.has(b.ref));
-  const aanvullend = opgenomen.filter((b) => !basis.primaireRefs.has(b.ref));
+  const isPrimair = primairVan ?? ((b: Bronresultaat) => basis.primaireRefs.has(b.ref));
+  const primair = opgenomen.filter(isPrimair);
+  const aanvullend = opgenomen.filter((b) => !isPrimair(b));
   const basisMeta = bouwMeta(basis.methode, basis.opgehaald, primair.map(alsAuditBron), basis.correlationId);
   const volledigeBronmeta = bouwMeta(
     basis.methode,
@@ -205,6 +286,9 @@ function bouwRetrievalMeta(
     bronversie_audit: volledigeBronmeta.bronversie_audit,
     opgehaald: basis.opgehaald,
     geselecteerd: opgenomen.length,
+    ...(basis.adaptersBasis && groepVan
+      ? { adapters: hertelOpgenomen(basis.adaptersBasis, opgenomen, groepVan) }
+      : {}),
     ...(basis.meerdereSporen
       ? {
           aanvullend: {
@@ -231,39 +315,49 @@ function bouwRetrievalMeta(
 export async function voerRetrievalUit(
   ctx: RetrievalContext,
   opdracht: Orkestratieopdracht,
-  geleendeGrendel?: Afbreekgrendel
+  geleendeGrendel?: Afbreekgrendel,
+  /** #426 — GELEEND van `voerVolledigeRetrievalUit()`; zie `HerkomstStaat`. */
+  herkomst?: HerkomstStaat
 ): Promise<RetrievalTussenresultaat> {
   const t0 = Date.now();
   const sporen = opdracht.sporen;
   if (sporen.length === 0) {
-    // Het type maakt dit onmogelijk; deze grendel vangt een aanroeper die het
-    // type omzeilt (bv. een `as`-cast of JS). Stil doorgaan zou een beurt
-    // zonder enige bron opleveren die er wél volwaardig uitziet.
     throw new Error("orkestratie: ten minste één spoor is vereist");
   }
 
-  // 1. Adapters bevragen. De sporen draaien parallel, net als vóór T2-1.
-  //    Elk spoor krijgt een AFGELEIDE context met zijn EIGEN documentscope. Eén
-  //    gedeelde scope zou het aanvullende spoor mee-scopen op de primaire
-  //    documenten, en dan zoekt de verbreding naar de bibliotheek niet meer
-  //    breder — precies wat zij moet doen.
-  // PR-B — één samengesteld signaal voor de hele keten: de clientverbinding én
-  // de deadline. Het onthoudt waaróm het afging, zodat een verbroken
-  // verbinding `annulering` oplevert en een verlopen deadline `timeout` — twee
-  // verschillende dingen die een kaal AbortSignal niet uit elkaar houdt.
-  // Is er een grendel geleend, dan is de UITLENER de eigenaar en sluit hij hem;
-  // deze functie mag dat dan niet doen, ook niet op het foutpad.
+  // ── Adaptergroepen ────────────────────────────────────────────────────────
+  // Groeperen op OBJECTIDENTITEIT, niet op naam: twee verschillend
+  // geconfigureerde instanties van dezelfde adapter mogen elkaars standenmap
+  // niet delen. Zolang geen spoor een eigen adapter zet, is er één groep en is
+  // elke stap hieronder identiek aan die van vóór T4-E.
+  const groepen: RetrievalAdapter[] = [];
+  const groepVanAdapter = new Map<RetrievalAdapter, number>();
+  const spoorNaarGroep = sporen.map(({ adapter }) => {
+    const effectief = adapter ?? opdracht.adapter;
+    let groep = groepVanAdapter.get(effectief);
+    if (groep === undefined) {
+      groep = groepen.length;
+      groepen.push(effectief);
+      groepVanAdapter.set(effectief, groep);
+    }
+    return groep;
+  });
+  if (herkomst) herkomst.adapters = groepen;
+
+  // `bijBronfout` geldt de GROEP; gemengde standen drukken een tegenstrijdige
+  // bedoeling uit en horen luid te falen in plaats van stil te worden uitgelegd.
+  const beleidPerGroep = bepaalBronfoutbeleid(sporen, spoorNaarGroep);
+
+  const capsPerGroep = groepen.map((a) => a.capabilities());
+  const capsVanSpoor = (i: number) => capsPerGroep[spoorNaarGroep[i]];
+  const adapterVanSpoor = (i: number) => groepen[spoorNaarGroep[i]];
+
   const eigenGrendel = geleendeGrendel === undefined;
   const grendel = geleendeGrendel ?? maakAfbreekgrendel(ctx.signal, opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS);
-  const ctxMetGrendel = { ...ctx, signal: grendel.signal };
+  // `resterendMs` komt uit DEZELFDE grendel als `signal`. Twee klokken die
+  // onafhankelijk worden meegegeven, bewaken vroeg of laat verschillende dingen.
+  const ctxMetGrendel = { ...ctx, signal: grendel.signal, resterendMs: () => grendel.resterendMs() };
 
-  //    `ctx.scope.documentIds` is voor een adapter de ENIGE bron van waarheid;
-  //    de orkestratie zet de spoorscope hier één keer en gebruikt diezelfde
-  //    afgeleide context ook voor `verrijkSelectie`.
-  // "Vandaag" wordt ÉÉN keer per beurt vastgesteld en door alle sporen gedeeld.
-  // Zou elk spoor het zelf afleiden, dan kan een beurt die middernacht kruist
-  // twee verschillende peildata gebruiken — en dan verschilt de
-  // review-vervalcontrole per spoor binnen dezelfde vraag.
   const vandaagVoorDezeBeurt = effectievePeildatum(undefined);
   const peildatumVanSpoor = (q: RetrievalQuery) => q.filters?.peildatum ?? vandaagVoorDezeBeurt;
 
@@ -272,18 +366,14 @@ export async function voerRetrievalUit(
     scope: { ...ctx.scope, documentIds: query.documentScope },
   }));
   try {
-    // 1a. TOELATINGSPOORT, VÓÓR `zoek()` — de filterbelofte. Een filter dat de
-    //     adapter niet ondersteunt is een FOUT, nooit een stille no-op: anders
-    //     zoekt hij breder dan gevraagd en ziet niemand het. Dat spoor wordt
-    //     dan niet bevraagd; `zoek()` wordt aantoonbaar niet aangeroepen.
-    const caps = opdracht.adapter.capabilities();
+    // ── 1a. Filterbelofte, VÓÓR `zoek()` ─────────────────────────────────────
     const contextBronsoortenGeldig = geldigeBronsoorten(ctx.bronbeleid.bronsoorten);
-    const capabilityBronsoortenGeldig = geldigeBronsoorten(caps.bronsoorten);
     const toegestaneBronsoorten = new Set(contextBronsoortenGeldig ? ctx.bronbeleid.bronsoorten : []);
-    const nietOndersteund = sporen.map(({ query }) => {
+    const nietOndersteund = sporen.map(({ query }, i) => {
+      const caps = capsVanSpoor(i);
       const fouten = nietOndersteundeFilters(caps, query);
       if (!contextBronsoortenGeldig) fouten.push("bronbeleid:ongeldige_bronsoort");
-      if (!capabilityBronsoortenGeldig) fouten.push("capability:ongeldige_bronsoort");
+      if (!geldigeBronsoorten(caps.bronsoorten)) fouten.push("capability:ongeldige_bronsoort");
       if (!caps.strategieen.includes(query.strategie)) fouten.push(`strategie:${query.strategie}`);
       for (const bronsoort of query.filters?.bronsoort ?? []) {
         if (!isBekendeBronsoort(bronsoort) || !toegestaneBronsoorten.has(bronsoort)) {
@@ -294,80 +384,108 @@ export async function voerRetrievalUit(
     });
     const filterweigeringen = nietOndersteund.filter((f) => f.length > 0).length;
 
+    // ── 1b. Adapters bevragen, parallel per spoor ────────────────────────────
     const uitkomsten: AdapterUitkomst[] = await Promise.all(
       sporen.map(({ query }, i) =>
         nietOndersteund[i].length > 0
           ? Promise.resolve<AdapterUitkomst>({
               kandidaten: [],
               methode: "geen",
-              // Niet bevraagd — dus ook geen provider die iets heeft gedaan.
               provider: "geen",
               latencyMs: 0,
               opgehaald: 0,
               fout: "configuratiefout",
             })
-          : opdracht.adapter.zoek(spoorContext[i], query)
+          : adapterVanSpoor(i).zoek(spoorContext[i], query)
       )
     );
-    // Tussen twee stappen door: is er afgebroken, dan stopt de keten hier — ook
-    // als de I/O zelf toevallig al klaar was.
     grendel.bewaak();
 
-    // 2. TOELATINGSPOORT, NÁ `zoek()` en VÓÓR de kandidatenbegrenzing. Niet pas
-    //    vóór de selectie: kapt de pool eerst af op `maxKandidaten`, dan kan een
-    //    geweigerde bron een toelaatbare kandidaat uit de pool hebben verdrongen.
-    //
-    //    ÉÉN BATCH over alle sporen: één `poortNu` en één V5-herlezing per unieke
-    //    bron. Per spoor apart zou dezelfde bron twee keer worden gelezen en bij
-    //    een intrekking tussen die lezingen verschillend worden beoordeeld.
-    // Bronbeleid is server-side context. Ook een adapter die per ongeluk of
-    // kwaadwillig een niet-toegestane soort terugstuurt, kan die grens niet
-    // verruimen. De filtering staat vóór de toelatingspoort en selectie.
     const scopeweigeringen: Weigering[] = [];
-    const beleidsToegelaten = uitkomsten.map((u, spoor) =>
+
+    // ── 2. VOORGRENS, zonder I/O ─────────────────────────────────────────────
+    //    Geen toelatingspoort en geen bewijs: alleen voorkomen dat een adapter
+    //    verrijkings-I/O doet voor een kandidaat die op zijn RUWE, server-
+    //    controleerbare velden al evident buiten scope valt.
+    //    De weigering wordt HIER al vastgelegd. Filtert de voorgrens stil, dan
+    //    verdwijnt een buiten-scope-kandidaat zonder spoor in de audit: hij
+    //    bereikt de tweede grens niet meer en zou daar dus ook niet worden
+    //    geteld. Dubbeltellen kan niet, juist omdat hij niet verder komt.
+    const voorgeselecteerd = uitkomsten.map((u, spoor) =>
       u.kandidaten.filter((b) => {
-        const toegestaan = binnenCentraleServergrens(spoorContext[spoor], caps, b);
-        if (!toegestaan) {
-          scopeweigeringen.push({ spoor, ref: b.ref, grond: "buiten_server_scope" });
-        }
+        const toegestaan = binnenCentraleServergrens(spoorContext[spoor], capsVanSpoor(spoor), b);
+        if (!toegestaan) scopeweigeringen.push({ spoor, ref: b.ref, grond: "buiten_server_scope" });
         return toegestaan;
       })
     );
-    const poort = await verifieerToelating(
+
+    // ── 3. PRE-POORTVERRIJKING (#426 D-6) ────────────────────────────────────
+    //    Alles wat een `Bronresultaat` buiten `weergave` kan wijzigen, gebeurt
+    //    HIER — vóór de definitieve servergrens en vóór V1–V5. Anders kan een
+    //    bron die als `fonds` is toegelaten ná de poort `notulen` worden, en dat
+    //    is precies het veld waarop de grens beslist.
+    const verrijkt: Bronresultaat[][] = [];
+    const extraPerSpoor: Partial<RetrievalMeta>[] = [];
+    for (let i = 0; i < voorgeselecteerd.length; i++) {
+      const hook = adapterVanSpoor(i).verrijkKandidaten;
+      if (!hook || voorgeselecteerd[i].length === 0) {
+        verrijkt.push(voorgeselecteerd[i]);
+        extraPerSpoor.push({});
+        continue;
+      }
+      const v = await hook.call(adapterVanSpoor(i), spoorContext[i], voorgeselecteerd[i], {
+        peildatum: peildatumVanSpoor(sporen[i].query),
+      });
+      verrijkt.push(v.resultaten);
+      extraPerSpoor.push({ ...(v.meta ?? {}) });
+      grendel.bewaak();
+    }
+
+    // ── 4. De DEFINITIEVE servergrens, op de verrijkte vorm ──────────────────
+    const beleidsToegelaten = verrijkt.map((lijst, spoor) =>
+      lijst.filter((b) => {
+        const toegestaan = binnenCentraleServergrens(spoorContext[spoor], capsVanSpoor(spoor), b);
+        if (!toegestaan) scopeweigeringen.push({ spoor, ref: b.ref, grond: "buiten_server_scope" });
+        return toegestaan;
+      })
+    );
+
+    // ── 5. TOELATINGSPOORT, per adaptergroep, met ÉÉN gedeelde `poortNu` ─────
+    const poort = await verifieerToelatingPerGroep(
       ctxMetGrendel,
-      opdracht.adapter,
-      beleidsToegelaten
+      groepen,
+      beleidsToegelaten,
+      spoorNaarGroep,
+      Date.now()
     );
     grendel.bewaak();
     const toegelatenPerSpoor = poort.toegelatenPerSpoor;
     const alleWeigeringen = [...scopeweigeringen, ...poort.geweigerd];
-    const geweigerdPerSpoor = sporen.map(
-      (_, i) => alleWeigeringen.filter((w) => w.spoor === i).length
-    );
-    // Inhoudsvrij, alleen tellingen; `null` als er niets is geweigerd.
+    const geweigerdPerSpoor = sporen.map((_, i) => alleWeigeringen.filter((w) => w.spoor === i).length);
     const toelating = vatToelatingSamen(alleWeigeringen, filterweigeringen);
 
-    // 3. `perAdapter` in SPOORVOLGORDE opbouwen, niet in volgorde van binnenkomst.
-    //    Zou dit vanuit de parallelle promises gebeuren, dan bepaalde de
-    //    responstijd de volgorde en was de samenvoeging niet meer deterministisch.
-    //    `kandidaten` telt wat de poort HEEFT TOEGELATEN: een geweigerde bron mag
-    //    ook in het auditspoor niet meetellen.
     const perAdapter: RetrievalTussenresultaat["perAdapter"] = uitkomsten.map((u, i) => ({
-      naam: opdracht.adapter.naam,
+      naam: adapterVanSpoor(i).naam,
       query: sporen[i].query.naam,
       methode: u.methode,
       latencyMs: u.latencyMs,
       kandidaten: toegelatenPerSpoor[i].length,
       fout: u.fout ?? (scopeweigeringen.some((w) => w.spoor === i) ? "buiten_scope" : undefined),
-      // Alleen aanwezig als er werkelijk iets is geweigerd: een veld dat altijd
-      // op 0 staat zou elke bestaande snapshot veranderen zonder iets te melden.
       ...(geweigerdPerSpoor[i] > 0 ? { geweigerd: geweigerdPerSpoor[i] } : {}),
     }));
 
-    // 4. Harde grens op de KANDIDATENPOOL — niet op de eindselectie. De pool is
-    //    bewust ruimer (`max(3 × maxResultaten, 20)`), want de centrale weging mag
-    //    een kandidaat van plek 15 alsnog in de top halen. Terugkappen naar
-    //    `maxResultaten` zou die promotie stil wegnemen.
+    // ── 5b. FAIL-CLOSED bij een bron die niet kon worden geraadpleegd ───────
+    //    Dit staat VÓÓR begrenzing, selectie en citaatvorming. Zou het erna
+    //    staan, dan is er al een antwoord gebouwd uit de overgebleven bronnen en
+    //    is "stoppen" niet meer dan een melding achteraf — precies de stille
+    //    fallback die dit ticket verbiedt.
+    const bronstatus = bouwBronstatus(uitkomsten, perAdapter, spoorNaarGroep, groepen);
+    const moetStoppen = uitkomsten.some(
+      (u, i) => isBronfout(u.fout) && stoptBijFout(beleidPerGroep[spoorNaarGroep[i]], groepen.length)
+    );
+    if (moetStoppen) throw new BronNietGeraadpleegd(bronstatus);
+
+    // ── 6. Harde grens op de KANDIDATENPOOL ─────────────────────────────────
     let truncatie: RetrievalTussenresultaat["truncatie"];
     const begrensd = toegelatenPerSpoor.map((toegelaten, i) => {
       const max = sporen[i].query.maxKandidaten;
@@ -376,42 +494,31 @@ export async function voerRetrievalUit(
       return toegelaten.slice(0, max);
     });
 
-    // 5. Selectie PER SPOOR — zie de kopnoot — gevolgd door de providerhook.
+    // ── 7. Selectie PER SPOOR ───────────────────────────────────────────────
     const geselecteerdPerSpoor: Bronresultaat[][] = [];
-    const extraPerSpoor: Partial<RetrievalMeta>[] = [];
     for (let i = 0; i < uitkomsten.length; i++) {
-      const u = uitkomsten[i];
       const g = sporen[i].grenzen;
       const perRef = new Map(begrensd[i].map((b) => [b.ref, b]));
-      const sel = await selecteerEnVerrijk(begrensd[i].map(alsSelectieBron), u.methode as RetrievalMeta["methode"], {
-        filters: sporen[i].query.filters,
-        maxResults: sporen[i].query.maxResultaten,
-        maxPerDoc: g.maxPerDoc,
-        representatieConstraints: g.representatieConstraints,
-        regimeWeging: g.regimeWeging,
-        relevantieDrempel: g.relevantieDrempel,
-      });
-      let gekozen = sel.chunks.map((b) => perRef.get(b.id)).filter((b): b is Bronresultaat => Boolean(b));
-      const extra = { ...sel.extra };
-      // Providerspecifieke uitbreiding (Supabase: parent-context). Per spoor, op
-      // exact dezelfde plek als vóór T2-1.
-      if (opdracht.adapter.verrijkSelectie && gekozen.length > 0) {
-        const v = await opdracht.adapter.verrijkSelectie(spoorContext[i], gekozen, {
-          // De EFFECTIEVE peildatum van dit spoor: dezelfde waarde waarmee de
-          // retrieval draaide. Een lege string zou de review-vervalcontrole op
-          // generieke siblings uitschakelen.
-          peildatum: peildatumVanSpoor(sporen[i].query),
-        });
-        gekozen = v.resultaten;
-        Object.assign(extra, v.meta ?? {});
-      }
-      geselecteerdPerSpoor.push(gekozen);
-      extraPerSpoor.push(extra);
+      const sel = await selecteerEnVerrijk(
+        begrensd[i].map(alsSelectieBron),
+        uitkomsten[i].methode as RetrievalMeta["methode"],
+        {
+          filters: sporen[i].query.filters,
+          maxResults: sporen[i].query.maxResultaten,
+          maxPerDoc: g.maxPerDoc,
+          representatieConstraints: g.representatieConstraints,
+          regimeWeging: g.regimeWeging,
+          relevantieDrempel: g.relevantieDrempel,
+        }
+      );
+      geselecteerdPerSpoor.push(
+        sel.chunks.map((b) => perRef.get(b.id)).filter((b): b is Bronresultaat => Boolean(b))
+      );
+      Object.assign(extraPerSpoor[i], sel.extra);
       grendel.bewaak();
     }
 
-    // 5. Samenvoegen. Het primaire spoor vooraan; een document dat daar al in zit
-    //    komt niet nóg eens uit een volgend spoor (één passage, één bronnummer).
+    // ── 8. Samenvoegen ──────────────────────────────────────────────────────
     const primair = geselecteerdPerSpoor[0] ?? [];
     const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.id));
     const aanvullend = geselecteerdPerSpoor
@@ -420,26 +527,48 @@ export async function voerRetrievalUit(
       .filter((b) => !primaireDocIds.has(b.documentIdentiteit.id));
     const geselecteerd = [...primair, ...aanvullend];
 
-    // 6. De contextgrens wordt NIET hier afgedwongen. Meten op de kale passage zou
-    //    de parent-uitbreiding, de bronkoppen en de scheidingstekens niet
-    //    meetellen, en dan is de grens geen grens. Zij geldt in `citeer()`, op de
-    //    werkelijk gerenderde blokken.
+    // ── 9. HERKOMST per instantie, VÓÓR enige groepering ─────────────────────
+    if (herkomst) {
+      const groepVanBron = new Map<Bronresultaat, number>();
+      geselecteerdPerSpoor.forEach((lijst, i) => {
+        for (const b of lijst) if (!groepVanBron.has(b)) groepVanBron.set(b, spoorNaarGroep[i]);
+      });
+      geselecteerd.forEach((bron, ordinal) => {
+        herkomst.kaart.set(bron, {
+          groep: groepVanBron.get(bron) ?? 0,
+          ordinal,
+          primair: ordinal < primair.length,
+        });
+      });
+    }
 
-    // 7. Auditspoor over de HUIDIGE selectie. Kapt `citeer()` later blokken af,
-    //    dan wordt deze meta daar opnieuw gebouwd over exact de opgenomen bronnen.
+    // #434 — alleen bij meer dan één adaptergroep; met één groep ontstaat de
+    // sleutel niet en blijft het bestaande pad byte-identiek.
+    const adaptersBasis = bouwAdapterMeta(
+      geselecteerd,
+      uitkomsten,
+      perAdapter,
+      spoorNaarGroep,
+      groepen,
+      groepVanMet(herkomst)
+    );
+
     const metaBasis = {
       methode: uitkomsten[0].methode as RetrievalMeta["methode"],
       opgehaald: uitkomsten.reduce((s, u) => s + u.opgehaald, 0),
       diagnostiek: uitkomsten[0].diagnostiek ?? {},
-      // De inhoudsvrije poortsamenvatting reist mee in de META, want die gaat
-      // via de route naar het duurzame auditspoor. Alleen aanwezig als er iets
-      // is geweigerd: een altijd-aanwezig veld zou elke snapshot veranderen.
       extra: { ...(extraPerSpoor[0] ?? {}), ...(toelating ? { toelating } : {}) },
       primaireRefs: new Set(primair.map((b) => b.ref)),
       meerdereSporen: uitkomsten.length > 1,
       correlationId: ctx.correlationId,
+      ...(adaptersBasis ? { adaptersBasis } : {}),
     };
-    const meta = bouwRetrievalMeta(geselecteerd, metaBasis);
+    const meta = bouwRetrievalMeta(
+      geselecteerd,
+      metaBasis,
+      primairVanMet(herkomst, metaBasis),
+      adaptersBasis ? groepVanMet(herkomst) : undefined
+    );
 
     return {
       kandidaten: begrensd.flat(),
@@ -451,24 +580,242 @@ export async function voerRetrievalUit(
         uitkomsten.find((u) => u.fout)?.fout ??
         (scopeweigeringen.length > 0 ? "buiten_scope" : undefined),
       meta,
-      // De gezaghebbende grens komt van de primaire query en reist mee, zodat
-      // `citeer()` hem niet nóg eens hoeft te krijgen (twee plekken lopen uiteen).
       maxContextTekens: sporen[0].query.maxContextTekens,
+      ...(bronstatus.length > 0 ? { bronstatus } : {}),
       metaBasis,
-      // De grendel reist mee naar fase 2: de weergaveverrijking (parent,
-      // notulen, documentmetadata) en de contextopbouw horen binnen dezelfde
-      // deadline. Sloot hij hier, dan viel dat werk erbuiten en claimde de
-      // adapter ten onrechte `timeout: true`. Sluiten doet de EIGENAAR —
-      // `voerVolledigeRetrievalUit()` — niet deze fase en niet de volgende.
       grendel,
     };
   } catch (e) {
-    // Een afbreking is een EIGEN foutcategorie, geen providerfout — en er volgt
-    // geen terugval: de keten stopt volledig. Een EIGEN grendel wordt hier
-    // gesloten; een geleende laat je met rust — die is van de uitlener, en die
-    // sluit hem in zijn eigen `finally`.
     if (eigenGrendel) grendel.stop();
     throw e;
+  }
+}
+
+/**
+ * `bijBronfout` per adaptergroep. Gemengde standen binnen één groep zijn
+ * ongeldig: een adapter faalt één keer, niet één keer per spoor, dus twee
+ * tegenstrijdige standen laten niet vaststellen wat er moet gebeuren.
+ *
+ * Werpt daarom vóór elke aanroep — hetzelfde patroon als de bestaande
+ * `sporen.length === 0`-grendel, die ook een geval afvangt dat het type al
+ * verbiedt. En mocht deze functie ooit worden omzeild, dan wint `"stop"`.
+ */
+type Bronfoutbeleid = "stop" | "meld" | "onbepaald";
+
+function bepaalBronfoutbeleid(
+  sporen: Queries<Spoor>,
+  spoorNaarGroep: readonly number[]
+): Bronfoutbeleid[] {
+  const beleid: Bronfoutbeleid[] = [];
+  for (let i = 0; i < sporen.length; i++) {
+    const groep = spoorNaarGroep[i];
+    const stand: Bronfoutbeleid = sporen[i].bijBronfout ?? "onbepaald";
+    if (beleid[groep] === undefined) beleid[groep] = stand;
+    else if (beleid[groep] !== stand) {
+      throw new Error(
+        "orkestratie: gemengde bijBronfout binnen één adaptergroep — dat drukt een tegenstrijdige bedoeling uit"
+      );
+    }
+  }
+  return beleid.map((b) => b ?? "onbepaald");
+}
+
+/**
+ * Stopt een bronfout de hele beurt?
+ *
+ * `"stop"` en `"meld"` zijn expliciete keuzes van de aanroeper en gelden altijd.
+ * Bij `"onbepaald"` — het veld is niet gezet — hangt het af van het aantal
+ * adaptergroepen, en dat is geen slordigheid maar het oplossen van een botsing
+ * tussen twee eisen van #426:
+ *
+ *   • "geen stille degradatie naar een volledig ogend antwoord uit alleen de
+ *     overige bronnen";
+ *   • "bestaand pad byte-identiek zolang geen tweede adapter actief is".
+ *
+ * Met ÉÉN adaptergroep bestaan er geen "overige bronnen": een mislukte bron
+ * levert dan een lege uitslag die zijn `fout` meedraagt — geen terugval, en
+ * precies het bestaande gedrag dat de byte-identiteitseis beschermt. Pas met een
+ * TWEEDE groep ontstaat het gevaar dat het ticket beschrijft, en daar valt
+ * `"onbepaald"` dus fail-closed uit.
+ *
+ * Wie ook bij één bron hard wil stoppen, zet `bijBronfout: "stop"` expliciet.
+ */
+function stoptBijFout(beleid: Bronfoutbeleid, aantalGroepen: number): boolean {
+  if (beleid === "meld") return false;
+  if (beleid === "stop") return true;
+  return aantalGroepen > 1;
+}
+
+/**
+ * Herberekent UITSLUITEND de selectiegebonden velden over de werkelijk
+ * opgenomen bronnen. De beurtbrede tellers liggen na fase 1 vast en worden
+ * ongewijzigd doorgegeven — een netwerkpoging die is gedaan, is gedaan.
+ *
+ * Deze functie draait ook in `citeer()`, ná de contextafkapping. Zou zij daar
+ * niet draaien, dan telt het auditspoor passages mee die nooit naar het model
+ * zijn gegaan.
+ */
+function hertelOpgenomen(
+  basis: readonly AdapterMeta[],
+  opgenomen: readonly Bronresultaat[],
+  groepVan: (bron: Bronresultaat) => number
+): AdapterMeta[] {
+  const rijen = basis.map((rij, groep) => {
+    const vanGroep = opgenomen.filter((b) => groepVan(b) === groep);
+    return {
+      ...rij,
+      opgenomen_passages: vanGroep.length,
+      opgenomen_documenten: new Set(vanGroep.map((b) => b.documentIdentiteit.id)).size,
+    };
+  });
+  // Opnieuw fail-closed: de herberekening is een plek waar een teller kan
+  // ontsporen, en een ongeldige vorm mag ook hier geen antwoord opleveren.
+  valideerAdapterMeta(rijen);
+  return rijen;
+}
+
+/**
+ * #434 T4-F — per-adapterdiagnostiek over EXACT de meegegeven bronnen.
+ *
+ * ALLEEN BIJ MEER DAN ÉÉN ADAPTERGROEP. Met één groep ontstaat de sleutel niet,
+ * en blijft het bestaande pad byte-identiek — dat is de DoD-eis van #434 en
+ * tegelijk de reden dat de fail-closed validatie de single-adapterroute niet
+ * raakt: wat niet wordt geconstrueerd, wordt niet gevalideerd.
+ *
+ * Twee soorten tellers, en het onderscheid is niet cosmetisch. De beurtbrede
+ * komen uit de adapter en veranderen niet door de citaatafkapping: een
+ * netwerkpoging die is gedaan, is gedaan. De selectiegebonden worden geteld
+ * over `opgenomen` — en deze functie draait tweemaal, in fase 1 en opnieuw in
+ * `citeer()` ná de afkapping, precies zoals `meta.geselecteerd` dat al doet.
+ * Kwamen zij uit de eerste berekening, dan noemt het auditspoor passages die
+ * nooit naar het model zijn gegaan.
+ */
+function bouwAdapterMeta(
+  opgenomen: readonly Bronresultaat[],
+  uitkomsten: readonly AdapterUitkomst[],
+  perAdapter: RetrievalTussenresultaat["perAdapter"],
+  spoorNaarGroep: readonly number[],
+  groepen: readonly RetrievalAdapter[],
+  groepVan: (bron: Bronresultaat) => number
+): AdapterMeta[] | undefined {
+  if (groepen.length <= 1) return undefined;
+
+  const leeg = (): AdapterTellers => ({});
+  const rijen: AdapterMeta[] = groepen.map((adapter, groep) => {
+    const sporen = spoorNaarGroep
+      .map((g, i) => (g === groep ? i : -1))
+      .filter((i) => i >= 0);
+    const som = (lees: (t: AdapterTellers) => number | undefined) =>
+      sporen.reduce((t, i) => t + (lees(uitkomsten[i].tellers ?? leeg()) ?? 0), 0);
+
+    const naPoort = sporen.reduce((t, i) => t + perAdapter[i].kandidaten, 0);
+    const geraadpleegd = sporen.some((i) => uitkomsten[i].provider !== "geen");
+    const opgenomenVanGroep = opgenomen.filter((b) => groepVan(b) === groep);
+
+    return {
+      naam: adapter.naam,
+      methode: uitkomsten[sporen[0]]?.methode ?? "geen",
+      resultaat: !geraadpleegd ? "niet_geraadpleegd" : naPoort === 0 ? "leeg" : "treffers",
+      netwerkpogingen: som((t) => t.netwerkpogingen),
+      latency_ms: sporen.reduce((t, i) => t + perAdapter[i].latencyMs, 0),
+      downloads: som((t) => t.downloads),
+      bytes: som((t) => t.bytes),
+      throttles: som((t) => t.throttles),
+      retries: som((t) => t.retries),
+      kandidaten_voor_poort: sporen.reduce((t, i) => t + uitkomsten[i].opgehaald, 0),
+      kandidaten_na_poort: naPoort,
+      afwijzing_root: som((t) => t.afwijzing_root),
+      afwijzing_mapping: som((t) => t.afwijzing_mapping),
+      afwijzing_binding: som((t) => t.afwijzing_binding),
+      afwijzing_rechten: som((t) => t.afwijzing_rechten),
+      afwijzing_versie: som((t) => t.afwijzing_versie),
+      afwijzing_download: som((t) => t.afwijzing_download),
+      afwijzing_extractie: som((t) => t.afwijzing_extractie),
+      afwijzing_lokalisatie: som((t) => t.afwijzing_lokalisatie),
+      afwijzing_grens: som((t) => t.afwijzing_grens),
+      opgenomen_passages: opgenomenVanGroep.length,
+      opgenomen_documenten: new Set(opgenomenVanGroep.map((b) => b.documentIdentiteit.id)).size,
+    };
+  });
+
+  // FAIL-CLOSED, vóór de auditlaag. Werpt bij de eerste afwijking; de beurt
+  // levert dan geen antwoord en geen citaten.
+  valideerAdapterMeta(rijen);
+  return rijen;
+}
+
+/** #434 — de adaptergroep van een INSTANTIE; zonder staat is er maar één groep. */
+function groepVanMet(herkomst: HerkomstStaat | undefined): (bron: Bronresultaat) => number {
+  return (bron) => herkomst?.kaart.get(bron)?.groep ?? 0;
+}
+
+/** Leest primair van de INSTANTIE zodra er een herkomststaat is; anders van de ref. */
+function primairVanMet(
+  herkomst: HerkomstStaat | undefined,
+  basis: RetrievalTussenresultaat["metaBasis"]
+): ((bron: Bronresultaat) => boolean) | undefined {
+  if (!herkomst) return undefined;
+  return (bron) => herkomst.kaart.get(bron)?.primair ?? basis.primaireRefs.has(bron.ref);
+}
+
+/**
+ * #426 — waarom een GEVRAAGDE bron niet in het antwoord zit.
+ *
+ * Alleen aanwezig als er werkelijk iets te melden is. Inhoudsvrij: adapternaam,
+ * bronsoort en een gesloten reden — nooit een providerboodschap.
+ */
+function bouwBronstatus(
+  uitkomsten: readonly AdapterUitkomst[],
+  perAdapter: RetrievalTussenresultaat["perAdapter"],
+  spoorNaarGroep: readonly number[],
+  groepen: readonly RetrievalAdapter[]
+): Bronstatus[] {
+  const status: Bronstatus[] = [];
+  const gezien = new Set<number>();
+  for (let i = 0; i < uitkomsten.length; i++) {
+    const groep = spoorNaarGroep[i];
+    if (gezien.has(groep)) continue;
+    const fout = perAdapter[i].fout;
+    if (!fout) continue;
+    gezien.add(groep);
+    status.push({
+      adapter: groepen[groep].naam,
+      bronsoort: groepen[groep].capabilities().bronsoorten[0] ?? "fonds",
+      geraadpleegd: uitkomsten[i].provider !== "geen",
+      reden: redenVanFout(fout),
+    });
+  }
+  return status;
+}
+
+/**
+ * Is dit een fout die betekent dat de BRON niet kon worden geraadpleegd?
+ *
+ * `geen_resultaten` hoort er niet bij: dat is een geldige, volledige uitslag —
+ * de bron is geraadpleegd en had niets. Zou die wel meetellen, dan zou een lege
+ * bibliotheek de hele beurt afbreken.
+ *
+ * `buiten_scope` evenmin: die ontstaat doordat de SERVER kandidaten weigerde,
+ * niet doordat de bron onbereikbaar was. De weigering staat al in `toelating`.
+ */
+function isBronfout(fout: RetrievalFoutcategorie | undefined): boolean {
+  return fout !== undefined && fout !== "geen_resultaten" && fout !== "buiten_scope";
+}
+
+function redenVanFout(fout: RetrievalFoutcategorie): Bronstatusreden {
+  switch (fout) {
+    case "timeout":
+      return "timeout";
+    case "annulering":
+      return "geannuleerd";
+    case "geen_resultaten":
+      return "geen_resultaten";
+    case "toestemming_geweigerd":
+      return "token_ongeldig";
+    case "configuratiefout":
+      return "readiness_ontbreekt";
+    default:
+      return "providerfout";
   }
 }
 
@@ -491,17 +838,37 @@ export async function voerVolledigeRetrievalUit(
   citaatOpdracht: CitaatOpdracht
 ): Promise<RetrievalUitkomst> {
   const grendel = maakAfbreekgrendel(ctx.signal, opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS);
+  // #426 — deze functie is óók eigenaar van de request-lokale herkomststaat, en
+  // leent hem net als de grendel uit aan beide fasen. Hij leeft precies zo lang
+  // als dit verzoek: geen moduleglobale structuur die gelijktijdige beurten van
+  // verschillende fondsen zouden delen, en geen veld op het tussenresultaat, dat
+  // via `Omit<…>` in `RetrievalUitkomst` zit en de orkestratie dus verlaat.
+  const herkomst = maakHerkomstStaat();
   try {
-    const tussen = await voerRetrievalUit(ctx, opdracht, grendel);
-    return await citeer(ctx, opdracht.adapter, tussen, citaatOpdracht);
+    const tussen = await voerRetrievalUit(ctx, opdracht, grendel, herkomst);
+    return await citeer(ctx, opdracht.adapter, tussen, citaatOpdracht, herkomst);
   } finally {
     grendel.stop();
   }
 }
 
-/** Vertaalt een afbreking naar de contract-foutcategorie (§4.4). */
-export function foutcategorieVoor(e: unknown): "timeout" | "annulering" | null {
-  return isAfbreking(e) ? redenVan(e) : null;
+/**
+ * Vertaalt een gestopte beurt naar de genormaliseerde foutcategorie (§4.4).
+ *
+ * #434 — `adaptermetadata_ongeldig` hoort hier bij, ook al is het geen
+ * afbreking. De reden is de bestemming: de aanroepers van deze functie zijn
+ * precies de plekken die de categorie DUURZAAM vastleggen op
+ * `ai_actie.resultaat_ref`. Bleef deze fout buiten de union, dan viel zij in de
+ * generieke `else`-tak, stopte de beurt zonder spoor, en was achteraf niet te
+ * onderscheiden van een willekeurige serverfout — terwijl dit juist de
+ * weigering is die zichtbaar moet zijn.
+ */
+export function foutcategorieVoor(
+  e: unknown
+): "timeout" | "annulering" | typeof ADAPTERMETA_FOUTCATEGORIE | null {
+  if (isAfbreking(e)) return redenVan(e);
+  if (e instanceof AdaptermetadataOngeldig) return ADAPTERMETA_FOUTCATEGORIE;
+  return null;
 }
 
 /**
@@ -527,39 +894,25 @@ export async function citeer(
   ctx: RetrievalContext,
   adapter: RetrievalAdapter,
   tussen: RetrievalTussenresultaat,
-  opdracht: CitaatOpdracht
+  opdracht: CitaatOpdracht,
+  /** #426 — GELEEND van `voerVolledigeRetrievalUit()`; zie `HerkomstStaat`. */
+  herkomst?: HerkomstStaat
 ): Promise<RetrievalUitkomst> {
-  // De adapter vult providerspecifieke WEERGAVEMETADATA aan (notulenlabel,
-  // documenttype, de uitgebreide parent-passage). Hij bouwt geen citaties.
-  // De grendel is GELEEND van `voerVolledigeRetrievalUit()`; die sluit hem in
-  // zijn `finally`. Hier wordt hij alleen uit het tussenresultaat gelicht,
-  // zodat het eindresultaat pure data blijft.
   const grendel = tussen.grendel;
   const { grendel: _grendel, ...tussenData } = tussen;
   const ctxMetGrendel = grendel ? { ...ctx, signal: grendel.signal } : ctx;
-  // Tweemaal citeren op hetzelfde tussenresultaat zou de tweede keer ZONDER
-  // deadline draaien; de grendel is enkelvoudig en zegt dat nu zelf.
   if (grendel?.gesloten()) throw new GrendelGesloten();
   try {
-    // De weergaveverrijking valt BINNEN de deadline: parent-context, notulen- en
-    // documentmetadata doen alle drie nog database-werk.
-    const verrijkt = adapter.verrijkWeergave
-      ? await adapter.verrijkWeergave(ctxMetGrendel, tussen.geselecteerd)
-      : tussen.geselecteerd;
+    const verrijkt = await pasWeergaveToe(ctxMetGrendel, adapter, tussen.geselecteerd, herkomst);
     grendel?.bewaak();
 
-    // Nummering, sentinel, neutralisatie, BronVerwijzing en de contextgrens:
-    // centraal, identiek voor elke provider.
-    // Eerst de DEFINITIEVE context bouwen — inclusief de harde grens — en pas
-    // daarna alle metadata afleiden van exact de bronnen die erin staan.
-    // De grens komt UITSLUITEND van de query, via het tussenresultaat.
-    // De aanroeper kent mogelijk alleen providerprivate scope-id's. Leid de
-    // primaire set daarom hier opnieuw af uit de opaque refs die fase 1 zelf
-    // vastlegde; zo hoeft geen database-id het providercontract in.
+    const primairVan = primairVanMet(herkomst, tussen.metaBasis);
     const primaireDocumentIds = opdracht.primaireDocumentIds?.size
       ? new Set(
           verrijkt
-            .filter((bron) => tussen.metaBasis.primaireRefs.has(bron.ref))
+            .filter((bron) =>
+              primairVan ? primairVan(bron) : tussen.metaBasis.primaireRefs.has(bron.ref)
+            )
             .map((bron) => bron.documentIdentiteit.id)
         )
       : opdracht.primaireDocumentIds;
@@ -571,7 +924,12 @@ export async function citeer(
     return {
       ...tussenData,
       geselecteerd: c.opgenomen,
-      meta: bouwRetrievalMeta(c.opgenomen, tussen.metaBasis),
+      meta: bouwRetrievalMeta(
+        c.opgenomen,
+        tussen.metaBasis,
+        primairVan,
+        tussen.metaBasis.adaptersBasis ? groepVanMet(herkomst) : undefined
+      ),
       bronverwijzingen: c.bronnen,
       contextTekst: c.contextTekst,
       sentinel: c.sentinel,
@@ -581,4 +939,92 @@ export async function citeer(
   } finally {
     grendel?.stop();
   }
+}
+
+/**
+ * Past de gesloten weergavepatch per adaptergroep toe.
+ *
+ * DE HOOK KRIJGT HET `Bronresultaat` NIET. Hij ziet `{ ref, weergave }` en
+ * levert `WeergaveVerrijking[]`; deze functie houdt het toegelaten resultaat
+ * vast, maakt per occurrence een VERSE instantie en zet alleen `weergave`. Dat
+ * de instanties hier ontstaan is geen tegenmaatregel maar een eigenschap: ze
+ * zijn per constructie uniek, ook als twee occurrences dezelfde `ref` hebben.
+ *
+ * De verdeling over groepen is uitsluitend voor de hook; de volgorde komt terug
+ * uit de OORSPRONKELIJKE positie in `geselecteerd` — die is de ordinal. Bij één
+ * groep is dat een identiteitsoperatie.
+ */
+async function pasWeergaveToe(
+  ctx: RetrievalContext,
+  standaard: RetrievalAdapter,
+  geselecteerd: readonly Bronresultaat[],
+  herkomst: HerkomstStaat | undefined
+): Promise<Bronresultaat[]> {
+  const groepen = herkomst && herkomst.adapters.length > 0 ? herkomst.adapters : [standaard];
+  const positiesPerGroep: number[][] = groepen.map(() => []);
+  geselecteerd.forEach((bron, i) => {
+    const groep = herkomst?.kaart.get(bron)?.groep ?? 0;
+    (positiesPerGroep[groep] ?? positiesPerGroep[0]).push(i);
+  });
+
+  const perPositie = new Map<number, Bronresultaat>();
+  for (let groep = 0; groep < groepen.length; groep++) {
+    const posities = positiesPerGroep[groep];
+    if (posities.length === 0) continue;
+    const bronnen = posities.map((i) => geselecteerd[i]);
+    const hook = groepen[groep].verrijkWeergave;
+    if (!hook) {
+      posities.forEach((i, k) => perPositie.set(i, versInstantie(bronnen[k], undefined, herkomst)));
+      continue;
+    }
+    const kandidaten: WeergaveKandidaat[] = bronnen.map((b) => ({ ref: b.ref, weergave: b.weergave }));
+    const patches = await hook.call(groepen[groep], ctx, kandidaten);
+    if (!Array.isArray(patches) || patches.length !== bronnen.length) {
+      throw new Error("orkestratie: verrijkWeergave() gaf niet evenveel patches als kandidaten");
+    }
+    for (let k = 0; k < bronnen.length; k++) {
+      const patch = lees(patches, k);
+      if (patch.type === "weglaten") continue;
+      perPositie.set(
+        posities[k],
+        versInstantie(bronnen[k], patch.type === "verrijkt" ? patch.weergave : undefined, herkomst)
+      );
+    }
+  }
+
+  // STABIEL op de oorspronkelijke positie — dat is de ordinal. Aaneenschakelen
+  // per groep zou bij verweven groepen de bronvolgorde veranderen.
+  return [...perPositie.keys()].sort((a, b) => a - b).map((i) => perPositie.get(i)!);
+}
+
+/**
+ * Leest één patch en weigert alles wat geen expliciete uitkomst is.
+ *
+ * Gelijke arraylengte is niet genoeg: een gat in een sparse array of een
+ * `undefined` heeft wél de goede `length`, maar betekent een vergeten tak en
+ * geen besluit om een bron weg te laten.
+ */
+function lees(patches: WeergaveVerrijking[], index: number): WeergaveVerrijking {
+  const patch = Object.prototype.hasOwnProperty.call(patches, index) ? patches[index] : undefined;
+  if (
+    patch === undefined ||
+    patch === null ||
+    typeof patch !== "object" ||
+    (patch.type !== "behouden" && patch.type !== "weglaten" && patch.type !== "verrijkt")
+  ) {
+    throw new Error("orkestratie: verrijkWeergave() gaf een ongeldige patch op positie " + index);
+  }
+  return patch;
+}
+
+/** Verse instantie, met de herkomst van het origineel overgenomen. */
+function versInstantie(
+  origineel: Bronresultaat,
+  weergave: Bronresultaat["weergave"] | undefined,
+  herkomst: HerkomstStaat | undefined
+): Bronresultaat {
+  const vers: Bronresultaat = weergave === undefined ? { ...origineel } : { ...origineel, weergave };
+  const eerder = herkomst?.kaart.get(origineel);
+  if (herkomst && eerder) herkomst.kaart.set(vers, eerder);
+  return vers;
 }

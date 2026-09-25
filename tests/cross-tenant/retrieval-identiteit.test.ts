@@ -180,13 +180,13 @@ test("#367 — correlation-id blijft gelijk door adapter, poort, selectie, citat
         versie: { soort: kandidaat.versie.soort, waarde: kandidaat.versie.waarde },
       }]));
     },
-    verrijkSelectie: async (ontvangen, geselecteerd) => {
+    verrijkKandidaten: async (ontvangen, kandidaten) => {
       controleer(ontvangen);
-      return { resultaten: geselecteerd };
+      return { resultaten: kandidaten };
     },
-    verrijkWeergave: async (ontvangen, geselecteerd) => {
+    verrijkWeergave: async (ontvangen, kandidaten) => {
       controleer(ontvangen);
-      return geselecteerd;
+      return kandidaten.map(() => ({ type: "behouden" as const }));
     },
   };
   const uitkomst = await voerVolledigeRetrievalUit(ctx, {
@@ -242,6 +242,11 @@ test("#367 — echte Supabase-adapter herleest via private chunk-id en levert ee
   };
   const gelezen: string[][] = [];
   const retrieval = maakSupabaseAdapter({ parentRetrieval: false } as Adaptervlaggen, {}, {
+    // #426 — de notulen- en documentmetadataverrijking draait sinds D-6 in fase 1,
+    // vóór de poort. Hermetisch houden betekent haar hier sturen; zonder deze
+    // twee zou de test een echte Supabase-client nodig hebben.
+    verrijkNotulen: async (chunks) => chunks,
+    verrijkDocumentmeta: async (chunks) => chunks,
     zoek: async () => ({ chunks: [chunk], meta }),
     leesVersies: async (chunks) => {
       gelezen.push(chunks.map((c) => c.id));
@@ -337,6 +342,11 @@ test("#367 — ontbrekende private map-entry faalt gesloten en zero-source is zi
   };
   let ronde = 0;
   const retrieval = maakSupabaseAdapter({ parentRetrieval: false } as Adaptervlaggen, {}, {
+    // #426 — de notulen- en documentmetadataverrijking draait sinds D-6 in fase 1,
+    // vóór de poort. Hermetisch houden betekent haar hier sturen; zonder deze
+    // twee zou de test een echte Supabase-client nodig hebben.
+    verrijkNotulen: async (chunks) => chunks,
+    verrijkDocumentmeta: async (chunks) => chunks,
     zoek: async () => ({ chunks: [chunk], meta: { methode: "fts_dutch_ranked", opgehaald: 1, geselecteerd: 1, chunks: [] } as RetrievalMeta }),
     leesVersies: async (chunks) => {
       ronde++;

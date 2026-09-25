@@ -203,8 +203,10 @@ test("hostgrens — routes gebruiken de ruwe Host-header uitsluitend via canonie
     assert.match(bron, /if \(!host\) return/, `${r}: ongeldige host → neutrale weigering`);
   }
   const flow = lees("core/lib/microsoft-login-flow-core.ts");
+  const validatie = lees("core/lib/host-validatie.ts");
   assert.match(flow, /export function canoniekeFondsHost\(/);
-  assert.match(flow, /if \(!opties\.lokaalToegestaan \|\| !isLokaleTestHostnaam\(hostnaam\)/, "poort alleen lokaal op .localhost/loopback");
+  assert.match(flow, /return normaliseerExacteHost\(ruw, opties\)/, "Microsoft-login hergebruikt de centrale hostparser");
+  assert.match(validatie, /!opties\.lokaalToegestaan \|\|\s*!isLokaleTestHostnaam\(hostnaam\)/, "poort alleen lokaal op .localhost/loopback");
   assert.match(flow, /const c = eisCanoniek\(host, opties\);/, "origin eist een canonieke host");
 });
 

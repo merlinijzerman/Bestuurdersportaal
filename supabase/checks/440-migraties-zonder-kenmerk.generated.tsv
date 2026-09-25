@@ -1,0 +1,27 @@
+migratie	categorie	toelichting
+2026_08_14zz_security_table_grants.sql	alleen-rechten	wijzigt uitsluitend rechten; de V3-grants-gate dekt dit
+2026_08_17_maak_profiel_app_metadata.sql	later-herdefinieerd	objecten later overschreven door: 2026_08_19_maak_profiel_admin_api_provisioning.sql
+2026_08_17_vraagrouter_documentdekking.sql	later-herdefinieerd	objecten later overschreven door: 2026_09_11_toelating_auditprojectie.sql
+2026_08_20_c01_view_schrijfrechten.sql	alleen-rechten	wijzigt uitsluitend rechten; de V3-grants-gate dekt dit
+2026_08_20_v3_maintain_revoke.sql	alleen-rechten	wijzigt uitsluitend rechten; de V3-grants-gate dekt dit
+2026_08_22_secdef_search_path_pg_temp.sql	alleen-data-of-commentaar	geen DDL die de catalogus verandert
+2026_08_27_p3b_01_zwaarte.sql	later-herdefinieerd	objecten later overschreven door: 2026_08_29_p4_08_i5_composite_fk.sql, 2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten.sql
+2026_08_27_p3b_02_booleans_generated.sql	later-herdefinieerd	objecten later overschreven door: 2026_08_29_p4_08_i5_composite_fk.sql, 2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten.sql
+2026_08_27_p3c_01_afwijking_kolommen.sql	later-herdefinieerd	objecten later overschreven door: 2026_08_29_p4_03_niet_begonnen_actief_trigger.sql
+2026_08_28_p214a1_02_kolomrevoke_stappen.sql	alleen-rechten	wijzigt uitsluitend rechten; de V3-grants-gate dekt dit
+2026_08_28_p214a1_03_kolomrevoke_besluiten.sql	alleen-rechten	wijzigt uitsluitend rechten; de V3-grants-gate dekt dit
+2026_08_28_p214a1_04_stap_insert_guard.sql	later-herdefinieerd	objecten later overschreven door: 2026_09_01_p214a1_05_stap_insert_guard_herbevestiging.sql
+2026_08_28_p3d_02_fn_besluit_status_omslag.sql	later-herdefinieerd	objecten later overschreven door: 2026_08_29_p4_07_besluit_heropenen_correctie.sql
+2026_08_28_p3d_03_status_kolomrevoke.sql	alleen-rechten	wijzigt uitsluitend rechten; de V3-grants-gate dekt dit
+2026_08_28_p3d_04_open_per_decision.sql	later-herdefinieerd	objecten later overschreven door: 2026_08_29_p4_05_besluitmoment_arm.sql
+2026_08_29_p4_06_procedure_beeindigen_heropenen.sql	later-herdefinieerd	objecten later overschreven door: 2026_08_29_p4_07_besluit_heropenen_correctie.sql, 2026_08_31_p5d_procedure_beeindigen_bediening.sql
+2026_08_31_zz_pf_wtp_invaarbesluit_201_approval.sql	alleen-data-of-commentaar	geen DDL die de catalogus verandert
+2026_09_04_microsoft_sharepoint_fase3.sql	buiten-scope-schema	creëert in schema: microsoft_private
+2026_09_04_microsoft_sharepoint_fase3b_documenten.sql	buiten-scope-schema	creëert in schema: microsoft_private
+2026_09_07_microsoft_login_startlimiet.sql	buiten-scope-schema	creëert in schema: login_private
+2026_09_11_z367_retrieval_identiteit_auditprojectie.sql	later-herdefinieerd	objecten later overschreven door: 2026_09_12_368_evidence_auditprojectie.sql, 2026_09_22_434_meta_adapters.sql
+2026_09_20_413_weburl_canoniek_quarantaine.sql	buiten-scope-schema	creëert in schema: microsoft_private
+2026_09_21_413_weburl_office_viewer.sql	buiten-scope-schema	creëert in schema: microsoft_private
+2026_09_21_423a_t4d_copilot_rollout_expand.sql	buiten-scope-schema	creëert in schema: microsoft_private
+2026_09_21_423b_t4d_copilot_rollout_contract.sql	verwijdert-objecten	dropt: microsoft_private.bewaar_koppeling — meetbaar aan de afwezigheid daarvan, niet aan een nieuw object
+2026_09_22_428_app365_demo_fonds_config.sql	alleen-data-of-commentaar	geen DDL die de catalogus verandert

@@ -3,6 +3,8 @@ import { requireCapability } from "@/core/lib/capabilities";
 import { vereisModuleToegang } from "@/core/lib/module-gate-page";
 import BeheerClient from "./_components/BeheerClient";
 import ConfigBeheer from "./_components/ConfigBeheer";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { sharePointRetrievalSmokeToegestaan } from "@/core/lib/microsoft-sharepoint-retrieval-smoke-gate";
 
 // Beheer-sectie: procescatalogus + organen + import. De hub zelf is
 // server-side gegate op catalog.manage; de API-routes blijven daarnaast
@@ -18,6 +20,8 @@ export default async function BeheerPage() {
   // Microsoft-loginbeleid (#344 fase 1C): eigen sub-scherm, smalle capability
   // login.beleid.manage (alleen beheerder); API + database blijven de echte grens.
   const magLoginbeleidBeheren = await requireCapability(sessie.userId, "login.beleid.manage");
+  const magSharePointSmokeUitvoeren = magLoginbeleidBeheren
+    && await sharePointRetrievalSmokeToegestaan(await createServerSupabase(), sessie.fondsId);
 
   return (
     <div className="p-8 max-w-6xl mx-auto w-full">
@@ -56,6 +60,40 @@ export default async function BeheerPage() {
             <div className="text-sm text-muted mt-0.5">
               Loginmodus (uit, optioneel, verplicht), dekking per account, intrekken, noodtoegang en
               herstel-uitnodigingen. Elke wijziging wordt append-only gelogd.
+            </div>
+          </div>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
+
+      {magSharePointSmokeUitvoeren && (
+        <Link
+          href="/beheer/microsoft-sharepoint-retrieval"
+          className="mb-8 flex items-center justify-between rounded-xl border border-line bg-white px-5 py-4 hover:bg-app-bg"
+        >
+          <div>
+            <div className="font-semibold text-ink">SharePoint-retrieval — Preview-smoke</div>
+            <div className="text-sm text-muted mt-0.5">
+              Meet de twee live retrievalroutes met de vaste synthetische PGB-fixtures, inclusief intrekking en replay.
+            </div>
+          </div>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
+
+      {/* #434 T4-F — de adapterstand uit het auditspoor. Dezelfde capability als
+          de fonds-configuratie hieronder; het leespad toetst hem opnieuw. */}
+      {magConfigBeheren && (
+        <Link
+          href="/beheer/adapterstatus"
+          className="mb-8 flex items-center justify-between rounded-xl border border-line bg-white px-5 py-4 hover:bg-app-bg"
+        >
+          <div>
+            <div className="font-semibold text-ink">Adapterstand — retrieval</div>
+            <div className="text-sm text-muted mt-0.5">
+              Wat de bronadapters in de vastgelegde beurten deden: treffers, afwijzingen,
+              downloads en niet-geraadpleegde bronnen. Uit het auditspoor; er wordt geen bron
+              bevraagd.
             </div>
           </div>
           <span className="text-muted">›</span>

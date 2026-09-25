@@ -47,9 +47,11 @@ Ieder ticket werkte vanuit een eigen worktree en branch op de toen actuele `orig
 
 Er trad geen onopgelost integratieconflict op. De vooraf geïdentificeerde hoge overlap tussen
 #367/#370 en #369/#368 is beheerst door de mergevolgorde, rebase/reconciliatie en herhaalde census-
-en contracttests. De actuele gecombineerde Preview-basis is `ca57f5c`; `main` blijft `09d473f`.
-Issues #367–#370 staan op GitHub nog open en worden pas na het afzonderlijke productie-/releasebesluit
-administratief gesloten.
+en contracttests. De uiteindelijke Preview-bron is `6a0456d`. Die bron is via PR #384 naar
+Productie gemerged als `3a6d9de`, bovenop de op 11 september uitgevoerde productiebasis `09d473f`.
+Issues #367–#370 staan op GitHub nog open en worden pas na acceptatie van de docs-only
+terugreconciliatie administratief gesloten. De tijdens de productie-smoke waargenomen, reeds in
+`09d473f` aanwezige reflectielogruis valt buiten deze tickets en volgt afzonderlijk in #386.
 
 ## Bestaande geïsoleerde werkplekken
 
@@ -61,6 +63,7 @@ administratief gesloten.
 | #370 | `mvp-370-microsoft-stub` | `feat/370-microsoft-adapterstub` | schoon op `4a61b7851747`; hermetisch, geen live wiring |
 
 De oorspronkelijke documentatie-PR #377 en alle vijf implementatie-/karakteriserings-PR's zijn na
-afzonderlijk akkoord gemerged. De nieuwe acceptatie-/promotiedocumentatie-PR blijft ongemergd tot
-nieuw opdrachtgeverakkoord; daarna kan uitsluitend `preview` zelf als bron voor een PR naar
-`main` worden gebruikt.
+afzonderlijk akkoord gemerged. Ook productiepromotie-PR #384 is na afzonderlijk akkoord gemerged.
+De huidige afsluitingsbranch startte op de daarna nog actuele `origin/preview` (`6a0456d`) en is
+eerst met `origin/main` (`3a6d9de`) gereconcilieerd. De docs-only afsluitings-PR blijft ongemergd tot
+nieuw opdrachtgeverakkoord; zij bevat geen productiecode.

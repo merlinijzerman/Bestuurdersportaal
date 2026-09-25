@@ -13,9 +13,14 @@ const vault = lees("core/lib/microsoft-vault.ts");
 
 test("SharePoint fase 3 gebruikt uitsluitend delegated Sites.Selected en de driedubbele fonds-poort", () => {
   assert.match(config, /MICROSOFT_SHAREPOINT_SCOPES = \[\.\.\.MICROSOFT_SCOPES, "Sites\.Selected"\] as const/);
-  assert.doesNotMatch(config, /Files\.|Sites\.Read|Sites\.ReadWrite|Sites\.FullControl|Sites\.Manage|AllSites/);
+  assert.doesNotMatch(config, /Sites\.Read|Sites\.ReadWrite|Sites\.FullControl|Sites\.Manage|AllSites/);
+  assert.match(config, /MICROSOFT_SEARCH_SPIKE_SCOPE = "Files\.Read\.All"/);
+  assert.doesNotMatch(config.match(/MICROSOFT_TOEGESTANE_SCOPES[\s\S]*?as const;/)?.[0] ?? "", /Files\.Read\.All/,
+    "de brede proefscope blijft buiten de normale allowlist");
   assert.match(connector, /microsoft_sharepoint_fase3/);
   assert.match(connector, /gedelegeerdToken\(ctx, "Sites\.Selected"\)/);
+  assert.match(connector, /sharepointSearchAccessToken/);
+  assert.match(connector, /isSharePointRetrievalSmokePreview/);
   assert.match(connector, /scopesMetUitbreiding/);
   assert.match(lees("app/api/microsoft/sharepoint/status/route.ts"), /capability: "profile\.view\.own"/);
   assert.match(lees("app/api/microsoft/sharepoint/toestemming/route.ts"), /capability: "profile\.manage\.own"/);
@@ -85,6 +90,7 @@ test("lijst en preview lopen met het token van de gebruiker, zonder content-call
   assert.match(sharepoint, /itemOnderRoot\(item, document\.drive_id, rootPadVanItem\(root, document\.drive_id\)\)/);
   assert.match(sharepoint, /previewActieUrl\(document\.drive_id, document\.item_id\)/);
   assert.match(sharepoint, /veiligeSharePointUrl\(preview\.getUrl\)/);
+  assert.match(sharepoint, /previewUrl\.searchParams\.set\("nb", "true"\)/);
   assert.doesNotMatch(sharepoint, /\/content|downloadUrl|createLink/);
 });
 
@@ -101,15 +107,18 @@ test("de preview-URL wordt nergens bewaard, gelogd of geaudit", () => {
   assert.doesNotMatch(vault, /console\./);
 });
 
-test("de previewpagina is de enige route met frame-src naar SharePoint en gebruikt een strikte iframe", () => {
+test("de previewpagina is de enige route met frame-src naar de afgebakende Microsoft-previewhosts en gebruikt een strikte iframe", () => {
   assert.match(nextConfig, /source: "\/bibliotheek\/sharepoint\/:ref"/);
-  assert.match(nextConfig, /frame-src 'self' https:\/\/challenges\.cloudflare\.com https:\/\/\*\.sharepoint\.com/);
+  assert.match(nextConfig, /frame-src 'self' https:\/\/challenges\.cloudflare\.com https:\/\/\*\.sharepoint\.com https:\/\/\*\.officeapps\.live\.com/);
   // De algemene CSP houdt de oude frame-src; alleen de afgeleide previewvariant voegt SharePoint toe.
   assert.equal(nextConfig.match(/https:\/\/\*\.sharepoint\.com/g)?.length, 1);
+  assert.equal(nextConfig.match(/https:\/\/\*\.officeapps\.live\.com/g)?.length, 1);
+  assert.doesNotMatch(nextConfig, /frame-src[^"\n]* https: "/);
   assert.match(nextConfig, /const cspDirectivesSharePointPreview = cspDirectives\.replace\(/);
   assert.match(nextConfig, /"frame-src 'self' https:\/\/challenges\.cloudflare\.com",/);
   assert.match(nextConfig, /frame-ancestors 'none'/);
-  assert.match(previewPagina, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups"/);
+  assert.match(previewPagina, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation allow-popups-to-escape-sandbox"/);
+  assert.match(previewPagina, /allowFullScreen/);
   assert.match(previewPagina, /referrerPolicy="no-referrer"/);
   assert.match(previewPagina, /method: "POST", cache: "no-store"/);
   assert.doesNotMatch(previewPagina, /localStorage|sessionStorage|router\.push\(.*url|history\./);

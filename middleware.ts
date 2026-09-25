@@ -23,11 +23,13 @@
 // ============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
-import { bepaalSurface, bepaalRoute, type Surface } from "@/core/lib/platform-host";
+import { bepaalSurface, bepaalRoute, eersteGeconfigureerdeHost, type Surface } from "@/core/lib/platform-host";
+import { lokaleHostmodus } from "@/core/lib/host-validatie";
 
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host");
   const isDev = process.env.NODE_ENV !== "production";
+  const lokaalToegestaan = lokaleHostmodus({ seedDoelomgeving: process.env.SEED_DOELOMGEVING });
 
   // Dev-ergonomie: lokaal is /platform/* direct bereikbaar, zodat de
   // platform-surface zonder host-config te smoken is.
@@ -40,7 +42,12 @@ export function middleware(request: NextRequest) {
     marketingHost: process.env.MARKETING_HOST,
     appHost: process.env.APP_HOST,
     platformHost: process.env.PLATFORM_HOST,
+    lokaalToegestaan,
   });
+
+  // Een syntactisch ongeldige Host-header wordt nooit gerepareerd of via een
+  // dev-override doorgelaten.
+  if (surface === null) return new NextResponse("Not found", { status: 404 });
 
   // Dev-fallback: buiten productie mag een querystring de surface simuleren
   // (o.a. om de marketing /login → app-login-redirect lokaal te testen).
@@ -80,7 +87,7 @@ export function middleware(request: NextRequest) {
       // methode-behoudend; → later 301 als apart besluit). Query-params blijven
       // behouden (clone neemt de search mee). Zonder APP_HOST geen veilig
       // redirect-doel → fail-safe doorlaten (geen lus, geen verkeerde host).
-      const appHost = process.env.APP_HOST;
+      const appHost = eersteGeconfigureerdeHost({ naam: "APP_HOST", waarde: process.env.APP_HOST, type: "exact", lokaalToegestaan });
       if (!appHost) return NextResponse.next();
       const url = request.nextUrl.clone();
       if (!isDev) url.protocol = "https:";

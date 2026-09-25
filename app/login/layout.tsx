@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { beeindigSessie, beoordeelPortaalSessie } from "@/core/lib/microsoft-login-sessieguard";
+import { isApp365DemoHost } from "@/core/lib/demo-omgeving";
 
 // Server-laag rond de (client-)loginpagina. Twee taken:
 //  1. noindex/follow: de login mag niet in de zoekindex, maar links erin mogen
@@ -11,10 +13,15 @@ import { beeindigSessie, beoordeelPortaalSessie } from "@/core/lib/microsoft-log
 //     identiteit heeft bewust geen profielen-rij. Die sessie mag hier niet
 //     terug naar `/`, want het tenantdashboard stuurt haar juist naar `/login`
 //     en dat zou een redirectlus veroorzaken.
-export const metadata: Metadata = {
-  title: "Inloggen",
-  robots: { index: false, follow: true },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: "Inloggen",
+    robots: {
+      index: false,
+      follow: !isApp365DemoHost((await headers()).get("host")),
+    },
+  };
+}
 
 export default async function LoginLayout({
   children,

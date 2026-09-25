@@ -186,7 +186,7 @@ test("PR-B: beheerscherm — token één keer in client-state met kopieerknop; a
   assert.match(teksten, /afrondenBevestiging:[\s\S]*?Microsoft-identiteit blijft in Supabase Auth achter/);
 });
 
-test("PR-B: registers — zes handelingen, activeringsroute in de LK-10-census, W7-telling 149", () => {
+test("PR-B: registers — zes handelingen, activeringsroute in de LK-10-census, actuele W7-telling", () => {
   const audit = JSON.parse(lees("tests/cross-tenant/audit-handelingen.expected.json")) as { handelingen: Record<string, string> };
   for (const [label, route] of [
     ["microsoft-login.beleid.wijzigen", "PATCH microsoft-login/beheer/beleid"],
@@ -197,5 +197,5 @@ test("PR-B: registers — zes handelingen, activeringsroute in de LK-10-census, 
     ["microsoft-login.uitnodiging.intrekken", "DELETE microsoft-login/beheer/uitnodiging"],
   ]) assert.equal(audit.handelingen[label!], route);
   assert.match(lees("tests/cross-tenant/login-keten-karakterisering.test.ts"), /"app\/auth\/microsoft-login\/uitnodiging\/route\.ts"/);
-  assert.match(lees("tests/cross-tenant/w7-declaraties.test.ts"), /HANDLERS\.length, 149/);
+  assert.match(lees("tests/cross-tenant/w7-declaraties.test.ts"), /HANDLERS\.length, 152/);
 });

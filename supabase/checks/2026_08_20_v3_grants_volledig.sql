@@ -58,6 +58,16 @@ create temp table v3_allow (
 );
 \copy v3_allow from 'supabase/checks/allowlist-grants.tsv' with (format csv, delimiter E'\t', header true)
 
+-- Supabase beheert storage zelf en rolt functievormen onafhankelijk van onze
+-- migraties uit. De oude vorm staat in de hoofdallowlist; de exact gemeten
+-- Storage-objectversioningvorm staat apart. Nooit beide vormen tegelijk
+-- toelaten: hieronder kiest de feitelijke catalogus precies één variant.
+drop table if exists v3_storage_objectversioning_allow;
+create temp table v3_storage_objectversioning_allow (
+  sectie text, sch text, obj text, klasse text, rol text, rechten text
+);
+\copy v3_storage_objectversioning_allow from 'supabase/checks/allowlist-grants-storage-objectversioning.tsv' with (format csv, delimiter E'\t', header true)
+
 -- ── Feitelijke stand berekenen (IDENTIEKE logica als de generator) ──────────
 drop table if exists v3_actual;
 create temp table v3_actual (
@@ -113,6 +123,71 @@ stgpol_rows as (
 select sectie, sch, obj, klasse, rol, rechten
   from (select * from rel_rows union all select * from fn_rows
         union all select * from bucket_rows union all select * from stgpol_rows) alles;
+
+-- Alleen de zes vervangen functies en twee toegevoegde triggerfuncties mogen
+-- tussen de twee platformvormen wisselen. Aanwezigheid van één nieuwe vorm
+-- kiest de nieuwe allowlist; een onvolledige/mengvorm faalt vervolgens op de
+-- gewone onbekend-/ontbrekend-objectcontrole. Grants blijven per rol exact.
+do $$
+declare
+  nieuwe_vorm boolean;
+begin
+  if (select count(*) from v3_storage_objectversioning_allow) <> 24
+     or (select count(distinct obj) from v3_storage_objectversioning_allow) <> 8
+     or exists (
+       select 1 from v3_storage_objectversioning_allow
+        where sectie <> 'FUNC' or sch <> 'storage' or klasse <> 'function'
+           or rol not in ('anon', 'authenticated', 'service_role')
+           or rechten <> 'EXECUTE'
+     )
+     or exists (
+       select 1 from v3_storage_objectversioning_allow
+        group by obj
+       having count(*) <> 3 or count(distinct rol) <> 3
+     ) then
+    raise exception 'V3 GRANTS-GATE FAALT — Storage-platformallowlist heeft ongeldige vorm';
+  end if;
+
+  select exists (
+    select 1 from v3_actual a
+    join v3_storage_objectversioning_allow n
+      on n.sectie = a.sectie and n.sch = a.sch and n.obj = a.obj
+    where a.sectie = 'FUNC'
+  ) into nieuwe_vorm;
+
+  if nieuwe_vorm then
+    -- Dit is een Supabase-platformvorm, geen vrijbrief voor een appfunctie met
+    -- dezelfde naam. De platformfuncties zijn invoker-functies onder de
+    -- storage-eigenaar; een andere eigenaar of SECURITY DEFINER blijft rood.
+    if exists (
+      select 1 from pg_proc p
+      join pg_namespace ns on ns.oid = p.pronamespace
+      join pg_roles eigenaar on eigenaar.oid = p.proowner
+      join v3_storage_objectversioning_allow n
+        on n.sch = ns.nspname
+       and n.obj = p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+      where n.sectie = 'FUNC'
+        and (eigenaar.rolname <> 'supabase_storage_admin' or p.prosecdef)
+    ) then
+      raise exception 'V3 GRANTS-GATE FAALT — Storage-platformfunctie heeft onjuiste eigenaar of SECURITY DEFINER';
+    end if;
+
+    delete from v3_allow a
+     where a.sectie = 'FUNC' and a.sch = 'storage'
+       and a.obj in (
+         select oud.obj from v3_allow oud
+          where oud.sectie = 'FUNC' and oud.sch = 'storage'
+            and split_part(oud.obj, '(', 1) in (
+              'get_size_by_bucket', 'list_multipart_uploads_with_delimiter',
+              'list_objects_with_delimiter', 'search', 'search_by_timestamp',
+              'search_v2'
+            )
+       );
+    insert into v3_allow select * from v3_storage_objectversioning_allow;
+  end if;
+  raise notice 'V3 Storage-platformvorm: %',
+    case when nieuwe_vorm then 'objectversioning' else 'oud' end;
+end $$;
 
 -- ── Vergelijken en falen bij elk verschil ───────────────────────────────────
 do $$

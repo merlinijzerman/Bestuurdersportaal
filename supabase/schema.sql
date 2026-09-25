@@ -2438,3 +2438,21 @@ create table if not exists public.procedure_afschriften (
 -- SECURITY DEFINER-functies alleen voor microsoft_vault; de audit-functie
 -- weigert details met URL's, tokens of externe id's. Zichtbaarheid en preview
 -- worden per request live via Graph met het token van de gebruiker bepaald.
+--
+-- #413: twee afgeleide kolommen voor de Copilot-locatorstap. web_url_canoniek is
+-- GEGENEREERD uit sharepoint_canoniek_weburl(web_url) — schema/host/poort/query/
+-- fragment/trailing slash genormaliseerd, padsegmenten byte-gelijk (geen decode,
+-- zodat %2F nooit een padscheiding wordt). mapping_status ('actief'|'botsing')
+-- zet rijen met een dubbele canonieke URL in QUARANTAINE zonder hun web_url te
+-- wissen. Een partiële unieke index (bron_id, web_url_canoniek) WHERE actief en
+-- niet-null draagt de exact-één-invariant; sharepoint_zoek_document_op_weburl()
+-- toetst count = 1 daarbovenop en negeert quarantainerijen. De upsert houdt de
+-- status zelf bij (uit de index vóór het schrijven, herclassificatie erna), zodat
+-- de index de documentenlijst nooit kan laten vallen.
+--
+-- #413 (21-09): de canonicalisering strijkt ook de vier Office-weergaveprefixen
+-- weg (/:w:/r/, /:x:/r/, /:p:/r/, /:b:/r/), want Graph levert voor Officebestanden
+-- zo'n viewer-URL terwijl een MAP het gewone pad krijgt. Sharinglinks
+-- (/:w:/s/<token>) dragen geen pad en blijven ongemoeid — fail-closed. Let op:
+-- web_url_canoniek is STORED, dus een functiewijziging herschrijft de kolom NIET
+-- vanzelf; de migratie bouwt de kolom daarom opnieuw op en herclassificeert.

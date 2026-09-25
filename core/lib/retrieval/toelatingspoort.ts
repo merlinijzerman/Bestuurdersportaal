@@ -295,10 +295,16 @@ function beoordeel(bron: Bronresultaat, o: Oordeelcontext): Weigergrond | null {
 export async function verifieerToelating(
   ctx: RetrievalContext,
   adapter: RetrievalAdapter,
-  kandidatenPerSpoor: readonly (readonly Bronresultaat[])[]
+  kandidatenPerSpoor: readonly (readonly Bronresultaat[])[],
+  /**
+   * #426 — GEDEELD over alle adaptergroepen van deze beurt. Per groep een eigen
+   * `Date.now()` zou twee bronnen binnen één verzoek aan verschillende vensters
+   * toetsen, en dan is V4 niet één grens maar twee.
+   */
+  gedeeldePoortNu?: number
 ): Promise<Poortuitkomst> {
   const caps = adapter.capabilities();
-  const poortNu = Date.now();
+  const poortNu = gedeeldePoortNu ?? Date.now();
   const verzoekStart = tijdstip(ctx.verzoekStartOp);
 
   let standen: Map<string, Bronregistratiestand> | null = null;
@@ -418,4 +424,48 @@ export function vatToelatingSamen(
     categorieen.configuratiefout = (categorieen.configuratiefout ?? 0) + filterweigeringen;
   }
   return { geweigerd: totaal, categorieen, gronden };
+}
+
+/**
+ * #426 — de poort over MEERDERE adaptergroepen van één verzoek.
+ *
+ * Elke groep krijgt zijn eigen `capabilities()` en zijn eigen standenmaps:
+ * `permissionProof` en `versiebeleid` zijn per adapter waar of onwaar, en de
+ * opaque refs van twee adapters zitten in gescheiden namespaces. Ze in één map
+ * samenvoegen zou betekenen dat een `ref` van adapter A de stand van adapter B
+ * kan opzoeken — en een ref is een string, dus botsing is niet uitgesloten.
+ *
+ * Wat WEL gedeeld is: `poortNu`. Eén beurt, één venster.
+ */
+export async function verifieerToelatingPerGroep(
+  ctx: RetrievalContext,
+  adapters: readonly RetrievalAdapter[],
+  kandidatenPerSpoor: readonly (readonly Bronresultaat[])[],
+  spoorNaarGroep: readonly number[],
+  gedeeldePoortNu: number = Date.now()
+): Promise<Poortuitkomst> {
+  const toegelatenPerSpoor: Bronresultaat[][] = kandidatenPerSpoor.map(() => []);
+  const geweigerd: Weigering[] = [];
+
+  for (let groep = 0; groep < adapters.length; groep++) {
+    // De sporen VAN DEZE GROEP, in hun oorspronkelijke volgorde. De poort krijgt
+    // alleen die deelverzameling; de teruggegeven spoorindices zijn lokaal en
+    // worden hieronder teruggeprojecteerd op de echte spoorindex.
+    const eigenSporen: number[] = [];
+    for (let i = 0; i < spoorNaarGroep.length; i++) if (spoorNaarGroep[i] === groep) eigenSporen.push(i);
+    if (eigenSporen.length === 0) continue;
+
+    const deel = await verifieerToelating(
+      ctx,
+      adapters[groep],
+      eigenSporen.map((i) => kandidatenPerSpoor[i]),
+      gedeeldePoortNu
+    );
+    deel.toegelatenPerSpoor.forEach((lijst, lokaal) => {
+      toegelatenPerSpoor[eigenSporen[lokaal]] = lijst;
+    });
+    for (const w of deel.geweigerd) geweigerd.push({ ...w, spoor: eigenSporen[w.spoor] });
+  }
+
+  return { toegelatenPerSpoor, geweigerd };
 }

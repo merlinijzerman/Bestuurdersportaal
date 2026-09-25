@@ -103,17 +103,17 @@ test("geweigerd + vlag AAN → weiger (429), met resetAt", () => {
 
 // ── 4. De fail-closed set (H-12) ─────────────────────────────────────────────
 
-test("fail-closed = exact de vijf H-12-endpoints", () => {
+test("fail-closed = de vijf H-12-endpoints plus de extern kostende Preview-smoke", () => {
   assert.deepEqual(
     [...FAIL_CLOSED_LIMIETEN].sort(),
-    ["backfill", "chat", "her_extract", "segmenteer", "zoeken"],
-    "de fail-closed set moet exact chat/zoeken/her_extract/backfill/segmenteer zijn"
+    ["backfill", "chat", "her_extract", "microsoft_sharepoint_retrieval_spike", "segmenteer", "zoeken"],
+    "de fail-closed set moet de vijf H-12-routes plus de SharePoint-smoke bevatten"
   );
-  assert.equal(FAIL_CLOSED_LIMIETEN.size, 5);
+  assert.equal(FAIL_CLOSED_LIMIETEN.size, 6);
 });
 
-test("isFailClosed: waar voor de vijf, onwaar voor een kostenvrije route", () => {
-  for (const naam of ["chat", "zoeken", "her_extract", "backfill", "segmenteer"] as const) {
+test("isFailClosed: waar voor de zes, onwaar voor een kostenvrije route", () => {
+  for (const naam of ["chat", "zoeken", "her_extract", "backfill", "segmenteer", "microsoft_sharepoint_retrieval_spike"] as const) {
     assert.equal(isFailClosed(naam), true, `${naam} hoort fail-closed te zijn`);
   }
   assert.equal(isFailClosed("upload"), false);

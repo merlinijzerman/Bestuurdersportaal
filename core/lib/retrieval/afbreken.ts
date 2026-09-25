@@ -72,6 +72,18 @@ export interface Afbreekgrendel {
   bewaak(): void;
   /** Is de grendel gesloten? Een gesloten grendel bewaakt niets meer. */
   gesloten(): boolean;
+  /**
+   * Wat er van de deadline over is, in milliseconden; nooit negatief.
+   *
+   * Een deelketen met een EIGEN, kortere klok — de Copilot-keten van T4-C — moet
+   * weten hoeveel beurtbudget er nog is. Zonder deze functie zou zij haar
+   * statische default gebruiken en een keten van vijftien seconden starten in een
+   * beurt die er nog drie te gaan heeft, óf zou de aanroeper de rekensom een
+   * tweede keer maken. Twee plekken die hetzelfde budget berekenen lopen uiteen.
+   *
+   * Na `stop()` is er geen budget meer: 0.
+   */
+  resterendMs(): number;
   /** Sluit de grendel en ruimt timer en luisteraar op. Idempotent. */
   stop(): void;
 }
@@ -85,6 +97,7 @@ export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeou
   const ctrl = new AbortController();
   let reden: Afbrekingsreden | null = null;
   let gesloten = false;
+  const eindtijd = Date.now() + timeoutMs;
 
   // Timer én luisteraar worden op ÉÉN plek opgeruimd, en die plek wordt langs
   // alle drie de uitgangen bereikt: afbreken, sluiten, en de deadline die vuurt.
@@ -119,6 +132,7 @@ export function maakAfbreekgrendel(clientSignal: AbortSignal | undefined, timeou
     signal: ctrl.signal,
     reden: () => reden,
     gesloten: () => gesloten,
+    resterendMs: () => (gesloten || reden !== null ? 0 : Math.max(0, eindtijd - Date.now())),
     bewaak() {
       if (reden !== null) throw new RetrievalAfgebroken(reden);
       // Een GESLOTEN grendel die stil `void` teruggeeft is het gevaarlijkst wat
