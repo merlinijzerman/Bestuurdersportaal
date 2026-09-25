@@ -174,7 +174,7 @@
         "stream": false,
         "system_sha256": "7bff8f3d29e4caf5b61f925ba455b34da80a2a54142b82b77c0c4a38b3a93881",
         "system_tekens": 258,
-        "temperature": 0,
+        "temperature": null,
         "tool_choice": "{\"type\":\"tool\",\"name\":\"vergelijk_dimensie\"}",
         "tools": [
           "onbekend"

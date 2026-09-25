@@ -24,7 +24,7 @@
 //  bepaalt wat er daarna moet gebeuren.
 // ============================================================================
 
-import { graphPadIsGelijkOfOnder, normaliseerGraphPad } from "../../spike/sharepoint-retrieval/prototype";
+import { graphPadIsGelijkOfOnder, normaliseerGraphPad } from "./graph-pad";
 
 const GRAPH_BASIS = "https://graph.microsoft.com/v1.0";
 

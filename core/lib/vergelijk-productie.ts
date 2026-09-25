@@ -404,7 +404,9 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
     const resp = await gw.gateway.genereer(gw.ctx, {
       taaktype: "vergelijk_waarde",
       maxTokens: 700,
-      temperature: 0,
+      // Opus 4.7+ weigert niet-standaard samplingparameters met HTTP 400.
+      // De verplichte functietool en de strikte prompt begrenzen de uitvoer;
+      // laat de provider daarom zijn standaardtemperatuur gebruiken.
       signal: input.signal,
       systeem:
         "Je vergelijkt één specifieke dimensie tussen twee versies van een pensioenfonds-" +
