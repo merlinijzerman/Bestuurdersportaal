@@ -13,6 +13,9 @@ const preview = lees("supabase/seeds/preview/2026_09_22_428_app365_preview_provi
 const productie = lees("supabase/seeds/production/2026_09_22_428_app365_production_provision.sql");
 const previewRollback = lees("supabase/rollbacks/2026_09_22_428_app365_preview_ROLLBACK.sql");
 const productieRollback = lees("supabase/rollbacks/2026_09_22_428_app365_production_ROLLBACK.sql");
+const previewDemo = lees("supabase/seeds/preview/2026_09_26_428_app365_preview_demo_fixtures.sql");
+const previewDemoCheck = lees("supabase/seeds/preview/2026_09_26_428_app365_preview_demo_CHECK.sql");
+const previewDemoRollback = lees("supabase/rollbacks/2026_09_26_428_app365_preview_demo_ROLLBACK.sql");
 
 test("gedeelde migratie is host- en omgevingsvrij en bevat de volledige veilige matrix", () => {
   for (const verboden of ["app365.bestuurdersportaal.com", "app365.preview.bestuurdersportaal.com", "swviwoytzvaqypieqgji", "aebwiufuegsiwhwpdrfb", "tenant_domains"])
@@ -51,4 +54,16 @@ test("providerrollback herstelt een exacte tombstone vóór vrijgave van het Ver
     assert.match(blok, /wildcard/);
     assert.ok(blok.indexOf("TXT-tombstone") < blok.indexOf("domain"), kop);
   }
+});
+
+test("Preview-demopakket is synthetisch, omgevingsgegrendeld en houdt Microsoft uit", () => {
+  assert.match(previewDemo, /app\.preview\.bestuurdersportaal\.com/);
+  assert.match(previewDemo, /app365\.preview\.bestuurdersportaal\.com/);
+  assert.doesNotMatch(previewDemo, /app365\.bestuurdersportaal\.com'\s*,\s*v_fonds\s*,\s*true/);
+  assert.match(previewDemo, /SYNTHETISCH/g);
+  assert.doesNotMatch(previewDemo, /microsoft_copilot_retrieval'\s*,\s*'true/);
+  assert.match(previewDemoCheck, /microsoft', 'uit'/);
+  assert.match(previewDemoCheck, /begin read only/);
+  assert.match(previewDemoRollback, /app\.preview\.bestuurdersportaal\.com/);
+  assert.match(previewDemoRollback, /delete from public\.documenten where fonds_id=v_fonds/);
 });

@@ -36,6 +36,13 @@ Na merge van de repositorywijziging stopt het werk. Voer de gedeelde migratie, p
 5. Pas de gedeelde migratie via de normale Preview-migratieketen toe.
 6. Voer uitsluitend Previewprovisioning en daarna Preview-self-check uit.
 7. Maak uitsluitend synthetische Previewaccounts en data.
+   Gebruik voor de vaste applicatiefixtures achtereenvolgens
+   `supabase/seeds/preview/2026_09_26_428_app365_preview_demo_fixtures.sql` en
+   `supabase/seeds/preview/2026_09_26_428_app365_preview_demo_CHECK.sql`. Het
+   pakket activeert alleen AI, Bibliotheek, Vergaderingen, Notulen, Procedures en
+   Risicomatrix voor `m365-demo`; Microsoft en vergelijking blijven uit. De
+   afzonderlijke fixture-rollback staat onder
+   `supabase/rollbacks/2026_09_26_428_app365_preview_demo_ROLLBACK.sql`.
 8. Voeg daarna pas de exacte Vercel-, DNS-, `APP_HOST`- en Auth-bindingen toe volgens de gereviewde providerdiff. Omdat beide zones een wildcard dragen, begint de DNS-wijziging met een exact TXT-tombstonerecord op de app365-host. Verifieer autoritatief dat een A-query `NOERROR` zonder antwoord geeft voordat het Vercel-domain wordt gekoppeld. Activeer de host pas als laatste door op exact dezelfde naam een expliciete Vercel-routingbinding toe te voegen; verwijder het tombstonerecord niet zolang nog geen expliciete routingbinding bestaat.
 9. Smoke hostrouting, harde reload, login/logout/reset, badge, metadata, robots, sitemap, cross-hostweigering en RLS.
 10. Bewijs nul Microsoft-tokenaanvragen en nul Copilotcalls.
