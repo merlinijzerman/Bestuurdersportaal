@@ -14,6 +14,7 @@ import { afrondenMetAfwijkingHandler } from "./handler";
 // de activatie-cascade is afgeleide toestand en volgt erbuiten (besluit 0192).
 export const POST = withFondsRoute(
   {
+    module: "procedures",
     hostGuard: "geen",
     rateLimit: "nog-niet-beoordeeld",
     audit: { handeling: "procedures.stappen.afwijking-vastleggen" },

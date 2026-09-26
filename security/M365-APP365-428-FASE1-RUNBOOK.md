@@ -36,7 +36,14 @@ Na merge van de repositorywijziging stopt het werk. Voer de gedeelde migratie, p
 5. Pas de gedeelde migratie via de normale Preview-migratieketen toe.
 6. Voer uitsluitend Previewprovisioning en daarna Preview-self-check uit.
 7. Maak uitsluitend synthetische Previewaccounts en data.
-8. Voeg daarna pas de exacte Vercel-, DNS-, `APP_HOST`- en Auth-bindingen toe volgens de gereviewde providerdiff.
+   Gebruik voor de vaste applicatiefixtures achtereenvolgens
+   `supabase/seeds/preview/2026_09_26_428_app365_preview_demo_fixtures.sql` en
+   `supabase/seeds/preview/2026_09_26_428_app365_preview_demo_CHECK.sql`. Het
+   pakket activeert alleen AI, Bibliotheek, Vergaderingen, Notulen, Procedures en
+   Risicomatrix voor `m365-demo`; Microsoft en vergelijking blijven uit. De
+   afzonderlijke fixture-rollback staat onder
+   `supabase/rollbacks/2026_09_26_428_app365_preview_demo_ROLLBACK.sql`.
+8. Voeg daarna pas de exacte Vercel-, DNS-, `APP_HOST`- en Auth-bindingen toe volgens de gereviewde providerdiff. Omdat beide zones een wildcard dragen, begint de DNS-wijziging met een exact TXT-tombstonerecord op de app365-host. Verifieer autoritatief dat een A-query `NOERROR` zonder antwoord geeft voordat het Vercel-domain wordt gekoppeld. Activeer de host pas als laatste door op exact dezelfde naam een expliciete Vercel-routingbinding toe te voegen; verwijder het tombstonerecord niet zolang nog geen expliciete routingbinding bestaat.
 9. Smoke hostrouting, harde reload, login/logout/reset, badge, metadata, robots, sitemap, cross-hostweigering en RLS.
 10. Bewijs nul Microsoft-tokenaanvragen en nul Copilotcalls.
 
@@ -48,8 +55,8 @@ Dezelfde volgorde geldt, maar uitsluitend voor `portal_production` met projectre
 
 1. Zet Microsoft-/Copilotpoorten dicht en blokkeer uitsluitend Preview-app365-accounts.
 2. Voer de Preview-databaserollback alleen met het aparte rollbackakkoord uit.
-3. Verwijder of deactiveer uitsluitend het DNS-record `app365.preview.bestuurdersportaal.com`.
-4. Wacht de vastgelegde TTL af en verifieer via een onafhankelijke resolver dat nieuw verkeer niet meer naar Vercel routeert.
+3. Verwijder uitsluitend de expliciete A-/AAAA-/ALIAS-/CNAME-routingbinding op `app365.preview.bestuurdersportaal.com` en herstel/behoud op die exacte naam een TXT-tombstone. Verwijder de naam niet: anders neemt de gedeelde wildcard de routing opnieuw over.
+4. Wacht de hoogste nog relevante TTL af en verifieer autoritatief én via een onafhankelijke resolver dat een A-/AAAA-query `NOERROR` zonder antwoord geeft en nieuw verkeer niet meer naar Vercel routeert.
 5. Geef pas daarna het domain van `preview-stable` vrij en controleer dat geen dangling claim resteert.
 6. Verwijder uitsluitend de Previewhost uit `APP_HOST` en de exacte Preview Auth-callbacks via de normale releaseweg.
 
@@ -57,8 +64,8 @@ Dezelfde volgorde geldt, maar uitsluitend voor `portal_production` met projectre
 
 1. Zet Microsoft-/Copilotpoorten dicht en blokkeer uitsluitend Productie-app365-accounts.
 2. Voer de Productiedatabaserollback alleen met het aparte rollbackakkoord uit.
-3. Verwijder of deactiveer uitsluitend het DNS-record `app365.bestuurdersportaal.com`.
-4. Wacht de vastgelegde TTL af en verifieer via een onafhankelijke resolver dat nieuw verkeer niet meer naar Vercel routeert.
+3. Verwijder uitsluitend de expliciete A-/AAAA-/ALIAS-/CNAME-routingbinding op `app365.bestuurdersportaal.com` en herstel/behoud op die exacte naam een TXT-tombstone. Verwijder de naam niet: anders neemt de gedeelde wildcard de routing opnieuw over.
+4. Wacht de hoogste nog relevante TTL af en verifieer autoritatief én via een onafhankelijke resolver dat een A-/AAAA-query `NOERROR` zonder antwoord geeft en nieuw verkeer niet meer naar Vercel routeert.
 5. Geef pas daarna het Production-domain vrij en controleer dat geen dangling claim resteert.
 6. Verwijder uitsluitend de Productiehost uit `APP_HOST` en de exacte Production Auth-callbacks via de normale releaseweg.
 

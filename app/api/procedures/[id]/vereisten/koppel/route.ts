@@ -25,7 +25,7 @@ function duidtOpGeenDissent(uitkomst: string): boolean {
   return /geen\s+dissent/i.test(uitkomst);
 }
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.vereisten.koppeling-wijzigen" }, capability: "procedures.manage",
+export const POST = withFondsRoute({ module: "procedures", hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.vereisten.koppeling-wijzigen" }, capability: "procedures.manage",
     schema: z
       .object({
         vereiste: z.unknown().optional(),

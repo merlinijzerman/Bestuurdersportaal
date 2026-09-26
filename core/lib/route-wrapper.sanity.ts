@@ -70,6 +70,7 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
     // de weigertak wordt per test expliciet aangezet.
     beoordeelPortaalSessie: async () => ({ toegestaan: true }),
     beoordeelRouteHostToegang: async () => ({ toegestaan: true }),
+    weigerAlsModuleUit: async () => null,
     // W6: default UIT. De vlag-aan-stand is de enige tak die gedrag verandert en
     // wordt per test expliciet aangezet — nooit via process.env.
     capabilityEnforceAan: () => false,
@@ -198,6 +199,56 @@ async function main() {
     const res = await handler(req());
     assert.equal(res.status, 403);
     assert.deepEqual(await res.json(), { error: "Dit webadres hoort niet bij uw fonds." });
+  });
+
+  await test("module UIT → 403 vóór capability en handler", async () => {
+    let handlerAangeroepen = 0;
+    let capabilityAangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({
+        weigerAlsModuleUit: async (fondsId, moduleKey) => {
+          assert.equal(fondsId, "f-1");
+          assert.equal(moduleKey, "procedures");
+          return Response.json({ error: "module uit" }, { status: 403 });
+        },
+        capabilityEnforceAan: () => {
+          capabilityAangeroepen++;
+          return true;
+        },
+      })
+    );
+    const handler = wrap(
+      { module: "procedures", capability: "TE_BEPALEN", schema: "geen-body" },
+      async () => {
+        handlerAangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    const res = await handler(req());
+    assert.equal(res.status, 403);
+    assert.deepEqual(await res.json(), { error: "module uit" });
+    assert.equal(capabilityAangeroepen, 0);
+    assert.equal(handlerAangeroepen, 0);
+  });
+
+  await test("module AAN → capability en handler blijven bereikbaar", async () => {
+    let moduleAangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({
+        weigerAlsModuleUit: async () => {
+          moduleAangeroepen++;
+          return null;
+        },
+        capabilityEnforceAan: () => true,
+      })
+    );
+    const handler = wrap(
+      { module: "vergaderingen", capability: IEDEREEN, schema: "geen-body" },
+      async () => Response.json({ ok: true })
+    );
+    const res = await handler(req());
+    assert.equal(res.status, 200);
+    assert.equal(moduleAangeroepen, 1);
   });
 
   await test("onafgevangen fout in handler → 500 {\"error\":\"Serverfout\"}", async () => {
