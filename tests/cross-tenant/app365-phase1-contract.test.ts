@@ -43,10 +43,12 @@ test("exacte app365-host resolveert; www en verkeerde tenant falen gesloten", ()
   assert.equal(bepaalSurface({ host: "www.app365.bestuurdersportaal.com", appHost: "app365.bestuurdersportaal.com" }), "app", "geldige onbekende host blijft achter de app-authgate maar krijgt geen tenantcontext");
 });
 
-test("providerrollback verwijdert DNS aantoonbaar vóór Vercel-domain", () => {
+test("providerrollback herstelt een exacte tombstone vóór vrijgave van het Vercel-domain", () => {
   const runbook = lees("security/M365-APP365-428-FASE1-RUNBOOK.md");
   for (const kop of ["Providerrollback Preview", "Providerrollback Productie"]) {
     const blok = runbook.slice(runbook.indexOf(kop), runbook.indexOf("## ", runbook.indexOf(kop) + kop.length));
-    assert.ok(blok.indexOf("DNS-record") < blok.indexOf("domain"), kop);
+    assert.match(blok, /TXT-tombstone/);
+    assert.match(blok, /wildcard/);
+    assert.ok(blok.indexOf("TXT-tombstone") < blok.indexOf("domain"), kop);
   }
 });

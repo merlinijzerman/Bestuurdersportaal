@@ -570,9 +570,11 @@ Rollback is **disable-first** en raakt geen ander fonds.
 4. uitsluitend de accounts van de doelomgeving blokkeren;
 5. de environmentrollback voor de geselecteerde context uitvoeren; het script
    weigert als projectref, fingerprint of host niet exact bij die context hoort;
-6. het overeenkomstige DNS-record verwijderen of uitschakelen en vanaf een
-   onafhankelijke resolver verifiëren dat nieuw verkeer niet meer naar Vercel
-   routeert; houd rekening met de vastgelegde TTL;
+6. de expliciete routingbinding op de exacte app365-host verwijderen en op die
+   exacte naam een TXT-tombstone herstellen/behouden; de naam zelf mag niet
+   verdwijnen omdat de gedeelde wildcard anders opnieuw naar Vercel routeert.
+   Verifieer na de hoogste nog relevante TTL autoritatief én via een onafhankelijke
+   resolver dat A-/AAAA-queries `NOERROR` zonder antwoord geven;
 7. pas na dat bewijs het overeenkomstige Vercel-domain loskoppelen en verifiëren
    dat geen dangling claim of alternatieve route resteert;
 8. uitsluitend de omgevingseigen app365-host uit `APP_HOST` en exacte
@@ -588,14 +590,16 @@ handelingen: terugdraaien van Preview raakt nooit de Production-host en omgekeer
 
 De providerrollbackchecklists leggen dezelfde veilige volgorde afzonderlijk vast:
 
-- **Preview (`portal_preview`):** Previewaccounts blokkeren; uitsluitend het
-  `app365.preview.bestuurdersportaal.com`-DNS-record uitschakelen/verwijderen;
-  onafhankelijke non-routingcontrole na de geldende TTL; pas daarna het domain
+- **Preview (`portal_preview`):** Previewaccounts blokkeren; uitsluitend de
+  expliciete routingbinding op `app365.preview.bestuurdersportaal.com` verwijderen
+  en de exacte TXT-tombstone herstellen/behouden; autoritatieve en onafhankelijke
+  non-routingcontrole na de geldende TTL; pas daarna het domain
   uit `preview-stable` vrijgeven; vervolgens uitsluitend Preview-`APP_HOST` en
   Preview Auth-callbacks via de releaseweg verwijderen.
 - **Productie (`portal_production`):** Productieaccounts blokkeren; uitsluitend
-  het `app365.bestuurdersportaal.com`-DNS-record uitschakelen/verwijderen;
-  onafhankelijke non-routingcontrole na de geldende TTL; pas daarna het
+  de expliciete routingbinding op `app365.bestuurdersportaal.com` verwijderen en
+  de exacte TXT-tombstone herstellen/behouden; autoritatieve en onafhankelijke
+  non-routingcontrole na de geldende TTL; pas daarna het
   Production-domain vrijgeven; vervolgens uitsluitend Production-`APP_HOST` en
   Production Auth-callbacks via de releaseweg verwijderen.
 
@@ -653,7 +657,8 @@ kan wijzen.
 - Productie-app365 is een Production-domain en volgt `main`, niet een
   deploymentalias;
 - TLS geldig en geen dangling binding;
-- rollback verwijdert/disablet per omgeving eerst DNS, bewijst non-routing en
+- rollback verwijdert per omgeving eerst alleen de expliciete routingbinding,
+  houdt een exacte TXT-tombstone tegen wildcardterugval, bewijst non-routing en
   geeft pas daarna het Vercel-domain vrij;
 - iedere environmentrollback verwijdert alleen haar eigen app365-binding;
 - volledige repositorygate groen.
