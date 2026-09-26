@@ -16,6 +16,7 @@
 import { isAfbreking, redenVan } from "../../../core/lib/retrieval/afbreken";
 import { CopilotFout } from "../../../core/lib/microsoft-retrieval/fouten";
 import type { Aanmelding } from "./auth";
+import { diagnostischeRetrievalFetch, type VeiligeProviderDiagnostiek } from "./diagnostiek";
 import { bestandsnaamscan, inhoudscan, leesActor, leesRootItem, leesBron, type LeesClient } from "./graph";
 import type { Labprofiel } from "./registry";
 import type { Scanregel, Smokerapport } from "./rapport";
@@ -198,10 +199,16 @@ export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUi
   // een ronde wachten; een te lage laat iemand een tweede call doen die er niet
   // meer was.
   let pogingen = 0;
+  let providerDiagnostiek: VeiligeProviderDiagnostiek | null = null;
   const tellendeFetch = ((invoer: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     pogingen++;
     return deps.retrievalFetch(invoer, init);
   }) as typeof fetch;
+  const retrievalFetch = diagnostischeRetrievalFetch(
+    tellendeFetch,
+    deps.signal,
+    (diagnostiek) => { providerDiagnostiek = diagnostiek; },
+  );
 
   const afgerond = {
     ...basis,
@@ -216,7 +223,7 @@ export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUi
     retrieval = await meet(profiel, {
       accessToken: aanmelding.accessToken,
       signal: deps.signal,
-      fetchImpl: tellendeFetch,
+      fetchImpl: retrievalFetch,
       modus: deps.modus,
     });
   } catch (fout) {
@@ -269,6 +276,7 @@ export async function voerSmokeUit(deps: SmokeAfhankelijkheden): Promise<SmokeUi
         graphCalls: client.pogingen(),
         retrieval: null,
         retrievalFout: { code: fout.code, categorie: fout.categorie, httpStatus: fout.httpStatus },
+        ...(providerDiagnostiek ? { providerDiagnostiek } : {}),
         retrievalPogingen: pogingen,
         eindstand: "retrieval_afgewezen",
       },
