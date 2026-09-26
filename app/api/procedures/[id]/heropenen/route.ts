@@ -15,6 +15,7 @@ import { z } from "zod";
 // decision_objects onder `decisions.manage` (tranche 7).
 export const POST = withFondsRoute(
   {
+    module: "procedures",
     capability: "procedures.heropenen",
     hostGuard: "geen",
     rateLimit: "nog-niet-beoordeeld",

@@ -10,6 +10,7 @@ import NotificatiesBlok from "./_components/NotificatiesBlok";
 import WerkbakBlok from "./_components/WerkbakBlok";
 import type { NotificatieType } from "@/core/lib/notifications";
 import AssistentIngang from "@/core/components/assistent/AssistentIngang";
+import { moduleBeschikbaar } from "@/core/lib/fonds-config";
 
 const ROL_LABEL: Record<string, string> = {
   bestuurder: "bestuurslid",
@@ -139,6 +140,12 @@ export default async function HomePage() {
 
   const voornaam = profiel?.naam?.split(" ")[0] || "";
   const rolLabel = ROL_LABEL[profiel?.rol || "bestuurder"] || "bestuurslid";
+  // De homepage is óók een module-ingang. De sidebar alleen verbergen is niet
+  // genoeg: een fonds met de vergadermodule uit mag hier geen deep-links of
+  // vergaderwerk in de persoonlijke werkbak terugkrijgen.
+  const vergaderingenBeschikbaar = profiel?.fonds_id
+    ? await moduleBeschikbaar(profiel.fonds_id, "vergaderingen")
+    : false;
 
   // Gedeelde portaalcontext (besluit 0085): dezelfde bron als het AI-startpunt.
   // We geven de reeds-opgehaalde sessie door zodat er geen extra profiel-query
@@ -213,12 +220,15 @@ export default async function HomePage() {
   const inbreng = (recenteInbreng || []) as InbrengItem[];
   const docs = (recenteDocs || []) as DocItem[];
   const notificaties = (recenteNotificaties || []) as NotifRow[];
+  const zichtbareNotificaties = vergaderingenBeschikbaar
+    ? notificaties
+    : notificaties.filter((notificatie) => notificatie.gerelateerd_aan_type !== "agendapunt");
 
   const heeftActiviteit =
     vragen.length > 0 ||
     inbreng.length > 0 ||
     docs.length > 0 ||
-    notificaties.length > 0;
+    zichtbareNotificaties.length > 0;
 
   // §9.2: de bestaande open-stappenweergave gaat op in één werkbak. De helper
   // leest alleen bestaande bronnen; er ontstaat dus geen tweede takenlijst.
@@ -226,6 +236,9 @@ export default async function HomePage() {
     userId: user.id,
     gebruikerNaam: profiel?.naam ?? null,
   });
+  const zichtbareWerkbak = vergaderingenBeschikbaar
+    ? werkbak
+    : werkbak.filter((item) => item.soort !== "vergadering");
 
   // §12 — bestuurlijke signalen zijn geen tweede takenlijst maar een compacte
   // prioritering binnen de bestaande homepage-werkbak. De evidence-synthese
@@ -304,7 +317,7 @@ export default async function HomePage() {
             </h1>
             <div className="portal-hero-copy">
               U bent {rolLabel} van {fondsnaam}.
-              {volgendeVergadering ? (
+              {vergaderingenBeschikbaar && volgendeVergadering ? (
                 <>
                   {" "}De volgende vergadering is{" "}
                   <Link
@@ -315,30 +328,33 @@ export default async function HomePage() {
                   </Link>
                   , over {dagenTot(volgendeVergadering.datum)} dagen.
                 </>
-              ) : (
+              ) : vergaderingenBeschikbaar ? (
                 <> Er staat geen volgende vergadering ingepland.</>
-              )}
+              ) : null}
             </div>
           </div>
-          <Link
-            href="/vergaderingen"
-            className="portal-hero-action"
-          >
-            Naar de vergaderingen →
-          </Link>
+          {vergaderingenBeschikbaar && (
+            <Link
+              href="/vergaderingen"
+              className="portal-hero-action"
+            >
+              Naar de vergaderingen →
+            </Link>
+          )}
         </div>
       </section>
 
       <WerkbakBlok
-        items={werkbak}
+        items={zichtbareWerkbak}
         signalen={bestuurlijkeSignalen}
         vandaag={vandaagAlsDatum()}
       />
 
       {/* Voor u open + Mijn activiteit */}
-      <div className="portal-two-column">
+      <div className={vergaderingenBeschikbaar ? "portal-two-column" : ""}>
         {/* Vergadering voorbereiden */}
-        <section className="portal-card p-5">
+        {vergaderingenBeschikbaar && (
+          <section className="portal-card p-5">
           <h2 className="portal-card-title mb-3">
             Vergadering voorbereiden
           </h2>
@@ -416,7 +432,8 @@ export default async function HomePage() {
               </Link>
             </div>
           )}
-        </section>
+          </section>
+        )}
 
         {/* Mijn recente activiteit */}
         <section className="portal-card p-5">
@@ -429,8 +446,8 @@ export default async function HomePage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {notificaties.length > 0 && (
-                <NotificatiesBlok initieelNotificaties={notificaties} />
+              {zichtbareNotificaties.length > 0 && (
+                <NotificatiesBlok initieelNotificaties={zichtbareNotificaties} />
               )}
               {vragen.length > 0 && (
                 <RecentBlok titel="AI-vragen">

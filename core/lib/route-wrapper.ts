@@ -12,7 +12,7 @@
 //  Wat hij wél doet is observeren: elke zou-weigering gaat als
 //  `[CAPABILITY-OBSERVE]` naar het log, en dat is de dataset waarmee W7 begint.
 //
-//  De wrapper doet exact vijf dingen:
+//  De wrapper doet exact zes dingen:
 //    1. Authenticatie      — createServerSupabase() + auth.getUser(); bij !user
 //                            EXACT NextResponse.json({error:"Niet ingelogd"},401).
 //    2. Profielresolutie   — haalProfiel(supabase, user.id): id, naam, rol, fonds_id.
@@ -22,6 +22,8 @@
 //                            die hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
 //                            `hostGuard: "route-eigen"` = de route doet het zelf,
 //                            bewust; zie RouteSpecV1.
+//    3a. Modulepoort      — weigert een route waarvan de expliciet gedeclareerde
+//                            fonds-module via het manifest uit staat.
 //    3b. Capability-poort — beoordeelt spec.capability tegen de profielrol
 //                            (core/lib/capability-enforce.ts). Onder
 //                            `ENFORCE_CAPABILITY=on` wordt een zou-weigering een
@@ -60,6 +62,7 @@ import {
   beoordeelAudit,
   type AuditDeclaratie,
 } from "@/core/lib/audit-enforce";
+import type { ModuleKey } from "@/core/lib/module-registry";
 // UITSLUITEND TYPES uit rate-limit — een waarde-import zou `logAppFout` (server-
 // only) meetrekken. De echte `controleerLimiet` + `LIMIETEN` worden LAZY geladen
 // in echteDeps, net als tenant-route-guard hieronder.
@@ -110,6 +113,14 @@ export type FondsContext = {
 };
 
 export type RouteSpecV1 = {
+  /**
+   * Optionele fonds-module waar deze route bij hoort. Als de module voor het
+   * fonds uit staat, stopt de wrapper vóór de capability-, schema- en handlerlaag
+   * met dezelfde 403-respons als {@link weigerAlsModuleUit}. Routes zonder een
+   * modulegrens laten dit veld weg; domeinsuites bewaken dat alle handlers onder
+   * een module-API het veld expliciet dragen.
+   */
+  readonly module?: ModuleKey;
   /** WIE mag deze route aanroepen. VERPLICHT — geen default, geen weglating.
    *
    *  Verplicht en niet optioneel omdat een AFWEZIG veld niet te onderscheiden is
@@ -243,6 +254,12 @@ export type WrapperDeps = {
    *  `verplicht` mag zij niet bestaan zonder levende uitzondering. */
   beoordeelPortaalSessie: (supabase: RlsClient, gebruikerId: string) => Promise<{ toegestaan: boolean; beperkt?: boolean }>;
   beoordeelRouteHostToegang: (args: HostGuardArgs) => Promise<HostGuardOordeel>;
+  /** Dwingt de fonds-modulebeschikbaarheid af. Lazy in echteDeps zodat de
+   *  wrapper-sanity buiten de Next-runtime een geïsoleerde stub kan gebruiken. */
+  weigerAlsModuleUit: (
+    fondsId: string | null | undefined,
+    moduleKey: ModuleKey
+  ) => Promise<Response | null>;
   /** Leest `ENFORCE_CAPABILITY`. Injecteerbaar zodat de sanity-suite BEIDE
    *  vlagstanden kan bewijzen zonder process.env te muteren — de vlag-aan-stand
    *  is de enige tak die gedrag verandert en mag niet op een omgevingsvariabele
@@ -302,6 +319,10 @@ const echteDeps: WrapperDeps = {
   beoordeelRouteHostToegang: async (args) => {
     const mod = await import("@/core/lib/tenant-route-guard");
     return mod.beoordeelRouteHostToegang(args);
+  },
+  weigerAlsModuleUit: async (fondsId, moduleKey) => {
+    const mod = await import("@/core/lib/module-guard");
+    return mod.weigerAlsModuleUit(fondsId, moduleKey);
   },
   controleerLimiet: async (supabase, limietNaam) => {
     const mod = await import("@/core/lib/rate-limit");
@@ -384,6 +405,14 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
             { status: 403 }
           );
         }
+      }
+
+      // 3a. Module-beschikbaarheid — ná authenticatie/profiel/host, vóór elke
+      // route-eigen handeling. De echte dependency laadt de server-only guard
+      // lazy; de los van Next draaiende wrapper-sanity injecteert een stub.
+      if (spec.module) {
+        const moduleWeigering = await deps.weigerAlsModuleUit(fondsId, spec.module);
+        if (moduleWeigering) return moduleWeigering;
       }
 
       // 3b. Capability-poort (W6) — NA de host-guard, VÓÓR de handler.

@@ -82,6 +82,10 @@ export default function Sidebar({
   const beschikbaarSet: Set<ModuleKey> | null = beschikbareModules
     ? new Set(beschikbareModules.filter(isModuleKey))
     : null;
+  // Dezelfde fail-safe als DashboardShell: alleen een expliciete manifestlijst
+  // zonder `ai` zet de AI-presentatie uit. Als de config niet kon worden
+  // geladen (undefined), behouden we het bestaande gedrag.
+  const aiBeschikbaar = !beschikbaarSet || beschikbaarSet.has("ai");
   // VEN-2: sub-functies (navigeerbaar=false) krijgen nooit een eigen menu-item —
   // ze delen de href van hun dragende module. Dit filter staat los van de
   // beschikbaarheid: ook als zo'n module ooit AAN gaat, hoort er geen tweede
@@ -294,12 +298,14 @@ export default function Sidebar({
           <Icoon sleutel="schild" grootte={14} streek={1.8} className="flex-shrink-0" />
           <span className={bijInklapVerborgen}>Alleen bronnen waar u recht op heeft</span>
         </div>
-        <div className={`flex items-center gap-2 px-1 ${ingeklapt ? "md:justify-center" : ""}`}>
-          <span className="w-2 h-2 bg-ok rounded-full pulse-dot flex-shrink-0"></span>
-          <span className={`text-nav-text/80 text-[11px] ${bijInklapVerborgen}`}>
-            Beheerde AI-omgeving actief
-          </span>
-        </div>
+        {aiBeschikbaar && (
+          <div className={`flex items-center gap-2 px-1 ${ingeklapt ? "md:justify-center" : ""}`}>
+            <span className="w-2 h-2 bg-ok rounded-full pulse-dot flex-shrink-0"></span>
+            <span className={`text-nav-text/80 text-[11px] ${bijInklapVerborgen}`}>
+              Beheerde AI-omgeving actief
+            </span>
+          </div>
+        )}
 
         {/* Gebruiker — klik opent het eigen profiel (geen los nav-item meer) */}
         <Link

@@ -31,10 +31,25 @@ describe("Sidebar", () => {
     );
 
     expect(screen.getByRole("link", { name: /AI Assistent/ })).toHaveAttribute("href", "/ai");
+    expect(screen.getByText("Beheerde AI-omgeving actief")).toBeVisible();
     expect(screen.queryByRole("link", { name: /Documentbibliotheek/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Catalogus & organen/ })).not.toBeInTheDocument();
     expect(screen.getByText("Bestuurslid")).toBeVisible();
     await verwachtGeenErnstigeAxeBevindingen(container);
+  });
+
+  it("toont geen actieve AI-status als de AI-module expliciet uitstaat", () => {
+    renderMetProviders(
+      <Sidebar
+        gebruikerNaam="Ada Lovelace"
+        gebruikerRol="beheerder"
+        beschikbareModules={["home", "beheer", "governance"]}
+        open
+      />,
+    );
+
+    expect(screen.queryByText("Beheerde AI-omgeving actief")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /AI Assistent/ })).not.toBeInTheDocument();
   });
 
   it("klapt via toetsenbord in en logt uit zonder oude AI-sessie", async () => {

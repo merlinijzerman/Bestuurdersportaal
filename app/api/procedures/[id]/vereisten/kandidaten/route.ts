@@ -7,6 +7,7 @@ import { haalKandidaten } from "@/core/lib/vereiste-kandidaten";
 // (niet als padsegment: hij bevat '|'). Leesroute → capability procedures.view.
 export const GET = withFondsRoute(
   {
+    module: "procedures",
     capability: "procedures.view",
     schema: "geen-body",
     hostGuard: "geen",

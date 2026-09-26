@@ -13,6 +13,7 @@ import { z } from "zod";
 // verwarren met heropenen-van-een-besluit (§6.3).
 export const POST = withFondsRoute(
   {
+    module: "procedures",
     capability: "procedures.beeindigen",
     hostGuard: "geen",
     rateLimit: "nog-niet-beoordeeld",
