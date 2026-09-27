@@ -3,7 +3,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { z } from "zod";
 import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.wijzigen" }, capability: "procedures.manage", schema: z.object({ "deadline": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ module: "procedures", hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.wijzigen" }, capability: "procedures.manage", schema: z.object({ "deadline": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;

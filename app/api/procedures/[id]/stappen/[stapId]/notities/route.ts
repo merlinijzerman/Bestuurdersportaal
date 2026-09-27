@@ -14,7 +14,7 @@ async function geldigeStap(supabase: Sb, procedureId: string, stapId: string) {
 }
 
 export const GET = withFondsRoute(
-  { hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "procedures.view", schema: "geen-body" },
+  { module: "procedures", hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "procedures.view", schema: "geen-body" },
   async (ctx, _req: NextRequest, params) => {
     const { id, stapId } = params as { id: string; stapId: string };
     if (!(await geldigeStap(ctx.supabase, id, stapId))) {
@@ -31,7 +31,7 @@ export const GET = withFondsRoute(
 );
 
 export const POST = withFondsRoute(
-  { hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.notities.aanmaken" }, capability: "procedures.manage", schema: z.object({ tekst: z.unknown().optional() }).passthrough() },
+  { module: "procedures", hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.notities.aanmaken" }, capability: "procedures.manage", schema: z.object({ tekst: z.unknown().optional() }).passthrough() },
   async (ctx, req: NextRequest, params) => {
     const { id, stapId } = params as { id: string; stapId: string };
     const body = (await req.json()) as { tekst?: string };

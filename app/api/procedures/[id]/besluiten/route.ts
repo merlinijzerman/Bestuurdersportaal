@@ -8,7 +8,7 @@ import {
   resolveRequirementBinding,
 } from "@/core/lib/bewijs-binding";
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.besluiten.aanmaken" }, capability: "procedures.manage", schema: z.object({ "agendapunt_id": z.unknown().optional(), "datum": z.unknown().optional(), "formulering": z.unknown().optional(), "motivering": z.unknown().optional(), "stap_id": z.unknown().optional(), "uitkomst": z.unknown().optional(), "vereiste": z.unknown().optional(), "vergadering_id": z.unknown().optional(), "verworpen_alternatieven": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ module: "procedures", hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.besluiten.aanmaken" }, capability: "procedures.manage", schema: z.object({ "agendapunt_id": z.unknown().optional(), "datum": z.unknown().optional(), "formulering": z.unknown().optional(), "motivering": z.unknown().optional(), "stap_id": z.unknown().optional(), "uitkomst": z.unknown().optional(), "vereiste": z.unknown().optional(), "vergadering_id": z.unknown().optional(), "verworpen_alternatieven": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

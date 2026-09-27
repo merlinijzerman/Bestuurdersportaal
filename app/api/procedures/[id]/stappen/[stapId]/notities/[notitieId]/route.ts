@@ -3,7 +3,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { z } from "zod";
 
 export const PATCH = withFondsRoute(
-  { hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.notities.wijzigen" }, capability: "procedures.manage", schema: z.object({ tekst: z.unknown().optional() }).passthrough() },
+  { module: "procedures", hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.notities.wijzigen" }, capability: "procedures.manage", schema: z.object({ tekst: z.unknown().optional() }).passthrough() },
   async (ctx, req: NextRequest, params) => {
     const { id, stapId, notitieId } = params as { id: string; stapId: string; notitieId: string };
     const body = (await req.json()) as { tekst?: string };
@@ -24,7 +24,7 @@ export const PATCH = withFondsRoute(
 );
 
 export const DELETE = withFondsRoute(
-  { hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.notities.verwijderen" }, capability: "procedures.manage", schema: "geen-body" },
+  { module: "procedures", hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.notities.verwijderen" }, capability: "procedures.manage", schema: "geen-body" },
   async (ctx, _req: NextRequest, params) => {
     const { id, stapId, notitieId } = params as { id: string; stapId: string; notitieId: string };
     const { data, error } = await ctx.supabase

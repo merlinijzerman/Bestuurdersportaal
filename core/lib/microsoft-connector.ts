@@ -63,8 +63,8 @@ function testStapSync<T>(categorie: MicrosoftTestFoutcategorie, actie: () => T):
   }
 }
 
-function client() {
-  const cfg = microsoftConfig();
+function client(fondsId: string) {
+  const cfg = microsoftConfig(fondsId);
   return new ConfidentialClientApplication({ auth: { clientId: cfg.clientId, clientSecret: cfg.clientSecret, authority: `https://login.microsoftonline.com/${cfg.tenantId}` } });
 }
 
@@ -110,9 +110,9 @@ export async function startKoppeling(
     throw new MicrosoftConnectorError("oauth_transactie");
   }
   const state = b64url(32), nonce = b64url(32), verifier = b64url(64);
-  const cfg = microsoftConfig();
+  const cfg = microsoftConfig(ctx.fondsId);
   await vault.maakOAuthTransactie({ state, fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, expiresAt: new Date(Date.now() + 10 * 60_000), blob: versleutelMicrosoftGeheim(JSON.stringify({ nonce, verifier, returnTo, scopes, doel }), aad(ctx.fondsId, ctx.gebruikerId, "oauth")) });
-  return client().getAuthCodeUrl({ scopes: [...scopes], redirectUri: cfg.callbackUrl, state, nonce, codeChallenge: challenge(verifier), codeChallengeMethod: "S256" });
+  return client(ctx.fondsId).getAuthCodeUrl({ scopes: [...scopes], redirectUri: cfg.callbackUrl, state, nonce, codeChallenge: challenge(verifier), codeChallengeMethod: "S256" });
 }
 /** Een incrementele consent vervangt de opgeslagen scopes van de verbinding.
  * Daarom vraagt iedere uitbreiding de unie van al verleende én nieuwe scopes,
@@ -156,8 +156,8 @@ export async function voltooiKoppeling(args: ConnectorContext & { state: string;
     }
     return { nonce: waarde.nonce, verifier: waarde.verifier, returnTo: waarde.returnTo, scopes: scopes as string[], doel };
   });
-  const cfg = microsoftConfig();
-  const msal = client();
+  const cfg = microsoftConfig(args.fondsId);
+  const msal = client(args.fondsId);
   const result = await koppelStap("token_exchange", () => msal.acquireTokenByCode({
     code: args.code,
     scopes: geheim.scopes,
@@ -186,7 +186,7 @@ export async function testKoppeling(ctx: ConnectorContext) {
       cache: await vault.leesCache(ctx.fondsId, ctx.gebruikerId),
     }));
     if (!verbinding || verbinding.status !== "gekoppeld" || !cache) throw new MicrosoftConnectorError("test_cache_read");
-    const msal = client();
+    const msal = client(ctx.fondsId);
     testStapSync("test_cache_decryptie", () => msal.getTokenCache().deserialize(ontsleutelMicrosoftGeheim(cache, aad(ctx.fondsId,ctx.gebruikerId,"cache"))));
     const account = await testStap("test_account_lookup", () => msal.getTokenCache().getAccountByHomeId(verbinding.home_account_id));
     if (!account) throw new MicrosoftConnectorError("test_account_lookup");
@@ -218,7 +218,7 @@ export async function ontkoppelKoppeling(ctx: ConnectorContext) { await vault.on
 async function gedelegeerdToken(ctx: ConnectorContext, scope: "Calendars.Read.Shared" | "Sites.Selected" | "Files.Read.All") {
   const [verbinding, cache] = await Promise.all([vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId), vault.leesCache(ctx.fondsId, ctx.gebruikerId)]);
   if (!verbinding || verbinding.status !== "gekoppeld" || !cache || !verbinding.scopes.includes(scope)) throw new MicrosoftConnectorError("test_silent_token");
-  const msal = client();
+  const msal = client(ctx.fondsId);
   msal.getTokenCache().deserialize(ontsleutelMicrosoftGeheim(cache, aad(ctx.fondsId, ctx.gebruikerId, "cache")));
   const account = await msal.getTokenCache().getAccountByHomeId(verbinding.home_account_id);
   if (!account) throw new MicrosoftConnectorError("test_account_lookup");

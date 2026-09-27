@@ -10,11 +10,17 @@ const BESTANDEN = Object.freeze({
     provision: "supabase/seeds/preview/2026_09_22_428_app365_preview_provision.sql",
     check: "supabase/seeds/preview/2026_09_22_428_app365_preview_CHECK.sql",
     rollback: "supabase/rollbacks/2026_09_22_428_app365_preview_ROLLBACK.sql",
+    "demo-provision": "supabase/seeds/preview/2026_09_26_428_app365_preview_demo_fixtures.sql",
+    "demo-check": "supabase/seeds/preview/2026_09_26_428_app365_preview_demo_CHECK.sql",
+    "demo-rollback": "supabase/rollbacks/2026_09_26_428_app365_preview_demo_ROLLBACK.sql",
   }),
   production: Object.freeze({
     provision: "supabase/seeds/production/2026_09_22_428_app365_production_provision.sql",
     check: "supabase/seeds/production/2026_09_22_428_app365_production_CHECK.sql",
     rollback: "supabase/rollbacks/2026_09_22_428_app365_production_ROLLBACK.sql",
+    "demo-provision": "supabase/seeds/production/2026_09_27_428_app365_production_demo_fixtures.sql",
+    "demo-check": "supabase/seeds/production/2026_09_27_428_app365_production_demo_CHECK.sql",
+    "demo-rollback": "supabase/rollbacks/2026_09_27_428_app365_production_demo_ROLLBACK.sql",
   }),
 });
 

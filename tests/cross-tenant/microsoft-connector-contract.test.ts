@@ -35,6 +35,18 @@ test("Microsoft F1 gebruikt geen Supabase service-role in het tenantpad", () => 
   assert.match(vault, /^import "server-only";/);
 });
 
+test("App365 gebruikt eigen Entra-configuratie zonder terugval naar de PGB-tenant", () => {
+  const config = lees("core/lib/microsoft-config.ts");
+  const configCore = lees("core/lib/microsoft-config-core.ts");
+  assert.match(config, /microsoftConfigVoorFonds\(process\.env, fondsId\)/);
+  assert.match(configCore, /MICROSOFT_APP365_FONDS_ID/);
+  assert.match(configCore, /return leesConfiguratie\(omgeving, "MICROSOFT_APP365_"\)/);
+  assert.match(connector, /microsoftConfig\(ctx\.fondsId\)/);
+  assert.match(connector, /microsoftConfig\(args\.fondsId\)/);
+  assert.match(connector, /client\(ctx\.fondsId\)/);
+  assert.match(connector, /client\(args\.fondsId\)/);
+});
+
 test("private vault is browserdicht en alle definers eindigen op pg_temp", () => {
   assert.match(migratie, /revoke all on schema microsoft_private from public, anon, authenticated/);
   assert.match(migratie, /revoke all on all tables in schema microsoft_private from public, anon, authenticated/);
