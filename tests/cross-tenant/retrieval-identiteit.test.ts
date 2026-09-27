@@ -104,6 +104,19 @@ test("#367 — Supabase-versiebewijs degradeert expliciet en faalt cross-tenant/
   assert.equal(bewijsUitVersierij(basis, DOC_REF, FONDS_B, "nu").soort, "onbekend");
   assert.equal(bewijsUitVersierij({ ...basis, document_id: "verwisseld" }, DOC_REF, FONDS_A, "nu").soort, "onbekend");
   assert.equal(bewijsUitVersierij(undefined, DOC_REF, FONDS_A, "nu").soort, "onbekend");
+  assert.equal(
+    bewijsUitVersierij(basis, DOC_REF, FONDS_A, "nu", true).soort,
+    "onbekend",
+    "WP3 laat een legacybestand zonder hash-gebonden scanbewijs niet via de datumfallback toe"
+  );
+  const schoon = {
+    ...basis,
+    documenten: {
+      ...basis.documenten,
+      scan_resultaat: { verdict: "clean", sha256: basis.documenten.bestand_hash },
+    },
+  };
+  assert.equal(bewijsUitVersierij(schoon, DOC_REF, FONDS_A, "nu", true).soort, "hash");
 });
 
 test("#367 — ongeldige bestand_hash is nooit sterk bewijs", () => {

@@ -8,6 +8,7 @@ import { createServerSupabase } from "../supabase-server";
 import type { DocumentChunk } from "../rag";
 import type { ActueleVersiestand, Versiebewijs } from "./contract";
 import { maakVolledigeVersieHash } from "./identiteit";
+import { heeftSchoonScanbewijs } from "../document-scan-poort";
 
 interface Versierij {
   id: string;
@@ -19,6 +20,7 @@ interface Versierij {
     bibliotheek: string | null;
     bestand_hash: string | null;
     documentdatum: string | null;
+    scan_resultaat?: Record<string, unknown> | null;
   } | null;
 }
 
@@ -32,12 +34,22 @@ export function bewijsUitVersierij(
   rij: Versierij | undefined,
   verwachtDocumentId: string,
   fondsId: string,
-  gecontroleerdOp: string
+  gecontroleerdOp: string,
+  vereisScanbewijs = false
 ): Versiebewijs {
   const d = rij?.documenten;
   const tenantKlopt =
     d?.bibliotheek === "generiek" || (nietLeeg(d?.fonds_id) && d?.fonds_id === fondsId);
   if (!rij || !d || rij.document_id !== verwachtDocumentId || d.id !== verwachtDocumentId || !tenantKlopt) {
+    return { soort: "onbekend", waarde: null, gecontroleerdOp };
+  }
+  // Als WP3 actief is, mag ook de zwakke documentdatumfallback een ongescand
+  // legacybestand niet alsnog toelaten. De poort is hash-gebonden en wordt per
+  // kandidaat opnieuw uit de database gelezen.
+  if (vereisScanbewijs && !heeftSchoonScanbewijs({
+    bestand_hash: d.bestand_hash,
+    scan_resultaat: d.scan_resultaat ?? null,
+  })) {
     return { soort: "onbekend", waarde: null, gecontroleerdOp };
   }
   if (nietLeeg(rij.indexering_versie) && nietLeeg(d.bestand_hash) && SHA256_HEX.test(d.bestand_hash)) {
@@ -63,7 +75,7 @@ export async function leesSupabaseVersies(
   const supabase = await createServerSupabase();
   let query = supabase
     .from("document_chunks")
-    .select("id, document_id, indexering_versie, documenten!inner(id, fonds_id, bibliotheek, bestand_hash, documentdatum)")
+    .select("id, document_id, indexering_versie, documenten!inner(id, fonds_id, bibliotheek, bestand_hash, documentdatum, scan_resultaat)")
     .in("id", [...perChunk.keys()]);
   if (signal) query = query.abortSignal(signal);
   const { data, error } = await query;
@@ -75,7 +87,13 @@ export async function leesSupabaseVersies(
   return new Map(
     [...perChunk].map(([id, chunk]) => [
       id,
-      bewijsUitVersierij(rijen.get(id), chunk.document_id, fondsId, gecontroleerdOp),
+      bewijsUitVersierij(
+        rijen.get(id),
+        chunk.document_id,
+        fondsId,
+        gecontroleerdOp,
+        process.env.WP3_MALWARESCAN_AAN === "true"
+      ),
     ])
   );
 }

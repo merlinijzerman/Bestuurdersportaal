@@ -6,7 +6,7 @@ import {
   bepaalContentType,
   normaliseerBestandstype,
 } from "@/core/lib/document-download-headers";
-import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
+import { isOrigineelBeschikbaar } from "@/core/lib/document-scan-poort";
 
 // GET /api/documents/[id]/bestand
 // Levert het originele bestand uitsluitend als download.
@@ -63,19 +63,6 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "nog-niet
     );
   }
 
-  // WP3 wordt per omgeving geactiveerd. Zodra de schakelaar aan staat is alleen
-  // een volledig verwerkt document met een positief, hash-gebonden verdict
-  // downloadbaar. Null/onbekend/scannerfout is dus nooit impliciet schoon.
-  if (
-    process.env.WP3_MALWARESCAN_AAN === "true" &&
-    (document.verwerkingsstatus !== "beschikbaar" || !heeftSchoonScanbewijs(document))
-  ) {
-    return NextResponse.json(
-      { error: "Dit document is nog niet veilig beschikbaar." },
-      { status: 403 }
-    );
-  }
-
   if (!document.opslag_pad) {
     return NextResponse.json(
       {
@@ -83,6 +70,19 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "nog-niet
           "Dit document is geüpload vóór de inzage-functionaliteit beschikbaar was. Het origineel is niet meer beschikbaar — alleen de tekst voor de AI-assistent.",
       },
       { status: 410 }
+    );
+  }
+
+  // WP3 wordt per omgeving geactiveerd. Een positief, hash-gebonden verdict is
+  // de veiligheidswaarheid voor het origineel. AI-extractie/indexering is een
+  // aparte toestand: die mag een schoon bestand niet ondownloadbaar maken.
+  if (!isOrigineelBeschikbaar(
+    { ...document, geindexeerd: false },
+    process.env.WP3_MALWARESCAN_AAN === "true"
+  )) {
+    return NextResponse.json(
+      { error: "Dit document is nog niet veilig beschikbaar." },
+      { status: 403 }
     );
   }
 

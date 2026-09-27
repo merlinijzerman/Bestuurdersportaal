@@ -122,6 +122,15 @@ test("zonder beschikbaar origineel suggereren we geen oorzaak", () => {
   assert.deepEqual(s, ["niet_doorzoekbaar"]);
 });
 
+test("opgeslagen legacy-origineel zonder veiligheidsbewijs krijgt een herstelmelding", () => {
+  const s = sleutels(doc({
+    geindexeerd: true,
+    verwerkingsstatus: "beschikbaar",
+    bestand_beschikbaar: false,
+  }));
+  assert.deepEqual(s, ["veiligheidscontrole"]);
+});
+
 test("een Word-document zonder index krijgt geen OCR-aanwijzing", () => {
   const s = sleutels(
     doc({ geindexeerd: false, verwerkingsstatus: null, bestandstype: "docx" })
