@@ -1,6 +1,6 @@
 {
   "_doc": "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie PER LEZING (bestand::tabel → een of meer van evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte lezing zonder klasse maakt de gate rood. Padresolutie volgt de tsconfig-alias en echte relatieve paden, inclusief ../ en indexbestanden. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
-  "bereikte_bestanden": 135,
+  "bereikte_bestanden": 136,
   "lezingen_per_klasse": {
     "evidence": [
       "core/lib/rag.ts::document_chunks",
@@ -42,6 +42,8 @@
     ],
     "configuratie": [
       "app/api/chat/route.ts::profielen",
+      "core/lib/agendapunt-documenten.ts::document_agendapunten",
+      "core/lib/agendapunt-documenten.ts::documenten",
       "core/lib/capabilities.ts::profielen",
       "core/lib/fonds-config.ts::fonds_config_log",
       "core/lib/fonds-config.ts::fonds_content_overrides",
@@ -77,10 +79,14 @@
     "decision_objects": [
       "evidence"
     ],
+    "document_agendapunten": [
+      "configuratie"
+    ],
     "document_chunks": [
       "evidence"
     ],
     "documenten": [
+      "configuratie",
       "evidence",
       "modelcontext"
     ],
@@ -181,6 +187,12 @@
         "risico_maatregelen",
         "risicos",
         "voorbereidingen"
+      ]
+    },
+    "core/lib/agendapunt-documenten.ts": {
+      "tabellen": [
+        "document_agendapunten",
+        "documenten"
       ]
     },
     "core/lib/capabilities.ts": {

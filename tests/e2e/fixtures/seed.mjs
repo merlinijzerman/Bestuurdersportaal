@@ -130,6 +130,23 @@ async function seedAssistentContext(admin, fonds) {
   if (agendapuntFout) {
     throw new Error(`E2E assistentcontext(agendapunt): ${agendapuntFout.message}`);
   }
+
+  // #462 PR-1 — uitsluitend een SECUNDAIRE koppeling. Daarmee bewijst de
+  // deeplink-E2E dat de chip niet stiekem alleen documenten.agendapunt_id leest.
+  // Het document zelf blijft context='algemeen' en wordt niet verplaatst.
+  const { error: koppelingFout } = await admin.from("document_agendapunten").upsert(
+    {
+      id: "00000000-0000-4000-8000-00000000e505",
+      fonds_id: fonds.id,
+      document_id: E2E_AI_BRONNEN.fondsAControle.id,
+      agendapunt_id: context.agendapunt.id,
+      vergadering_id: context.vergadering.id,
+    },
+    { onConflict: "document_id,agendapunt_id" },
+  );
+  if (koppelingFout) {
+    throw new Error(`E2E assistentcontext(secundaire koppeling): ${koppelingFout.message}`);
+  }
 }
 
 async function vindGebruiker(admin, email) {

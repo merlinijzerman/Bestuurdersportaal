@@ -65,6 +65,14 @@ test("portaalcontext — documenten-read is fonds-bibliotheek + actief (geen gen
   );
 });
 
+test("portaalcontext — bureau-telling gebruikt primaire én secundaire agendapuntkoppelingen", () => {
+  assert.match(
+    bron,
+    /haalAgendapuntDocumentKoppelingen\(/,
+    "de telling moet de gedeelde vereniging van documenten.agendapunt_id en document_agendapunten gebruiken"
+  );
+});
+
 test("portaalcontext — fonds komt uit de sessie (haalFondsSessie), nooit uit een parameter/URL", () => {
   assert.match(
     bron,

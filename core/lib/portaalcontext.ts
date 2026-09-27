@@ -31,6 +31,10 @@ import type { RetrievalContext } from "@/core/lib/retrieval/contract";
 import { bewaakNaIO, isAfbreking, TIMEOUT_DEFAULT_MS } from "@/core/lib/retrieval/afbreken";
 import { actorModelcontextRij, leesModelcontext, MODELCONTEXT_GEEN_GELDIGHEID } from "@/core/lib/retrieval/modelcontext-reader";
 import {
+  haalAgendapuntDocumentKoppelingen,
+  type AgendapuntDocumentLezer,
+} from "@/core/lib/agendapunt-documenten";
+import {
   telEigenInbreng,
   telZonderGekoppeldStuk,
   type PortaalContext,
@@ -144,19 +148,16 @@ async function haalPortaalContextProvider(
       if (isBureau) {
         let metStukIds: string[] = [];
         if (apList.length > 0) {
-          const { data: stukken, error: stukkenError } = await supabase
-            .from("documenten")
-            .select("agendapunt_id")
-            .eq("actief", true)
-            .in(
-              "agendapunt_id",
-              apList.map((a) => a.id)
-            ).abortSignal(signal);
-          bewaakNaIO(signal, stukkenError);
-          if (stukkenError) throw stukkenError;
-          metStukIds = (stukken || [])
-            .map((d: { agendapunt_id: string | null }) => d.agendapunt_id)
-            .filter((x): x is string => !!x);
+          // De bureau-telling gebruikt dezelfde definitie als de chatcontext:
+          // primaire én non-destructieve koppelingen, met inactieve documenten
+          // uitgesloten. Anders telt een punt met alleen document_agendapunten
+          // ten onrechte als "zonder stuk" (#462 PR-1).
+          const stukken = await haalAgendapuntDocumentKoppelingen(
+            supabase as unknown as AgendapuntDocumentLezer,
+            apList.map((a) => a.id),
+            signal
+          );
+          metStukIds = stukken.map((d) => d.agendapunt_id);
         }
         agendapunten = telZonderGekoppeldStuk(apList, metStukIds);
       } else {
