@@ -115,11 +115,11 @@ console.log("mock luistert op 443 (JWKS + storage)\n");
 
 // ── Aanroepen ───────────────────────────────────────────────────────────────
 
-async function scan({ bestand, gedrag, token, ext = "pdf" }) {
+async function scan({ bestand, gedrag, token, ext = "pdf", bucket = "documenten-quarantaine" }) {
   const q = new URLSearchParams({ bestand });
   if (gedrag) q.set("gedrag", gedrag);
   const signedUrl =
-    `${ISSUER}/storage/v1/object/sign/documenten-quarantaine/${FONDS}/${DOC}.${ext}?${q}`;
+    `${ISSUER}/storage/v1/object/sign/${bucket}/${FONDS}/${DOC}.${ext}?${q}`;
   const res = await fetch(`${SCANNER}/scan`, {
     method: "POST",
     headers: {
@@ -170,6 +170,11 @@ console.log("── Schone dragers (verwacht: clean) ──");
 for (const [bestand, ext] of [["schoon.pdf", "pdf"], ["schoon.docx", "docx"]]) {
   beoordeel(bestand, await scan({ bestand, ext }), (r) => r.lichaam.verdict === "clean");
 }
+beoordeel(
+  "schoon.pdf uit legacybucket documenten",
+  await scan({ bestand: "schoon.pdf", ext: "pdf", bucket: "documenten" }),
+  (r) => r.lichaam.verdict === "clean"
+);
 
 // ── EICAR-liveness ──────────────────────────────────────────────────────────
 //  GEMETEN EIGENSCHAP, en die stuurt hoe deze test eruitziet: ClamAV detecteert
@@ -266,7 +271,7 @@ for (const [naam, url] of [
   ["link-local metadata", "https://169.254.169.254/storage/v1/object/sign/documenten-quarantaine/x.pdf"],
   ["ander hostname", "https://kwaadaardig.example/storage/v1/object/sign/documenten-quarantaine/x.pdf"],
   ["suffix-aanval op hostname", `https://abc123xyz.supabase.co.aanvaller.nl/storage/v1/object/sign/documenten-quarantaine/${FONDS}/${DOC}.pdf`],
-  ["andere bucket", `${ISSUER}/storage/v1/object/sign/documenten/${FONDS}/${DOC}.pdf`],
+  ["andere bucket", `${ISSUER}/storage/v1/object/sign/documenten-archief/${FONDS}/${DOC}.pdf`],
   ["REST-API in plaats van storage", `${ISSUER}/rest/v1/documenten?select=*`],
   ["dubbel-encoded traversal", `${ISSUER}/storage/v1/object/sign/documenten-quarantaine/%252e%252e/geheim.pdf`],
   ["afwijkende poort", `https://abc123xyz.supabase.co:8443/storage/v1/object/sign/documenten-quarantaine/${FONDS}/${DOC}.pdf`],
