@@ -16,6 +16,9 @@ const productieRollback = lees("supabase/rollbacks/2026_09_22_428_app365_product
 const previewDemo = lees("supabase/seeds/preview/2026_09_26_428_app365_preview_demo_fixtures.sql");
 const previewDemoCheck = lees("supabase/seeds/preview/2026_09_26_428_app365_preview_demo_CHECK.sql");
 const previewDemoRollback = lees("supabase/rollbacks/2026_09_26_428_app365_preview_demo_ROLLBACK.sql");
+const productieDemo = lees("supabase/seeds/production/2026_09_27_428_app365_production_demo_fixtures.sql");
+const productieDemoCheck = lees("supabase/seeds/production/2026_09_27_428_app365_production_demo_CHECK.sql");
+const productieDemoRollback = lees("supabase/rollbacks/2026_09_27_428_app365_production_demo_ROLLBACK.sql");
 
 test("gedeelde migratie is host- en omgevingsvrij en bevat de volledige veilige matrix", () => {
   for (const verboden of ["app365.bestuurdersportaal.com", "app365.preview.bestuurdersportaal.com", "swviwoytzvaqypieqgji", "aebwiufuegsiwhwpdrfb", "tenant_domains"])
@@ -66,4 +69,18 @@ test("Preview-demopakket is synthetisch, omgevingsgegrendeld en houdt Microsoft 
   assert.match(previewDemoCheck, /begin read only/);
   assert.match(previewDemoRollback, /app\.preview\.bestuurdersportaal\.com/);
   assert.match(previewDemoRollback, /delete from public\.documenten where fonds_id=v_fonds/);
+});
+
+test("Production-demopakket spiegelt de inhoud maar vereist uitsluitend Productionbindingen", () => {
+  assert.match(productieDemo, /app\.bestuurdersportaal\.com/);
+  assert.match(productieDemo, /app365\.bestuurdersportaal\.com/);
+  assert.match(productieDemo, /host like '%\.preview\.bestuurdersportaal\.com'/);
+  assert.doesNotMatch(productieDemo, /where host = 'app365\.preview\.bestuurdersportaal\.com'\s+and fonds_id = v_fonds and actief/);
+  assert.equal(productieDemo.match(/SYNTHETISCH/g)?.length, previewDemo.match(/SYNTHETISCH/g)?.length);
+  assert.doesNotMatch(productieDemo, /microsoft_copilot_retrieval'\s*,\s*'true/);
+  assert.match(productieDemoCheck, /'omgeving', 'production'/);
+  assert.match(productieDemoCheck, /microsoft', 'uit'/);
+  assert.match(productieDemoCheck, /begin read only/);
+  assert.match(productieDemoRollback, /app365\.bestuurdersportaal\.com/);
+  assert.match(productieDemoRollback, /delete from public\.documenten where fonds_id=v_fonds/);
 });
