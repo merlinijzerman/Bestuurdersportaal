@@ -26,12 +26,14 @@ export function projectrefUitDatabaseUrl(waarde) {
 
 export function bevestigApp365Doel({ omgeving, databaseUrl, actie, mutatieAkkoord }) {
   if (!Object.hasOwn(DOELEN, omgeving)) throw geblokkeerd("APP365_DOELOMGEVING moet exact 'preview' of 'production' zijn.");
-  if (!new Set(["provision", "check", "rollback"]).has(actie)) throw geblokkeerd("actie moet provision, check of rollback zijn.");
+  if (!new Set(["provision", "check", "rollback", "demo-provision", "demo-check", "demo-rollback"]).has(actie)) {
+    throw geblokkeerd("actie moet provision, check, rollback, demo-provision, demo-check of demo-rollback zijn.");
+  }
   const projectRef = projectrefUitDatabaseUrl(databaseUrl);
   if (projectRef !== DOELEN[omgeving].projectRef) {
     throw geblokkeerd(`projectref '${projectRef}' hoort niet bij '${omgeving}'.`);
   }
-  if (actie !== "check" && mutatieAkkoord !== DOELEN[omgeving].mutatieAkkoord) {
+  if (!new Set(["check", "demo-check"]).has(actie) && mutatieAkkoord !== DOELEN[omgeving].mutatieAkkoord) {
     throw geblokkeerd(`afzonderlijk mutatieakkoord '${DOELEN[omgeving].mutatieAkkoord}' ontbreekt.`);
   }
   return { omgeving, projectRef, actie };

@@ -29,3 +29,40 @@ test("read-only check vereist juiste doelbevestiging maar geen mutatieakkoord", 
     omgeving: "preview", projectRef: "swviwoytzvaqypieqgji", actie: "check",
   });
 });
+
+test("Production-demoprovisioning met Preview-URL stopt vóór psql", () => {
+  let calls = 0;
+  assert.throws(() => voerApp365SqlUit({
+    omgeving: "production",
+    actie: "demo-provision",
+    databaseUrl: previewUrl,
+    mutatieAkkoord: "428-fase3-productie",
+    spawn() { calls++; return { status: 0 }; },
+  }), /hoort niet bij 'production'/);
+  assert.equal(calls, 0);
+});
+
+test("demo-check is read-only en selecteert het omgevingsspecifieke bestand", () => {
+  let aanroep;
+  const doel = voerApp365SqlUit({
+    omgeving: "production",
+    actie: "demo-check",
+    databaseUrl: productieUrl,
+    spawn(command, args) { aanroep = { command, args }; return { status: 0 }; },
+  });
+  assert.equal(doel.omgeving, "production");
+  assert.equal(aanroep.command, "psql");
+  assert.match(aanroep.args.at(-1), /seeds\/production\/2026_09_27_428_app365_production_demo_CHECK\.sql$/);
+});
+
+test("demo-rollback vereist het afzonderlijke Production-akkoord", () => {
+  let calls = 0;
+  assert.throws(() => voerApp365SqlUit({
+    omgeving: "production",
+    actie: "demo-rollback",
+    databaseUrl: productieUrl,
+    mutatieAkkoord: "",
+    spawn() { calls++; return { status: 0 }; },
+  }), /afzonderlijk mutatieakkoord/);
+  assert.equal(calls, 0);
+});

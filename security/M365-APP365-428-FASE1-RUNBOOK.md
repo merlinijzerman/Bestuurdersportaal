@@ -51,6 +51,23 @@ Na merge van de repositorywijziging stopt het werk. Voer de gedeelde migratie, p
 
 Dezelfde volgorde geldt, maar uitsluitend voor `portal_production` met projectref `aebwiufuegsiwhwpdrfb`, Productionaccounts en `app365.bestuurdersportaal.com`. Een groen Previewbewijs autoriseert Productie niet automatisch.
 
+De read-only nulmeting van 27 september 2026 bevestigde dat `m365-demo` in
+Production bestaat, maar nog geen hostbinding, synthetische demo-objecten of
+geactiveerde demomodules heeft. Na de bestaande fonds- en hostprovisioning wordt
+het synthetische pakket daarom afzonderlijk uitgevoerd en gecontroleerd:
+
+1. `supabase/seeds/production/2026_09_27_428_app365_production_demo_fixtures.sql`;
+2. `supabase/seeds/production/2026_09_27_428_app365_production_demo_CHECK.sql`;
+3. alleen bij rollback:
+   `supabase/rollbacks/2026_09_27_428_app365_production_demo_ROLLBACK.sql`.
+
+Gebruik hiervoor de runneracties `demo-provision`, `demo-check` en
+`demo-rollback`. De muterende acties eisen `428-fase3-productie`; de check blijft
+read-only. Het pakket activeert alleen AI, Bibliotheek, Vergaderingen, Notulen,
+Procedures en Risicomatrix. Microsoft-login, Copilot Retrieval en alle overige
+Microsoftvlaggen blijven dicht totdat callback, Production-credentials,
+demo-eigen identiteit en demo-eigen SharePoint-bron afzonderlijk zijn bewezen.
+
 ## Providerrollback Preview
 
 1. Zet Microsoft-/Copilotpoorten dicht en blokkeer uitsluitend Preview-app365-accounts.
