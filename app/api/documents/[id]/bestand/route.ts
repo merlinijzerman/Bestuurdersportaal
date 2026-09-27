@@ -64,6 +64,16 @@ export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "nog-niet
   }
 
   if (!document.opslag_pad) {
+    // Een aangetoond besmet/geweigerd bestand heeft bewust geen pad in de
+    // definitieve bucket. Houd dat security-oordeel onderscheidbaar van een
+    // historisch document waarvan het origineel simpelweg ontbreekt.
+    const verdict = document.scan_resultaat?.verdict;
+    if (verdict === "infected" || verdict === "policy_blocked") {
+      return NextResponse.json(
+        { error: "Dit document is om veiligheidsredenen niet beschikbaar." },
+        { status: 403 }
+      );
+    }
     return NextResponse.json(
       {
         error:
