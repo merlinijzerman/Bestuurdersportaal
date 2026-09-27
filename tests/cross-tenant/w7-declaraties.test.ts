@@ -136,7 +136,10 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // tijdelijke delegated Microsoft Search-scope, achter dezelfde poorten.
   // 152: #434 (T4-F) voegt de read-only beheerstand GET /api/beheer/adapterstatus toe,
   // met de BESTAANDE capability fonds.config.manage — geen nieuw leesrecht.
-  assert.equal(HANDLERS.length, 152, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 153: #463 (fase A) voegt GET /api/microsoft/sharepoint/zoeken toe —
+  // metadatazoeken in de gekoppelde SharePoint-bron. Declaratie zoeken.use; de
+  // route dwingt inline ook documents.view af (zelfde leesrecht als de lijst).
+  assert.equal(HANDLERS.length, 153, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {
