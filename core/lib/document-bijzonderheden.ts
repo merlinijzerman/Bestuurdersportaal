@@ -73,6 +73,7 @@ export interface Bijzonderheid {
     | "in_verwerking"
     | "geen_tekstlaag"
     | "niet_doorzoekbaar"
+    | "veiligheidscontrole"
     | "type_ontbreekt"
     | "metadata_onvolledig"
     | "vervallen"
@@ -94,6 +95,8 @@ export interface DocumentToestand {
   verwerkingsstatus: string | null;
   ocr_toegepast: boolean | null;
   opslag_pad: string | null;
+  /** Door de server bepaald; ontbrekend houdt oude aanroepers compatibel. */
+  bestand_beschikbaar?: boolean;
   documenttype: string | null;
   deactivatie_reden: string | null;
   /** Geldigheidsgrens van een generiek kaderdocument (ISO YYYY-MM-DD). */
@@ -133,7 +136,8 @@ export function bepaalBijzonderheden(
   }
 
   const isGeneriek = doc.bibliotheek === "generiek";
-  const kanInzien = !!doc.opslag_pad;
+  const kanInzien = doc.bestand_beschikbaar ?? !!doc.opslag_pad;
+  const heeftOrigineel = !!doc.opslag_pad;
   const inVerwerking =
     !doc.geindexeerd &&
     (PIPELINE_STATUSSEN as readonly string[]).includes(doc.verwerkingsstatus ?? "");
@@ -158,6 +162,24 @@ export function bepaalBijzonderheden(
       toelichting:
         "De verwerking is afgebroken. Een voorzitter of beheerder kan in het menu " +
         '"Opnieuw verwerken" kiezen.',
+    });
+  }
+
+
+  if (
+    heeftOrigineel &&
+    !kanInzien &&
+    !inVerwerking &&
+    !verwerkingMislukt &&
+    !verwerkingGeweigerd
+  ) {
+    uit.push({
+      sleutel: "veiligheidscontrole",
+      label: "Veiligheidscontrole nodig",
+      soort: "let_op",
+      toelichting:
+        "Het origineel is aanwezig, maar heeft nog geen geldig veiligheidsbewijs. " +
+        'Een voorzitter of beheerder kan in het menu "Veilig controleren en herindexeren" kiezen.',
     });
   }
 
