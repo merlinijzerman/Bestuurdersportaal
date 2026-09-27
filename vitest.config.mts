@@ -9,6 +9,7 @@ const nodeTestbestanden = [
   "core/lib/vraagtype.test.ts",
   "core/lib/provider-fout.test.ts",
   "core/lib/ai-gateway/gateway.test.ts",
+  "core/lib/ai-gateway/anthropic-adapter.test.ts",
   "core/lib/ai-gateway/secrets.test.ts",
   "platform/lib/aqlab-checks.test.ts",
   "tests/karakterisering/audit-inventaris.test.ts",

@@ -87,6 +87,7 @@ function adapter(over: Partial<ProviderAdapter> & { calls?: AdapterVerzoek[] } =
     tekst: `antwoord op ${v.model}`,
     inhoud: [{ type: "text", text: `antwoord op ${v.model}` }],
     stopReden: "einde",
+    stopDetailsCategorie: null,
     usage: maakUsage({ in: 10, out: 4, cacheLezen: 2, cacheCreatie: 1 }),
     latencyMs: 12,
   });
@@ -251,10 +252,35 @@ test("non-streaming: genormaliseerde usage, stopreden en auditregel zonder inhou
   assert.equal(log.correlatie_id, "req-0001-abcdef");
   assert.equal(log.actie_id, "c1111111-1111-1111-1111-111111111111");
   assert.equal(log.tokens_totaal, 17);
+  assert.equal(log.tokens_thinking, null);
   assert.equal(log.latency_ms, 12);
   const serialisatie = JSON.stringify(log);
   assert.doesNotMatch(serialisatie, /GEHEIME/);
   assert.doesNotMatch(serialisatie, /sk-ant/);
+});
+
+test("effort en afzonderlijke thinking-tokens lopen door het gatewaycontract", async () => {
+  const a = adapter({
+    genereer: async (v) => {
+      a.calls.push(v);
+      return {
+        tekst: "antwoord",
+        inhoud: [],
+        stopReden: "weigering",
+        stopDetailsCategorie: "general_harms",
+        usage: maakUsage({ in: 8, out: 5, thinking: 3 }),
+        latencyMs: 9,
+      };
+    },
+  });
+  const d = deps({ adapters: { anthropic: a } });
+  const r = await maakGateway(d).genereer(ctx(), verzoek({ effort: "xhigh" }));
+  assert.equal(a.calls[0]?.effort, "xhigh");
+  assert.equal(r.stopReden, "weigering");
+  assert.equal(r.stopDetailsCategorie, "general_harms");
+  assert.equal(r.usage.thinking, 3);
+  assert.equal(r.usage.totaal, 13);
+  assert.equal(d.db.logboek.at(-1)?.tokens_thinking, 3);
 });
 
 test("streaming: delta's komen door, afronden normaliseert en logt", async () => {

@@ -25,8 +25,12 @@ const expected = {
   // #311 T3 — contracttests van de AI-gateway (gateway.test.ts) en de
   // secret-/foutlaag (secrets.test.ts); titels gepind zoals de overige suites.
   "core/lib/ai-gateway/gateway.test.ts": {
-    count: 14,
-    titlesSha256: "f26fb3504a24fef3930446d9a6dbc053af9e2495883e8419ef255d373e044c22",
+    count: 15,
+    titlesSha256: "c1d5e1c0509e156781ac9e731c7c3b2d4ac51c43d953059f0ac33810bf5dd5de",
+  },
+  "core/lib/ai-gateway/anthropic-adapter.test.ts": {
+    count: 6,
+    titlesSha256: "1e2dc25c8736f6c495664a5322231429e3300813cf777505b28f3512c648d5d6",
   },
   "core/lib/ai-gateway/secrets.test.ts": {
     count: 3,

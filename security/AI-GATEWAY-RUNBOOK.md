@@ -58,6 +58,29 @@ De trigger dwingt af dat het profiel bestaat en actief is, dat de provider bij h
 
 `supabase/rollbacks/2026_09_04_ai_gateway_configuratie_ROLLBACK.sql` — eerst de T3-code terugrollen, dan dit bestand. Het script **weigert** zolang `gateway_log` of `fonds_configuratie_log` regels bevat; exporteer eerst en zet dan in dezelfde sessie `set ai_gateway.rollback_met_dataverlies = 'ja'`. De loginrol wordt op `NOLOGIN` gezet en blijft bestaan; verwijder haar apart nadat is vastgesteld dat geen deployment of secretstore haar nog gebruikt.
 
+### #438 — Opus 5.5/Sonnet 5-contract (PR1)
+
+`supabase/migrations/20260927172711_ai_gateway_opus_5_5_contract.sql` voegt uitsluitend
+`tokens_thinking` en de stopredenen `contextvenster`, `pauze` en `weigering` toe. De migratie
+wijzigt geen model, allowlist of fondsconfiguratie. Controleer na toepassing:
+
+```sql
+select column_name, is_nullable, column_default
+  from information_schema.columns
+ where table_schema = 'ai_gateway_private'
+   and table_name = 'gateway_log'
+   and column_name = 'tokens_thinking';
+
+select has_function_privilege(
+  'ai_gateway', 'ai_gateway_private.schrijf_log(jsonb)', 'execute'
+);
+```
+
+Thinking-tokens zijn een subset van `tokens_out`; tel ze nooit nogmaals op bij
+`tokens_totaal`. De bijbehorende handmatige rollback weigert zolang een logregel een nieuwe
+stopreden of een aanwezige thinkingtelling bevat. Exporteer/behoud het append-only spoor; maak
+het niet leeg om een rollback af te dwingen. Rol eerst de code terug, daarna pas het SQL-contract.
+
 ## Lokaal / CI
 
 `scripts/testdb-apply-migrations.sh` maakt in de wegwerp-DB een wachtwoordloze `ai_gateway`-fixture met dezelfde flags (zoals voor `microsoft_vault`), zodat de migratie en de suite in `scripts/cross-tenant-ci.sh` ongewijzigd draaien. Preview en Productie vereisen een echt, beheerd wachtwoord.
