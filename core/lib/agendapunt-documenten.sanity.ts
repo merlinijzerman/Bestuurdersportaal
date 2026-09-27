@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   bepaalGevraagdeDocumentIds,
   haalAgendapuntDocumentKoppelingen,
+  MELDING_ANALYSE_NIET_GEKOPPELD,
   type AgendapuntDocumentLezer,
 } from "./agendapunt-documenten";
 
@@ -85,9 +86,8 @@ await check("B-1: een geldige agendapuntmodus negeert een bevroren clientscope",
       agendapuntModusActief: true,
       actueleAgendapuntDocumentIds: ["nieuw", "nieuw"],
       clientDocumentIds: ["oud-opgeslagen", "ander-fonds"],
-      volledigeAnalyseDocumentId: "client-volledige-analyse",
     }),
-    ["nieuw"]
+    { ok: true, ids: ["nieuw"] }
   );
 });
 
@@ -98,12 +98,38 @@ await check("opnieuw oplossen volgt de actuele koppelingen per beurt", () => {
   };
   assert.deepEqual(
     bepaalGevraagdeDocumentIds({ ...basis, actueleAgendapuntDocumentIds: ["versie-1"] }),
-    ["versie-1"]
+    { ok: true, ids: ["versie-1"] }
   );
   assert.deepEqual(
     bepaalGevraagdeDocumentIds({ ...basis, actueleAgendapuntDocumentIds: ["versie-2"] }),
-    ["versie-2"]
+    { ok: true, ids: ["versie-2"] }
   );
+});
+
+await check("volledige analyse wint van de agendapuntscope als het stuk nog gekoppeld is", () => {
+  assert.deepEqual(
+    bepaalGevraagdeDocumentIds({
+      agendapuntModusActief: true,
+      actueleAgendapuntDocumentIds: ["analyse", "ander-stuk"],
+      volledigeAnalyseDocumentId: "analyse",
+      clientDocumentIds: ["client"],
+    }),
+    { ok: true, ids: ["analyse"] }
+  );
+});
+
+await check("volledige analyse op een niet meer gekoppeld stuk wordt geweigerd", () => {
+  for (const actueel of [["ander-stuk"], []]) {
+    assert.deepEqual(
+      bepaalGevraagdeDocumentIds({
+        agendapuntModusActief: true,
+        actueleAgendapuntDocumentIds: actueel,
+        volledigeAnalyseDocumentId: "ontkoppeld",
+        clientDocumentIds: ["ontkoppeld"],
+      }),
+      { ok: false, melding: MELDING_ANALYSE_NIET_GEKOPPELD }
+    );
+  }
 });
 
 await check("buiten agendapuntmodus blijven analyse- en clientscopes intact", () => {
@@ -113,7 +139,7 @@ await check("buiten agendapuntmodus blijven analyse- en clientscopes intact", ()
       actueleAgendapuntDocumentIds: ["agenda"],
       clientDocumentIds: ["client", "client", ""],
     }),
-    ["client"]
+    { ok: true, ids: ["client"] }
   );
   assert.deepEqual(
     bepaalGevraagdeDocumentIds({
@@ -122,7 +148,7 @@ await check("buiten agendapuntmodus blijven analyse- en clientscopes intact", ()
       volledigeAnalyseDocumentId: "analyse",
       clientDocumentIds: ["client"],
     }),
-    ["analyse"]
+    { ok: true, ids: ["analyse"] }
   );
 });
 

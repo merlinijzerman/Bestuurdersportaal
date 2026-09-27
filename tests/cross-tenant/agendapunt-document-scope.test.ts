@@ -30,8 +30,21 @@ test("B-1 — de chatroute lost agendapuntstukken server-side op en geeft client
   assert.match(route, /bepaalGevraagdeDocumentIds\(\{[\s\S]*?actueleAgendapuntDocumentIds:[\s\S]*?clientDocumentIds:/);
   assert.match(
     helper,
-    /if \(input\.agendapuntModusActief\)[\s\S]*?actueleAgendapuntDocumentIds/,
-    "in agendapuntmodus moet de vroege return uitsluitend de actuele server-set gebruiken"
+    /const actueel = \[\.\.\.new Set\(input\.actueleAgendapuntDocumentIds[\s\S]*?if \(input\.agendapuntModusActief\) return \{ ok: true, ids: actueel \}/,
+    "in agendapuntmodus moet de return uitsluitend de actuele server-set gebruiken"
+  );
+});
+
+test("B-1 — volledige analyse wint alleen bij een nog gekoppeld stuk, anders 400", () => {
+  assert.match(
+    helper,
+    /if \(input\.volledigeAnalyseDocumentId\) \{[\s\S]*?input\.agendapuntModusActief && !actueel\.includes\(input\.volledigeAnalyseDocumentId\)[\s\S]*?ok: false/,
+    "een ontkoppeld analysestuk mag de agendapuntscope niet stil vervangen"
+  );
+  assert.match(
+    route,
+    /if \(!gevraagdeScope\.ok\) \{\s*return NextResponse\.json\(\{ error: gevraagdeScope\.melding \}, \{ status: 400 \}\);/,
+    "de route moet een geweigerde scope direct met 400 beantwoorden"
   );
 });
 

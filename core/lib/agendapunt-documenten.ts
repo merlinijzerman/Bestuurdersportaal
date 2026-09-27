@@ -166,23 +166,42 @@ export async function haalAgendapuntDocumenten(
   return koppelingen.map(({ id, titel }) => ({ id, titel }));
 }
 
+export type GevraagdeDocumentIds =
+  | { ok: true; ids: string[] }
+  | { ok: false; melding: string };
+
+export const MELDING_ANALYSE_NIET_GEKOPPELD =
+  "Dit stuk is niet meer aan dit agendapunt gekoppeld. Stel de vraag opnieuw bij het agendapunt.";
+
 /**
- * B-1: bij een geldig agendapunt is de serveropgeloste set altijd leidend.
- * Een clientscope (ook uit een eerder opgeslagen gesprek) wordt dan genegeerd.
+ * B-1: bij een geldig agendapunt is de serveropgeloste set leidend; een
+ * clientscope (ook uit een eerder opgeslagen gesprek) wordt dan genegeerd.
+ *
+ * Uitzondering: een volledige analyse. Dat document-id is al server-side tegen
+ * het auditspoor gevalideerd en wint, maar in agendapuntmodus alleen zolang het
+ * stuk nog actueel aan dit agendapunt gekoppeld is. Anders weigert de route de
+ * beurt, zodat audit (document_id) en gebruikte scope nooit uiteenlopen.
  */
 export function bepaalGevraagdeDocumentIds(input: {
   agendapuntModusActief: boolean;
   actueleAgendapuntDocumentIds: readonly string[];
   volledigeAnalyseDocumentId?: string | null;
   clientDocumentIds?: readonly unknown[] | null;
-}): string[] {
-  if (input.agendapuntModusActief) {
-    return [...new Set(input.actueleAgendapuntDocumentIds.filter((id) => id.length > 0))];
+}): GevraagdeDocumentIds {
+  const actueel = [...new Set(input.actueleAgendapuntDocumentIds.filter((id) => id.length > 0))];
+  if (input.volledigeAnalyseDocumentId) {
+    if (input.agendapuntModusActief && !actueel.includes(input.volledigeAnalyseDocumentId)) {
+      return { ok: false, melding: MELDING_ANALYSE_NIET_GEKOPPELD };
+    }
+    return { ok: true, ids: [input.volledigeAnalyseDocumentId] };
   }
-  if (input.volledigeAnalyseDocumentId) return [input.volledigeAnalyseDocumentId];
-  return [...new Set(
-    (input.clientDocumentIds ?? []).filter(
-      (id): id is string => typeof id === "string" && id.length > 0
-    )
-  )];
+  if (input.agendapuntModusActief) return { ok: true, ids: actueel };
+  return {
+    ok: true,
+    ids: [...new Set(
+      (input.clientDocumentIds ?? []).filter(
+        (id): id is string => typeof id === "string" && id.length > 0
+      )
+    )],
+  };
 }

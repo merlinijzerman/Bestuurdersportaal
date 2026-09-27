@@ -1071,12 +1071,16 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // (§7): bestaat, actief, toegang (RLS), geïndexeerd. Faalt een check, dan een
     // concrete melding — nooit een stille terugval naar de hele bibliotheek.
     let scopeHerkomst: VraagScope = "fondscollectie";
-    let gevraagdeScopeIds = bepaalGevraagdeDocumentIds({
+    const gevraagdeScope = bepaalGevraagdeDocumentIds({
       agendapuntModusActief,
       actueleAgendapuntDocumentIds: actueleAgendapuntDocumenten.map((d) => d.id),
       volledigeAnalyseDocumentId,
       clientDocumentIds: body.document_scope?.document_ids,
     });
+    if (!gevraagdeScope.ok) {
+      return NextResponse.json({ error: gevraagdeScope.melding }, { status: 400 });
+    }
+    let gevraagdeScopeIds = gevraagdeScope.ids;
     if (gevraagdeScopeIds.length > 0) scopeHerkomst = "geselecteerd_document";
 
     // ── Plateau 1 — vroege contextresolutie ────────────────────────────────
