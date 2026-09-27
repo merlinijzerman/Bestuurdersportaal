@@ -18,7 +18,7 @@ import http from "node:http";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { beoordeelBronUrl } from "./bron-url.mjs";
+import { beoordeelBronUrlVoorBuckets } from "./bron-url.mjs";
 import { maakOidcVerifier } from "./oidc.mjs";
 import { openInstream } from "./clamd.mjs";
 
@@ -43,7 +43,10 @@ if (ontbreekt.length > 0) {
 
 const CONFIG = {
   poort: Number(process.env.PORT ?? 80),
-  bucket: "documenten-quarantaine",
+  // Nieuwe uploads komen uit quarantaine; de definitieve bucket is uitsluitend
+  // toegestaan voor de eenmalige, hash-gebonden legacy-rescan. Beide delen
+  // dezelfde strikte objectsleutelallowlist in bron-url.mjs.
+  buckets: Object.freeze(["documenten-quarantaine", "documenten"]),
   supabaseHost: process.env.SCANNER_SUPABASE_HOST,
   // Ruim boven de 25 MB-uploadgrens van de applicatie. Raakt een bestand deze
   // cap, dan is dat geen randgeval maar een signaal.
@@ -165,9 +168,9 @@ async function behandelScan(req, res) {
   const body = await leesJsonBody(req);
   if (!body.ok) return json(res, 400, { code: body.code });
 
-  const bron = beoordeelBronUrl(body.waarde.signedUrl, {
+  const bron = beoordeelBronUrlVoorBuckets(body.waarde.signedUrl, {
     supabaseHost: CONFIG.supabaseHost,
-    bucket: CONFIG.bucket,
+    buckets: CONFIG.buckets,
   });
   if (!bron.ok) {
     // De foutcode is veilig (gesloten verzameling); de URL zelf gaat NIET in

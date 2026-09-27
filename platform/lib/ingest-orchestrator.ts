@@ -110,6 +110,16 @@ interface DocumentRij {
   verwerkingsstatus: string | null;
 }
 
+interface ReaperDocument {
+  id: string;
+  fonds_id: string | null;
+  verwerkingsstatus: string | null;
+  quarantaine_pad: string | null;
+  opslag_pad: string | null;
+  bestand_hash: string | null;
+  scan_resultaat: Record<string, unknown> | null;
+}
+
 // Pipeline-statussen vóór de embedding-fase: de worker moet dan eerst extraheren
 // (+ OCR) en kale chunks aanmaken. 'embedding' = chunks staan er, alleen embeddings
 // resteren. Deze twee sets sturen de reaper-enqueue én de dispatch in verwerkJob.
@@ -305,14 +315,48 @@ async function ruimVerweesdeOriginelenOp(svc: SupabaseClient): Promise<number> {
 // draagt de hele resterende pipeline (extractie→embedding); de stap-waarde is de
 // beginfase (auditspoor). De partiële unieke index vangt concurrente dubbelen.
 async function reaper(svc: SupabaseClient): Promise<number> {
-  const { data: kandidaten, error } = await svc
+  const { data: pipelineKandidaten, error } = await svc
     .from("documenten")
-    .select("id, fonds_id, verwerkingsstatus, quarantaine_pad, opslag_pad")
+    .select("id, fonds_id, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
     .in("verwerkingsstatus", NEEDS_WORK_STATUSSEN)
     .eq("geindexeerd", false)
     .eq("actief", true)
     .limit(REAPER_LIMIET);
-  if (error || !kandidaten || kandidaten.length === 0) return 0;
+  if (error) return 0;
+
+  // WP3-compatibiliteit: vóór de quarantaine-introductie zijn originelen direct
+  // in de leesbucket beland. Zodra WP3 aan staat mogen die niet blijven steken:
+  // de reaper maakt gecontroleerd scan-jobs aan. Alleen de gangbare legacyvorm
+  // (hash of scanresultaat ontbreekt) wordt automatisch opgepakt; afwijkende
+  // bewijsconflicten vereisen een expliciete her-indexeeractie.
+  let legacyKandidaten: ReaperDocument[] = [];
+  if (process.env.WP3_MALWARESCAN_AAN === "true") {
+    const { data, error: legacyError } = await svc
+      .from("documenten")
+      .select("id, fonds_id, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
+      .eq("actief", true)
+      .not("opslag_pad", "is", null)
+      .or("bestand_hash.is.null,scan_resultaat.is.null")
+      .limit(REAPER_LIMIET);
+    if (legacyError) {
+      console.error("[ingest-worker] legacy-scanselectie mislukt:", legacyError.message);
+    } else {
+      legacyKandidaten = ((data ?? []) as ReaperDocument[]).filter((d) =>
+        !["geweigerd", "gequarantineerd", "mislukt"].includes(d.verwerkingsstatus ?? "") &&
+        moetLegacyOrigineelScannen(d)
+      );
+    }
+  }
+
+  const perId = new Map<string, ReaperDocument>();
+  for (const d of [
+    ...((pipelineKandidaten ?? []) as ReaperDocument[]),
+    ...legacyKandidaten,
+  ]) {
+    if (!perId.has(d.id)) perId.set(d.id, d);
+  }
+  const kandidaten = [...perId.values()].slice(0, REAPER_LIMIET);
+  if (kandidaten.length === 0) return 0;
 
   const ids = kandidaten.map((d) => d.id as string);
   const { data: openJobs } = await svc
@@ -327,6 +371,7 @@ async function reaper(svc: SupabaseClient): Promise<number> {
     if (heeftJob.has(d.id as string)) continue;
     const stap = d.quarantaine_pad && !d.opslag_pad
       ? "scan"
+      : moetLegacyOrigineelScannen(d) ? "scan"
       : d.verwerkingsstatus === "embedding" ? "embedding" : "extractie";
     const { error: insErr } = await svc.from("document_processing_jobs").insert({
       document_id: d.id,
@@ -393,6 +438,12 @@ async function verwerkJob(
 
   if (document.quarantaine_pad && !document.opslag_pad) {
     return await scanEnPromoveer(svc, job, document, oidcToken);
+  }
+
+  // Legacy-originelen staan al in de leesbucket, maar missen het bij WP3
+  // ingevoerde, hash-gebonden scanbewijs. Scan ze vóór élke parser- of AI-call.
+  if (moetLegacyOrigineelScannen(document)) {
+    return await scanLegacyOrigineel(svc, job, document, oidcToken);
   }
 
   const aiScope = bepaalDocumentIngestAiScope(document.bibliotheek, job.fonds_id);
@@ -639,6 +690,115 @@ async function scanEnPromoveer(
   return await yieldJob(svc, job);
 }
 
+function moetLegacyOrigineelScannen(
+  doc: Pick<DocumentRij, "opslag_pad" | "bestand_hash" | "scan_resultaat">
+): boolean {
+  return process.env.WP3_MALWARESCAN_AAN === "true" &&
+    !!doc.opslag_pad &&
+    !heeftSchoonScanbewijs(doc);
+}
+
+// ── WP3-hotfix: bestaand origineel in leesbucket → scanbewijs → herindex ───
+// Dit pad promoveert niets: de bytes staan al op hun definitieve plek. Het doet
+// wel exact dezelfde magic-byte-, hash-, scannerhealth- en deploymentcontroles
+// als het quarantainepad. Bestaande chunks worden vóór de externe scan gewist,
+// zodat ongescande legacy-inhoud tijdens een storing niet via een oud RAG-pad
+// kan blijven lekken. Het origineel zelf blijft voor herstel/audit bewaard.
+async function scanLegacyOrigineel(
+  svc: SupabaseClient,
+  job: IngestJob,
+  doc: DocumentRij,
+  oidcToken: string | null
+): Promise<Uitkomst> {
+  if (!doc.opslag_pad) return await markeerMislukt(svc, job, doc.id, "geen_origineel");
+
+  const naam = doc.bestandsnaam ?? doc.opslag_pad.split("/").pop() ?? "document";
+  const { data: blob, error: dlErr } = await svc.storage
+    .from("documenten")
+    .download(doc.opslag_pad);
+  if (dlErr || !blob) return await backoff(svc, job, "legacy_storage_download");
+
+  const buffer = Buffer.from(await blob.arrayBuffer());
+  const validatie = await valideerUpload({
+    naam,
+    mimeType: doc.bestandstype
+      ? CONTENT_TYPE_PER_BESTANDSTYPE[doc.bestandstype as Bestandstype] ?? ""
+      : "",
+    buffer,
+  });
+
+  // Vanaf dit moment is het document expliciet in herstel. Oude afgeleide
+  // inhoud blijft niet bruikbaar terwijl het scanbewijs nog ontbreekt.
+  const { error: chunkDeleteError } = await svc
+    .from("document_chunks")
+    .delete()
+    .eq("document_id", doc.id);
+  if (chunkDeleteError) return await backoff(svc, job, "legacy_chunks_blokkeren");
+  await svc.from("documenten").update({ geindexeerd: false }).eq("id", doc.id);
+
+  if (!validatie.ok) {
+    return await markeerGeweigerd(svc, job, doc.id, `legacy_${validatie.foutcode}`);
+  }
+  if (doc.bestandstype && validatie.bestandstype !== doc.bestandstype) {
+    return await markeerGeweigerd(svc, job, doc.id, "legacy_extensie_inhoud_mismatch");
+  }
+
+  if (!oidcToken) return await backoff(svc, job, "scanner_oidc_ontbreekt");
+  const health = await leesScannerHealth(oidcToken);
+  if (!health) return await backoff(svc, job, "scanner_onbereikbaar");
+  if (signatureOordeel(health) === "verouderd") {
+    return await backoffVerouderdeSignatures(svc, job);
+  }
+
+  const { data: signed, error: signErr } = await svc.storage
+    .from("documenten")
+    .createSignedUrl(doc.opslag_pad, 90);
+  if (signErr || !signed?.signedUrl) return await backoff(svc, job, "signed_url_mislukt");
+
+  const scan = await scanSignedUrl({ signedUrl: signed.signedUrl, oidcToken });
+  // Nooit signed URL of bestandsnaam bewaren; alleen het begrensde scannercontract.
+  await svc.from("documenten").update({ scan_resultaat: scan }).eq("id", doc.id);
+  if (scan.verdict === "scanner_unreachable" || scan.verdict === "error") {
+    return await backoff(svc, job, scan.code ?? "scanner_onbereikbaar");
+  }
+  if (scan.verdict === "stale_definitions") {
+    return await backoffVerouderdeSignatures(svc, job);
+  }
+  if (scan.verdict === "infected" || scan.verdict === "policy_blocked") {
+    await svc.from("document_processing_jobs").update({
+      status: "mislukt", eind: nu(), foutcode: scan.verdict,
+    }).eq("id", job.id);
+    await svc.from("documenten").update({
+      bestand_hash: validatie.hash,
+      geindexeerd: false,
+      verwerkingsstatus: "gequarantineerd",
+    }).eq("id", doc.id).eq("opslag_pad", doc.opslag_pad);
+    return "mislukt";
+  }
+  if (scan.verdict !== "clean") return await backoff(svc, job, "scanner_verdict_onbekend");
+  if (!gelijkeHash(scan.sha256, validatie.hash)) {
+    return await securityConflict(svc, job, doc.id, "legacy_hash_mismatch");
+  }
+  if (scan.deploymentId !== health.deploymentId) {
+    return await backoff(svc, job, "scanner_deployment_gewijzigd");
+  }
+
+  const { data: geraakt, error: updateErr } = await svc.from("documenten").update({
+    bestand_hash: validatie.hash,
+    bestandstype: validatie.bestandstype,
+    mime_gedetecteerd: validatie.mimeGedetecteerd,
+    geindexeerd: false,
+    verwerkingsstatus: "gescand",
+  }).eq("id", doc.id).eq("opslag_pad", doc.opslag_pad).select("id");
+  if (updateErr || !geraakt?.length) {
+    return await securityConflict(svc, job, doc.id, "legacy_scan_db_update");
+  }
+
+  // Extractie/herindexering begint in een nieuwe workerinvocatie. Vanaf dit
+  // moment is het origineel al veilig downloadbaar dankzij het scanbewijs.
+  return await yieldJob(svc, job);
+}
+
 async function verwijderQuarantaine(
   svc: SupabaseClient, documentId: string, pad: string, verwachtDoelpad?: string
 ): Promise<void> {
@@ -659,7 +819,9 @@ async function securityConflict(
   svc: SupabaseClient, job: IngestJob, documentId: string, foutcode: string
 ): Promise<Uitkomst> {
   await svc.from("document_processing_jobs").update({ status: "mislukt", foutcode, eind: nu() }).eq("id", job.id);
-  await svc.from("documenten").update({ verwerkingsstatus: "gequarantineerd" }).eq("id", documentId);
+  await svc.from("documenten").update({
+    verwerkingsstatus: "gequarantineerd", geindexeerd: false,
+  }).eq("id", documentId);
   return "mislukt";
 }
 
@@ -820,7 +982,7 @@ async function markeerGeweigerd(
     .eq("id", job.id);
   await svc
     .from("documenten")
-    .update({ verwerkingsstatus: "geweigerd" })
+    .update({ verwerkingsstatus: "geweigerd", geindexeerd: false })
     .eq("id", documentId);
   return "overgeslagen";
 }
@@ -901,7 +1063,7 @@ async function backoff(
       .eq("id", job.id);
     await svc
       .from("documenten")
-      .update({ verwerkingsstatus: "mislukt" })
+      .update({ verwerkingsstatus: "mislukt", geindexeerd: false })
       .eq("id", job.document_id);
     return "mislukt";
   }
@@ -928,7 +1090,7 @@ async function backoffVerouderdeSignatures(
       status: "mislukt", retry_count: nieuweRetry,
       foutcode: "signatures_verouderd", eind: nu(),
     }).eq("id", job.id);
-    await svc.from("documenten").update({ verwerkingsstatus: "mislukt" })
+    await svc.from("documenten").update({ verwerkingsstatus: "mislukt", geindexeerd: false })
       .eq("id", job.document_id);
     return "mislukt";
   }

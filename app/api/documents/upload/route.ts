@@ -38,6 +38,10 @@ import { badRequest, rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { withFondsRoute, type FondsContext } from "@/core/lib/route-wrapper";
 import { z } from "zod";
+import {
+  isAiContextBeschikbaar,
+  isOrigineelBeschikbaar,
+} from "@/core/lib/document-scan-poort";
 
 type ServerSupabase = Awaited<ReturnType<typeof createServerSupabase>>;
 const malwareScanAan = () => process.env.WP3_MALWARESCAN_AAN === "true";
@@ -927,7 +931,13 @@ export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoo
       console.error("Documenten ophalen fout:", error);
       return NextResponse.json({ error: "Documenten ophalen mislukt" }, { status: 500 });
     }
-    return NextResponse.json({ documenten: data });
+    const scanAan = malwareScanAan();
+    const documenten = (data ?? []).map((document) => ({
+      ...document,
+      bestand_beschikbaar: isOrigineelBeschikbaar(document, scanAan),
+      ai_beschikbaar: isAiContextBeschikbaar(document, scanAan),
+    }));
+    return NextResponse.json({ documenten });
   } catch (error) {
     console.error("Fout bij ophalen documenten:", error);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
