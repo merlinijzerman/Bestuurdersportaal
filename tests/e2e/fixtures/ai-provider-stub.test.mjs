@@ -88,6 +88,27 @@ test("stub bewaart per verzoek alleen vorm en hashes, nooit promptinhoud (#311)"
   });
 });
 
+test("stub honoreert de automatische verplichte vergelijktool van Opus 5.5", async () => {
+  await metStub(async (basis) => {
+    const response = await fetch(`${basis}/v1/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-opus-5-5",
+        stream: false,
+        tool_choice: { type: "auto" },
+        tools: [{ name: "vergelijk_dimensie", input_schema: { type: "object" }, strict: true }],
+        messages: [{ role: "user", content: "Vergelijk" }],
+      }),
+    });
+    const bericht = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(bericht.stop_reason, "tool_use");
+    assert.equal(bericht.content[0].type, "tool_use");
+    assert.equal(bericht.content[0].name, "vergelijk_dimensie");
+  });
+});
+
 test("stub-hash canonicaliseert alleen exact gekoppelde geldige modelcontextsentinels", async () => {
   await metStub(async (basis) => {
     const sentinelA = "a".repeat(24);
