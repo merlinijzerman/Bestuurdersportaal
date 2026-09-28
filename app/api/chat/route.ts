@@ -2379,7 +2379,16 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           hybrideZoekenAan(fondsId),
           retrievalVlaggenVoorFonds(fondsId),
         ]);
-        const vergelijkTimeoutMs = timeoutUitConfig(vergelijkVlaggen.retrievalTimeoutMs);
+        const vergelijkRetrievalTimeoutMs = timeoutUitConfig(vergelijkVlaggen.retrievalTimeoutMs);
+        // Een vergelijking bestaat uit meerdere korte retrievals én meerdere
+        // opeenvolgende modelcalls. De volledige keten is generatiewerk en mag
+        // daarom niet door de 20 s-retrievalgrens worden afgekapt; individuele
+        // retrievals houden wél hun eigen, strakke timeout.
+        const vergelijkBudget = effectiefGeneratiebudget(
+          generatieTimeoutUitConfig(vergelijkVlaggen.generatieTimeoutMs),
+          performance.now() - ctx.startMonotoonMs
+        );
+        if (!vergelijkBudget.genoeg) throw new BeurtAfgebroken("timeout");
         let resultaat;
         try {
           resultaat = await voerVergelijkingBinnenDeadline(
@@ -2391,7 +2400,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             },
             {
               clientSignal: req.signal,
-              timeoutMs: vergelijkTimeoutMs,
+              timeoutMs: vergelijkBudget.budgetMs,
               depsVoorSignal(signal) {
                 const vergelijkRetrieval = maakSupabaseAdapter(vergelijkVlaggen, {
                   gateway: { gateway, ctx: gatewayCtx },
@@ -2413,7 +2422,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                       verzoekStartOp: ctx.verzoekStartOp,
                       signal,
                     },
-                    timeoutMs: vergelijkTimeoutMs,
+                    timeoutMs: vergelijkRetrievalTimeoutMs,
                     hybrideAan: vergelijkHybrideAan,
                     vlaggen: vergelijkVlaggen,
                     audit: new VergelijkAuditVerzamelaar(ctx.requestId),
