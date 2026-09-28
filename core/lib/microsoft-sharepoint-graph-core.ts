@@ -292,6 +292,11 @@ export type DocumentProjectie = {
   gewijzigdOp: string | null; eTag: string | null; cTag: string | null; ouderItemId: string | null; mappad: string; webUrl: string | null;
 };
 
+/** #462 — een map onder het rootitem zoals het private mapregister haar
+ * vastlegt. Bevat de Graph-item-id en is dus uitsluitend server-side; de
+ * browser krijgt alleen de lokale referentie, naam en het weergavepad. */
+export type MapregisterProjectie = { itemId: string; naam: string; ouderItemId: string | null; mappad: string };
+
 export function deltaUrl(driveId: string, rootItemId: string): string {
   return `${GRAPH_BASIS}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(rootItemId)}/delta?$select=id,name,size,file,folder,eTag,cTag,lastModifiedDateTime,parentReference,deleted,webUrl&$top=${GRAPH_PAGINAGROOTTE}`;
 }
@@ -329,7 +334,7 @@ type GraphDeltaItem = GraphDriveItem & { deleted?: { state?: string } | null };
  * rootitem, met een weergavepad dat via de ouderketen tot het rootitem is
  * herleid. Items waarvan de keten het rootitem niet bereikt, verwijderde
  * items en items uit een andere drive vallen af. */
-export function bouwDocumentboom(items: GraphDeltaItem[], driveId: string, rootItemId: string): { documenten: DocumentProjectie[]; mappen: string[] } {
+export function bouwDocumentboom(items: GraphDeltaItem[], driveId: string, rootItemId: string): { documenten: DocumentProjectie[]; mappen: string[]; mapItems: MapregisterProjectie[] } {
   const mappen = new Map<string, { naam: string; ouder: string | null }>();
   const bestanden: GraphDeltaItem[] = [];
   for (const item of items) {
@@ -368,7 +373,18 @@ export function bouwDocumentboom(items: GraphDeltaItem[], driveId: string, rootI
   }
   documenten.sort((a, b) => a.mappad.localeCompare(b.mappad, "nl") || a.naam.localeCompare(b.naam, "nl"));
   const mapPaden = [...mappen.keys()].map((id) => padVan(id)).filter((x): x is string => typeof x === "string" && x.length > 0).sort((a, b) => a.localeCompare(b, "nl"));
-  return { documenten, mappen: [...new Set(mapPaden)] };
+  // #462 — dezelfde mappen als registerprojectie: alleen mappen waarvan de
+  // ouderketen het rootitem bereikt (lussen, vreemde drives en zwevende mappen
+  // vallen af, precies als bij `mappen`). Het rootitem zelf is geen map in het
+  // register: de bron is de root.
+  const mapItems: MapregisterProjectie[] = [];
+  for (const [itemId, map] of mappen) {
+    const mappad = padVan(itemId);
+    if (typeof mappad !== "string" || mappad.length === 0) continue;
+    mapItems.push({ itemId, naam: map.naam.slice(0, 240), ouderItemId: map.ouder, mappad: mappad.slice(0, 1000) });
+  }
+  mapItems.sort((a, b) => a.mappad.localeCompare(b.mappad, "nl") || a.itemId.localeCompare(b.itemId));
+  return { documenten, mappen: [...new Set(mapPaden)], mapItems };
 }
 
 /** Het pad van het rootitem zoals Graph het in parentReference.path van zijn

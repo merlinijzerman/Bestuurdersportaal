@@ -2456,3 +2456,16 @@ create table if not exists public.procedure_afschriften (
 -- (/:w:/s/<token>) dragen geen pad en blijven ongemoeid — fail-closed. Let op:
 -- web_url_canoniek is STORED, dus een functiewijziging herschrijft de kolom NIET
 -- vanzelf; de migratie bouwt de kolom daarom opnieuw op en herclassificeert.
+
+-- ── Microsoft 365 — #462 PR-2: mapregister en agendapuntkoppeling ──────────
+-- Bron van waarheid: supabase/migrations/2026_09_28_462_sharepoint_mapregister_agendakoppeling.sql.
+-- microsoft_private.sharepoint_mappen spiegelt sharepoint_documenten voor mappen
+-- (lokale uuid ↔ bron/drive/item, naam, ouder, mappad, status, configuratieversie;
+-- unique (bron_id, item_id)); gevuld tijdens de documentenlijst.
+-- microsoft_private.agendapunt_sharepoint_koppelingen: n-op-n agendapunt ↔ precies
+-- één document_ref ÓF map_ref (xor-CHECK), fonds_id NOT NULL, composite-FK
+-- (fonds_id, ref) → register(fonds_id, id) (daarvoor kreeg sharepoint_documenten
+-- unique (fonds_id, id)), en een validatietrigger voor agendapunt ↔ vergadering ↔
+-- fonds en actieve/actuele bron (agendapunten dragen geen fonds_id — besluit 0007-
+-- uitzondering). Koppelrij onveranderlijk; ontkoppelen verwijdert alleen de rij.
+-- RLS aan, geen policies; vijf SECURITY DEFINER-RPC's alleen voor microsoft_vault.
