@@ -295,3 +295,39 @@ export function juridischeDuiding(
   }
   return null;
 }
+
+// ── Statusweergave ──────────────────────────────────────────────────────────
+// De generieke publicatieworkflow bewaart een gepubliceerde bron technisch als
+// status='van_kracht' + bronstatus='actief'. Voor wetgeving is "Van kracht"
+// juridisch juist; voor wetsgeschiedenis zou hetzelfde zichtbare label ten
+// onrechte suggereren dat de toelichting zelf een geldende norm is. Vertaal
+// daarom uitsluitend de WEERGAVE per juridisch documenttype. De opgeslagen
+// tokens en de bestaande generieke toestandsmachine blijven ongewijzigd.
+
+export function juridischStatusveldLabel(
+  documenttype: string | null | undefined
+): string | null {
+  if (documenttype === "wetgeving") return "Geldigheidsstatus";
+  if (documenttype === "wetsgeschiedenis") return "Publicatiestatus";
+  return null;
+}
+
+export function juridischeDocumentstatusLabel(
+  documenttype: string | null | undefined,
+  status: string | null | undefined
+): string | null {
+  if (!isJuridischDocumenttype(documenttype)) return null;
+  if (!status) return "—";
+
+  if (documenttype === "wetgeving") {
+    if (status === "van_kracht") return "Van kracht (actuele norm)";
+    if (status === "historisch") return "Vervangen (historisch)";
+    if (status === "gearchiveerd") return "Ingetrokken of gearchiveerd";
+    return status;
+  }
+
+  if (status === "van_kracht") return "Gepubliceerd (actieve, informatieve bron)";
+  if (status === "historisch") return "Historisch (niet actief als actuele bron)";
+  if (status === "gearchiveerd") return "Gearchiveerd (uitgesloten als bron)";
+  return status;
+}

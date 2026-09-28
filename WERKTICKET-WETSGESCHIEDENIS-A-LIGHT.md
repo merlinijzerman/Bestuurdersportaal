@@ -105,6 +105,9 @@ De bronweergave maakt het onderscheid expliciet, bijvoorbeeld:
   opgehaald, omdat zij niet worden geïmporteerd.
 - Toon het onderscheid tussen geldend recht en wetsgeschiedenis in antwoord en
   onderbouwing/bronnenpaneel.
+- Pas hetzelfde onderscheid toe in de afzonderlijke documentvergelijking. Expliciet gekozen
+  historische documenten blijven vergelijkbaar, maar de vergelijking presenteert wetgeving
+  en wetsgeschiedenis nooit als twee gelijkwaardige bindende normen.
 - Voeg documenttype, subtype, dossiernummer, versie/datum, normgewicht en rechtsregime toe
   aan de bestaande retrieval- en auditmetadata. Gebruik de documenttitel voor de volledige
   officiële bronverwijzing.
@@ -128,6 +131,9 @@ De bronweergave maakt het onderscheid expliciet, bijvoorbeeld:
   toevoegen met kamerstuknummer, datum, officiële link en zichtbaar niet-bindend label.
 - Een aangenomen amendement kan als verklaring voor de uiteindelijke tekst worden gebruikt,
   maar nooit als zelfstandige norm.
+- Een expliciete vergelijking tussen actuele wetgeving en wetsgeschiedenis benoemt zichtbaar
+  welke bron de actuele norm is en welke bron uitsluitend toelichting geeft; de selectie wordt
+  niet door een impliciet actualiteitsfilter gewijzigd.
 - Een verworpen, ingetrokken of status-onbekend amendement is niet geïmporteerd en kan
   daardoor niet in een antwoord verschijnen.
 - Een passage over de Wvb verschijnt niet als onderbouwing bij een uitsluitend op de
@@ -162,6 +168,7 @@ De bronweergave maakt het onderscheid expliciet, bijvoorbeeld:
 | Regimelek tussen Pensioenwet en Wvb | Bron logisch splitsen en rechtsregime vóór ranking afdwingen |
 | Laatste versie van amendement wordt ten onrechte als aangenomen beschouwd | Status vóór import controleren aan de officiële parlementaire bron; alleen aangenomen versie importeren en typeren als `aangenomen_amendement` |
 | Domeinwhitelist maakt Kamerstuk bindend | Classificatie op publicatiesoort/kenmerk, niet alleen op domein |
+| Vergelijkingscall presenteert wet en toelichting als gelijkwaardige normen | Expliciete selectie behouden, maar documenttype, normgewicht en juridische rol doorgeven aan vergelijking, bronweergave en audit |
 
 ## 8. Startvoorwaarden en Definition of Done
 

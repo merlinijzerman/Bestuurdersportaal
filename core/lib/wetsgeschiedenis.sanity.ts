@@ -19,6 +19,8 @@ import {
   WETSGESCHIEDENIS_SUBTYPEN,
   formatteerDossiernummer,
   juridischeDuiding,
+  juridischeDocumentstatusLabel,
+  juridischStatusveldLabel,
   normaliseerDossiernummer,
   titelBevatDossiernummer,
   titelBevatStaatsblad,
@@ -145,6 +147,24 @@ check("actuele wetgeving kan als bindende bron worden gecureerd", () => {
     assert.equal(r.waarde.wetsgeschiedenis_subtype, null);
     assert.equal(r.waarde.dossiernummer, null);
   }
+});
+
+check("statusweergave onderscheidt geldende norm van gepubliceerde wetsgeschiedenis", () => {
+  assert.equal(juridischStatusveldLabel("wetgeving"), "Geldigheidsstatus");
+  assert.equal(juridischStatusveldLabel("wetsgeschiedenis"), "Publicatiestatus");
+  assert.equal(juridischStatusveldLabel("memo"), null);
+  assert.equal(
+    juridischeDocumentstatusLabel("wetgeving", "van_kracht"),
+    "Van kracht (actuele norm)"
+  );
+  assert.equal(
+    juridischeDocumentstatusLabel("wetsgeschiedenis", "van_kracht"),
+    "Gepubliceerd (actieve, informatieve bron)"
+  );
+  assert.doesNotMatch(
+    juridischeDocumentstatusLabel("wetsgeschiedenis", "van_kracht") ?? "",
+    /van kracht/i
+  );
 });
 
 // ── Memorie van antwoord en nota van toelichting ───────────────────────────

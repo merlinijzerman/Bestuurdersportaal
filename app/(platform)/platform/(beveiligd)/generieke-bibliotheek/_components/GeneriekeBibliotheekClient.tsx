@@ -33,6 +33,8 @@ import {
   isDossiernummerVerplicht,
   isJuridischDocumenttype,
   juridischeDuiding,
+  juridischeDocumentstatusLabel,
+  juridischStatusveldLabel,
 } from "@/core/lib/wetsgeschiedenis";
 import {
   generiekGeldigheidsstatus,
@@ -204,7 +206,7 @@ function CanonBadge({ canon }: { canon: keyof typeof GELDIGHEIDSSTATUS_LABEL }) 
       className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${kleur}`}
       title={GELDIGHEIDSSTATUS_LABEL[canon]}
     >
-      {canon}
+      {GELDIGHEIDSSTATUS_LABEL[canon]}
     </span>
   );
 }
@@ -756,8 +758,21 @@ export default function GeneriekeBibliotheekClient({
             <Veld label="Geldig tot" fout={veldfouten.geldig_tot}>
               <Input type="date" value={form.geldig_tot} onChange={(v) => set("geldig_tot", v)} />
             </Veld>
-            <Veld label="Documentstatus" fout={veldfouten.documentstatus}>
-              <Select value={form.documentstatus} onChange={(v) => set("documentstatus", v)} opties={GENERIEKE_DOCUMENTSTATUS} />
+            <Veld
+              label={juridischStatusveldLabel(form.documenttype) ?? "Documentstatus"}
+              fout={veldfouten.documentstatus}
+            >
+              <Select
+                value={form.documentstatus}
+                onChange={(v) => set("documentstatus", v)}
+                opties={GENERIEKE_DOCUMENTSTATUS}
+                labels={Object.fromEntries(
+                  GENERIEKE_DOCUMENTSTATUS.map((status) => [
+                    status,
+                    juridischeDocumentstatusLabel(form.documenttype, status) ?? status,
+                  ])
+                )}
+              />
             </Veld>
             <Veld label="Bronstatus" fout={veldfouten.bronstatus}>
               <Select value={form.bronstatus} onChange={(v) => set("bronstatus", v)} opties={GENERIEKE_BRONSTATUS} />
@@ -870,7 +885,9 @@ export default function GeneriekeBibliotheekClient({
                   <td className="px-4 py-2">
                     <CanonBadge canon={canon} />
                     <div className="mt-0.5 text-xs text-ink/50">
-                      {d.status ?? "—"} · {d.bronstatus ?? "—"}
+                      {juridischeDocumentstatusLabel(d.documenttype, d.status) ?? d.status ?? "—"}
+                      {" · "}
+                      {d.bronstatus ?? "—"}
                     </div>
                   </td>
                   <td className="px-4 py-2">
@@ -972,10 +989,12 @@ function Select({
   value,
   onChange,
   opties,
+  labels,
 }: {
   value: string;
   onChange: (v: string) => void;
   opties: readonly string[];
+  labels?: Readonly<Record<string, string>>;
 }) {
   return (
     <select
@@ -985,7 +1004,7 @@ function Select({
     >
       {opties.map((o) => (
         <option key={o} value={o}>
-          {o}
+          {labels?.[o] ?? o}
         </option>
       ))}
     </select>
