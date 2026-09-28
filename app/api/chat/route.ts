@@ -116,7 +116,7 @@ import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
 import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
 // T5 — Vergelijkmodus. De logica zit volledig in core/lib/vergelijk-* (los
 // testbaar); deze route is enkel de confidence-gated ingang + governance-logging.
-import { bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "@/core/lib/vergelijk-intent";
+import { bepaalAangevraagdeDimensies, bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "@/core/lib/vergelijk-intent";
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
 import { vergelijkmodusVoorFondsAan } from "@/core/lib/vergelijk-rollout";
 import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
@@ -2396,6 +2396,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               mode: "symmetrisch",
               bronDocumentId: vergelijkBron.id,
               doelDocumentId: vergelijkDoel.id,
+              aangevraagdeDimensies: bepaalAangevraagdeDimensies(effectieveVraag),
               versies: VERGELIJK_VERSIES,
             },
             {

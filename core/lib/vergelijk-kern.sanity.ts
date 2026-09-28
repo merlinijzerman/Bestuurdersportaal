@@ -222,6 +222,23 @@ testAsync("aangevulde + LLM-dimensies verschijnen in de reikwijdte", async () =>
   assert.equal(r.dimensies.find((d) => d.key === "indexatieambitie")?.herkomst, "aangevuld");
 });
 
+testAsync("expliciet gevraagde dimensies bepalen exact de reikwijdte", async () => {
+  let haikuAangeroepen = false;
+  const r = await voerVergelijkingUit(
+    { ...PARAMS, aangevraagdeDimensies: ["planning", "bestuurlijke rapportage", "maatregelen"] },
+    baseDeps({
+      bepaalExtraDimensies: async () => {
+        haikuAangeroepen = true;
+        return [{ key: "ongevraagd", label: "Ongevraagd", herkomst: "llm" }];
+      },
+    })
+  );
+  assert.equal(haikuAangeroepen, false);
+  assert.deepEqual(r.dimensies.map((d) => d.key), ["planning", "bestuurlijke rapportage", "maatregelen"]);
+  assert.match(r.dimensies[1].zoekvraag ?? "", /rapporteert/);
+  assert.match(r.dimensies[2].zoekvraag ?? "", /beheersmaatregelen/);
+});
+
 testAsync("persisteer krijgt de findings en de run-id komt terug", async () => {
   let ontvangen = -1;
   const r = await voerVergelijkingUit(

@@ -115,6 +115,10 @@ export interface VergelijkParams {
   doelDocumentId: string;
   // Door de bestuurder aangevulde dimensies (labels/sleutels), best-effort.
   extraDimensies?: string[];
+  // Expliciet in de natuurlijke taal gevraagde vergelijkingsassen. Als deze
+  // confidence-gated lijst gevuld is, is zij de bedoelde reikwijdte en worden
+  // geen ongevraagde catalogus- of LLM-dimensies toegevoegd.
+  aangevraagdeDimensies?: string[];
   versies: { model: string; promptVersion: string; comparatorVersion: string };
 }
 
@@ -158,6 +162,25 @@ export function dedupDimensies(dims: Dimensie[]): Dimensie[] {
     uit.push(d);
   }
   return uit;
+}
+
+/** Breid alleen enkele generieke bestuurstermen uit die Nederlandse FTS door
+ * samenstellingen/woordsoorten anders mist. De zichtbare dimensienaam en finding
+ * key blijven ongewijzigd. */
+export function zoekvraagVoorDimensie(label: string): string {
+  const genormaliseerd = label.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const termen = [label];
+  if (genormaliseerd.includes("rapport")) {
+    termen.push("rapportage", "rapporteert", "voortgangsrapportage", "bestuursrapportage");
+  }
+  if (genormaliseerd.includes("risico")) termen.push("risico", "risico's");
+  if (genormaliseerd.includes("maatregel") || genormaliseerd.includes("beheers")) {
+    termen.push("maatregel", "maatregelen", "beheersmaatregel", "beheersmaatregelen");
+  }
+  if (genormaliseerd.includes("planning") || genormaliseerd.includes("tijdpad")) {
+    termen.push("planning", "tijdpad", "deadline", "afronding");
+  }
+  return [...new Set(termen.map((term) => term.trim()).filter(Boolean))].join(" or ");
 }
 
 // Deterministische waardevergelijking (beide zijden hebben een semantic_unit).
@@ -234,15 +257,27 @@ export async function voerVergelijkingUit(
   //    aangevuld. Best-effort; dedup op key.
   const concepten = await deps.leesConcepten();
   const catalogus = bouwCatalogusDimensies(concepten);
-  const extra = await deps.bepaalExtraDimensies({ bronDocumentId, doelDocumentId, catalogus });
-  const aangevuld: Dimensie[] = (params.extraDimensies ?? [])
+  const vrijeDimensies = (waarden: string[]): Dimensie[] => waarden
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .map((s) => {
-      const match = catalogus.find((d) => d.key.toLowerCase() === s.toLowerCase());
-      return match ?? { key: s, label: s, herkomst: "aangevuld" as const };
+      const match = catalogus.find((d) =>
+        d.key.toLowerCase() === s.toLowerCase() || d.label.toLowerCase() === s.toLowerCase()
+      );
+      return {
+        ...(match ?? { key: s, label: s, herkomst: "aangevuld" as const }),
+        zoekvraag: zoekvraagVoorDimensie(s),
+      };
     });
-  const dimensies = dedupDimensies([...catalogus, ...extra, ...aangevuld]);
+  const explicietGevraagd = vrijeDimensies(params.aangevraagdeDimensies ?? []);
+  let dimensies: Dimensie[];
+  if (explicietGevraagd.length > 0) {
+    dimensies = dedupDimensies(explicietGevraagd);
+  } else {
+    const extra = await deps.bepaalExtraDimensies({ bronDocumentId, doelDocumentId, catalogus });
+    const aangevuld = vrijeDimensies(params.extraDimensies ?? []);
+    dimensies = dedupDimensies([...catalogus, ...extra, ...aangevuld]);
+  }
 
   // 2. Semantic units per document één keer lezen (voor het deterministische pad).
   const bronUnits = indexeerUnits(await deps.leesSemanticUnits(bronDocumentId));

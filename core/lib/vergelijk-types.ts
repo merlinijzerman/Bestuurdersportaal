@@ -29,6 +29,8 @@ export type DimensieHerkomst = "catalogus" | "llm" | "aangevuld";
 export interface Dimensie {
   key: string; // 'solidariteitsreserve.bovengrens' of een LLM-afgeleide sleutel
   label: string;
+  /** Server-afgeleide retrievalquery; de zichtbare/stabiele sleutel blijft schoon. */
+  zoekvraag?: string;
   concept_id?: string | null; // gezet bij een catalogus-concept
   concept_key?: string | null;
   type?: ConceptType | null; // alleen bij catalogus-concepten

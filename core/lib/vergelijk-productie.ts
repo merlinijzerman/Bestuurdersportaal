@@ -52,7 +52,7 @@ function toolUse(inhoud: unknown[]): { input: unknown } | null {
 
 // Reproduceerbaarheids-stempels (belanden in comparison_run). Bump bij een bewuste
 // wijziging aan het prompt- of comparator-gedrag.
-export const VERGELIJK_PROMPT_VERSIE = "t5-vergelijk-v1";
+export const VERGELIJK_PROMPT_VERSIE = "t5-vergelijk-v2";
 export const VERGELIJK_COMPARATOR_VERSIE = "t5-v1";
 // Het synthese-/duidingsmodel voor het LLM-pad (Opus). Haiku doet alleen de
 // dimensiebepaling; het geregistreerde run-model is het zwaarste model in de keten.
@@ -231,7 +231,7 @@ async function haalPassages(
   dimensie: Dimensie,
   maxResultaten = MAX_PASSAGES_PER_ZIJDE
 ): Promise<PassageLite[]> {
-  const vraag = `${dimensie.label} (${dimensie.key})`;
+  const vraag = dimensie.zoekvraag ?? `${dimensie.label} (${dimensie.key})`;
   const auditDocumentId = maakDocumentIdentiteit(`fonds:${retrieval.context.fondsId}`, documentId);
   try {
     const uitkomst = await voerVolledigeRetrievalUit(
