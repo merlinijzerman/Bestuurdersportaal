@@ -58,38 +58,46 @@ export default function AgendapuntBronPicker({
     mapRefs: SharePointMap[];
   } | null>(null);
   const [geselecteerd, setGeselecteerd] = useState<Set<string>>(new Set());
-  const [fout, setFout] = useState<string | null>(null);
+  const [portaalFout, setPortaalFout] = useState<string | null>(null);
+  const [sharepointFout, setSharepointFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
 
   useEffect(() => {
     let actief = true;
-    void Promise.all([
-      fetch("/api/documents/upload", { cache: "no-store" })
-        .then(async (res) => {
-          if (!res.ok) throw new Error("Portaalbibliotheek ophalen mislukt");
-          return res.json() as Promise<{ documenten?: PortaalDocument[] }>;
-        })
-        .then((data) => { if (actief) setPortaal(data.documenten ?? []); }),
-      fetch("/api/microsoft/sharepoint/documenten", { cache: "no-store" })
-        .then(async (res) => {
-          const data = await res.json().catch(() => ({})) as {
-            beschikbaar?: boolean;
-            documenten?: SharePointDocument[];
-            mapRefs?: SharePointMap[];
-          };
-          if (!res.ok && data.beschikbaar !== true) throw new Error("SharePoint ophalen mislukt");
-          return data;
-        })
-        .then((data) => {
-          if (actief) setSharepoint({
+    void (async () => {
+      try {
+        const response = await fetch("/api/documents/upload", { cache: "no-store" });
+        if (!response.ok) throw new Error();
+        const data = await response.json() as { documenten?: PortaalDocument[] };
+        if (actief) {
+          setPortaal(data.documenten ?? []);
+          setPortaalFout(null);
+        }
+      } catch {
+        if (actief) setPortaalFout("Portaalbibliotheek ophalen mislukt");
+      }
+    })();
+    void (async () => {
+      try {
+        const response = await fetch("/api/microsoft/sharepoint/documenten", { cache: "no-store" });
+        const data = await response.json().catch(() => ({})) as {
+          beschikbaar?: boolean;
+          documenten?: SharePointDocument[];
+          mapRefs?: SharePointMap[];
+        };
+        if (!response.ok && data.beschikbaar !== true) throw new Error();
+        if (actief) {
+          setSharepoint({
             beschikbaar: data.beschikbaar === true,
             documenten: data.documenten ?? [],
             mapRefs: data.mapRefs ?? [],
           });
-        }),
-    ]).catch((error) => {
-      if (actief) setFout(error instanceof Error ? error.message : "Bronnen ophalen mislukt");
-    });
+          setSharepointFout(null);
+        }
+      } catch {
+        if (actief) setSharepointFout("SharePoint ophalen mislukt");
+      }
+    })();
     return () => { actief = false; };
   }, []);
 
@@ -139,7 +147,6 @@ export default function AgendapuntBronPicker({
     });
     if (bronnen.length === 0) return;
     setBezig(true);
-    setFout(null);
     try {
       if (await onSelectSharePoint(bronnen)) onClose();
     } finally {
@@ -164,7 +171,7 @@ export default function AgendapuntBronPicker({
               type="button"
               role="tab"
               aria-selected={tab === waarde}
-              onClick={() => { setTab(waarde); setZoek(""); setFout(null); }}
+              onClick={() => { setTab(waarde); setZoek(""); }}
               className={`rounded-t-lg px-4 py-2 text-sm font-medium ${tab === waarde ? "bg-accent-tint text-accent-ink" : "text-muted hover:text-ink"}`}
             >
               {waarde === "portaal" ? "Portaalbibliotheek" : "SharePoint"}
@@ -189,8 +196,9 @@ export default function AgendapuntBronPicker({
           )}
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3">
-          {fout && <p className="rounded-md border border-err/30 bg-err-tint p-3 text-sm text-err-ink" role="alert">{fout}</p>}
-          {tab === "portaal" && !fout && (portaal === null ? (
+          {tab === "portaal" && portaalFout && <p className="rounded-md border border-err/30 bg-err-tint p-3 text-sm text-err-ink" role="alert">{portaalFout}</p>}
+          {tab === "sharepoint" && sharepointFout && <p className="rounded-md border border-err/30 bg-err-tint p-3 text-sm text-err-ink" role="alert">{sharepointFout}</p>}
+          {tab === "portaal" && !portaalFout && (portaal === null ? (
             <p className="py-6 text-center text-sm italic text-muted">Documenten laden…</p>
           ) : portaalZichtbaar.length === 0 ? (
             <p className="py-6 text-center text-sm italic text-muted">Geen portaalstukken gevonden.</p>
@@ -206,7 +214,7 @@ export default function AgendapuntBronPicker({
               ))}
             </ul>
           ))}
-          {tab === "sharepoint" && !fout && (sharepoint === null ? (
+          {tab === "sharepoint" && !sharepointFout && (sharepoint === null ? (
             <p className="py-6 text-center text-sm italic text-muted">SharePoint laden…</p>
           ) : !sharepoint.beschikbaar ? (
             <p className="py-6 text-center text-sm text-muted">SharePoint is voor dit fonds niet beschikbaar.</p>

@@ -89,6 +89,53 @@ describe("AgendapuntBronPicker", () => {
     expect(screen.getByText("Portaalstuk")).toBeVisible();
     expect(screen.queryByText("Generiek kader")).not.toBeInTheDocument();
   });
+
+  it("houdt de portaalbibliotheek bruikbaar wanneer SharePoint laden faalt", async () => {
+    const fetchMock = pickerFetch();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/microsoft/sharepoint/documenten")) {
+        return new Response(JSON.stringify({ error: "providerfout" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return fetchMock(input);
+    }));
+    const { user } = renderMetProviders(
+      <AgendapuntBronPicker onSelectPortaal={vi.fn()} onSelectSharePoint={vi.fn(async () => true)} onClose={vi.fn()} />
+    );
+
+    expect(await screen.findByText("Portaalstuk")).toBeVisible();
+    expect(screen.getByLabelText("Filter bibliotheek")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "SharePoint" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("SharePoint ophalen mislukt");
+    expect(screen.queryByText("SharePoint laden…")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Portaalbibliotheek" }));
+    expect(screen.getByText("Portaalstuk")).toBeVisible();
+  });
+
+  it("houdt SharePoint bruikbaar wanneer de portaalbibliotheek laden faalt", async () => {
+    const fetchMock = pickerFetch();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/documents/upload")) {
+        return new Response(JSON.stringify({ error: "databasefout" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return fetchMock(input);
+    }));
+    const { user } = renderMetProviders(
+      <AgendapuntBronPicker onSelectPortaal={vi.fn()} onSelectSharePoint={vi.fn(async () => true)} onClose={vi.fn()} />
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Portaalbibliotheek ophalen mislukt");
+    expect(screen.queryByText("Documenten laden…")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "SharePoint" }));
+    expect(await screen.findByText("Beleid.docx")).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Selecteer Vergaderstukken" })).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
 
 describe("AgendapuntSharePointBronnen — B-6", () => {
