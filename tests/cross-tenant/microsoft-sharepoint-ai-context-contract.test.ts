@@ -79,3 +79,22 @@ test("live mapcontrole en retrieval delen één beurtdeadline", () => {
   assert.match(route, /timeoutMs: effectiefRetrievalTimeoutMs/);
   assert.match(route, /finally \{\s*setupGrendel\.stop\(\)/);
 });
+
+test("agendapuntadapter serialiseert listing en tokenverversing om de MSAL-cache", () => {
+  const begin = productieAdapter.indexOf(
+    "export async function maakProductieGekoppeldeSharePointAdapter"
+  );
+  const gekoppeldeAdapter = productieAdapter.slice(begin);
+  const liveListing = gekoppeldeAdapter.indexOf("sharepointDocumenten({");
+  const downloadToken = gekoppeldeAdapter.indexOf(
+    "const token = await sharepointAccessToken({"
+  );
+
+  assert.ok(begin >= 0);
+  assert.ok(liveListing >= 0);
+  assert.ok(downloadToken > liveListing);
+  assert.doesNotMatch(
+    gekoppeldeAdapter.slice(liveListing, downloadToken),
+    /sharepointAccessToken/
+  );
+});
