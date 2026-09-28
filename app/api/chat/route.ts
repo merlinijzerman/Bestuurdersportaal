@@ -28,7 +28,10 @@ import {
   maakProductieGekoppeldeSharePointAdapter,
   type DirecteSharePointScope,
 } from "@/core/lib/microsoft-sharepoint-ai-context";
-import type { SharePointMapSelectie } from "@/core/lib/microsoft-sharepoint-map-ai-core";
+import {
+  telGebruikteSharePointDocumenten,
+  type SharePointMapSelectie,
+} from "@/core/lib/microsoft-sharepoint-map-ai-core";
 import { microsoftSharePointAiContextActief } from "@/core/lib/microsoft-sharepoint-ai-gate";
 import { controleerChunkPresentie, leesBesluitEvidence } from "@/core/lib/retrieval/supabase-evidence";
 import { bouwModelcontextBlok, combineerModelcontext, maakModelcontextSentinel } from "@/core/lib/retrieval/modelcontext";
@@ -3397,6 +3400,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ? directeSharePoint.chunksVoor(voltooid.geselecteerd)
           : []),
       ];
+      const gebruikteSharePointDocumenten = directeSharePoint
+        ? telGebruikteSharePointDocumenten(
+            voltooid.geselecteerd,
+            directeSharePoint.lokaleDocumentRefVoor
+          )
+        : 0;
       if (sharepointScopeActief) {
         // Vanaf hier consumeert de bestaande prompt-/auditlaag nog de generieke
         // scopevelden. Vul ze uitsluitend uit de live toegelaten resultaten:
@@ -3438,7 +3447,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             .filter((scope) => scope.soort === "map")
             .map((scope) => scope.ref),
           kandidaten: sharepointMapSelectie?.kandidatenBehandeld ?? 0,
-          gebruikte_documenten: sharepointMapSelectie?.documenten.length ?? 0,
+          gebruikte_documenten: gebruikteSharePointDocumenten,
           afgekapt: sharepointMapSelectie?.afgekapt ?? false,
         };
       }

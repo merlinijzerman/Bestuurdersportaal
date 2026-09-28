@@ -24,6 +24,20 @@ export type SharePointMapSelectie = {
   afgekapt: boolean;
 };
 
+/** Telt uitsluitend SharePoint-documenten die de centrale selectie én
+ * toelatingspoort werkelijk hebben doorstaan. Een passage-duplicaat uit
+ * hetzelfde document telt eenmaal; portaalbronnen leveren geen lokale ref. */
+export function telGebruikteSharePointDocumenten(
+  geselecteerd: readonly { documentIdentiteit: { id: string } }[],
+  lokaleRefVoor: (identiteit: string) => string | undefined
+): number {
+  return new Set(
+    geselecteerd
+      .map((bron) => lokaleRefVoor(bron.documentIdentiteit.id))
+      .filter((ref): ref is string => typeof ref === "string")
+  ).size;
+}
+
 const STOPWOORDEN = new Set([
   "aan", "als", "bij", "de", "deze", "dit", "door", "een", "en", "geef",
   "het", "in", "is", "map", "met", "noem", "of", "om", "op", "over",

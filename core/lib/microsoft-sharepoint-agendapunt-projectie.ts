@@ -113,3 +113,34 @@ export function refsZijnLiveToegankelijk(
       : mappen.has(bron.ref)
   );
 }
+
+/**
+ * Leest en projecteert alle SharePoint-koppelingen voor een agenda in één
+ * batch. De callbacks houden database- en Graph-afhankelijkheden server-side;
+ * deze pure orkestratie borgt dat ook bij meerdere agendapunten hoogstens één
+ * private leesaanroep en één live, delegated listing plaatsvinden.
+ */
+export async function projecteerSharePointAgendaBatch(args: {
+  agendapuntIds: readonly string[];
+  leesKoppelingen: (
+    agendapuntIds: string[]
+  ) => Promise<SharePointAgendakoppelingRuw[]>;
+  leesLive: () => Promise<{
+    documenten: readonly LiveSharePointDocument[];
+    mappen: readonly LiveSharePointMap[];
+  }>;
+}): Promise<VeiligeSharePointAgendakoppeling[]> {
+  const agendapuntIds = [...new Set(args.agendapuntIds)];
+  if (agendapuntIds.length === 0) return [];
+  const koppelingen = await args.leesKoppelingen(agendapuntIds);
+  if (koppelingen.length === 0) return [];
+
+  let live: Awaited<ReturnType<typeof args.leesLive>> | undefined;
+  try {
+    live = await args.leesLive();
+  } catch {
+    // B-6: een token-, toegangs-, timeout- of Microsoft-fout ontsluit niets.
+    // De projectie hieronder levert uitsluitend neutrale placeholders.
+  }
+  return projecteerSharePointAgendakoppelingen(koppelingen, live);
+}

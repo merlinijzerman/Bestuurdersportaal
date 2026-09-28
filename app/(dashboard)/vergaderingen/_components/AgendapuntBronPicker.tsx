@@ -48,6 +48,9 @@ export default function AgendapuntBronPicker({
 }: Props) {
   const [tab, setTab] = useState<"portaal" | "sharepoint">("portaal");
   const [zoek, setZoek] = useState("");
+  const [bibliotheekFilter, setBibliotheekFilter] = useState<
+    "alle" | "fonds" | "generiek"
+  >("alle");
   const [portaal, setPortaal] = useState<PortaalDocument[] | null>(null);
   const [sharepoint, setSharepoint] = useState<{
     beschikbaar: boolean;
@@ -92,10 +95,16 @@ export default function AgendapuntBronPicker({
 
   const term = zoek.trim().toLocaleLowerCase("nl-NL");
   const portaalZichtbaar = useMemo(
-    () => (portaal ?? []).filter((document) =>
-      !term || `${document.titel} ${document.bron ?? ""}`.toLocaleLowerCase("nl-NL").includes(term)
-    ),
-    [portaal, term]
+    () => (portaal ?? []).filter((document) => {
+      if (
+        bibliotheekFilter !== "alle" &&
+        document.bibliotheek !== bibliotheekFilter
+      ) return false;
+      return !term || `${document.titel} ${document.bron ?? ""}`
+        .toLocaleLowerCase("nl-NL")
+        .includes(term);
+    }),
+    [bibliotheekFilter, portaal, term]
   );
   const sharepointZichtbaar = useMemo(() => [
     ...(sharepoint?.mapRefs ?? []).map((map) => ({
@@ -162,8 +171,22 @@ export default function AgendapuntBronPicker({
             </button>
           ))}
         </div>
-        <div className="border-b border-line px-5 py-3">
-          <input value={zoek} onChange={(event) => setZoek(event.target.value)} placeholder={tab === "portaal" ? "Zoek op titel…" : "Zoek op naam of map…"} className="w-full rounded-md border border-app-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none" autoFocus />
+        <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+          <input value={zoek} onChange={(event) => setZoek(event.target.value)} placeholder={tab === "portaal" ? "Zoek op titel…" : "Zoek op naam of map…"} className="min-w-0 flex-1 rounded-md border border-app-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none" autoFocus />
+          {tab === "portaal" && (
+            <select
+              aria-label="Filter bibliotheek"
+              value={bibliotheekFilter}
+              onChange={(event) => setBibliotheekFilter(
+                event.target.value as "alle" | "fonds" | "generiek"
+              )}
+              className="rounded-md border border-app-line-strong bg-white px-2 py-2 text-sm"
+            >
+              <option value="alle">Alle bibliotheken</option>
+              <option value="fonds">Fonds</option>
+              <option value="generiek">Generiek</option>
+            </select>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {fout && <p className="rounded-md border border-err/30 bg-err-tint p-3 text-sm text-err-ink" role="alert">{fout}</p>}

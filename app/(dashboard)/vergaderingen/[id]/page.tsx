@@ -17,6 +17,14 @@ import type {
   StemData,
   Bestuurslid,
 } from "../_components/StemrondeBlok";
+import { rolHeeftCapability } from "@/core/lib/capabilities-map";
+import { microsoftSharePointActief } from "@/core/lib/microsoft-connector";
+import { sharepointDocumenten } from "@/core/lib/microsoft-sharepoint";
+import { leesSharePointAgendakoppelingen } from "@/core/lib/microsoft-vault";
+import {
+  projecteerSharePointAgendaBatch,
+  type VeiligeSharePointAgendakoppeling,
+} from "@/core/lib/microsoft-sharepoint-agendapunt-projectie";
 
 // Page-cache uitschakelen — agendapunt-mutaties moeten direct zichtbaar zijn
 export const dynamic = "force-dynamic";
@@ -78,6 +86,7 @@ export default async function VergaderingDetailPage({
     .eq("id", user.id)
     .single();
   const huidigeRol = (profielRaw as { rol?: string } | null)?.rol ?? null;
+  const magDocumentenBekijken = rolHeeftCapability(huidigeRol, "documents.view");
 
   const { data: vergadering } = await supabase
     .from("vergaderingen")
@@ -274,6 +283,46 @@ export default async function VergaderingDetailPage({
     }
   );
 
+  // #462 PR-5 review — één private batchlezing en hoogstens één live Graph-
+  // enumeratie voor de HELE vergadering. De browser ontvangt uitsluitend de
+  // veilige projectie. Bij token/toegang/timeout/Microsoft-fout maakt de helper
+  // alleen neutrale placeholders; registermetadata is nooit een fallback.
+  const sharepointPerAgendapunt = new Map<
+    string,
+    VeiligeSharePointAgendakoppeling[]
+  >();
+  if (magDocumentenBekijken && agendapuntIds.length > 0) {
+    let sharepointActief = false;
+    try {
+      sharepointActief = await microsoftSharePointActief(supabase, v.fonds_id);
+    } catch {
+      // Configuratie niet betrouwbaar leesbaar: niets naar de browser.
+    }
+    if (sharepointActief) {
+      const projecties = await projecteerSharePointAgendaBatch({
+        agendapuntIds,
+        leesKoppelingen: (ids) =>
+          leesSharePointAgendakoppelingen(v.fonds_id, ids),
+        leesLive: async () => {
+          const live = await sharepointDocumenten(
+            {
+              fondsId: v.fonds_id,
+              gebruikerId: user.id,
+              correlationId: crypto.randomUUID(),
+            },
+            AbortSignal.timeout(8_000)
+          );
+          return { documenten: live.documenten, mappen: live.mapRefs };
+        },
+      }).catch(() => []);
+      for (const projectie of projecties) {
+        const lijst = sharepointPerAgendapunt.get(projectie.agendapuntId) ?? [];
+        lijst.push(projectie);
+        sharepointPerAgendapunt.set(projectie.agendapuntId, lijst);
+      }
+    }
+  }
+
   // Voor de volgorde-pijltjes: bepaal per actieve kaart wat vorige/volgende is.
   // We berekenen dit op basis van de niet-verwijderde subset, in volgorde.
   const actieveAgendapunten = agendapunten.filter((a) => !a.verwijderd_op);
@@ -426,6 +475,7 @@ export default async function VergaderingDetailPage({
                 stemmen={stemmenVoorPunt}
                 bestuursleden={bestuursleden}
                 totaalBestuursleden={totaalBestuursleden}
+                sharepointKoppelingen={sharepointPerAgendapunt.get(a.id) ?? []}
               />
             );
           })}

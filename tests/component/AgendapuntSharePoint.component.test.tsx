@@ -13,13 +13,22 @@ function pickerFetch() {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("/api/documents/upload")) {
-      return new Response(JSON.stringify({ documenten: [{
-        id: "44444444-4444-4444-8444-444444444444",
-        titel: "Portaalstuk",
-        bron: "Bestuursbureau",
-        bibliotheek: "fonds",
-        bestandstype: "pdf",
-      }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ documenten: [
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+          titel: "Portaalstuk",
+          bron: "Bestuursbureau",
+          bibliotheek: "fonds",
+          bestandstype: "pdf",
+        },
+        {
+          id: "66666666-6666-4666-8666-666666666666",
+          titel: "Generiek kader",
+          bron: "Generieke bibliotheek",
+          bibliotheek: "generiek",
+          bestandstype: "pdf",
+        },
+      ] }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
     return new Response(JSON.stringify({
       beschikbaar: true,
@@ -63,25 +72,44 @@ describe("AgendapuntBronPicker", () => {
       { soort: "map", ref: MAP_REF },
     ]));
   });
+
+  it("behoudt in de portaal-tab het filter Alle bibliotheken, Fonds en Generiek", async () => {
+    vi.stubGlobal("fetch", pickerFetch());
+    const { user } = renderMetProviders(
+      <AgendapuntBronPicker onSelectPortaal={vi.fn()} onSelectSharePoint={vi.fn(async () => true)} onClose={vi.fn()} />
+    );
+    expect(await screen.findByText("Portaalstuk")).toBeVisible();
+    expect(screen.getByText("Generiek kader")).toBeVisible();
+
+    await user.selectOptions(screen.getByLabelText("Filter bibliotheek"), "generiek");
+    expect(screen.queryByText("Portaalstuk")).not.toBeInTheDocument();
+    expect(screen.getByText("Generiek kader")).toBeVisible();
+
+    await user.selectOptions(screen.getByLabelText("Filter bibliotheek"), "fonds");
+    expect(screen.getByText("Portaalstuk")).toBeVisible();
+    expect(screen.queryByText("Generiek kader")).not.toBeInTheDocument();
+  });
 });
 
 describe("AgendapuntSharePointBronnen — B-6", () => {
   it("toont na live validatie badge, metadata en acties", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-      beschikbaar: true,
-      koppelingen: [{
-        koppelingId: "55555555-5555-4555-8555-555555555555",
-        agendapuntId: AGENDAPUNT,
-        toegankelijk: true,
-        soort: "document",
-        naam: "Openbaar beleid.docx",
-        mappad: "Bestuur/Beleid",
-        bestandstype: "docx",
-        previewHref: `/bibliotheek/sharepoint/${DOC_REF}`,
-        microsoft365Url: "https://voorbeeld.sharepoint.com/beleid.docx",
-      }],
-    }), { status: 200, headers: { "Content-Type": "application/json" } })));
-    const { user } = renderMetProviders(<AgendapuntSharePointBronnen agendapuntId={AGENDAPUNT} magBeheren vernieuwSignaal={0} />);
+    const { user } = renderMetProviders(
+      <AgendapuntSharePointBronnen
+        agendapuntId={AGENDAPUNT}
+        magBeheren
+        initieleKoppelingen={[{
+          koppelingId: "55555555-5555-4555-8555-555555555555",
+          agendapuntId: AGENDAPUNT,
+          toegankelijk: true,
+          soort: "document",
+          naam: "Openbaar beleid.docx",
+          mappad: "Bestuur/Beleid",
+          bestandstype: "docx",
+          previewHref: `/bibliotheek/sharepoint/${DOC_REF}`,
+          microsoft365Url: "https://voorbeeld.sharepoint.com/beleid.docx",
+        }]}
+      />
+    );
     expect(await screen.findByText("Openbaar beleid.docx")).toBeVisible();
     expect(screen.getByText("SharePoint")).toBeVisible();
     await user.click(screen.getByLabelText("Acties"));
@@ -92,18 +120,21 @@ describe("AgendapuntSharePointBronnen — B-6", () => {
 
   it("ontkoppelt via de uniforme agendapunt-route en ververst de kaart", async () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
-    let verwijderd = false;
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "DELETE") {
-        verwijderd = true;
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({
-        beschikbaar: true,
-        koppelingen: verwijderd ? [] : [{
+      throw new Error("onverwachte fetch");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { user } = renderMetProviders(
+      <AgendapuntSharePointBronnen
+        agendapuntId={AGENDAPUNT}
+        magBeheren
+        initieleKoppelingen={[{
           koppelingId: "55555555-5555-4555-8555-555555555555",
           agendapuntId: AGENDAPUNT,
           toegankelijk: true,
@@ -113,12 +144,8 @@ describe("AgendapuntSharePointBronnen — B-6", () => {
           bestandstype: "docx",
           previewHref: `/bibliotheek/sharepoint/${DOC_REF}`,
           microsoft365Url: null,
-        }],
-      }), { status: 200, headers: { "Content-Type": "application/json" } });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const { user } = renderMetProviders(
-      <AgendapuntSharePointBronnen agendapuntId={AGENDAPUNT} magBeheren vernieuwSignaal={0} />
+        }]}
+      />
     );
 
     expect(await screen.findByText("Beleid.docx")).toBeVisible();
@@ -136,7 +163,7 @@ describe("AgendapuntSharePointBronnen — B-6", () => {
     "geen toegang",
     "timeout",
     "Microsoft-fout",
-  ])("lekt bij %s geen naam, pad, type of link", async () => {
+  ])("lekt bij %s geen naam, pad, type of link", () => {
     const privateRegisterRij = {
       koppeling_id: "55555555-5555-4555-8555-555555555555",
       agendapunt_id: AGENDAPUNT,
@@ -153,14 +180,36 @@ describe("AgendapuntSharePointBronnen — B-6", () => {
     expect(responseJson).not.toContain("Geheim dossier.docx");
     expect(responseJson).not.toContain("Bestuur/Vertrouwelijk");
     expect(responseJson).not.toContain(DOC_REF);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
-      beschikbaar: true,
-      koppelingen: responseProjectie,
-    }), { status: 200, headers: { "Content-Type": "application/json" } })));
-    renderMetProviders(<AgendapuntSharePointBronnen agendapuntId={AGENDAPUNT} magBeheren={false} vernieuwSignaal={0} />);
-    expect(await screen.findByText("Gekoppelde SharePoint-bron")).toBeVisible();
+    renderMetProviders(
+      <AgendapuntSharePointBronnen
+        agendapuntId={AGENDAPUNT}
+        magBeheren={false}
+        initieleKoppelingen={responseProjectie}
+      />
+    );
+    expect(screen.getByText("Gekoppelde SharePoint-bron")).toBeVisible();
     expect(screen.queryByText("Geheim dossier.docx")).not.toBeInTheDocument();
     expect(screen.queryByText(/Bestuur\/Vertrouwelijk/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("toont bij een ontoegankelijke bron ook voor een beheerder geen menu of ontkoppelactie", () => {
+    renderMetProviders(
+      <AgendapuntSharePointBronnen
+        agendapuntId={AGENDAPUNT}
+        magBeheren
+        initieleKoppelingen={[{
+          koppelingId: "55555555-5555-4555-8555-555555555555",
+          agendapuntId: AGENDAPUNT,
+          toegankelijk: false,
+          label: "Gekoppelde SharePoint-bron",
+        }]}
+      />
+    );
+    expect(screen.getByText("Gekoppelde SharePoint-bron")).toBeVisible();
+    expect(screen.queryByText("SharePoint")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Acties")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ontkoppelen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });

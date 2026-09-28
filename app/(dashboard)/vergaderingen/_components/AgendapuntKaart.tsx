@@ -18,7 +18,9 @@ import DocumentUploadModal from "@/core/components/DocumentUploadModal";
 import AgendapuntBronPicker, {
   type GekozenSharePointBron,
 } from "./AgendapuntBronPicker";
-import AgendapuntSharePointBronnen from "./AgendapuntSharePointBronnen";
+import AgendapuntSharePointBronnen, {
+  type Koppeling as SharePointAgendakoppeling,
+} from "./AgendapuntSharePointBronnen";
 
 export interface Stuk {
   id: string;
@@ -165,6 +167,7 @@ export default function AgendapuntKaart({
   stemmen,
   bestuursleden,
   totaalBestuursleden,
+  sharepointKoppelingen,
 }: {
   nummer: number;
   punt: Agendapunt;
@@ -184,6 +187,7 @@ export default function AgendapuntKaart({
   stemmen: StemData[];
   bestuursleden: Bestuurslid[];
   totaalBestuursleden: number;
+  sharepointKoppelingen: SharePointAgendakoppeling[];
 }) {
   const router = useRouter();
   // Standaard ingeklapt (05-07): een agenda met meerdere punten werd te lang
@@ -195,7 +199,6 @@ export default function AgendapuntKaart({
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [koppelBezig, setKoppelBezig] = useState(false);
-  const [sharepointVernieuwSignaal, setSharepointVernieuwSignaal] = useState(0);
   const [editOpen, setEditOpen] = useState(false);
   const [volgordeBezig, setVolgordeBezig] = useState(false);
 
@@ -361,7 +364,6 @@ export default function AgendapuntKaart({
         setUploadFout(data.error || "Koppelen mislukt");
         return false;
       }
-      setSharepointVernieuwSignaal((waarde) => waarde + 1);
       router.refresh();
       return true;
     } catch {
@@ -579,7 +581,7 @@ export default function AgendapuntKaart({
               <AgendapuntSharePointBronnen
                 agendapuntId={punt.id}
                 magBeheren={magMarkeren}
-                vernieuwSignaal={sharepointVernieuwSignaal}
+                initieleKoppelingen={sharepointKoppelingen}
               />
               <div className="flex flex-wrap items-center gap-2">
                 <button

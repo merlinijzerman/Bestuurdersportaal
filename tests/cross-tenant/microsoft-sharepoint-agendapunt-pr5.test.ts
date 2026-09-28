@@ -3,10 +3,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  projecteerSharePointAgendaBatch,
   projecteerSharePointAgendakoppelingen,
   refsZijnLiveToegankelijk,
 } from "../../core/lib/microsoft-sharepoint-agendapunt-projectie";
-import { selecteerSharePointDocumentKandidaten } from "../../core/lib/microsoft-sharepoint-map-ai-core";
+import {
+  selecteerSharePointDocumentKandidaten,
+  telGebruikteSharePointDocumenten,
+} from "../../core/lib/microsoft-sharepoint-map-ai-core";
 import { splitsRetrievalMeta } from "../../core/lib/audit-meta";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -62,6 +66,62 @@ test("B-6 — alleen een actuele live match ontsluit metadata en lokale acties",
   if (!uit[0].toegankelijk) assert.fail("live document werd niet ontsloten");
   assert.equal(uit[0].naam, "Beleid.docx");
   assert.equal(uit[0].previewHref, `/bibliotheek/sharepoint/${DOC_REF}`);
+});
+
+test("agenda-overzicht leest koppelingen en live SharePoint elk eenmaal voor meerdere agendapunten", async () => {
+  let batchLezingen = 0;
+  let liveLezingen = 0;
+  const tweedeAgendapunt = "55555555-5555-4555-8555-555555555555";
+  const uit = await projecteerSharePointAgendaBatch({
+    agendapuntIds: ["44444444-4444-4444-8444-444444444444", tweedeAgendapunt],
+    leesKoppelingen: async (ids) => {
+      batchLezingen += 1;
+      assert.equal(ids.length, 2);
+      return [
+        {
+          koppeling_id: "33333333-3333-4333-8333-333333333333",
+          agendapunt_id: ids[0],
+          soort: "document",
+          ref: DOC_REF,
+        },
+        {
+          koppeling_id: "66666666-6666-4666-8666-666666666666",
+          agendapunt_id: ids[1],
+          soort: "map",
+          ref: MAP_REF,
+        },
+      ];
+    },
+    leesLive: async () => {
+      liveLezingen += 1;
+      return {
+        documenten: [{
+          ref: DOC_REF,
+          naam: "Beleid.docx",
+          mappad: "Bestuur",
+          bestandstype: "docx",
+          previewMogelijk: true,
+          webUrl: null,
+        }],
+        mappen: [{ ref: MAP_REF, naam: "Vergaderstukken", mappad: "Vergaderstukken" }],
+      };
+    },
+  });
+  assert.equal(batchLezingen, 1);
+  assert.equal(liveLezingen, 1);
+  assert.equal(uit.length, 2);
+  assert.ok(uit.every((koppeling) => koppeling.toegankelijk));
+
+  const pagina = lees("app", "(dashboard)", "vergaderingen", "[id]", "page.tsx");
+  const kaartBronnen = lees("app", "(dashboard)", "vergaderingen", "_components", "AgendapuntSharePointBronnen.tsx");
+  assert.equal((pagina.match(/projecteerSharePointAgendaBatch\(/g) ?? []).length, 1);
+  assert.match(
+    pagina,
+    /leesSharePointAgendakoppelingen\(v\.fonds_id, ids\)/
+  );
+  assert.equal((pagina.match(/sharepointDocumenten\(/g) ?? []).length, 1);
+  assert.ok(!kaartBronnen.includes('method: "GET"'), "een kaart mag geen eigen lijstrequest doen");
+  assert.ok(!kaartBronnen.includes('cache: "no-store"'), "een kaart mag geen eigen live listing doen");
 });
 
 test("koppelen vereist dat iedere lokale ref in de security-trimmed live set staat", () => {
@@ -142,6 +202,27 @@ test("audit van agendapunt-SharePoint bevat alleen lokale refs en inhoudsarme te
     afgekapt: false,
   });
   assert.equal("agendapunt_sharepoint" in inhoud, false);
+});
+
+test("audit telt alleen unieke SharePoint-documenten uit de werkelijk geselecteerde context", () => {
+  const refPerIdentiteit = new Map([
+    ["sp:document-a", DOC_REF],
+    ["sp:document-b", MAP_REF],
+  ]);
+  const aantal = telGebruikteSharePointDocumenten(
+    [
+      { documentIdentiteit: { id: "sp:document-a" } },
+      { documentIdentiteit: { id: "sp:document-a" } },
+      { documentIdentiteit: { id: "portaal:document-c" } },
+      { documentIdentiteit: { id: "sp:document-b" } },
+    ],
+    (identiteit) => refPerIdentiteit.get(identiteit)
+  );
+  assert.equal(aantal, 2);
+
+  const route = lees("app", "api", "chat", "route.ts");
+  assert.match(route, /telGebruikteSharePointDocumenten\(\s*voltooid\.geselecteerd/);
+  assert.match(route, /gebruikte_documenten: gebruikteSharePointDocumenten/);
 });
 
 test("multiselect koppelt atomair via één private SQL-aanroep", () => {
