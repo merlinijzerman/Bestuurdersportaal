@@ -33,6 +33,32 @@ function opschonen(s: string): string {
   return s.replace(/[?.!,;:]+$/g, "").trim();
 }
 
+const MAX_AANGEVRAAGDE_DIMENSIES = 8;
+
+/**
+ * Haal alleen expliciet benoemde vergelijkingsassen uit een gebruikersvraag.
+ * Dit is bewust confidence-gated: zonder herkenbare instructie levert de helper
+ * niets op en blijft de bestaande catalogus/Haiku-route leidend.
+ */
+export function bepaalAangevraagdeDimensies(vraag: string): string[] {
+  const patronen = [
+    /\bgeef\s+per\s+document\s+(.+?)(?:,?\s+en\s+sluit\s+af\b|[.!?]|$)/i,
+    /\bvergelijk(?:\s+[^.!?]*?)?\s+op\s+(.+?)(?:[.!?]|$)/i,
+  ];
+  const match = patronen.map((patroon) => vraag.match(patroon)).find(Boolean);
+  const opsomming = match?.[1]?.trim();
+  if (!opsomming) return [];
+
+  return opsomming
+    .replace(/\s*,\s*(?:en\s+)?/gi, "|")
+    .replace(/\s+en\s+/gi, "|")
+    .split("|")
+    .map((deel) => deel.trim().replace(/^(?:de|het|een)\s+/i, ""))
+    .filter((deel) => deel.length >= 2 && deel.length <= 100)
+    .filter((deel, index, alle) => alle.findIndex((ander) => ander.toLowerCase() === deel.toLowerCase()) === index)
+    .slice(0, MAX_AANGEVRAAGDE_DIMENSIES);
+}
+
 // Haal na een trigger het "X <splits> Y"-deel eruit. Best-effort.
 function haalHints(vraag: string): { bron: string | null; doel: string | null } {
   // Neem de tekst ná het triggerwoord (of de hele zin bij "X vs Y").
@@ -46,7 +72,9 @@ function haalHints(vraag: string): { bron: string | null; doel: string | null } 
   const delen = rest.split(SPLITS);
   if (delen.length >= 2) {
     const bron = opschonen(delen[0]);
-    const doel = opschonen(delen[1]);
+    // Een vervolzin kan de gewenste vergelijkingsassen bevatten en hoort niet
+    // bij de documenthint. Stop daarom na de eerste zin van het tweede doel.
+    const doel = opschonen(delen[1].split(/[.!?](?:\s|$)/, 1)[0]);
     return { bron: bron || null, doel: doel || null };
   }
   return { bron: null, doel: null };
