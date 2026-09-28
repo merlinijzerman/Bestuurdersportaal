@@ -264,6 +264,51 @@ test("#368 modelcontextreader — scope/status/provider/cap falen gesloten", asy
   }), /modelcontext_providerfout/);
 });
 
+test("#438 modelcontextreader — alleen documentlabels mogen historische vergelijkversies benoemen", async () => {
+  const signal = new AbortController().signal;
+  const historisch = fondsModelcontextRij(
+    { fonds_id: "fonds-a", id: "doc-v1", titel: "Plan v1" },
+    "fonds-a",
+    null,
+    geverifieerdeModelcontextGeldigheid({
+      status: "historisch", actief: true, geldigVanaf: null, geldigTot: null,
+    })
+  );
+
+  const toegestaan = await leesModelcontext({
+    context: { ...context, signal },
+    soort: "documentlabels",
+    scope: { fondsId: "fonds-a" },
+    maxItems: 1,
+    levenscyclusbeleid: "vergelijkbare_versies",
+    lees: async () => ({ data: [historisch], error: null }),
+  });
+  assert.equal(toegestaan[0]?.id, "doc-v1");
+
+  await assert.rejects(() => leesModelcontext({
+    context: { ...context, signal },
+    soort: "risico",
+    scope: { fondsId: "fonds-a" },
+    maxItems: 1,
+    levenscyclusbeleid: "vergelijkbare_versies",
+    lees: async () => ({ data: [historisch], error: null }),
+  }), /modelcontext_providerfout/);
+
+  await assert.rejects(() => leesModelcontext({
+    context: { ...context, signal },
+    soort: "documentlabels",
+    scope: { fondsId: "fonds-a" },
+    maxItems: 1,
+    levenscyclusbeleid: "vergelijkbare_versies",
+    lees: async () => ({ data: [fondsModelcontextRij(
+      { fonds_id: "fonds-a", id: "doc-uit" }, "fonds-a", null,
+      geverifieerdeModelcontextGeldigheid({
+        status: "historisch", actief: false, geldigVanaf: null, geldigTot: null,
+      })
+    )], error: null }),
+  }), /modelcontext_niet_actueel/);
+});
+
 test("#368 modelcontextreader — ontbrekende servermetadata en private binding falen gesloten", async () => {
   const signal = new AbortController().signal;
   await assert.rejects(() => leesModelcontext({
