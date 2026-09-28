@@ -24,6 +24,20 @@ export type SharePointMapSelectie = {
   afgekapt: boolean;
 };
 
+/** Telt uitsluitend SharePoint-documenten die de centrale selectie én
+ * toelatingspoort werkelijk hebben doorstaan. Een passage-duplicaat uit
+ * hetzelfde document telt eenmaal; portaalbronnen leveren geen lokale ref. */
+export function telGebruikteSharePointDocumenten(
+  geselecteerd: readonly { documentIdentiteit: { id: string } }[],
+  lokaleRefVoor: (identiteit: string) => string | undefined
+): number {
+  return new Set(
+    geselecteerd
+      .map((bron) => lokaleRefVoor(bron.documentIdentiteit.id))
+      .filter((ref): ref is string => typeof ref === "string")
+  ).size;
+}
+
 const STOPWOORDEN = new Set([
   "aan", "als", "bij", "de", "deze", "dit", "door", "een", "en", "geef",
   "het", "in", "is", "map", "met", "noem", "of", "om", "op", "over",
@@ -56,19 +70,15 @@ function score(document: MapDocumentKandidaat, termen: readonly string[]): numbe
   }, 0);
 }
 
-/**
- * Rangschikt eerst de volledige live zichtbare set onder de map. Pas daarna
- * gelden de twee grenzen. Hierdoor is de Graph-/arrayvolgorde nooit de reden
- * dat juist de eerste zes documenten worden gebruikt.
- */
-export function selecteerSharePointMapDocumenten(
+/** Rangschikt een reeds server-side afgebakende set, bijvoorbeeld de vereniging
+ * van losse agendadocumenten en documenten uit meerdere gekoppelde mappen. */
+export function selecteerSharePointDocumentKandidaten(
   documenten: readonly MapDocumentKandidaat[],
-  gekozenMapPad: string,
   vraag: string,
   grenzen: { maxKandidaten?: number; maxDocumenten?: number } = {}
 ): SharePointMapSelectie {
-  const onderMap = documenten.filter((document) => isOnderMap(document.mappad, gekozenMapPad));
-  const ondersteund = onderMap.filter((document) =>
+  const uniek = [...new Map(documenten.map((document) => [document.ref, document])).values()];
+  const ondersteund = uniek.filter((document) =>
     !!document.bestandstype &&
     SHAREPOINT_MAP_AI_TYPES.has(document.bestandstype) &&
     (document.grootte === null || document.grootte <= SHAREPOINT_MAP_MAX_DOCUMENT_BYTES)
@@ -99,9 +109,24 @@ export function selecteerSharePointMapDocumenten(
   const geselecteerd = kandidaten.slice(0, maxDocumenten).map((x) => x.document);
   return {
     documenten: geselecteerd,
-    totaalOnderMap: onderMap.length,
+    totaalOnderMap: uniek.length,
     ondersteundOnderMap: ondersteund.length,
     kandidatenBehandeld: kandidaten.length,
     afgekapt: ondersteund.length > geselecteerd.length,
   };
+}
+
+/**
+ * Rangschikt eerst de volledige live zichtbare set onder de map. Pas daarna
+ * gelden de twee grenzen. Hierdoor is de Graph-/arrayvolgorde nooit de reden
+ * dat juist de eerste zes documenten worden gebruikt.
+ */
+export function selecteerSharePointMapDocumenten(
+  documenten: readonly MapDocumentKandidaat[],
+  gekozenMapPad: string,
+  vraag: string,
+  grenzen: { maxKandidaten?: number; maxDocumenten?: number } = {}
+): SharePointMapSelectie {
+  const onderMap = documenten.filter((document) => isOnderMap(document.mappad, gekozenMapPad));
+  return selecteerSharePointDocumentKandidaten(onderMap, vraag, grenzen);
 }

@@ -242,6 +242,9 @@ SQL_M365_WEBURL_VECTOREN="supabase/checks/2026_09_20_413_weburl_canonicalisering
 # composite-FK én trigger), xor document_ref/map_ref, ontkoppelen raakt het
 # register niet, oude configuratieversie of inactieve bron levert niets.
 SQL_M365_462_KOPPELING="supabase/checks/2026_09_28_462_sharepoint_mapregister_agendakoppeling.sql"
+# #462 PR-5 — lokale SharePoint-refs uitsluitend op bronniveau, met een
+# gesloten vorm die namen/paden/URL's/inhoud hard weigert.
+SQL_M365_462_AUDIT="supabase/checks/2026_09_28_462_agendapunt_sharepoint_auditprojectie.sql"
 # Microsoft-login fase 1B (#335, T1, besluit 0211) — privaat schema login_private,
 # minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
 # SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
@@ -463,6 +466,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL_VECTOREN"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_462_KOPPELING"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_462_AUDIT"
 echo
 echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
