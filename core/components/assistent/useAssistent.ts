@@ -970,7 +970,8 @@ export function useAssistent(opties: UseAssistentOpties) {
       laden
     )
       return;
-    const grondigeAnalyseVoorDezeBeurt = grondigeAnalyse;
+    const grondigeAnalyseVoorDezeBeurt =
+      opties?.grondigeAnalyseOverride ?? grondigeAnalyse;
     setInvoer("");
     setGrondigeAnalyse(false);
     setVrijeVraagOpen(false);
@@ -1089,7 +1090,12 @@ export function useAssistent(opties: UseAssistentOpties) {
         const evt = leesStreamRegel(raw);
         if (!evt) return;
         const vorige = stand;
-        const { stand: nu, uitwerking } = pasStreamEventToe(vorige, evt, tekst);
+        const { stand: nu, uitwerking } = pasStreamEventToe(
+          vorige,
+          evt,
+          tekst,
+          grondigeAnalyseVoorDezeBeurt
+        );
         stand = nu;
 
         // Alleen zetten wat écht wijzigde, zodat de volgorde en het aantal
@@ -1330,7 +1336,8 @@ export function useAssistent(opties: UseAssistentOpties) {
   function kiesVerduidelijking(
     intent: "fonds" | "algemeen",
     origineleVraag: string,
-    idx: number
+    idx: number,
+    grondigeAnalyse = false
   ) {
     if (laden) return;
     const voorTerugvraag = berichten.slice(0, idx); // laat de verduidelijkingsbubbel vallen
@@ -1348,6 +1355,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     stuurBericht(origineleVraag, {
       bronIntentOverride: intent,
       bronIntentBron: "chip",
+      grondigeAnalyseOverride: grondigeAnalyse,
       geenNieuweVraag: true,
       basisBerichten: basis,
     });
