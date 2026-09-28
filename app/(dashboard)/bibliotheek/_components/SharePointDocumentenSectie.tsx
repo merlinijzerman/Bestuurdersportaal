@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 
 type SharePointDocument = {
   ref: string; naam: string; bestandstype: string | null; grootte: number | null; gewijzigdOp: string | null;
@@ -8,11 +9,13 @@ type SharePointDocument = {
 };
 type Antwoord = {
   beschikbaar: boolean; error?: string; foutcategorie?: string;
+  aiContextBeschikbaar?: boolean;
   bron?: { weergavenaam: string; site: string; bibliotheek: string; map: string } | null;
   documenten?: SharePointDocument[]; mappen?: string[]; afgekapt?: boolean;
 };
 
 const TYPE_LABEL: Record<string, string> = { pdf: "PDF", docx: "Word", doc: "Word", pptx: "PowerPoint", ppt: "PowerPoint", xlsx: "Excel", xls: "Excel" };
+const AI_TYPES = new Set(["pdf", "docx", "pptx", "xlsx"]);
 const TYPE_BLOK = "inline-flex items-center justify-center min-w-[46px] h-5 rounded border border-line bg-app-surface px-1.5 text-[10.5px] font-bold uppercase tracking-wider text-muted";
 
 function grootteLabel(bytes: number | null): string {
@@ -141,6 +144,16 @@ export default function SharePointDocumentenSectie() {
                       {doc.previewMogelijk
                         ? <Link href={`/bibliotheek/sharepoint/${doc.ref}`} className="text-xs font-semibold text-accent hover:underline">Preview</Link>
                         : <span className="text-xs text-muted" title="Dit bestandstype kan niet in de browser worden getoond.">Geen preview</span>}
+                      {antwoord.aiContextBeschikbaar === true && doc.bestandstype && AI_TYPES.has(doc.bestandstype) && (
+                        <AssistentIngang
+                          ingangen={[{ soort: "sharepoint", ref: doc.ref }]}
+                          module="bibliotheek"
+                          className="ml-3 text-xs font-semibold text-accent hover:underline"
+                          title="Vraag de AI over dit SharePoint-document"
+                        >
+                          Vraag de AI
+                        </AssistentIngang>
+                      )}
                       {doc.webUrl && (
                         <a href={doc.webUrl} target="_blank" rel="noopener noreferrer" className="ml-3 text-xs font-semibold text-accent hover:underline">Openen in Microsoft 365</a>
                       )}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { microsoftSharePointActief } from "@/core/lib/microsoft-connector";
+import { microsoftSharePointAiContextActief } from "@/core/lib/microsoft-sharepoint-ai-gate";
 import { sharepointDocumenten } from "@/core/lib/microsoft-sharepoint";
 import { sharepointFoutcategorie } from "@/core/lib/microsoft-sharepoint-graph-core";
 export const dynamic = "force-dynamic";
@@ -9,7 +10,11 @@ export const dynamic = "force-dynamic";
 export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "documents.view", schema: "geen-body" }, async (ctx) => {
   if (!ctx.fondsId || !(await microsoftSharePointActief(ctx.supabase, ctx.fondsId))) return NextResponse.json({ beschikbaar: false }, { headers: { "Cache-Control": "no-store" } });
   try {
-    return NextResponse.json({ beschikbaar: true, ...(await sharepointDocumenten({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, correlationId: ctx.requestId })) }, { headers: { "Cache-Control": "no-store" } });
+    const [documenten, aiContextBeschikbaar] = await Promise.all([
+      sharepointDocumenten({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, correlationId: ctx.requestId }),
+      microsoftSharePointAiContextActief(ctx.supabase, ctx.fondsId),
+    ]);
+    return NextResponse.json({ beschikbaar: true, aiContextBeschikbaar, ...documenten }, { headers: { "Cache-Control": "no-store" } });
   } catch (fout) {
     const categorie = sharepointFoutcategorie(fout);
     if (categorie === "bron_niet_geconfigureerd") return NextResponse.json({ beschikbaar: true, bron: null, documenten: [], mappen: [], afgekapt: false }, { headers: { "Cache-Control": "no-store" } });

@@ -30,6 +30,7 @@ import type {
   AgendapuntContext,
   DocumentScope,
   ModuleScope,
+  SharePointScope,
   StuurOpties,
 } from "@/core/lib/assistent-types";
 
@@ -64,6 +65,7 @@ export interface ChatPayloadInvoer {
   herkomst: Herkomst | null;
   /** De EFFECTIEVE scope voor deze beurt (na een eventuele per-turn override). */
   documentScope: DocumentScope | null;
+  sharepointScope: SharePointScope | null;
   /** De EFFECTIEVE antwoordmodus voor deze beurt; null = auto-detectie. */
   antwoordmodus: Antwoordmodus | null;
   agendapuntContext: AgendapuntContext | null;
@@ -91,6 +93,7 @@ export function bouwChatPayload(invoer: ChatPayloadInvoer): Record<string, unkno
     voorbereidingsstand,
     herkomst,
     documentScope: effScope,
+    sharepointScope,
     antwoordmodus: effAntwoordmodus,
     agendapuntContext,
     moduleScope,
@@ -117,6 +120,11 @@ export function bouwChatPayload(invoer: ChatPayloadInvoer): Record<string, unkno
           document_ids: effScope.document_ids,
           algemene_kennis: effScope.algemene_kennis === true,
         }
+      : undefined,
+    // #462 — alleen de lokale refs. Naam en pad zijn live Microsoft-metadata en
+    // mogen niet in het verzoek- of gesprekscontract bevriezen.
+    sharepoint_scope: sharepointScope
+      ? { soort: sharepointScope.soort, refs: sharepointScope.refs }
       : undefined,
     // Increment G — vastgezette antwoordmodus (null = auto-detectie).
     actieve_antwoordmodus: effAntwoordmodus,
@@ -214,6 +222,7 @@ export const CHAT_PAYLOAD_VELDEN = [
   "bron_intent_bron",
   "bron_intent_herkomst",
   "document_scope",
+  "sharepoint_scope",
   "actieve_antwoordmodus",
   "algemeen_perspectief",
   "transformatie",

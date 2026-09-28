@@ -9,6 +9,7 @@ import {
   contextChipLabels,
   leesScope,
   leesAgendapuntContext,
+  leesSharePointScope,
 } from "./assistent-context";
 
 let n = 0;
@@ -66,6 +67,20 @@ check("risicomatrix en risico zijn ECHT verschillende soorten", () => {
   assert.equal(
     bepaalContextSoort({ ...LEEG, moduleScope: { soort: "risico", risico_id: "r1", label: "Renterisico" } }),
     "risico"
+  );
+});
+
+check("een live SharePoint-document heeft een eigen contextsoort", () => {
+  assert.equal(
+    bepaalContextSoort({
+      ...LEEG,
+      sharepointScope: {
+        soort: "document",
+        refs: ["7d5ef460-162e-4c34-a1bc-287337cbdf09"],
+        labels: ["Bestuursverslag.docx"],
+      },
+    }),
+    "sharepoint_document"
   );
 });
 
@@ -173,6 +188,31 @@ check("leesAgendapuntContext vereist een id en valt terug op een nette titel", (
   );
 });
 
+check("leesSharePointScope herstelt alleen één lokale UUID-ref en nooit een label", () => {
+  assert.equal(leesSharePointScope(null), null);
+  assert.equal(leesSharePointScope({ sharepoint_scope: { soort: "document", refs: [] } }), null);
+  assert.equal(
+    leesSharePointScope({
+      sharepoint_scope: { soort: "document", refs: ["geen-uuid"], labels: ["geheim.docx"] },
+    }),
+    null
+  );
+  assert.deepEqual(
+    leesSharePointScope({
+      sharepoint_scope: {
+        soort: "document",
+        refs: ["7D5EF460-162E-4C34-A1BC-287337CBDF09"],
+        labels: ["geheim.docx"],
+      },
+    }),
+    {
+      soort: "document",
+      refs: ["7d5ef460-162e-4c34-a1bc-287337cbdf09"],
+      labels: [],
+    }
+  );
+});
+
 // ── De ENE contextchip van het paneel (T1, besluit 0204) ────────────────────
 
 check("fondsbreed is geen scope en heeft dus niets om los te laten", () => {
@@ -229,6 +269,20 @@ check("de documentchip telt de rest mee in het label", () => {
   });
   assert.match(chip.label, /\+2$/);
   assert.equal(chip.bronbereik, "alleen 3 stukken");
+});
+
+check("de SharePoint-chip toont alleen het live opgeloste label", () => {
+  const chip = contextChip({
+    ...LEEG,
+    sharepointScope: {
+      soort: "document",
+      refs: ["7d5ef460-162e-4c34-a1bc-287337cbdf09"],
+      labels: ["Bestuursverslag.docx"],
+    },
+  });
+  assert.equal(chip.label, "SharePoint-document · «Bestuursverslag.docx»");
+  assert.match(chip.bronbereik, /live gecontroleerde SharePoint-document/);
+  assert.equal(chip.losTeLaten, true);
 });
 
 

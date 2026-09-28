@@ -93,6 +93,12 @@ function vindplaatsVan(bron: Bron): string {
  */
 function openenActieVan(bron: Bron): { href: string; label: string } | null {
   if (!bron.heeft_origineel) return null;
+  if (bron.bibliotheek === "sharepoint") {
+    return {
+      href: `/bibliotheek/sharepoint/${bron.document_id}`,
+      label: "Openen in SharePoint-preview",
+    };
+  }
   return bron.pagina
     ? {
         href: `/api/documents/${bron.document_id}/bestand#page=${bron.pagina}`,

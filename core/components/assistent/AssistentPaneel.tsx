@@ -117,6 +117,7 @@ export default function AssistentPaneel({
 
   const chip = contextChip({
     documentScope: context.documentScope,
+    sharepointScope: context.sharepointScope,
     agendapuntContext: context.agendapuntContext,
     moduleScope: context.moduleScope,
   });
@@ -128,6 +129,7 @@ export default function AssistentPaneel({
 
   function laatLos() {
     context.zetDocumentScope(null);
+    context.zetSharepointScope(null);
     context.zetAgendapuntContext(null);
     context.zetModuleScope(null);
     context.zetRisicoLijst([]);

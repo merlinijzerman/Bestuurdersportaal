@@ -252,6 +252,15 @@ export interface DocumentScope {
   algemene_kennis?: boolean;
 }
 
+// #462 PR-3 — live SharePoint-context. `refs` zijn uitsluitend lokale, opaque
+// UUID-referenties uit het private register. `labels` bestaan alleen in het
+// browsergeheugen voor de contextchip en gaan nooit naar /api/chat of jsonb.
+export interface SharePointScope {
+  soort: "document";
+  refs: string[];
+  labels: string[];
+}
+
 // Besluit 0151 — AI-modulecontext. De client houdt alleen de sleutel + een label
 // voor de chip bij; de server resolveert de inhoud onder RLS. `risicomatrix` is de
 // enige risico-ingang; `risico` ontstaat door in de chat in te zoomen (verdiep-chip).
@@ -365,4 +374,3 @@ export interface StuurOpties {
   /** Zichtbare actietekst; de server ontvangt voor de analyse de originele vraag. */
   weergaveTekst?: string;
 }
-
