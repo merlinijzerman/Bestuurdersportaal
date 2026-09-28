@@ -1789,6 +1789,10 @@ export const scenarios = [
   //  W1-seed (één FTS-chunk onder document1, geen embedding → zichtbare
   //  FTS-terugval). `idempotentie: true` geeft elke ronde een verse sleutel,
   //  zodat verify-ronde 2 en 3 hetzelfde pad lopen als ronde 1.
+  //  #438 PR2 wijzigt uitsluitend de provider-requesthashes van de bronloze en
+  //  providerfout-scenario's: system- en userblokken dragen nu expliciete
+  //  `cache_control`-metadata met een TTL van één uur. De overige velden en de
+  //  volledige SSE-respons blijven in deze snapshots gekarakteriseerd.
   //  De scenario's staan ONVOORWAARDELIJK in de tabel (de statische W7-matrix
   //  moet omgevingsonafhankelijk zijn); `vereist: "ai-stub"` laat run.mjs ze
   //  zichtbaar overslaan wanneer de stub-URL ontbreekt.
