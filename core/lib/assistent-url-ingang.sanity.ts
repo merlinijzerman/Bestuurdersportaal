@@ -73,6 +73,7 @@ check("de vijf scope-ingangen worden herkend", () => {
     ).ingangen[0],
     {
       soort: "sharepoint",
+      objectsoort: "document",
       ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
     }
   );
@@ -82,6 +83,7 @@ check("de SharePoint-deeplink bevat alleen de lokale ref en is omkeerbaar", () =
   const href = bouwAssistentDeeplink([
     {
       soort: "sharepoint",
+      objectsoort: "document",
       ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
       label: "vertrouwelijk bestuursstuk.docx",
     },
@@ -94,9 +96,21 @@ check("de SharePoint-deeplink bevat alleen de lokale ref en is omkeerbaar", () =
   assert.deepEqual(leesAssistentContextUitUrl(href.slice(3)).ingangen, [
     {
       soort: "sharepoint",
+      objectsoort: "document",
       ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
     },
   ]);
+});
+
+check("een SharePoint-map gebruikt een eigen deeplink en is omkeerbaar", () => {
+  const ingang = {
+    soort: "sharepoint" as const,
+    objectsoort: "map" as const,
+    ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+  };
+  const href = bouwAssistentDeeplink([ingang]);
+  assert.equal(href, "/ai?sharepoint_map=7d5ef460-162e-4c34-a1bc-287337cbdf09");
+  assert.deepEqual(leesAssistentContextUitUrl(href.slice(3)).ingangen, [ingang]);
 });
 
 check("een ongeldige SharePoint-ref wordt genegeerd", () => {
@@ -216,6 +230,7 @@ checkAsync("SharePoint wordt hier niet uit Supabase opgelost", async () => {
   const { lezer, gelezen } = maakLezer({});
   const uit = await resolveerAssistentContext(lezer, [{
     soort: "sharepoint",
+    objectsoort: "document",
     ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
   }]);
   assert.deepEqual(gelezen, []);

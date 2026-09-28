@@ -60,7 +60,7 @@ import {
 /** Welke deeplink-ingang de URL aanwijst (nog niet opgezocht in de database). */
 export type AssistentUrlIngang =
   | { soort: "document"; documentId: string }
-  | { soort: "sharepoint"; ref: string; label?: string }
+  | { soort: "sharepoint"; objectsoort: "document" | "map"; ref: string; label?: string }
   | { soort: "agendapunt"; agendapuntId: string }
   | { soort: "proces"; procedureId: string }
   | { soort: "risicomatrix" };
@@ -119,6 +119,7 @@ export function leesAssistentContextUitUrl(zoekstring: string): AssistentUrlVerz
 
   const doc = params.get("doc");
   const sharepoint = params.get("sharepoint");
+  const sharepointMap = params.get("sharepoint_map");
   const agendapunt = params.get("agendapunt");
   const proces = params.get("proces");
   const risicomatrix = params.get("risicomatrix");
@@ -126,7 +127,10 @@ export function leesAssistentContextUitUrl(zoekstring: string): AssistentUrlVerz
   const ingangen: AssistentUrlIngang[] = [];
   if (doc) ingangen.push({ soort: "document", documentId: doc });
   if (sharepoint && UUID.test(sharepoint)) {
-    ingangen.push({ soort: "sharepoint", ref: sharepoint.toLowerCase() });
+    ingangen.push({ soort: "sharepoint", objectsoort: "document", ref: sharepoint.toLowerCase() });
+  }
+  if (sharepointMap && UUID.test(sharepointMap)) {
+    ingangen.push({ soort: "sharepoint", objectsoort: "map", ref: sharepointMap.toLowerCase() });
   }
   if (agendapunt) ingangen.push({ soort: "agendapunt", agendapuntId: agendapunt });
   // Deze twee stonden in het origineel in één blok als if/else if.
@@ -166,7 +170,9 @@ export function bouwAssistentDeeplink(ingangen: AssistentUrlIngang[]): string {
   const params = new URLSearchParams();
   for (const ingang of ingangen) {
     if (ingang.soort === "document") params.set("doc", ingang.documentId);
-    else if (ingang.soort === "sharepoint") params.set("sharepoint", ingang.ref);
+    else if (ingang.soort === "sharepoint") {
+      params.set(ingang.objectsoort === "map" ? "sharepoint_map" : "sharepoint", ingang.ref);
+    }
     else if (ingang.soort === "agendapunt") params.set("agendapunt", ingang.agendapuntId);
     else if (ingang.soort === "proces") params.set("proces", ingang.procedureId);
     else params.set("risicomatrix", "1");

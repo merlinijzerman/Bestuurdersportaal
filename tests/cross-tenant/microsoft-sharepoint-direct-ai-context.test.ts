@@ -230,3 +230,73 @@ test("een token uit een andere tenant wordt vóór download fail-closed geweiger
   assert.equal(uit.kandidaten.length, 0);
   assert.equal(downloads, 0);
 });
+
+test("mapdocumenten delen één downloadbudget en worden zichtbaar afgekapt", async () => {
+  const tweede: GeregistreerdDocument = {
+    ...DOCUMENT,
+    ref: "55555555-5555-4555-8555-555555555555",
+    itemId: "item-2",
+    naam: "uitvoering.docx",
+  };
+  let downloads = 0;
+  const adapter = maakDirecteSharePointAdapter({
+    bron: BRON,
+    tokenTenantId: BRON.tenantId,
+    accessToken: "test-token",
+    documenten: [{ document: DOCUMENT }, { document: tweede }],
+    maxTotaalBytes: 10,
+    leesItem: async (id) => {
+      if (id === BRON.rootItemId) return root();
+      const document = id === tweede.itemId ? tweede : DOCUMENT;
+      return {
+        ...item(),
+        id: document.itemId,
+        name: document.naam,
+        webUrl: `https://${HOST}/sites/lab/Gedeelde%20documenten/PGB/${document.naam}`,
+      };
+    },
+    herleesBron: async () => BRON,
+    downloadImpl: async ({ maxBytes }) => {
+      downloads += 1;
+      assert.equal(maxBytes, 10);
+      return { ok: true, bytes: Buffer.alloc(10, 1) };
+    },
+    extractImpl: async () => ({
+      tekst: "",
+      aantalPaginas: 1,
+      segmenten: [{
+        pagina: 1,
+        paragraaf: null,
+        tekst: "Voldoende inhoud over het beleid en de uitvoering voor de test.",
+      }],
+    }),
+  });
+  const uit = await adapter.zoek(
+    {
+      fondsId: FONDS,
+      actor: { soort: "gebruiker", id: GEBRUIKER },
+      taaktype: "chat_generatie",
+      bronbeleid: { bronsoorten: ["sharepoint"] },
+      correlationId: "corr-budget",
+      verzoekStartOp: new Date().toISOString(),
+      resterendMs: () => 5_000,
+    },
+    {
+      naam: "primair",
+      documentScope: [
+        maakDocumentIdentiteit(`fonds:${FONDS}:sharepoint`, DOCUMENT.ref),
+        maakDocumentIdentiteit(`fonds:${FONDS}:sharepoint`, tweede.ref),
+      ],
+      origineleVraag: "Wat is het beleid?",
+      zoekvraag: "beleid",
+      strategie: "gericht",
+      maxResultaten: 8,
+      maxKandidaten: 24,
+      maxContextTekens: 40_000,
+    }
+  );
+  assert.equal(downloads, 1);
+  assert.equal(uit.opgehaald, 1);
+  assert.deepEqual(uit.truncatie, { reden: "kandidaten" });
+  assert.ok(uit.kandidaten.length > 0);
+});

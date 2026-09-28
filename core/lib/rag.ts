@@ -783,6 +783,10 @@ export interface RetrievalMeta {
     verwerkte_chunks?: number;
     batches?: number;
     afgekapt?: boolean;
+    /** #462 — inhoudsvrije audit van de gekozen SharePoint-context. */
+    sharepoint_soort?: "document" | "map";
+    kandidaten?: number;
+    gebruikte_documenten?: number;
   };
   /** M1–M4 — gevalideerde, reproduceerbare routerbeslissing (geen vrije tekst). */
   vraagrouter?: Vraagroute;

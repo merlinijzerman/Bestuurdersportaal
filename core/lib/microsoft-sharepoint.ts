@@ -228,12 +228,12 @@ async function registreerMappen(fondsId: string, bronId: string, configuratiever
   }
 }
 
-export async function sharepointDocumenten(ctx: BronContext) {
+export async function sharepointDocumenten(ctx: BronContext, signal?: AbortSignal) {
   const start = Date.now();
   const bron = await actieveBron(ctx.fondsId);
   try {
     const { accessToken } = await token(ctx);
-    const boom = await enumereerBoom(accessToken, bron.drive_id, bron.root_item_id);
+    const boom = await enumereerBoom(accessToken, bron.drive_id, bron.root_item_id, signal);
     const refs = await vault.upsertSharePointDocumenten({ fondsId: ctx.fondsId, bronId: bron.id, configuratieversie: bron.configuratieversie, documenten: boom.documenten });
     const refVan = new Map(refs.map((x) => [x.item_id, x.ref]));
     const documenten = boom.documenten.flatMap((doc: DocumentProjectie) => {

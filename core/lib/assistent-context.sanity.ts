@@ -82,6 +82,17 @@ check("een live SharePoint-document heeft een eigen contextsoort", () => {
     }),
     "sharepoint_document"
   );
+  assert.equal(
+    bepaalContextSoort({
+      ...LEEG,
+      sharepointScope: {
+        soort: "map",
+        refs: ["7d5ef460-162e-4c34-a1bc-287337cbdf09"],
+        labels: ["Bestuur"],
+      },
+    }),
+    "sharepoint_map"
+  );
 });
 
 // ── Het chiplabel — op de letter, zoals /ai het vandaag toont ───────────────
@@ -207,6 +218,19 @@ check("leesSharePointScope herstelt alleen één lokale UUID-ref en nooit een la
     }),
     {
       soort: "document",
+      refs: ["7d5ef460-162e-4c34-a1bc-287337cbdf09"],
+      labels: [],
+    }
+  );
+  assert.deepEqual(
+    leesSharePointScope({
+      sharepoint_scope: {
+        soort: "map",
+        refs: ["7D5EF460-162E-4C34-A1BC-287337CBDF09"],
+      },
+    }),
+    {
+      soort: "map",
       refs: ["7d5ef460-162e-4c34-a1bc-287337cbdf09"],
       labels: [],
     }
