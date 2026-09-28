@@ -151,6 +151,8 @@ export const LEZINGKLASSE = {
   "core/lib/portaalcontext.ts::procedure_stappen": { klassen: ["modelcontext"], doel: "lopende stappen met deadline" },
   "core/lib/portaalcontext.ts::procedure_eigenaars": { klassen: ["modelcontext"], doel: "eigenaarschap bij lopende stappen" },
   "core/lib/portaalcontext.ts::profielen": { klassen: ["modelcontext"], doel: "namen bij eigenaarschap en inbreng" },
+  "core/lib/agendapunt-documenten.ts::document_agendapunten": { klassen: ["configuratie"], doel: "server-side scopebepaling: welke opaque documentrefs actueel aan het agendapunt zijn gekoppeld; geen prompt- of documentinhoud" },
+  "core/lib/agendapunt-documenten.ts::documenten": { klassen: ["configuratie"], doel: "actieve documentrefs voor de retrievalscope en onbetrouwbare UI-labels; vertrouwde titels en inhoud lopen daarna via de typed modelcontext- en evidencegrenzen" },
   "core/lib/profielsturing.ts::profielen": { klassen: ["modelcontext"], doel: "bestuurlijke rol, antwoordvoorkeur en detailniveau sturen het antwoord" },
   "core/lib/profielsturing.ts::profiel_expertises": { klassen: ["modelcontext"], doel: "expertiseprofiel van de bestuurder" },
   "core/lib/profielsturing.ts::profiel_gremia": { klassen: ["modelcontext"], doel: "gremia van de bestuurder" },

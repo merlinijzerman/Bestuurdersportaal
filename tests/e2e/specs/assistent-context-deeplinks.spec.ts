@@ -28,7 +28,7 @@ test.describe("Assistent — client-side context-deeplinks", () => {
 
     await page.goto(`${FONDS_A}/ai?agendapunt=${context.agendapunt.id}`);
     await expect(
-      page.getByText(`Agendapunt: «${context.agendapunt.titel}» · geen stukken`, {
+      page.getByText(`Agendapunt: «${context.agendapunt.titel}» · 1 stuk`, {
         exact: true,
       }),
     ).toBeVisible();
@@ -54,13 +54,14 @@ test.describe("Assistent — client-side context-deeplinks", () => {
     await expect(herkomstChip).toContainText("uw fonds");
 
     // Het origineel voerde doc en agendapunt onafhankelijk en in deze volgorde
-    // uit. Het agendapunt zonder stukken overschrijft dus de eerdere docscope.
+    // uit. De agendapuntcontext (hier met uitsluitend een secundair gekoppeld
+    // stuk) overschrijft dus de eerdere docscope.
     // Dit is het randgeval dat de eerste P1a-resolver abusievelijk omdraaide.
     await page.goto(
       `${FONDS_A}/ai?doc=${document.id}&agendapunt=${context.agendapunt.id}`,
     );
     await expect(
-      page.getByText(`Agendapunt: «${context.agendapunt.titel}» · geen stukken`, {
+      page.getByText(`Agendapunt: «${context.agendapunt.titel}» · 1 stuk`, {
         exact: true,
       }),
     ).toBeVisible();

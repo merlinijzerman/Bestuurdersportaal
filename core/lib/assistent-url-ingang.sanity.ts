@@ -153,10 +153,12 @@ function maakLezer(perTabel: Record<string, unknown>) {
       const data = perTabel[tabel] ?? null;
       const bouwer = {
         eq: () => bouwer,
+        in: () => bouwer,
         order: () => bouwer,
+        abortSignal: () => bouwer,
         maybeSingle: () => Promise.resolve({ data }),
-        then: (op: (w: { data: unknown }) => unknown) =>
-          Promise.resolve({ data }).then(op),
+        then: (op: (w: { data: unknown; error: null }) => unknown) =>
+          Promise.resolve({ data, error: null }).then(op),
       };
       return { select: () => bouwer as never };
     },
@@ -205,8 +207,8 @@ checkAsync("?agendapunt= zet de framing én de gekoppelde stukken", async () => 
   const { lezer } = maakLezer({
     agendapunten: { id: "a1", titel: "Vaststellen jaarrekening" },
     documenten: [
-      { id: "s1", titel: "Jaarrekening" },
-      { id: "s2", titel: null },
+      { id: "s1", titel: "Jaarrekening", agendapunt_id: "a1", actief: true },
+      { id: "s2", titel: null, agendapunt_id: "a1", actief: true },
       { id: null, titel: "kapot" },
     ],
   });
@@ -290,7 +292,9 @@ checkAsync("twee ingangen worden samengevoegd; de latere overschrijft", async ()
   // Zoals de losse blokken deden: ?doc= zet de documentscope, en de
   // agendapunt-tak overschrijft die daarna met de stukken van het agendapunt.
   const { lezer } = maakLezer({
-    documenten: [{ id: "s1", titel: "Stuk van het agendapunt" }],
+    documenten: [
+      { id: "s1", titel: "Stuk van het agendapunt", agendapunt_id: "a1", actief: true },
+    ],
     agendapunten: { id: "a1", titel: "Jaarrekening" },
   });
   const uit = await resolveerAssistentContext(lezer, [
