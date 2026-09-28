@@ -52,6 +52,7 @@ export interface GatewayLogRegel {
   tokens_out: number;
   tokens_cache_lezen: number;
   tokens_cache_creatie: number;
+  tokens_thinking: number | null;
   tokens_totaal: number;
   correlatie_id: string;
   actie_id: string | null;

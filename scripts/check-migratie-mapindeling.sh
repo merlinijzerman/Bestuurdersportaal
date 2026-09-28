@@ -17,14 +17,30 @@
 #
 #  De invariant zit nu in de mapstructuur; deze check bewaakt dat het zo blijft.
 #
-#  NOG NIET afgedwongen: de 14-cijferige bestandsnaamconventie. De hernummering
-#  is bewust uitgesteld (raakt 111 documenten en 128 bestandsnamen) en is pas
-#  nodig zodra de CLI-ledger in gebruik wordt genomen. Zie fase 1.5 en 3.
+#  Zolang de eigen baseline-runner leidend is, moet elke migratie de bestaande
+#  `YYYY_MM_DD...`-vorm houden. Een losse CLI-timestamp (`YYYYMMDDhhmmss`) sorteert
+#  vóór de baselinecutoff en wordt daardoor stil overgeslagen. De volledige
+#  hernummering naar CLI-ledgernamen blijft uitgesteld tot fase 1.5 en 3.
 # ============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 fout=0
+
+# Voorkom een gemengde naamruimte: de replay in testdb-apply-migrations.sh
+# vergelijkt bestandsnamen met een YYYY_MM_DD-cutoff. Een door `supabase
+# migration new` gemaakte 14-cijferige naam zou daardoor niet worden toegepast,
+# terwijl bijbehorende checks wel draaien.
+onreplaybaar="$(find supabase/migrations -maxdepth 1 -name '*.sql' -print \
+  | sed 's#supabase/migrations/##' \
+  | grep -Ev '^20[0-9]{2}_[0-9]{2}_[0-9]{2}[a-z]*_.+\.sql$' \
+  | LC_ALL=C sort || true)"
+if [ -n "$onreplaybaar" ]; then
+  echo "FOUT: migratiebestanden passen niet in de YYYY_MM_DD-replayvolgorde:" >&2
+  echo "$onreplaybaar" | sed 's/^/  supabase\/migrations\//' >&2
+  echo "Gebruik de bestaande repo-conventie zolang de CLI-ledger niet leidend is." >&2
+  fout=1
+fi
 
 ongeldig="$(find supabase/migrations -maxdepth 1 -name '*.sql' \
   \( -name '*ROLLBACK*' -o -name '*seed*' \) | LC_ALL=C sort)"

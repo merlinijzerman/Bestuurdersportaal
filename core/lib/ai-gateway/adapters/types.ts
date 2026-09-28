@@ -9,10 +9,12 @@
 
 import type {
   Bericht,
+  EffortNiveau,
   NeutraleTool,
   Provider,
   ReasoningEffort,
   StopReden,
+  StopDetailsCategorie,
   TekstBlok,
   Usage,
 } from "../contract";
@@ -25,6 +27,7 @@ export interface AdapterVerzoek {
   maxTokens: number;
   temperature?: number | null;
   topP?: number | null;
+  effort?: EffortNiveau | null;
   tools?: NeutraleTool[];
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -37,6 +40,7 @@ export interface AdapterResultaat {
   tekst: string;
   inhoud: unknown[];
   stopReden: StopReden;
+  stopDetailsCategorie: StopDetailsCategorie | null;
   usage: Usage;
   latencyMs: number;
 }
@@ -57,12 +61,25 @@ export function legeUsage(): Usage {
   return { in: 0, out: 0, cacheLezen: 0, cacheCreatie: 0, totaal: 0 };
 }
 
-export function maakUsage(v: { in?: number; out?: number; cacheLezen?: number; cacheCreatie?: number }): Usage {
+export function maakUsage(v: {
+  in?: number;
+  out?: number;
+  cacheLezen?: number;
+  cacheCreatie?: number;
+  thinking?: number;
+}): Usage {
   const inn = v.in ?? 0;
   const out = v.out ?? 0;
   const cacheLezen = v.cacheLezen ?? 0;
   const cacheCreatie = v.cacheCreatie ?? 0;
-  return { in: inn, out, cacheLezen, cacheCreatie, totaal: inn + cacheLezen + cacheCreatie + out };
+  return {
+    in: inn,
+    out,
+    cacheLezen,
+    cacheCreatie,
+    ...(typeof v.thinking === "number" ? { thinking: v.thinking } : {}),
+    totaal: inn + cacheLezen + cacheCreatie + out,
+  };
 }
 
 /** Vouwt string of blokken tot één system-string (OpenAI/Mistral chat-completions). */

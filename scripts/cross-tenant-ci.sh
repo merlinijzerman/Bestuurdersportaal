@@ -191,6 +191,9 @@ SQL_M365F1="supabase/checks/2026_09_04_microsoft_fase1_connectorfundament.sql"
 # #311 T2 — AI-gateway: privaat schema, minimale rol ai_gateway (exact 3 executes,
 # nul tabelrechten), profiel-eigenaarschap, backfill ×4, fail-closed fondstrigger.
 SQL_AIGW="supabase/checks/2026_09_04_ai_gateway.sql"
+# #438 PR1 — nieuwe stopredenen en afzonderlijke thinking-tokenobservability;
+# schrijft alleen transactionele testregels via de minimale ai_gateway-rol.
+SQL_AIGW55="supabase/checks/2026_09_27_ai_gateway_opus_5_5_contract.sql"
 # #322 PR-C — de toelatingssamenvatting (en `gateway`) overleven beide
 # leesniveaus van het auditspoor, met de tellingen intact.
 SQL_TOELATING="supabase/checks/2026_09_11_toelating_auditprojectie.sql"
@@ -476,6 +479,9 @@ TEST_DATABASE_URL="$DB_URL" node scripts/breakglass-directe-refresh.mjs
 echo
 echo "-- AI-gateway T2 (#311): privaat schema, rol ai_gateway, profiel-eigenaarschap, backfill, fondstrigger --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
+echo
+echo "-- #438 PR1 (Opus 5.5/Sonnet 5 gatewaycontract) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW55"
 echo
 
 echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van het auditspoor --"
