@@ -228,7 +228,13 @@ export function createAiProviderStub({
       // verplichte functietool kiest, levert de stub een geldig tool_use-blok.
       // Alle bestaande non-stream tests zonder tool_choice houden exact hun
       // historische tekstrespons.
-      const toolNaam = body?.tool_choice?.type === "tool" ? body.tool_choice.name : null;
+      const explicieteToolNaam = body?.tool_choice?.type === "tool" ? body.tool_choice.name : null;
+      const automatischeVergelijkTool = body?.tool_choice?.type === "auto"
+        && Array.isArray(body.tools)
+        && body.tools.some((tool) => tool?.name === "vergelijk_dimensie")
+        ? "vergelijk_dimensie"
+        : null;
+      const toolNaam = explicieteToolNaam ?? automatischeVergelijkTool;
       if (toolNaam === "stel_dimensies_voor") {
         return json(res, 200, {
           id: "msg_wp4_vergelijk_dimensies",

@@ -68,6 +68,13 @@ De vergelijkingscall is volledig in scope. `vergelijk_dimensies` en `vergelijk_w
 
 ## Vervolgtranches
 
-1. Allowlist/configuratie uitsluitend in Preview, gevolgd door AQLab-baseline/challenger en route-smokes — inclusief documentvergelijking en controle van effort/cachemetingen.
-2. Directe PDF-/beeldinput als aparte proef met visuele paginaselectie en meetset voor tabellen/grafieken.
-3. Productie-go/no-go op kwaliteit, refusal-rate, tool-retry/fail-closed, latency, tokens/kosten en cache-hitratio.
+1. PR3 activeert uitsluitend de Preview-canary `m365-demo`: Opus 5.5 voor generatie
+   (inclusief `vergelijk_waarde`), Sonnet 5 voor sterke hulp en concept, Haiku 4.5
+   ongewijzigd voor snelle hulp. De overige Preview-fondsen en Productie blijven 4.x.
+2. Route-smokes omvatten chat, **Grondige analyse**, documentvergelijking en controle
+   van model, effort, thinking-tokens, cachemetingen, stopreden en toolherstel in het
+   inhoudsvrije gatewaylog.
+3. Directe PDF-/beeldinput blijft een aparte proef met visuele paginaselectie en
+   meetset voor tabellen/grafieken.
+4. Productie-go/no-go volgt pas op kwaliteit, refusal-rate, tool-retry/fail-closed,
+   latency, tokens/kosten en cache-hitratio.

@@ -48,6 +48,24 @@ Naast de modelwissel zijn drie optimalisaties relevant, maar niet allemaal tegel
 - De Preview-canary/modelactivatie en directe PDF-/beeldanalyse blijven afzonderlijke
   vervolgtranches.
 
+## PR3 — Preview-canary
+
+- De generieke migratie voegt Opus 5.5 en Sonnet 5 toe aan de centrale allowlist en
+  zet de defaults voor uitsluitend nieuw aangemaakte fondsen. Bestaande fondsen worden
+  niet door de migratie omgezet.
+- De daadwerkelijke activatie is een omgevingsspecifieke, fail-closed Preview-seed:
+  alleen het synthetische fonds `m365-demo` gaat naar Opus 5.5 voor `generatie` en
+  Sonnet 5 voor `hulp_sterk` en `concept`; `hulp_snel` blijft Haiku 4.5. De seed
+  weigert een database met een productiehost.
+- De overige Preview-fondsen blijven tijdens deze canary op Claude 4.x. Productie
+  blijft buiten scope en vereist een apart go/no-go.
+- De generatiebaseline en de waardecall van documentvergelijking krijgen 32k
+  `max_tokens`; concepttaken krijgen 16k en sterke hulptaken 4k. Deze plafonds geven
+  adaptive thinking ruimte zonder de zichtbare outputvorm te verruimen: parsers,
+  schema's en lengtecontroles blijven leidend.
+- AQLab krijgt Opus 5.5 als baseline, Sonnet 5 als challenger en de 4.x-modellen als
+  expliciete rollback-/regressievarianten. De judge blijft Opus 4.8.
+
 ## Referenties
 
 - [Migrating to Claude Opus 5.5](https://platform.claude.com/docs/en/about-claude/models/migrating-to-claude-opus-5-5)

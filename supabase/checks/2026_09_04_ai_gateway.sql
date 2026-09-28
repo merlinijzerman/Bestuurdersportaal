@@ -280,7 +280,7 @@ declare v jsonb;
 begin
   set local role ai_gateway;
   v := ai_gateway_private.lees_config('a2222222-2222-2222-2222-2222222222a2', 'generatie');
-  if (v->>'ok')::boolean is not true or v->>'model' <> 'claude-opus-4-8' or v->>'secret_ref' <> 'ANTHROPIC_API_KEY'
+  if (v->>'ok')::boolean is not true or v->>'model' <> 'claude-opus-5-5' or v->>'secret_ref' <> 'ANTHROPIC_API_KEY'
      or v->>'profiel_id' <> 'platform-anthropic' or (v->>'versie')::int <> 1 then
     raise exception 'FAALT #2e: normale resolutie levert onverwacht resultaat: %', v;
   end if;
