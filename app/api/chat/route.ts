@@ -2350,6 +2350,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // Kandidaat-documenten binnen het eigen fonds (RLS scoping).
       const docRijen = await leesModelcontext({
         context: evidenceContext, soort: "documentlabels", scope: { fondsId }, maxItems: 5000,
+        // Vergelijking is juist bedoeld voor versies: historische, nog actieve
+        // labels mogen worden gekoppeld. De inhoud blijft via de evidencegrens
+        // en de expliciete document-scope lopen.
+        levenscyclusbeleid: "vergelijkbare_versies",
         lees: async (signal) => {
           const { data, error } = await supabase.from("documenten")
             .select("id, fonds_id, bibliotheek, titel, status, actief, geldig_vanaf, geldig_tot")

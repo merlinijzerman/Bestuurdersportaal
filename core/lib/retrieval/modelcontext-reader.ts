@@ -26,6 +26,11 @@ const NIET_ACTUELE_STATUSSEN = new Set<string>([
   "inactief", "gesloten", "afgerond", "ingetrokken", "gearchiveerd", "historisch",
   "vervallen", "geannuleerd", "afgekeurd", "mislukt",
 ]);
+const VERGELIJKBARE_HISTORISCHE_STATUSSEN = new Set<string>([
+  "ingetrokken", "gearchiveerd", "historisch", "vervallen",
+]);
+
+export type ModelcontextLevenscyclusbeleid = "actueel" | "vergelijkbare_versies";
 
 export interface ModelcontextScope {
   fondsId: string;
@@ -205,7 +210,11 @@ export async function voerDuurzameSchrijfBinnenDeadlineUit<T>(
   return await schrijf();
 }
 
-function isActueel(geldigheid: ModelcontextGeldigheid, peildatum: string): boolean {
+function isToegestaanVolgensLevenscyclus(
+  geldigheid: ModelcontextGeldigheid,
+  peildatum: string,
+  beleid: ModelcontextLevenscyclusbeleid
+): boolean {
   switch (geldigheid.soort) {
     case "niet_van_toepassing":
       return true;
@@ -214,6 +223,15 @@ function isActueel(geldigheid: ModelcontextGeldigheid, peildatum: string): boole
       if (geldigheid.actief === false) return false;
       if (geldigheid.geldigVanaf && !/^\d{4}-\d{2}-\d{2}$/.test(geldigheid.geldigVanaf)) return false;
       if (geldigheid.geldigTot && !/^\d{4}-\d{2}-\d{2}$/.test(geldigheid.geldigTot)) return false;
+      // Een expliciete versievergelijking moet een benoembare historische
+      // voorganger kunnen vinden. Deze uitzondering geldt uitsluitend voor
+      // documentlabels (afgedwongen in leesModelcontext), nooit voor inhoud.
+      // Inactieve rijen en onbekende/misvormde lifecyclemetadata blijven dicht.
+      if (
+        beleid === "vergelijkbare_versies" &&
+        geldigheid.status !== null &&
+        VERGELIJKBARE_HISTORISCHE_STATUSSEN.has(geldigheid.status)
+      ) return true;
       if (geldigheid.geldigVanaf && geldigheid.geldigVanaf > peildatum) return false;
       if (geldigheid.geldigTot && geldigheid.geldigTot < peildatum) return false;
       if (geldigheid.status && NIET_ACTUELE_STATUSSEN.has(geldigheid.status)) return false;
@@ -229,10 +247,16 @@ export async function leesModelcontext<T>(opdracht: {
   soort: ModelcontextLezingSoort;
   scope: ModelcontextScope;
   maxItems: number;
+  levenscyclusbeleid?: ModelcontextLevenscyclusbeleid;
   lees: (signal: AbortSignal) => PromiseLike<ModelcontextProviderResult<T>>;
 }): Promise<T[]> {
   const { context, scope } = opdracht;
   if (!MODELCONTEXT_LEZING_SOORTEN.has(opdracht.soort)) throw new ModelcontextWeigering("providerfout");
+  const levenscyclusbeleid = opdracht.levenscyclusbeleid ?? "actueel";
+  if (
+    !["actueel", "vergelijkbare_versies"].includes(levenscyclusbeleid) ||
+    (levenscyclusbeleid === "vergelijkbare_versies" && opdracht.soort !== "documentlabels")
+  ) throw new ModelcontextWeigering("providerfout");
   if (!Array.isArray(context.bronbeleid.bronsoorten)
     || context.bronbeleid.bronsoorten.some((soort) => !BRONSOORTEN.has(soort))) {
     throw new ModelcontextWeigering("providerfout");
@@ -283,7 +307,9 @@ export async function leesModelcontext<T>(opdracht: {
     // server-afgeleide selector. Een lege selector is geen fondsbrede wildcard.
     if (refs.size > 0 && rij.privateRef == null) throw new ModelcontextWeigering("buiten_scope");
     if (rij.privateRef != null && !refs.has(rij.privateRef)) throw new ModelcontextWeigering("buiten_scope");
-    if (!isActueel(rij.geldigheid, peildatum)) throw new ModelcontextWeigering("niet_actueel");
+    if (!isToegestaanVolgensLevenscyclus(rij.geldigheid, peildatum, levenscyclusbeleid)) {
+      throw new ModelcontextWeigering("niet_actueel");
+    }
   }
   return rows.map((rij) => rij.waarde);
 }
