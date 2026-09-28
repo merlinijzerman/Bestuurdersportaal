@@ -142,6 +142,7 @@ test("Opus 5.5 probeert een ontbrekende verplichte tool precies eenmaal opnieuw"
   const resultaat = await adapter.genereer(verzoek(), { apiKey: "test" });
   assert.equal(calls.length, 2);
   assert.equal(resultaat.stopReden, "tool");
+  assert.equal(resultaat.effort, "high");
   assert.match(JSON.stringify(calls[1]), /HERSTELINSTRUCTIE/);
 });
 
@@ -199,6 +200,7 @@ test("weigering en thinking-tokens worden inhoudsarm genormaliseerd", async () =
   const resultaat = await adapter.genereer(verzoek(), { apiKey: "test" });
   assert.equal(resultaat.stopReden, "weigering");
   assert.equal(resultaat.stopDetailsCategorie, "general_harms");
+  assert.equal(resultaat.effort, "high");
   assert.equal(resultaat.usage.thinking, 6);
   assert.equal(resultaat.usage.totaal, 24);
   assert.equal(calls, 1, "een expliciete weigering wordt niet met een toolretry omzeild");

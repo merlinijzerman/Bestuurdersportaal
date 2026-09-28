@@ -328,13 +328,12 @@ test("feitelijke modus eindigt exact op TOON_BLOK (regels + \\n\\n + toon)", () 
   assert.equal(statisch, `${SP_COMBINEREN_REGELS}\n\n${TOON_BLOK}`);
 });
 
-test("bouwSysteemBlokken: 2 blokken, statisch gecachet (ephemeral) + dynamisch ongecachet", () => {
+test("bouwSysteemBlokken: statische instructies en sessiecontext hebben elk een cache van één uur", () => {
   const blokken = bouwSysteemBlokken(SP_COMBINEREN_REGELS, CTX, "feitelijk");
   assert.equal(blokken.length, 2);
   assert.equal(blokken[0].type, "text");
-  assert.deepEqual(blokken[0].cache_control, { type: "ephemeral" });
-  // Het dynamische blok draagt GEEN cache-breakpoint (blijft ongecachet).
-  assert.equal(blokken[1].cache_control, undefined);
+  assert.deepEqual(blokken[0].cache_control, { type: "ephemeral", ttl: "1h" });
+  assert.deepEqual(blokken[1].cache_control, { type: "ephemeral", ttl: "1h" });
   // Statisch blok == de bouwStatischeInstructies-uitvoer.
   assert.equal(blokken[0].text, bouwStatischeInstructies(SP_COMBINEREN_REGELS, "feitelijk"));
   assert.equal(sha(blokken[1].text), PIN.dyn_block);

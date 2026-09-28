@@ -10,7 +10,7 @@
 
 import type { Credentials } from "../secrets";
 import { GatewayFout } from "../fout";
-import { maakUsage, systeemNaarTekst, type AdapterResultaat, type AdapterVerzoek, type ProviderAdapter } from "./types";
+import { berichtNaarTekst, maakUsage, systeemNaarTekst, type AdapterResultaat, type AdapterVerzoek, type ProviderAdapter } from "./types";
 
 export const MISTRAL_STANDAARD_CHAT_URL = "https://api.mistral.ai/v1/chat/completions";
 const MAX_RETRIES = 2;
@@ -46,7 +46,10 @@ export function maakMistralAdapter(deps?: { fetchImpl?: typeof fetch }): Provide
       const body = {
         model: v.model,
         max_tokens: v.maxTokens,
-        messages: [{ role: "system" as const, content: systeemNaarTekst(v.systeem) }, ...v.berichten],
+        messages: [
+          { role: "system" as const, content: systeemNaarTekst(v.systeem) },
+          ...v.berichten.map((bericht) => ({ ...bericht, content: berichtNaarTekst(bericht.content) })),
+        ],
         ...(typeof v.temperature === "number" ? { temperature: v.temperature } : {}),
         ...(typeof v.topP === "number" ? { top_p: v.topP } : {}),
       };
@@ -68,6 +71,7 @@ export function maakMistralAdapter(deps?: { fetchImpl?: typeof fetch }): Provide
             inhoud: [{ type: "text", text: tekst }],
             stopReden: finish === "length" ? "max_tokens" : finish === "stop" ? "einde" : "onbekend",
             stopDetailsCategorie: null,
+            effort: null,
             usage: maakUsage({ in: data.usage?.prompt_tokens ?? 0, out: data.usage?.completion_tokens ?? 0 }),
             latencyMs: Date.now() - start,
           };

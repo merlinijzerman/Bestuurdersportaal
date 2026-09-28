@@ -328,6 +328,7 @@ async function haalExtraDimensies(
 
     const resp = await gw.gateway.genereer(gw.ctx, {
       taaktype: "vergelijk_dimensies",
+      effort: "low",
       maxTokens: 512,
       temperature: 0,
       signal: retrieval.context.signal,
@@ -403,6 +404,7 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
   try {
     const resp = await gw.gateway.genereer(gw.ctx, {
       taaktype: "vergelijk_waarde",
+      effort: "medium",
       maxTokens: 700,
       // Opus 4.7+ weigert niet-standaard samplingparameters met HTTP 400.
       // De verplichte functietool en de strikte prompt begrenzen de uitvoer;

@@ -41,6 +41,8 @@ export interface AdapterResultaat {
   inhoud: unknown[];
   stopReden: StopReden;
   stopDetailsCategorie: StopDetailsCategorie | null;
+  /** Werkelijk toegepast provider-effort; null als dit model het niet ondersteunt. */
+  effort: EffortNiveau | null;
   usage: Usage;
   latencyMs: number;
 }
@@ -89,4 +91,10 @@ export function systeemNaarTekst(systeem: string | TekstBlok[]): string {
     .map((b) => (typeof b.text === "string" ? b.text : ""))
     .filter((t) => t.length > 0)
     .join("\n\n");
+}
+
+/** Vouwt providerneutrale tekstblokken terug voor providers zonder block-API. */
+export function berichtNaarTekst(content: Bericht["content"]): string {
+  if (typeof content === "string") return content;
+  return content.map((blok) => blok.text).join("\n\n");
 }
