@@ -61,7 +61,8 @@ De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afger
 2. **Preview-DB (`portal_preview`)**: eerst de controlequery uit de migratie (moet 0 zijn), dan de migratie `2026_09_23_wetsgeschiedenis_a_light_foundation.sql`.
 3. Tegen Preview: `supabase/checks/2026_07_31_r1_structurele_gates.sql` en de V3-grants-gate. Er is geen nieuw object en geen grantwijziging, dus de allowlist hoeft niet te veranderen. Controleer dat.
 4. Pas daarna: merge van de PR naar `preview` → Preview-deploy. De UI biedt de nieuwe waarden aan; zonder migratie falen de select en de insert.
-5. Productie alleen via de reguliere promotie (akkoord opdrachtgever) en in dezelfde volgorde: eerst de migratie op `portal_production`, dan de code.
+5. **Geen documentupload, vervanging of import op Preview.** De Preview-antivirusscanner werkt niet en valt bewust buiten deze opdracht. De Preview-smoke blijft daarom beperkt tot schema, rechten, bestaande data en de weergave/validatie van metadata; de upload- en ingestketen wordt daar niet beproefd.
+6. Productie alleen via de reguliere promotie (akkoord opdrachtgever) en in dezelfde volgorde: eerst de migratie op `portal_production`, dan de code. De documentimport gebeurt pas daarna op Productie, waar de scanner werkt: eerst een canary van twee representatieve documenten, controle op scan, extractie, chunking, metadata en vindbaarheid, en pas dan de rest van de batch.
 
 Rollback: eerst juridische documenten herclassificeren of verwijderen via de curatie, dan het rollbackscript. Het script weigert anders.
 
@@ -81,7 +82,7 @@ Rollback: eerst juridische documenten herclassificeren of verwijderen via de cur
 | `scripts/check-migratie-mapindeling.sh` | OK |
 | Negatieve controle, idempotentie, rollback | groen, zie §4a |
 
-Niet uitgevoerd: een live smoke tegen Preview, Productie, Microsoft of SharePoint (bewust). Ook geen visuele browsercontrole van de curatie-UI, omdat het platformpad een platform-identiteit met MFA vereist. Dit is een open punt voor de Preview-ronde.
+Niet uitgevoerd: een live smoke tegen Preview, Productie, Microsoft of SharePoint (bewust). Ook geen visuele browsercontrole van de curatie-UI, omdat het platformpad een platform-identiteit met MFA vereist. In de Preview-ronde wordt bewust geen document geüpload of geïmporteerd; zie §3. De visuele controle beperkt zich daar tot de metadata-UI.
 
 ### 4a. Volledige suite, negatieve controle en idempotentie
 

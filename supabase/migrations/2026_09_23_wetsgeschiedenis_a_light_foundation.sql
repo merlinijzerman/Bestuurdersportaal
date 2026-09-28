@@ -115,6 +115,74 @@ alter table public.documenten add  constraint documenten_wetsgeschiedenis_combin
     end
   );
 
+-- ── 5. Fail-closed eindcontrole binnen dezelfde transactie ──────────────────
+do $$
+declare
+  ontbreekt text := '';
+  n_ongeldig integer;
+begin
+  if not exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'documenten'
+       and column_name = 'wetsgeschiedenis_subtype'
+       and data_type = 'text'
+       and is_nullable = 'YES'
+  ) then
+    ontbreekt := ontbreekt || ' documenten.wetsgeschiedenis_subtype';
+  end if;
+
+  if not exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'documenten'
+       and column_name = 'dossiernummer'
+       and data_type = 'text'
+       and is_nullable = 'YES'
+  ) then
+    ontbreekt := ontbreekt || ' documenten.dossiernummer';
+  end if;
+
+  if (
+    select count(*)
+      from pg_constraint
+     where conrelid = 'public.documenten'::regclass
+       and conname in (
+         'documenten_documenttype_check',
+         'documenten_wetsgeschiedenis_subtype_check',
+         'documenten_dossiernummer_check',
+         'documenten_juridisch_generiek_check',
+         'documenten_wetsgeschiedenis_combinatie_check'
+       )
+       and contype = 'c'
+       and convalidated
+  ) <> 5 then
+    ontbreekt := ontbreekt || ' gevalideerde CHECK-constraints';
+  end if;
+
+  select count(*) into n_ongeldig
+    from public.documenten
+   where (documenttype in ('wetgeving', 'wetsgeschiedenis')
+          and coalesce(bibliotheek, '') <> 'generiek')
+      or (documenttype = 'wetsgeschiedenis'
+          and (wetsgeschiedenis_subtype is null
+               or (dossiernummer is null
+                   and wetsgeschiedenis_subtype <> 'nota_van_toelichting')
+               or coalesce(normgewicht, '') <> 'informatief'))
+      or (documenttype is distinct from 'wetsgeschiedenis'
+          and (wetsgeschiedenis_subtype is not null or dossiernummer is not null));
+
+  if ontbreekt <> '' or n_ongeldig <> 0 then
+    raise exception
+      'Wetsgeschiedenis-foundation eindcontrole faalt: ontbreekt=%, ongeldige rijen=%',
+      nullif(btrim(ontbreekt), ''), n_ongeldig;
+  end if;
+
+  raise notice 'Wetsgeschiedenis-foundation OK: kolommen, vijf CHECKs en bestaande data gevalideerd.';
+end $$;
+
 commit;
 
 -- ============================================================================
