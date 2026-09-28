@@ -19,6 +19,7 @@
 
 import assert from "node:assert/strict";
 import {
+  bouwAssistentDeeplink,
   leesAssistentContextUitUrl,
   resolveerAssistentContext,
   type ContextLezer,
@@ -50,7 +51,7 @@ check("zonder parameters is er geen ingang en geen herkomst", () => {
   assert.deepEqual(leesAssistentContextUitUrl("?x=1"), { ingangen: [], herkomst: null });
 });
 
-check("de vier scope-ingangen worden herkend", () => {
+check("de vijf scope-ingangen worden herkend", () => {
   assert.deepEqual(leesAssistentContextUitUrl("?doc=d1").ingangen[0], {
     soort: "document",
     documentId: "d1",
@@ -66,6 +67,43 @@ check("de vier scope-ingangen worden herkend", () => {
   assert.deepEqual(leesAssistentContextUitUrl("?risicomatrix=1").ingangen[0], {
     soort: "risicomatrix",
   });
+  assert.deepEqual(
+    leesAssistentContextUitUrl(
+      "?sharepoint=7D5EF460-162E-4C34-A1BC-287337CBDF09"
+    ).ingangen[0],
+    {
+      soort: "sharepoint",
+      ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+    }
+  );
+});
+
+check("de SharePoint-deeplink bevat alleen de lokale ref en is omkeerbaar", () => {
+  const href = bouwAssistentDeeplink([
+    {
+      soort: "sharepoint",
+      ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+      label: "vertrouwelijk bestuursstuk.docx",
+    },
+  ]);
+  assert.equal(
+    href,
+    "/ai?sharepoint=7d5ef460-162e-4c34-a1bc-287337cbdf09"
+  );
+  assert.ok(!href.includes("vertrouwelijk"));
+  assert.deepEqual(leesAssistentContextUitUrl(href.slice(3)).ingangen, [
+    {
+      soort: "sharepoint",
+      ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+    },
+  ]);
+});
+
+check("een ongeldige SharePoint-ref wordt genegeerd", () => {
+  assert.deepEqual(
+    leesAssistentContextUitUrl("?sharepoint=geen-uuid").ingangen,
+    []
+  );
 });
 
 check("meerdere parameters leveren MEERDERE ingangen, in bronvolgorde", () => {
@@ -172,6 +210,17 @@ checkAsync("zonder ingang wordt er niets opgezocht", async () => {
   assert.deepEqual(gelezen, []);
   assert.equal(uit.startSchoonGesprek, false);
   assert.deepEqual(uit.patch, {}, "zonder ingang wordt geen enkel veld aangeraakt");
+});
+
+checkAsync("SharePoint wordt hier niet uit Supabase opgelost", async () => {
+  const { lezer, gelezen } = maakLezer({});
+  const uit = await resolveerAssistentContext(lezer, [{
+    soort: "sharepoint",
+    ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+  }]);
+  assert.deepEqual(gelezen, []);
+  assert.deepEqual(uit.patch, {});
+  assert.equal(uit.startSchoonGesprek, false);
 });
 
 checkAsync("?doc= zet de documentscope en start een schoon gesprek", async () => {

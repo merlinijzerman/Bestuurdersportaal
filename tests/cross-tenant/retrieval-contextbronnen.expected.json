@@ -1,6 +1,6 @@
 {
   "_doc": "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie PER LEZING (bestand::tabel → een of meer van evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte lezing zonder klasse maakt de gate rood. Padresolutie volgt de tsconfig-alias en echte relatieve paden, inclusief ../ en indexbestanden. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
-  "bereikte_bestanden": 140,
+  "bereikte_bestanden": 163,
   "lezingen_per_klasse": {
     "evidence": [
       "core/lib/rag.ts::document_chunks",
@@ -51,6 +51,8 @@
       "core/lib/fonds-config.ts::fonds_module_manifest",
       "core/lib/fonds-config.ts::fonds_theming",
       "core/lib/fonds-sessie.ts::profielen",
+      "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_feature_flags",
+      "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_integratie_profielen",
       "core/lib/profiel.ts::profielen",
       "core/lib/vergelijk-productie.ts::concepts",
       "core/lib/vergelijk-rollout.ts::fonds_feature_flags",
@@ -100,6 +102,9 @@
       "configuratie"
     ],
     "fonds_feature_flags": [
+      "configuratie"
+    ],
+    "fonds_integratie_profielen": [
       "configuratie"
     ],
     "fonds_module_manifest": [
@@ -212,6 +217,12 @@
     "core/lib/fonds-sessie.ts": {
       "tabellen": [
         "profielen"
+      ]
+    },
+    "core/lib/microsoft-sharepoint-ai-gate.ts": {
+      "tabellen": [
+        "fonds_feature_flags",
+        "fonds_integratie_profielen"
       ]
     },
     "core/lib/organisatieprofiel.ts": {

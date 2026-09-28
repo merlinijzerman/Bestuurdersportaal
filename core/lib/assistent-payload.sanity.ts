@@ -61,6 +61,7 @@ function referentieLiteral(invoer: ChatPayloadInvoer): Record<string, unknown> {
     voorbereidingsstand,
     herkomst,
     documentScope: effScope,
+    sharepointScope,
     antwoordmodus: effAntwoordmodus,
     grondigeAnalyse,
     agendapuntContext,
@@ -82,6 +83,9 @@ function referentieLiteral(invoer: ChatPayloadInvoer): Record<string, unknown> {
           document_ids: effScope.document_ids,
           algemene_kennis: effScope.algemene_kennis === true,
         }
+      : undefined,
+    sharepoint_scope: sharepointScope
+      ? { soort: sharepointScope.soort, refs: sharepointScope.refs }
       : undefined,
     actieve_antwoordmodus: effAntwoordmodus,
     grondige_analyse: grondigeAnalyse,
@@ -145,6 +149,7 @@ const BASIS: ChatPayloadInvoer = {
   voorbereidingsstand: false,
   herkomst: null,
   documentScope: null,
+  sharepointScope: null,
   antwoordmodus: null,
   grondigeAnalyse: false,
   agendapuntContext: null,
@@ -294,6 +299,22 @@ check("document_scope stuurt de ids, niet de titels", () => {
     algemene_kennis: false,
   });
   assert.ok(!JSON.stringify(p).includes("Geheime titel"));
+});
+
+check("sharepoint_scope stuurt alleen de lokale ref, nooit het live label", () => {
+  const p = bouwChatPayload({
+    ...BASIS,
+    sharepointScope: {
+      soort: "document",
+      refs: ["00000000-0000-4000-8000-00000000a365"],
+      labels: ["Vertrouwelijke live naam.docx"],
+    },
+  });
+  assert.deepStrictEqual(p.sharepoint_scope, {
+    soort: "document",
+    refs: ["00000000-0000-4000-8000-00000000a365"],
+  });
+  assert.ok(!JSON.stringify(p).includes("Vertrouwelijke live naam"));
 });
 
 // ── 2. Volledigheid: het vangnet tegen verschraling ─────────────────────────

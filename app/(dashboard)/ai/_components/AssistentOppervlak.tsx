@@ -154,6 +154,8 @@ export default function AssistentOppervlak() {
   const {
     documentScope,
     zetDocumentScope,
+    sharepointScope,
+    zetSharepointScope,
     agendapuntContext,
     zetAgendapuntContext,
     moduleScope,
@@ -305,6 +307,7 @@ export default function AssistentOppervlak() {
   function scopeUitDocumentlijst(documentIds: string[], titels: string[]) {
     if (laden || documentIds.length === 0) return;
     zetAgendapuntContext(null);
+    zetSharepointScope(null);
     zetDocumentScope({ document_ids: documentIds, titels, algemene_kennis: true });
     focusInvoer();
   }
@@ -347,6 +350,7 @@ export default function AssistentOppervlak() {
     // Een expliciete documentkeuze verlaat de agendapunt-modus (ADR 0028): de
     // gebruiker stuurt nu zelf op één stuk i.p.v. de agendapunt-framing.
     zetAgendapuntContext(null);
+    zetSharepointScope(null);
     zetDocumentScope({ document_ids: [s.id], titels: [s.titel] });
     setInvoer((huidig) => huidig.replace(/@([^\s@]*)$/, "").trimEnd());
     sluitMention();
@@ -379,6 +383,7 @@ export default function AssistentOppervlak() {
     !scherpstelActief &&
     berichten.length <= 1 &&
     !documentScope &&
+    !sharepointScope &&
     !agendapuntContext &&
     // Besluit 0151 — bij een actieve module-scope tonen we direct het chatvenster
     // (met scope-chip), niet het generieke startpunt.
@@ -1497,6 +1502,27 @@ export default function AssistentOppervlak() {
         )}
 
         {/* Scope-chip: "Je vraagt nu over: «titel»" + wis-knop + algemene-kennis-toggle */}
+        {sharepointScope && (
+          <div className="mb-2 flex items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-2 max-w-full bg-accent-tint border border-accent/30 text-accent-ink text-xs rounded-full pl-3 pr-2 py-1">
+              <span className="truncate">
+                SharePoint-document: «{sharepointScope.labels[0] || "dit document"}»
+              </span>
+              <button
+                onClick={() => zetSharepointScope(null)}
+                className="shrink-0 w-4 h-4 rounded-full bg-accent hover:bg-accent text-accent-ink flex items-center justify-center"
+                aria-label="SharePoint-context wissen"
+                title="Onderwerp wissen — weer fondsbreed vragen"
+              >
+                <Icoon sleutel="sluiten" grootte={10} streek={2.2} />
+              </button>
+            </span>
+            <span className="text-xs text-muted">
+              Live gelezen met uw eigen Microsoft-rechten
+            </span>
+          </div>
+        )}
+
         {!agendapuntContext && documentScope && (
           <div className="mb-2 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-2 max-w-full bg-warn-tint border border-warn/30 text-warn-ink text-xs rounded-full pl-3 pr-2 py-1">
@@ -1574,7 +1600,9 @@ export default function AssistentOppervlak() {
               }
             }}
             placeholder={
-              documentScope
+              sharepointScope
+                ? "Stel een vraag over dit SharePoint-document..."
+                : documentScope
                 ? "Stel een vraag over dit document... (@ om te wisselen)"
                 : "Stel een vraag... (@ om een specifiek document te kiezen)"
             }

@@ -48,6 +48,7 @@ import type {
   AgendapuntContext,
   DocumentScope,
   ModuleScope,
+  SharePointScope,
 } from "@/core/lib/assistent-types";
 import type { Herkomst } from "@/core/lib/assistent-payload";
 import {
@@ -59,6 +60,7 @@ import {
 /** Welke deeplink-ingang de URL aanwijst (nog niet opgezocht in de database). */
 export type AssistentUrlIngang =
   | { soort: "document"; documentId: string }
+  | { soort: "sharepoint"; ref: string; label?: string }
   | { soort: "agendapunt"; agendapuntId: string }
   | { soort: "proces"; procedureId: string }
   | { soort: "risicomatrix" };
@@ -86,6 +88,7 @@ export interface AssistentContextPatch {
   documentScope?: DocumentScope | null;
   agendapuntContext?: AgendapuntContext | null;
   moduleScope?: ModuleScope | null;
+  sharepointScope?: SharePointScope | null;
   risicoLijst?: { id: string; titel: string }[];
 }
 
@@ -105,6 +108,7 @@ export interface AssistentUrlContext {
  * als label in de UI. Daarom een sobere vorm en nooit vrije tekst uit de URL.
  */
 const HERKOMST_SLUG = /^[a-z0-9-]{1,40}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Leest de querystring. PUUR: geen `window`, geen database — geef de zoekstring
@@ -114,12 +118,16 @@ export function leesAssistentContextUitUrl(zoekstring: string): AssistentUrlVerz
   const params = new URLSearchParams(zoekstring);
 
   const doc = params.get("doc");
+  const sharepoint = params.get("sharepoint");
   const agendapunt = params.get("agendapunt");
   const proces = params.get("proces");
   const risicomatrix = params.get("risicomatrix");
 
   const ingangen: AssistentUrlIngang[] = [];
   if (doc) ingangen.push({ soort: "document", documentId: doc });
+  if (sharepoint && UUID.test(sharepoint)) {
+    ingangen.push({ soort: "sharepoint", ref: sharepoint.toLowerCase() });
+  }
   if (agendapunt) ingangen.push({ soort: "agendapunt", agendapuntId: agendapunt });
   // Deze twee stonden in het origineel in één blok als if/else if.
   if (proces) ingangen.push({ soort: "proces", procedureId: proces });
@@ -158,6 +166,7 @@ export function bouwAssistentDeeplink(ingangen: AssistentUrlIngang[]): string {
   const params = new URLSearchParams();
   for (const ingang of ingangen) {
     if (ingang.soort === "document") params.set("doc", ingang.documentId);
+    else if (ingang.soort === "sharepoint") params.set("sharepoint", ingang.ref);
     else if (ingang.soort === "agendapunt") params.set("agendapunt", ingang.agendapuntId);
     else if (ingang.soort === "proces") params.set("proces", ingang.procedureId);
     else params.set("risicomatrix", "1");
@@ -225,6 +234,7 @@ async function resolveerEen(
       if (!d?.id || d.actief === false) return LEEG;
       return {
         patch: {
+          sharepointScope: null,
           documentScope: {
             document_ids: [d.id],
             titels: [d.titel || "dit document"],
@@ -233,6 +243,10 @@ async function resolveerEen(
         startSchoonGesprek: true,
       };
     }
+
+    // SharePoint wordt door de browser tegen de live documentenroute opgelost:
+    // deze Supabase-resolver bezit bewust geen Microsoft-token of vault-toegang.
+    if (ingang.soort === "sharepoint") return LEEG;
 
     if (ingang.soort === "agendapunt") {
       const { data } = await lezer
@@ -247,6 +261,7 @@ async function resolveerEen(
       const geldig = await haalAgendapuntDocumenten(lezer, ap.id);
       return {
         patch: {
+          sharepointScope: null,
           agendapuntContext: { id: ap.id, titel: ap.titel || "dit agendapunt" },
           // De toelichting zelf wordt server-side per beurt opgehaald; de
           // client-titel wordt niet vertrouwd voor de promptinhoud (ADR 0028).
@@ -272,6 +287,7 @@ async function resolveerEen(
       if (!p?.id) return LEEG;
       return {
         patch: {
+          sharepointScope: null,
           // Alleen de sleutel + een label voor de chip; de server resolveert de
           // inhoud onder RLS en vertrouwt de client-titel niet (besluit 0151).
           moduleScope: {
@@ -309,6 +325,7 @@ async function resolveerEen(
     }
     return {
       patch: {
+        sharepointScope: null,
         moduleScope: { soort: "risicomatrix", label: "de risicomatrix" },
         risicoLijst,
       },
