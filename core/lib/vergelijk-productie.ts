@@ -405,7 +405,10 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
     const resp = await gw.gateway.genereer(gw.ctx, {
       taaktype: "vergelijk_waarde",
       effort: "medium",
-      maxTokens: 700,
+      // Adaptive thinking telt mee in max_tokens. Gebruik hetzelfde ruime
+      // generatieplafond als chat zodat de verplichte toolcall niet wordt
+      // verdrongen door reasoning-tokens.
+      maxTokens: 32_000,
       // Opus 4.7+ weigert niet-standaard samplingparameters met HTTP 400.
       // De verplichte functietool en de strikte prompt begrenzen de uitvoer;
       // laat de provider daarom zijn standaardtemperatuur gebruiken.

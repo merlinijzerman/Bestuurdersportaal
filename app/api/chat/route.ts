@@ -1216,7 +1216,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               taaktype: "chat_contextresolutie",
               systeem,
               berichten: [{ role: "user", content: gebruiker }],
-              maxTokens: 220,
+              // Sonnet 5 gebruikt adaptive thinking; thinking valt binnen dit
+              // plafond. De parser blijft het antwoord inhoudelijk begrenzen.
+              maxTokens: 4096,
               temperature: 0,
               timeoutMs: CONTEXTRESOLVER_SDK_TIMEOUT_MS,
               signal: ctrl.signal,

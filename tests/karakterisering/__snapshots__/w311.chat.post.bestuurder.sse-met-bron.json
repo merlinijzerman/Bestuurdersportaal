@@ -144,9 +144,9 @@
   "nawerk": {
     "provider_verzoeken": [
       {
-        "max_tokens": 5000,
+        "max_tokens": 32000,
         "messages_aantal": 1,
-        "model": "claude-opus-4-8",
+        "model": "claude-opus-5-5",
         "prompthash_niet_gekarakteriseerd": "bronkop bevat bron-sentinel en peildatum",
         "stream": true,
         "temperature": null,
