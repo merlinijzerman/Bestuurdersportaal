@@ -8,7 +8,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beoordeelBronUrl } from "../src/bron-url.mjs";
+import {
+  beoordeelBronUrl,
+  beoordeelBronUrlVoorBuckets,
+} from "../src/bron-url.mjs";
 
 const CONFIG = {
   supabaseHost: "abc123xyz.supabase.co",
@@ -31,6 +34,29 @@ test("geldige signed URL van het juiste project en de juiste bucket wordt toegel
 test("hostname wordt hoofdletterongevoelig vergeleken", () => {
   const r = beoordeelBronUrl(GELDIG.replace("abc123xyz", "ABC123XYZ"), CONFIG);
   assert.equal(r.ok, true);
+});
+
+test("vaste twee-bucketallowlist accepteert quarantaine én legacybron", () => {
+  const config = {
+    supabaseHost: CONFIG.supabaseHost,
+    buckets: ["documenten-quarantaine", "documenten"],
+  };
+  assert.equal(beoordeelBronUrlVoorBuckets(GELDIG, config).ok, true);
+  assert.equal(
+    beoordeelBronUrlVoorBuckets(
+      GELDIG.replace("/documenten-quarantaine/", "/documenten/"),
+      config
+    ).ok,
+    true
+  );
+});
+
+test("twee-bucketallowlist blijft dicht voor iedere andere bucket", () => {
+  const r = beoordeelBronUrlVoorBuckets(
+    GELDIG.replace("/documenten-quarantaine/", "/documenten-archief/"),
+    { supabaseHost: CONFIG.supabaseHost, buckets: ["documenten-quarantaine", "documenten"] }
+  );
+  assert.deepEqual(r, { ok: false, code: "pad_niet_toegestaan" });
 });
 
 // ── Protocol ────────────────────────────────────────────────────────────────

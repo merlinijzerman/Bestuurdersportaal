@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import { bevestigVeiligeE2eDoelomgeving } from "./omgeving.mjs";
 import {
   E2E_ASSISTENT_CONTEXT,
@@ -25,9 +26,11 @@ const AI_ZOEKTEKST = Object.freeze({
 
 async function seedAiBron(admin, fonds, bron, suffix, tekst) {
   const opslagPad = `${fonds.id}/wp4-synthetische-bron-${suffix}.pdf`;
+  const bytes = new TextEncoder().encode(`%PDF-1.4\n% WP4 synthetische bron ${suffix}\n%%EOF\n`);
+  const bestandHash = createHash("sha256").update(bytes).digest("hex");
   const upload = await admin.storage.from("documenten").upload(
     opslagPad,
-    new TextEncoder().encode(`%PDF-1.4\n% WP4 synthetische bron ${suffix}\n%%EOF\n`),
+    bytes,
     { contentType: "application/pdf", upsert: true },
   );
   if (upload.error) throw new Error(`E2E AI-storage(${suffix}): ${upload.error.message}`);
@@ -48,6 +51,8 @@ async function seedAiBron(admin, fonds, bron, suffix, tekst) {
       documentdatum: "2026-01-15",
       verwerkingsstatus: "beschikbaar",
       geindexeerd: true,
+      bestand_hash: bestandHash,
+      scan_resultaat: { verdict: "clean", sha256: bestandHash },
       actief: true,
     },
     { onConflict: "id" },
@@ -129,6 +134,23 @@ async function seedAssistentContext(admin, fonds) {
   );
   if (agendapuntFout) {
     throw new Error(`E2E assistentcontext(agendapunt): ${agendapuntFout.message}`);
+  }
+
+  // #462 PR-1 — uitsluitend een SECUNDAIRE koppeling. Daarmee bewijst de
+  // deeplink-E2E dat de chip niet stiekem alleen documenten.agendapunt_id leest.
+  // Het document zelf blijft context='algemeen' en wordt niet verplaatst.
+  const { error: koppelingFout } = await admin.from("document_agendapunten").upsert(
+    {
+      id: "00000000-0000-4000-8000-00000000e505",
+      fonds_id: fonds.id,
+      document_id: E2E_AI_BRONNEN.fondsAControle.id,
+      agendapunt_id: context.agendapunt.id,
+      vergadering_id: context.vergadering.id,
+    },
+    { onConflict: "document_id,agendapunt_id" },
+  );
+  if (koppelingFout) {
+    throw new Error(`E2E assistentcontext(secundaire koppeling): ${koppelingFout.message}`);
   }
 }
 

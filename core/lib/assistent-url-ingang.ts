@@ -50,6 +50,11 @@ import type {
   ModuleScope,
 } from "@/core/lib/assistent-types";
 import type { Herkomst } from "@/core/lib/assistent-payload";
+import {
+  haalAgendapuntDocumenten,
+  type AgendapuntDocumentLezer,
+  type AgendapuntDocumentZoekbouwer,
+} from "@/core/lib/agendapunt-documenten";
 
 /** Welke deeplink-ingang de URL aanwijst (nog niet opgezocht in de database). */
 export type AssistentUrlIngang =
@@ -167,13 +172,15 @@ export function bouwAssistentDeeplink(ingangen: AssistentUrlIngang[]): string {
  * te testen met een klein stubje, en is aan de signatuur af te lezen dat hij
  * alleen leest (select/eq/order) en nooit schrijft.
  */
-interface Zoekbouwer extends PromiseLike<{ data: unknown }> {
+interface Zoekbouwer extends AgendapuntDocumentZoekbouwer {
   eq(kolom: string, waarde: unknown): Zoekbouwer;
+  in(kolom: string, waarden: readonly string[]): Zoekbouwer;
   order(kolom: string, opties: { ascending: boolean }): Zoekbouwer;
   maybeSingle(): PromiseLike<{ data: unknown }>;
+  abortSignal(signal: AbortSignal): Zoekbouwer;
 }
 
-export interface ContextLezer {
+export interface ContextLezer extends AgendapuntDocumentLezer {
   from(tabel: string): { select(kolommen: string): Zoekbouwer };
 }
 
@@ -235,16 +242,9 @@ async function resolveerEen(
         .maybeSingle();
       const ap = data as { id?: string; titel?: string } | null;
       if (!ap?.id) return LEEG;
-      const { data: stukkenRuw } = await lezer
-        .from("documenten")
-        .select("id, titel")
-        .eq("agendapunt_id", ap.id)
-        .eq("actief", true);
-      const geldig = Array.isArray(stukkenRuw)
-        ? (stukkenRuw as { id?: unknown; titel?: unknown }[]).filter(
-            (s): s is { id: string; titel: string } => typeof s?.id === "string"
-          )
-        : [];
+      // Alleen voor de zichtbare chip. De chatroute vertrouwt deze set niet en
+      // lost hem bij iedere beurt opnieuw server-side onder RLS op (#462 B-1).
+      const geldig = await haalAgendapuntDocumenten(lezer, ap.id);
       return {
         patch: {
           agendapuntContext: { id: ap.id, titel: ap.titel || "dit agendapunt" },

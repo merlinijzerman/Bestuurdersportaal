@@ -91,6 +91,12 @@ import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel, bouwRegimeKaderBlok } from "@/core/lib/organisatieprofiel";
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
+import {
+  bepaalGevraagdeDocumentIds,
+  haalAgendapuntDocumenten,
+  type AgendapuntDocument,
+  type AgendapuntDocumentLezer,
+} from "@/core/lib/agendapunt-documenten";
 import { bouwVoorbereidingProduct } from "@/core/lib/voorbereiding-product";
 import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
 import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
@@ -431,8 +437,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // toelichting (agendapunten.beschrijving) zélf op via RLS — zo wordt de
       // fonds-grens server-side afgedwongen en logt het auditspoor de échte
       // toelichting i.p.v. door de client aanleverbare tekst. De meegestuurde
-      // document_scope (de gekoppelde stukken) dient dan als retrieval-scope,
-      // zónder strict-document gedrag.
+      // De route lost de gekoppelde stukken dan zelf actueel op uit de primaire
+      // en secundaire koppelingen. Een meegestuurde document_scope is alleen
+      // clientweergave en wordt in deze modus genegeerd.
       agendapunt_context?: { id?: string; titel?: string };
       // P2 Deel B — "een document doorgronden": de gekozen secties + (bij
       // "Afwijkingen") de aantoonbaar eerdere versie. De zichtbare beurt blijft de
@@ -906,6 +913,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const agendapuntIdRaw =
       typeof body.agendapunt_context?.id === "string" ? body.agendapunt_context.id : "";
     let agendapuntSeed: AgendapuntSeed | null = null;
+    let actueleAgendapuntDocumenten: AgendapuntDocument[] = [];
     if (agendapuntIdRaw) {
       const [apRow] = await leesModelcontext({
         context: evidenceContext,
@@ -941,6 +949,15 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           titel: (apRow.titel as string) || "dit agendapunt",
           toelichting: (apRow.beschrijving as string | null) ?? null,
         };
+        // B-1 (#462): bepaal de gekoppelde stukken op de server, onder dezelfde
+        // RLS-sessie als de rest van de beurt. Dit verenigt de primaire koppeling
+        // en document_agendapunten. Een clientscope (ook uit een opgeslagen
+        // gesprek) is uitsluitend weergavestatus en krijgt hier geen gezag.
+        actueleAgendapuntDocumenten = await haalAgendapuntDocumenten(
+          supabase as unknown as AgendapuntDocumentLezer,
+          agendapuntSeed.id,
+          req.signal
+        );
       }
     }
     const agendapuntModusActief = agendapuntSeed !== null;
@@ -1054,11 +1071,16 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // (§7): bestaat, actief, toegang (RLS), geïndexeerd. Faalt een check, dan een
     // concrete melding — nooit een stille terugval naar de hele bibliotheek.
     let scopeHerkomst: VraagScope = "fondscollectie";
-    let gevraagdeScopeIds = volledigeAnalyseDocumentId
-      ? [volledigeAnalyseDocumentId]
-      : (body.document_scope?.document_ids ?? []).filter(
-          (id) => typeof id === "string" && id.length > 0
-        );
+    const gevraagdeScope = bepaalGevraagdeDocumentIds({
+      agendapuntModusActief,
+      actueleAgendapuntDocumentIds: actueleAgendapuntDocumenten.map((d) => d.id),
+      volledigeAnalyseDocumentId,
+      clientDocumentIds: body.document_scope?.document_ids,
+    });
+    if (!gevraagdeScope.ok) {
+      return NextResponse.json({ error: gevraagdeScope.melding }, { status: 400 });
+    }
+    let gevraagdeScopeIds = gevraagdeScope.ids;
     if (gevraagdeScopeIds.length > 0) scopeHerkomst = "geselecteerd_document";
 
     // ── Plateau 1 — vroege contextresolutie ────────────────────────────────

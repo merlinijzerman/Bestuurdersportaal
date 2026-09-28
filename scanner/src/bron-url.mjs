@@ -31,9 +31,9 @@ export const BRON_URL_FOUTCODES = /** @type {const} */ ([
   "objectsleutel_ongeldig",
 ]);
 
-// De objectsleutel binnen de quarantainebucket is volledig deterministisch en
-// wordt server-side gemunt: `<fonds-uuid>/<document-uuid>.<ext>` voor de
-// tenant-upload, `generiek/<document-uuid>.<ext>` voor platformcuratie. Zie
+// De objectsleutel binnen de toegestane documentbuckets is volledig
+// deterministisch en wordt server-side gemunt: `<fonds-uuid>/<document-uuid>.<ext>`
+// voor de tenant-upload, `generiek/<document-uuid>.<ext>` voor platformcuratie. Zie
 // QUARANTAINE_PAD_PATROON in platform/lib/generiek-pipeline.ts — dit is
 // dezelfde gedachte, hier toegepast op de scannerkant.
 //
@@ -131,7 +131,7 @@ export function beoordeelBronUrl(ruw, config) {
     return { ok: false, code: "poort_niet_toegestaan" };
   }
 
-  // 7. Pad moet exact in de signed-object-zone van de quarantainebucket liggen.
+  // 7. Pad moet exact in de signed-object-zone van de geconfigureerde bucket liggen.
   //    `url.pathname` is door de parser al genormaliseerd, dus een pad met
   //    `..` of `%2e%2e` is hier al buiten de prefix gecollapst en valt af.
   const vereistPrefix = `/storage/v1/object/sign/${config.bucket}/`;
@@ -149,4 +149,32 @@ export function beoordeelBronUrl(ruw, config) {
   }
 
   return { ok: true, url };
+}
+
+/**
+ * Variant voor een kleine, expliciete bucketallowlist. De algemene SSRF-poort
+ * blijft per bucket exact; deze helper verruimt alleen naar de door de caller
+ * vastgelegde namen en kiest nooit op basis van gebruikersinvoer.
+ *
+ * @param {unknown} ruw
+ * @param {{ supabaseHost: string, buckets: readonly string[] }} config
+ * @returns {{ ok: true, url: URL } | { ok: false, code: string }}
+ */
+export function beoordeelBronUrlVoorBuckets(ruw, config) {
+  /** @type {{ ok: false, code: string } | null} */
+  let specifieksteFout = null;
+  for (const bucket of config.buckets) {
+    const oordeel = beoordeelBronUrl(ruw, {
+      supabaseHost: config.supabaseHost,
+      bucket,
+    });
+    if (oordeel.ok) return oordeel;
+    // Gemeenschappelijke URL-fouten zijn voor elke bucket gelijk. Een geldige
+    // bucketprefix met een ongeldige objectsleutel is specifieker dan de
+    // padfout die de andere allowlist-entry daarna oplevert.
+    if (oordeel.code !== "pad_niet_toegestaan" || specifieksteFout === null) {
+      specifieksteFout = oordeel;
+    }
+  }
+  return specifieksteFout ?? { ok: false, code: "pad_niet_toegestaan" };
 }
