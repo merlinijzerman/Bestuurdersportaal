@@ -173,6 +173,8 @@ export interface VerduidelijkingKeuze {
   vraag: string;
   opties: { intent: "fonds" | "algemeen"; label: string }[];
   origineleVraag: string;
+  /** Behoudt de eenmalige max-keuze wanneer eerst een bronverduidelijking nodig is. */
+  grondigeAnalyse?: boolean;
 }
 
 export interface VolledigeAnalyseAanbod {
@@ -305,6 +307,8 @@ export interface AgendapuntContext {
 export interface StuurOpties {
   antwoordmodusOverride?: Antwoordmodus | null;
   scopeOverride?: DocumentScope | null;
+  /** Eenmalige max-keuze uit de voorafgaande verduidelijkingsbeurt. */
+  grondigeAnalyseOverride?: boolean;
   // Increment I-2 (FO §11a) — bevestigde bron-intentie na een verduidelijkingschip.
   bronIntentOverride?: "fonds" | "algemeen";
   // Waar komt die bevestigde intentie vandaan (ingreep 1/2)? Uitsluitend voor het
