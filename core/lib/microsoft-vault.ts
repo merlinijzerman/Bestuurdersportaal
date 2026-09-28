@@ -219,6 +219,31 @@ export async function koppelSharePointAanAgendapunt(args: { fondsId: string; geb
   if (!rij) throw new Error("sharepoint koppeling niet vastgelegd");
   return { koppelingId: rij.koppeling_id, nieuw: rij.nieuw === true };
 }
+/**
+ * Koppelt een gevalideerde set in één SQL-statement. Als één private RPC
+ * weigert, rolt PostgreSQL het hele statement terug; de browser krijgt dus
+ * nooit een ongemelde halve multiselectie.
+ */
+export async function koppelSharePointBronnenAanAgendapunt(args: {
+  fondsId: string;
+  gebruikerId: string;
+  agendapuntId: string;
+  bronnen: Array<{ soort: SharePointKoppelsoort; ref: string }>;
+}) {
+  if (args.bronnen.length === 0) return [] as Array<{ koppelingId: string; nieuw: boolean }>;
+  const r = await db().query(
+    `select resultaat.koppeling_id, resultaat.nieuw
+       from jsonb_to_recordset($4::jsonb) as bron(soort text, ref uuid)
+       cross join lateral microsoft_private.sharepoint_koppel_agendapunt(
+         $1, $2, $3, bron.soort, bron.ref
+       ) as resultaat`,
+    [args.fondsId, args.gebruikerId, args.agendapuntId, JSON.stringify(args.bronnen)]
+  );
+  return (r.rows as Array<{ koppeling_id: string; nieuw: boolean }>).map((rij) => ({
+    koppelingId: rij.koppeling_id,
+    nieuw: rij.nieuw === true,
+  }));
+}
 /** Verwijdert uitsluitend de koppelrij; register en SharePoint blijven onaangeroerd. */
 export async function ontkoppelSharePointVanAgendapunt(args: { fondsId: string; agendapuntId: string; koppelingId: string }) {
   const r = await db().query("select microsoft_private.sharepoint_ontkoppel_agendapunt($1,$2,$3) as verwijderd", [args.fondsId, args.agendapuntId, args.koppelingId]);

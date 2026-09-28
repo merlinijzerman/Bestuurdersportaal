@@ -2,16 +2,16 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 118,
+    "aantalHandlers": 120,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 41,
+    "zonderSpoor": 43,
     "klasseTelling": {
       "domein": 39,
+      "operationeel": 28,
       "geen": 9,
       "bewijsketen": 38,
-      "machine": 6,
-      "operationeel": 26
+      "machine": 6
     },
     "ketengebeurtenisVereist": [],
     "spoorVereist": [],
@@ -129,6 +129,30 @@
           "soort": "tabel"
         }
       ],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/agendapunten/[id]/sharepoint/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "DELETE app/api/agendapunten/[id]/sharepoint/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "operationeel",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
       "platform": []
     },
     {

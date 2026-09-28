@@ -15,7 +15,10 @@ import StemrondeBlok, {
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { rolHeeftCapability } from "@/core/lib/capabilities-map";
 import DocumentUploadModal from "@/core/components/DocumentUploadModal";
-import BibliotheekPicker from "@/core/components/BibliotheekPicker";
+import AgendapuntBronPicker, {
+  type GekozenSharePointBron,
+} from "./AgendapuntBronPicker";
+import AgendapuntSharePointBronnen from "./AgendapuntSharePointBronnen";
 
 export interface Stuk {
   id: string;
@@ -192,6 +195,7 @@ export default function AgendapuntKaart({
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [koppelBezig, setKoppelBezig] = useState(false);
+  const [sharepointVernieuwSignaal, setSharepointVernieuwSignaal] = useState(0);
   const [editOpen, setEditOpen] = useState(false);
   const [volgordeBezig, setVolgordeBezig] = useState(false);
 
@@ -338,6 +342,31 @@ export default function AgendapuntKaart({
       router.refresh();
     } catch {
       setUploadFout("Verbindingsfout tijdens ontkoppelen");
+    } finally {
+      setKoppelBezig(false);
+    }
+  }
+
+  async function koppelSharePoint(bronnen: GekozenSharePointBron[]) {
+    setKoppelBezig(true);
+    setUploadFout(null);
+    try {
+      const res = await fetch(`/api/agendapunten/${punt.id}/sharepoint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bronnen }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setUploadFout(data.error || "Koppelen mislukt");
+        return false;
+      }
+      setSharepointVernieuwSignaal((waarde) => waarde + 1);
+      router.refresh();
+      return true;
+    } catch {
+      setUploadFout("Verbindingsfout tijdens koppelen");
+      return false;
     } finally {
       setKoppelBezig(false);
     }
@@ -498,8 +527,9 @@ export default function AgendapuntKaart({
         />
       )}
       {pickerOpen && (
-        <BibliotheekPicker
-          onSelect={(id) => koppelBestaand(id)}
+        <AgendapuntBronPicker
+          onSelectPortaal={(id) => void koppelBestaand(id)}
+          onSelectSharePoint={koppelSharePoint}
           onClose={() => setPickerOpen(false)}
         />
       )}
@@ -535,7 +565,7 @@ export default function AgendapuntKaart({
           {/* Stukken */}
           <div>
             <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
-              Stukken ({punt.stukken.length})
+              Stukken en bronnen ({punt.stukken.length} uit het portaal)
             </div>
             <div className="space-y-2">
               {punt.stukken.map((s) => (
@@ -546,6 +576,11 @@ export default function AgendapuntKaart({
                   onOntkoppelen={magMarkeren ? ontkoppelStuk : undefined}
                 />
               ))}
+              <AgendapuntSharePointBronnen
+                agendapuntId={punt.id}
+                magBeheren={magMarkeren}
+                vernieuwSignaal={sharepointVernieuwSignaal}
+              />
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"

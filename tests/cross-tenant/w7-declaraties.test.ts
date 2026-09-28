@@ -139,7 +139,9 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // 153: #463 (fase A) voegt GET /api/microsoft/sharepoint/zoeken toe —
   // metadatazoeken in de gekoppelde SharePoint-bron. Declaratie zoeken.use; de
   // route dwingt inline ook documents.view af (zelfde leesrecht als de lijst).
-  assert.equal(HANDLERS.length, 153, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 154–156: #462 PR-5 voegt GET/POST/DELETE voor de agendapuntkoppeling toe:
+  // lezen op documents.view; koppelen/ontkoppelen op documents.metadata.update.
+  assert.equal(HANDLERS.length, 156, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

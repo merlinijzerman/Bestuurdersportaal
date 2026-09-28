@@ -4,6 +4,8 @@
   "handelingen": {
     "agendapunten.aanmaken": "POST agendapunten",
     "agendapunten.herstellen": "POST agendapunten/[id]/herstellen",
+    "agendapunten.sharepoint-koppelen": "POST agendapunten/[id]/sharepoint",
+    "agendapunten.sharepoint-ontkoppelen": "DELETE agendapunten/[id]/sharepoint",
     "agendapunten.verwijderen": "DELETE agendapunten/[id]",
     "agendapunten.wijzigen": "PATCH agendapunten/[id]",
     "ai.stuk-exporteren": "POST ai/stuk-export",
