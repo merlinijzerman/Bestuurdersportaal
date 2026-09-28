@@ -20,6 +20,7 @@
         "documentdatum": null,
         "documenttype": null,
         "doelgroep": null,
+        "dossiernummer": null,
         "eigenaar": null,
         "extern_url": null,
         "fonds_id": "<uuid:1>",
@@ -60,6 +61,7 @@
         "vervangt_na_scan_reden": null,
         "verwerkingsstatus": null,
         "volgende_review": null,
+        "wetsgeschiedenis_subtype": null,
         "wettelijk_regime": null
       },
       {
@@ -81,6 +83,7 @@
         "documentdatum": null,
         "documenttype": null,
         "doelgroep": null,
+        "dossiernummer": null,
         "eigenaar": null,
         "extern_url": null,
         "fonds_id": "<uuid:1>",
@@ -121,6 +124,7 @@
         "vervangt_na_scan_reden": null,
         "verwerkingsstatus": null,
         "volgende_review": null,
+        "wetsgeschiedenis_subtype": null,
         "wettelijk_regime": null
       },
       {
@@ -142,6 +146,7 @@
         "documentdatum": null,
         "documenttype": null,
         "doelgroep": null,
+        "dossiernummer": null,
         "eigenaar": null,
         "extern_url": null,
         "fonds_id": "<uuid:1>",
@@ -182,6 +187,7 @@
         "vervangt_na_scan_reden": null,
         "verwerkingsstatus": null,
         "volgende_review": null,
+        "wetsgeschiedenis_subtype": null,
         "wettelijk_regime": null
       },
       {
@@ -203,6 +209,7 @@
         "documentdatum": null,
         "documenttype": null,
         "doelgroep": null,
+        "dossiernummer": null,
         "eigenaar": null,
         "extern_url": null,
         "fonds_id": "<uuid:1>",
@@ -243,6 +250,7 @@
         "vervangt_na_scan_reden": null,
         "verwerkingsstatus": null,
         "volgende_review": null,
+        "wetsgeschiedenis_subtype": null,
         "wettelijk_regime": null
       }
     ]

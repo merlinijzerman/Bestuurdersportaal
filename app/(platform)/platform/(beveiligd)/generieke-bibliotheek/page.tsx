@@ -29,6 +29,7 @@ const DOC_KOLOMMEN =
   "id, titel, bron, bronorganisatie, extern_url, normgewicht, documentdatum, " +
   "geldig_vanaf, geldig_tot, status, bronstatus, toepassingsgebied, regelingstype, " +
   "doelgroep, thema, statusinterpretatie, eigenaar, volgende_review, versie, " +
+  "documenttype, wetsgeschiedenis_subtype, dossiernummer, wettelijk_regime, " +
   "verwerkingsstatus, paginas, opslag_pad, " +
   "vervangen_door_document_id, vervangt_document_id, aangemaakt";
 

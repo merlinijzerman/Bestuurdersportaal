@@ -324,7 +324,9 @@ create table if not exists public.documenten (
   vergadering_id uuid references public.vergaderingen(id) on delete set null,
   documenttype   text check (documenttype in (
                    'beleid','besluit','besluitdocument','besluitregistratie',
-                   'bestuursvoorstel','notulen','advies','memo','analyse','rapportage','bijlage','overig')),
+                   'bestuursvoorstel','notulen','advies','memo','analyse','rapportage','bijlage','overig',
+                   -- Wetsgeschiedenis A-light (migratie 2026_09_23): alleen generiek.
+                   'wetgeving','wetsgeschiedenis')),
   status         text check (status in (
                    'concept','vastgesteld','van_kracht','historisch','gearchiveerd')),
   -- bronstatus NULL ≡ "actief" tijdens de overgang (Increment C backfill);
@@ -349,6 +351,18 @@ create table if not exists public.documenten (
   -- document_chunks via fn_chunk_denorm; voedt de regime-demotie (lib/weeg-regime).
   wettelijk_regime text check (wettelijk_regime is null or wettelijk_regime in
                    ('pw','wvb','beide','algemeen')),
+  -- Wetsgeschiedenis A-light (migratie 2026_09_23_wetsgeschiedenis_a_light_foundation,
+  -- authoritatief). Alleen bij documenttype='wetsgeschiedenis'; subtype daar verplicht,
+  -- dossiernummer ook (behalve bij nota_van_toelichting); dan altijd
+  -- normgewicht='informatief' (documenten_wetsgeschiedenis_combinatie_check).
+  -- 'wetgeving'/'wetsgeschiedenis' alleen bij bibliotheek='generiek'
+  -- (documenten_juridisch_generiek_check). Niet gedenorm. naar document_chunks.
+  -- Geen publicatiekenmerk-/behandelingsstatusveld: verwijzing staat in de titel.
+  wetsgeschiedenis_subtype text check (wetsgeschiedenis_subtype is null or wetsgeschiedenis_subtype in
+                   ('memorie_van_toelichting','aangenomen_amendement','nota_van_wijziging',
+                    'nota_naar_aanleiding_van_het_verslag','memorie_van_antwoord',
+                    'nota_van_toelichting')),
+  dossiernummer    text check (dossiernummer is null or dossiernummer ~ '^[0-9]{3,6}(-[A-Z0-9]{1,8})?$'),
   metadata_te_controleren    boolean not null default false,
   metadata_review_status     text not null default 'niet_nodig'
                    check (metadata_review_status in ('niet_nodig','te_controleren','gecontroleerd','afgewezen')),

@@ -1,0 +1,177 @@
+// ============================================================================
+//  lib/wetsgeschiedenis-structuur.ts — Wetsgeschiedenis A-light, foundation.
+// ----------------------------------------------------------------------------
+//  Pure, conservatieve structurering van parlementaire stukken (memorie van
+//  toelichting, nota van wijziging, nota n.a.v. het verslag, aangenomen
+//  amendement) in logische delen:
+//    • algemeen deel;
+//    • artikelsgewijze toelichting, per artikel of onderdeel;
+//    • bij een amendement: de wijzigingstekst en de toelichting.
+//
+//  Het resultaat is compatibel met StructuurUnit (lib/chunking.ts): het
+//  hergebruikt de bestaande chunkvelden structuur_type en structuur_label, er
+//  komt geen nieuw chunkveld bij.
+//
+//  NOG NIET AANGESLOTEN op de ingest (chunk-bouw/chunk-ingest) — dat volgt in
+//  de post-releasefase (PR 2 van het werkticket), samen met de eerste echte
+//  import. Hier alleen de pure logica + tests met synthetische fixtures.
+//
+//  Conservatief: alleen een kop op een EIGEN, korte regel telt als grens. Een
+//  verwijzing midden in een zin ("zoals artikel 150d bepaalt") splitst nooit.
+//  Wordt niets herkend, dan blijft de tekst één 'overig'-unit en valt de
+//  bestaande generieke chunking terug op haar eigen structuurdetectie.
+// ============================================================================
+
+import type { StructuurType, StructuurUnit } from "./chunking";
+import type { WetsgeschiedenisSubtype } from "./wetsgeschiedenis";
+
+export type ParlementairDeel =
+  | "algemeen_deel"
+  | "artikelsgewijze_toelichting"
+  | "amendement_wijziging"
+  | "amendement_toelichting"
+  | "overig";
+
+export const PARLEMENTAIR_DEEL_LABEL: Record<ParlementairDeel, string> = {
+  algemeen_deel: "Algemeen deel",
+  artikelsgewijze_toelichting: "Artikelsgewijze toelichting",
+  amendement_wijziging: "Amendement — wijziging",
+  amendement_toelichting: "Amendement — toelichting",
+  overig: "Overig",
+};
+
+export interface ParlementaireUnit {
+  deel: ParlementairDeel;
+  type: StructuurType;
+  /** Artikel/onderdeel of kop binnen het deel; null = lopende tekst. */
+  label: string | null;
+  tekst: string;
+}
+
+// Maximale lengte van een kopregel. Langer = doorlopende tekst.
+const MAX_KOP = 120;
+
+const RE_ALGEMEEN = /^(?:[IVX]+\.?\s+)?(?:algemeen(?:\s+deel)?|algemene\s+toelichting)$/i;
+const RE_ARTIKELSGEWIJS = /^(?:[IVX]+\.?\s+)?(?:artikelsgewijs|artikelsgewijze\s+toelichting|artikelgewijze\s+toelichting|artikelsgewijze\s+toelichting\s+.*)$/i;
+const RE_TOELICHTING = /^toelichting$/i;
+const RE_ARTIKEL = /^(Artikel\s+[0-9IVXLC]+[a-z]*(?:\s*,\s*onderdeel\s+[A-Z0-9]+)?)\b/i;
+const RE_ONDERDEEL = /^(Onderdeel\s+[A-Z0-9]+)\b/;
+const RE_GENUMMERDE_KOP = /^(\d+(?:\.\d+){0,3})\.?\s+\p{Lu}[^\n]{0,110}$/u;
+
+function isKopregel(regel: string): boolean {
+  return regel.length > 0 && regel.length <= MAX_KOP && !/[.;:,]$/.test(regel);
+}
+
+/**
+ * Structureert de tekst van een parlementair stuk. Deterministisch en zonder
+ * IO. `subtype` stuurt alleen de amendement-behandeling; bij een onbekend of
+ * ontbrekend subtype gelden de MvT-regels.
+ */
+export function structureerParlementairStuk(
+  tekst: string,
+  subtype: WetsgeschiedenisSubtype | null
+): ParlementaireUnit[] {
+  const isAmendement = subtype === "aangenomen_amendement";
+  const units: ParlementaireUnit[] = [];
+  let deel: ParlementairDeel = isAmendement ? "amendement_wijziging" : "overig";
+  let huidig: ParlementaireUnit | null = null;
+  let huidigArtikel: string | null = null;
+
+  const sluit = () => {
+    if (huidig && huidig.tekst.trim() !== "") units.push(huidig);
+    huidig = null;
+  };
+  const open = (u: ParlementaireUnit) => {
+    sluit();
+    huidig = u;
+  };
+
+  for (const ruw of tekst.split("\n")) {
+    const regel = ruw.trim();
+    const kop = isKopregel(regel);
+
+    // 1. Deelgrenzen.
+    if (kop && isAmendement && RE_TOELICHTING.test(regel)) {
+      deel = "amendement_toelichting";
+      huidigArtikel = null;
+      open({ deel, type: "kop", label: PARLEMENTAIR_DEEL_LABEL[deel], tekst: ruw });
+      continue;
+    }
+    if (kop && !isAmendement && RE_ALGEMEEN.test(regel)) {
+      deel = "algemeen_deel";
+      huidigArtikel = null;
+      open({ deel, type: "kop", label: PARLEMENTAIR_DEEL_LABEL[deel], tekst: ruw });
+      continue;
+    }
+    if (kop && !isAmendement && RE_ARTIKELSGEWIJS.test(regel)) {
+      deel = "artikelsgewijze_toelichting";
+      huidigArtikel = null;
+      open({ deel, type: "kop", label: PARLEMENTAIR_DEEL_LABEL[deel], tekst: ruw });
+      continue;
+    }
+
+    // 2. Artikel/onderdeel — alleen in de artikelsgewijze toelichting of in de
+    //    wijzigingstekst van een amendement (daar is het de structuur zelf).
+    const artikelContext =
+      deel === "artikelsgewijze_toelichting" || deel === "amendement_wijziging";
+    if (kop && artikelContext) {
+      const art = regel.match(RE_ARTIKEL);
+      if (art) {
+        huidigArtikel = normaliseerLabel(art[1]);
+        open({ deel, type: "artikel", label: huidigArtikel, tekst: ruw });
+        continue;
+      }
+      const ond = regel.match(RE_ONDERDEEL);
+      if (ond) {
+        const onderdeel = normaliseerLabel(ond[1]);
+        // "Onderdeel B" na "Artikel I, onderdeel A" hoort bij Artikel I.
+        const basis = huidigArtikel?.replace(/,\s*onderdeel\s+\S+$/i, "") ?? null;
+        const label = basis ? `${basis}, ${onderdeel.replace(/^Onderdeel/, "onderdeel")}` : onderdeel;
+        open({ deel, type: "artikel", label, tekst: ruw });
+        continue;
+      }
+    }
+
+    // 3. Genummerde paragraafkop binnen het algemeen deel.
+    if (kop && deel === "algemeen_deel") {
+      const par = regel.match(RE_GENUMMERDE_KOP);
+      if (par) {
+        open({ deel, type: "paragraaf", label: `§${par[1]}`, tekst: ruw });
+        continue;
+      }
+    }
+
+    // 4. Lopende tekst hoort bij de lopende unit (of opent een tekst-unit).
+    if (huidig) {
+      (huidig as ParlementaireUnit).tekst += "\n" + ruw;
+    } else if (regel !== "") {
+      huidig = { deel, type: "tekst", label: null, tekst: ruw };
+    }
+  }
+  sluit();
+
+  return units.length > 0
+    ? units
+    : [{ deel: "overig", type: "tekst", label: null, tekst }];
+}
+
+function normaliseerLabel(s: string): string {
+  const compact = s.replace(/\s+/g, " ").trim();
+  return compact.charAt(0).toUpperCase() + compact.slice(1);
+}
+
+/**
+ * Vertaalt naar StructuurUnit voor de bestaande chunkpijplijn. Het deel komt
+ * in het label (structuur_label), zodat een chunk herkenbaar blijft als
+ * "Artikelsgewijze toelichting — Artikel I, onderdeel B".
+ */
+export function alsStructuurUnits(units: ParlementaireUnit[]): StructuurUnit[] {
+  return units.map((u) => {
+    const deelLabel = u.deel === "overig" ? null : PARLEMENTAIR_DEEL_LABEL[u.deel];
+    const label =
+      u.label && deelLabel && u.label !== deelLabel
+        ? `${deelLabel} — ${u.label}`
+        : (u.label ?? deelLabel);
+    return { type: u.type, label, tekst: u.tekst };
+  });
+}
