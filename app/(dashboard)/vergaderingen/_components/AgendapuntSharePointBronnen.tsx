@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export type Koppeling =
   | {
@@ -30,16 +30,17 @@ export default function AgendapuntSharePointBronnen({
   magBeheren: boolean;
   initieleKoppelingen: Koppeling[];
 }) {
-  const [koppelingen, setKoppelingen] = useState<Koppeling[]>(initieleKoppelingen);
+  const [verwijderdeIds, setVerwijderdeIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [fout, setFout] = useState<string | null>(null);
   const [bezigId, setBezigId] = useState<string | null>(null);
-
-  // Een router.refresh na koppelen levert één nieuwe server-side batchprojectie
-  // voor de hele vergadering; per kaart volgt geen Graph-request meer.
-  useEffect(() => {
-    setKoppelingen(initieleKoppelingen);
-    setFout(null);
-  }, [initieleKoppelingen]);
+  // Een router.refresh na koppelen levert nieuwe serverprops uit één batch voor
+  // de hele vergadering. Alleen succesvol ontkoppelde ids worden lokaal
+  // optimistisch verborgen; zo spiegelen we props niet via een effect.
+  const koppelingen = initieleKoppelingen.filter(
+    (koppeling) => !verwijderdeIds.has(koppeling.koppelingId)
+  );
 
   async function ontkoppel(koppelingId: string) {
     if (!confirm("Deze SharePoint-bron ontkoppelen? Er wordt niets in SharePoint gewijzigd.")) return;
@@ -51,9 +52,11 @@ export default function AgendapuntSharePointBronnen({
         body: JSON.stringify({ koppeling_id: koppelingId }),
       });
       if (!response.ok) throw new Error();
-      setKoppelingen((huidig) =>
-        huidig.filter((koppeling) => koppeling.koppelingId !== koppelingId)
-      );
+      setVerwijderdeIds((huidig) => {
+        const volgend = new Set(huidig);
+        volgend.add(koppelingId);
+        return volgend;
+      });
     } catch {
       setFout("Ontkoppelen mislukt.");
     } finally {
