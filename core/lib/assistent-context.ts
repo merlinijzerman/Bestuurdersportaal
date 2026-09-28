@@ -36,6 +36,7 @@ export type AssistentContextSoort =
   | "fondsbreed"
   | "document"
   | "sharepoint_document"
+  | "sharepoint_map"
   | "agendapunt"
   | "proces"
   | "risicomatrix"
@@ -83,7 +84,11 @@ export function bepaalContextSoort(velden: {
 }): AssistentContextSoort {
   if (velden.agendapuntContext) return "agendapunt";
   if (velden.moduleScope) return velden.moduleScope.soort;
-  if (velden.sharepointScope) return "sharepoint_document";
+  if (velden.sharepointScope) {
+    return velden.sharepointScope.soort === "map"
+      ? "sharepoint_map"
+      : "sharepoint_document";
+  }
   if (velden.documentScope) return "document";
   return "fondsbreed";
 }
@@ -101,8 +106,8 @@ export function leesSharePointScope(ruw: unknown): SharePointScope | null {
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x)
       )
     : [];
-  if (soort !== "document" || refs.length !== 1) return null;
-  return { soort: "document", refs: [refs[0].toLowerCase()], labels: [] };
+  if ((soort !== "document" && soort !== "map") || refs.length !== 1) return null;
+  return { soort, refs: [refs[0].toLowerCase()], labels: [] };
 }
 
 /** Leest de jsonb-scope uit een gesprek terug naar de UI-vorm (of null). */
@@ -265,9 +270,14 @@ export function contextChip(velden: {
   }
 
   if (sharepointScope) {
+    const isMap = sharepointScope.soort === "map";
     return {
-      label: `SharePoint-document · «${sharepointScope.labels[0] || "dit document"}»`,
-      bronbereik: "alleen dit live gecontroleerde SharePoint-document",
+      label: `${isMap ? "SharePoint-map" : "SharePoint-document"} · «${
+        sharepointScope.labels[0] || (isMap ? "deze map" : "dit document")
+      }»`,
+      bronbereik: isMap
+        ? "relevante documenten uit deze live gecontroleerde SharePoint-map"
+        : "alleen dit live gecontroleerde SharePoint-document",
       losTeLaten: true,
     };
   }

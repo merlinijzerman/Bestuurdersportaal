@@ -252,11 +252,12 @@ export interface DocumentScope {
   algemene_kennis?: boolean;
 }
 
-// #462 PR-3 — live SharePoint-context. `refs` zijn uitsluitend lokale, opaque
-// UUID-referenties uit het private register. `labels` bestaan alleen in het
-// browsergeheugen voor de contextchip en gaan nooit naar /api/chat of jsonb.
+// #462 PR-3/4 — live SharePoint-context. `refs` zijn uitsluitend lokale, opaque
+// UUID-referenties uit het private document- of mapregister. `labels` bestaan
+// alleen in het browsergeheugen voor de contextchip en gaan nooit naar
+// /api/chat of jsonb.
 export interface SharePointScope {
-  soort: "document";
+  soort: "document" | "map";
   refs: string[];
   labels: string[];
 }

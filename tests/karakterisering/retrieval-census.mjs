@@ -180,6 +180,8 @@ export const LEZINGKLASSE = {
   "core/lib/fonds-config.ts::fonds_feature_flags": { klassen: ["configuratie"], doel: "retrievalvlaggen per fonds" },
   "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_feature_flags": { klassen: ["configuratie"], doel: "bestaande SharePoint-fasepoort plus de aparte, standaard-uit AI-contextvlag" },
   "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_integratie_profielen": { klassen: ["configuratie"], doel: "driedubbele fondsgebonden SharePoint-poort; geen modelcontext" },
+  "core/lib/microsoft-connector.ts::fonds_feature_flags": { klassen: ["configuratie"], doel: "live SharePoint-maplisting controleert de fasepoort per beurt; geen documentinhoud of modelcontext" },
+  "core/lib/microsoft-connector.ts::fonds_integratie_profielen": { klassen: ["configuratie"], doel: "live SharePoint-maplisting resolveert uitsluitend het fondsgebonden connectorprofiel; geen modelcontext" },
   "core/lib/vergelijk-rollout.ts::fonds_feature_flags": { klassen: ["configuratie"], doel: "strikte fonds-opt-in voor vergelijking; geen modelcontext" },
   "core/lib/fonds-config.ts::fonds_config_log": { klassen: ["configuratie"], doel: "configuratiehistorie" },
   "core/lib/fonds-config.ts::fonds_content_overrides": { klassen: ["configuratie"], doel: "teksten per fonds" },

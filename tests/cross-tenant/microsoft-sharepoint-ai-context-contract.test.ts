@@ -33,7 +33,9 @@ test("de productieadapter gebruikt uitsluitend het delegated gebruikerstoken", (
   );
   assert.doesNotMatch(productieAdapter, /acquireTokenByClientCredential|client_credentials/);
   assert.match(productieAdapter, /token\.tenantId !== bronRij\.tenant_id/);
-  assert.match(productieAdapter, /leesSharePointDocument\(args\.fondsId, ref\)/);
+  assert.match(productieAdapter, /leesSharePointDocument\(args\.fondsId, args\.scope\.ref\)/);
+  assert.match(productieAdapter, /sharepointDocumenten\(/);
+  assert.match(productieAdapter, /leesSharePointMap\(args\.fondsId, args\.scope\.ref\)/);
 });
 
 test("een SharePoint-context bewaart en verstuurt alleen de lokale UUID-ref", () => {
@@ -47,9 +49,12 @@ test("een SharePoint-context bewaart en verstuurt alleen de lokale UUID-ref", ()
   assert.match(gesprek, /cache: "no-store"/);
 });
 
-test("de documentlijst opent de ene centrale assistentingang", () => {
+test("documenten en mappen openen dezelfde centrale assistent via het actiemenu", () => {
   assert.match(lijst, /<AssistentIngang/);
-  assert.match(lijst, /soort: "sharepoint", ref: doc\.ref/);
+  assert.match(lijst, /<Actiemenu label=\{doc\.naam\}/);
+  assert.match(lijst, /soort: "sharepoint", objectsoort: "document", ref: doc\.ref/);
+  assert.match(lijst, /<Actiemenu label=\{naam\}/);
+  assert.match(lijst, /soort: "sharepoint", objectsoort: "map", ref: mapRef\.ref/);
   assert.match(lijst, /AI_TYPES\.has\(doc\.bestandstype\)/);
   assert.match(lijst, /antwoord\.aiContextBeschikbaar === true/);
   assert.match(documentenRoute, /microsoftSharePointAiContextActief/);
@@ -60,7 +65,17 @@ test("de documentlijst opent de ene centrale assistentingang", () => {
 
 test("toegelaten SharePoint-passages bereiken de bestaande promptbrug", () => {
   assert.match(route, /directeSharePoint\.chunksVoor\(voltooid\.geselecteerd\)/);
-  assert.match(route, /scopeTitels = \[\.\.\.new Set\(chunks\.map/);
+  assert.match(route, /scopeTitels = \[directeSharePoint!\.scopeLabel\]/);
+  assert.match(route, /GESELECTEERDE SHAREPOINT-MAP/);
+  assert.match(route, /sharepoint_map_afgekapt/);
   assert.match(productieAdapter, /tekst: resultaat\.passage/);
   assert.match(productieAdapter, /bibliotheek: "sharepoint"/);
+});
+
+test("live mapcontrole en retrieval delen één beurtdeadline", () => {
+  assert.match(route, /const setupGrendel = maakAfbreekgrendel\(req\.signal, retrievalTimeoutMs\)/);
+  assert.match(route, /signal: setupGrendel\.signal/);
+  assert.match(route, /effectiefRetrievalTimeoutMs = Math\.max\(1, setupGrendel\.resterendMs\(\)\)/);
+  assert.match(route, /timeoutMs: effectiefRetrievalTimeoutMs/);
+  assert.match(route, /finally \{\s*setupGrendel\.stop\(\)/);
 });

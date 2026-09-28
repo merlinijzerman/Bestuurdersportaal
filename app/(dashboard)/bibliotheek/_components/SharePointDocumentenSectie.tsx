@@ -1,17 +1,19 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import AssistentIngang from "@/core/components/assistent/AssistentIngang";
 
 type SharePointDocument = {
   ref: string; naam: string; bestandstype: string | null; grootte: number | null; gewijzigdOp: string | null;
   mappad: string; previewMogelijk: boolean; webUrl: string | null;
 };
+type SharePointMapRef = { ref: string; naam: string; mappad: string };
 type Antwoord = {
   beschikbaar: boolean; error?: string; foutcategorie?: string;
   aiContextBeschikbaar?: boolean;
   bron?: { weergavenaam: string; site: string; bibliotheek: string; map: string } | null;
-  documenten?: SharePointDocument[]; mappen?: string[]; afgekapt?: boolean;
+  documenten?: SharePointDocument[]; mappen?: string[]; mapRefs?: SharePointMapRef[]; afgekapt?: boolean;
 };
 
 const TYPE_LABEL: Record<string, string> = { pdf: "PDF", docx: "Word", doc: "Word", pptx: "PowerPoint", ppt: "PowerPoint", xlsx: "Excel", xls: "Excel" };
@@ -23,6 +25,53 @@ function grootteLabel(bytes: number | null): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} kB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function Actiemenu({ label, children }: { label: string; children: (sluit: () => void) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [positie, setPositie] = useState<{ left: number; top: number | null; bottom: number | null } | null>(null);
+  const sluit = () => setOpen(false);
+
+  return (
+    <div className="relative flex justify-end">
+      <button
+        type="button"
+        aria-label={`Acties voor ${label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-lg text-muted hover:bg-app-bg"
+        onClick={(event) => {
+          if (open) return sluit();
+          const rect = event.currentTarget.getBoundingClientRect();
+          const menuBreedte = 230;
+          const geschatteHoogte = 180;
+          const marge = 8;
+          const left = Math.max(marge, Math.min(rect.right - menuBreedte, window.innerWidth - menuBreedte - marge));
+          const naarBoven = rect.bottom + geschatteHoogte > window.innerHeight && rect.top > geschatteHoogte;
+          setPositie(naarBoven
+            ? { left, top: null, bottom: window.innerHeight - rect.top + 4 }
+            : { left, top: rect.bottom + 4, bottom: null });
+          setOpen(true);
+        }}
+      >
+        ⋮
+      </button>
+      {open && positie && typeof document !== "undefined" && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={sluit} />
+          <div
+            role="menu"
+            aria-label={`Acties voor ${label}`}
+            className="fixed z-50 min-w-[220px] max-w-[calc(100vw-16px)] overflow-y-auto rounded-lg border border-line bg-app-surface py-1 text-left shadow-lg"
+            style={{ left: positie.left, top: positie.top ?? undefined, bottom: positie.bottom ?? undefined, maxHeight: "calc(100vh - 24px)" }}
+          >
+            {children(sluit)}
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 /** SharePoint-documenten in de fondsbibliotheek (Microsoft 365 fase 3, #321).
@@ -62,6 +111,10 @@ export default function SharePointDocumentenSectie() {
   }, []);
 
   const documenten = useMemo(() => antwoord?.documenten ?? [], [antwoord]);
+  const mapRefVanPad = useMemo(
+    () => new Map((antwoord?.mapRefs ?? []).map((map) => [map.mappad, map])),
+    [antwoord]
+  );
   const submappen = useMemo(() => {
     const direct = new Set<string>();
     const prefix = pad ? `${pad}/` : "";
@@ -117,19 +170,48 @@ export default function SharePointDocumentenSectie() {
                   <th className="px-2 py-2">Document</th>
                   <th className="w-[90px] px-2 py-2">Omvang</th>
                   <th className="w-[120px] px-2 py-2">Gewijzigd</th>
-                  <th className="w-[230px] px-2 py-2 text-right pr-4">Acties</th>
+                  <th className="w-[72px] px-2 py-2 text-center">Acties</th>
                 </tr>
               </thead>
               <tbody>
-                {submappen.map((naam) => (
-                  <tr key={`map-${naam}`} className="border-t border-line">
-                    <td className="px-4 py-2"><span className={TYPE_BLOK}>Map</span></td>
-                    <td className="px-2 py-2 truncate" colSpan={3}>
-                      <button type="button" onClick={() => setPad(pad ? `${pad}/${naam}` : naam)} className="font-medium text-ink hover:underline">{naam}</button>
-                    </td>
-                    <td className="px-2 py-2" />
-                  </tr>
-                ))}
+                {submappen.map((naam) => {
+                  const volgendPad = pad ? `${pad}/${naam}` : naam;
+                  const mapRef = mapRefVanPad.get(volgendPad);
+                  return (
+                    <tr key={`map-${naam}`} className="border-t border-line">
+                      <td className="px-4 py-2"><span className={TYPE_BLOK}>Map</span></td>
+                      <td className="px-2 py-2 truncate" colSpan={3}>
+                        <button type="button" onClick={() => setPad(volgendPad)} className="font-medium text-ink hover:underline">{naam}</button>
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <Actiemenu label={naam}>{(sluit) => (
+                          <>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => { sluit(); setPad(volgendPad); }}
+                              className="w-full px-4 py-2 text-left text-sm text-ink hover:bg-app-bg"
+                            >
+                              Map openen
+                            </button>
+                            {antwoord.aiContextBeschikbaar === true && mapRef && (
+                              <AssistentIngang
+                                ingangen={[{ soort: "sharepoint", objectsoort: "map", ref: mapRef.ref }]}
+                                module="bibliotheek"
+                                role="menuitem"
+                                onClick={sluit}
+                                className="block px-4 py-2 text-sm font-medium text-ink hover:bg-warn-tint"
+                                title="Open de assistent met deze SharePoint-map als context"
+                              >
+                                Vraag de AI over deze map
+                              </AssistentIngang>
+                            )}
+                          </>
+                        )}</Actiemenu>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {zichtbaar.map((doc) => (
                   <tr key={doc.ref} className="border-t border-line">
                     <td className="px-4 py-2"><span className={TYPE_BLOK}>{doc.bestandstype ? TYPE_LABEL[doc.bestandstype] ?? doc.bestandstype : "—"}</span></td>
@@ -140,23 +222,48 @@ export default function SharePointDocumentenSectie() {
                     </td>
                     <td className="px-2 py-2 text-muted">{grootteLabel(doc.grootte)}</td>
                     <td className="px-2 py-2 text-muted">{doc.gewijzigdOp ? new Date(doc.gewijzigdOp).toLocaleDateString("nl-NL") : "—"}</td>
-                    <td className="px-2 py-2 text-right pr-4 whitespace-nowrap">
-                      {doc.previewMogelijk
-                        ? <Link href={`/bibliotheek/sharepoint/${doc.ref}`} className="text-xs font-semibold text-accent hover:underline">Preview</Link>
-                        : <span className="text-xs text-muted" title="Dit bestandstype kan niet in de browser worden getoond.">Geen preview</span>}
-                      {antwoord.aiContextBeschikbaar === true && doc.bestandstype && AI_TYPES.has(doc.bestandstype) && (
-                        <AssistentIngang
-                          ingangen={[{ soort: "sharepoint", ref: doc.ref }]}
-                          module="bibliotheek"
-                          className="ml-3 text-xs font-semibold text-accent hover:underline"
-                          title="Vraag de AI over dit SharePoint-document"
-                        >
-                          Vraag de AI
-                        </AssistentIngang>
-                      )}
-                      {doc.webUrl && (
-                        <a href={doc.webUrl} target="_blank" rel="noopener noreferrer" className="ml-3 text-xs font-semibold text-accent hover:underline">Openen in Microsoft 365</a>
-                      )}
+                    <td className="px-2 py-2 text-center">
+                      <Actiemenu label={doc.naam}>{(sluit) => (
+                        <>
+                          {doc.previewMogelijk && (
+                            <Link
+                              role="menuitem"
+                              href={`/bibliotheek/sharepoint/${doc.ref}`}
+                              onClick={sluit}
+                              className="block px-4 py-2 text-sm text-ink hover:bg-app-bg"
+                            >
+                              Bekijken
+                            </Link>
+                          )}
+                          {antwoord.aiContextBeschikbaar === true && doc.bestandstype && AI_TYPES.has(doc.bestandstype) && (
+                            <AssistentIngang
+                              ingangen={[{ soort: "sharepoint", objectsoort: "document", ref: doc.ref }]}
+                              module="bibliotheek"
+                              role="menuitem"
+                              onClick={sluit}
+                              className="block px-4 py-2 text-sm font-medium text-ink hover:bg-warn-tint"
+                              title="Open de assistent met dit SharePoint-document als context"
+                            >
+                              Vraag de AI over dit document
+                            </AssistentIngang>
+                          )}
+                          {doc.webUrl && (
+                            <a
+                              role="menuitem"
+                              href={doc.webUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={sluit}
+                              className="block px-4 py-2 text-sm text-ink hover:bg-app-bg"
+                            >
+                              Openen in Microsoft 365
+                            </a>
+                          )}
+                          {!doc.previewMogelijk && !doc.webUrl && (
+                            <span className="block px-4 py-2 text-sm text-muted">Geen acties beschikbaar</span>
+                          )}
+                        </>
+                      )}</Actiemenu>
                     </td>
                   </tr>
                 ))}

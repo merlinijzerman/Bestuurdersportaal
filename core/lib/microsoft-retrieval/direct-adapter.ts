@@ -26,7 +26,12 @@ import {
 } from "../retrieval/identiteit";
 import type { GraphDriveItem } from "../microsoft-sharepoint-graph-core";
 import { veiligeSharePointUrl } from "../microsoft-sharepoint-graph-core";
-import { downloadItem, type DownloadOpdracht, type DownloadResultaat } from "./download";
+import {
+  downloadItem,
+  MAX_DOWNLOAD_BYTES,
+  type DownloadOpdracht,
+  type DownloadResultaat,
+} from "./download";
 import {
   bevestigKandidaatItem,
   bevestigVersieOngewijzigd,
@@ -40,6 +45,8 @@ import { canoniekeWebUrl, type GeregistreerdDocument } from "./mapping";
 
 export const MAX_DIRECTE_PASSAGES_PER_DOCUMENT = 8;
 export const MAX_DIRECTE_EXTRACTIE_TEKENS = 2_000_000;
+export const MAX_DIRECTE_TOTAAL_BYTES = 60 * 1024 * 1024;
+export const MAX_DIRECTE_TOTAAL_TEKENS = 4_000_000;
 
 export const DIRECTE_SHAREPOINT_CAPABILITIES: AdapterCapabilities = {
   bronsoorten: ["sharepoint"],
@@ -64,6 +71,9 @@ export interface DirectSharePointAdapterDeps {
   documenten: DirectSharePointDocument[];
   leesItem: ItemLezer;
   herleesBron: () => Promise<BronSnapshot | undefined>;
+  /** Beurtbrede grenzen; PR-4 gebruikt ze voor maximaal zes mapdocumenten. */
+  maxTotaalBytes?: number;
+  maxTotaalTekens?: number;
   downloadImpl?: (opdracht: DownloadOpdracht) => Promise<DownloadResultaat>;
   extractImpl?: (
     bytes: Buffer,
@@ -172,6 +182,9 @@ export function maakDirecteSharePointAdapter(
 
       const kandidaten: Bronresultaat[] = [];
       let gelezenDocumenten = 0;
+      let totaalBytes = 0;
+      let totaalExtractieTekens = 0;
+      let budgetAfgekapt = false;
       for (const { document } of deps.documenten) {
         if (ctx.resterendMs() <= 0) return foutUitkomst(t0, "timeout");
         const type = extractieType(document.bestandstype);
@@ -197,25 +210,55 @@ export function maakDirecteSharePointAdapter(
         if (!bevestigd.ok) return foutUitkomst(t0, "toestemming_geweigerd");
 
         const doeDownload = deps.downloadImpl ?? downloadItem;
+        const byteBudget = Math.max(
+          0,
+          Math.min(
+            MAX_DOWNLOAD_BYTES,
+            (deps.maxTotaalBytes ?? MAX_DIRECTE_TOTAAL_BYTES) - totaalBytes
+          )
+        );
+        if (byteBudget <= 0) {
+          budgetAfgekapt = true;
+          break;
+        }
         const download = await doeDownload({
           accessToken: deps.accessToken,
           driveId: deps.bron.driveId,
           itemId: document.itemId,
           siteHostnaam: deps.bron.siteHostnaam,
           signal: ctx.signal,
+          maxBytes: byteBudget,
         });
-        if (!download.ok) return foutUitkomst(t0, "toestemming_geweigerd");
+        if (!download.ok) {
+          if (byteBudget < MAX_DOWNLOAD_BYTES && gelezenDocumenten > 0) {
+            budgetAfgekapt = true;
+            break;
+          }
+          return foutUitkomst(t0, "toestemming_geweigerd");
+        }
+        totaalBytes += download.bytes.byteLength;
 
         const doeExtractie = deps.extractImpl ?? ((bytes, bestandstype) =>
           extractTekst(bytes, bestandstype));
         const extractie = await doeExtractie(download.bytes, type, ctx.signal);
-        const totaalTekens = extractie.segmenten.reduce(
+        const documentTekens = extractie.segmenten.reduce(
           (som, segment) => som + segment.tekst.length,
           0
         );
-        if (totaalTekens <= 0 || totaalTekens > MAX_DIRECTE_EXTRACTIE_TEKENS) {
+        if (documentTekens <= 0 || documentTekens > MAX_DIRECTE_EXTRACTIE_TEKENS) {
           return foutUitkomst(t0, "configuratiefout");
         }
+        if (
+          totaalExtractieTekens + documentTekens >
+          (deps.maxTotaalTekens ?? MAX_DIRECTE_TOTAAL_TEKENS)
+        ) {
+          if (gelezenDocumenten > 0) {
+            budgetAfgekapt = true;
+            break;
+          }
+          return foutUitkomst(t0, "configuratiefout");
+        }
+        totaalExtractieTekens += documentTekens;
 
         const onveranderd = await bevestigVersieOngewijzigd(
           {
@@ -320,6 +363,7 @@ export function maakDirecteSharePointAdapter(
         provider: "microsoft",
         latencyMs: Date.now() - t0,
         opgehaald: gelezenDocumenten,
+        ...(budgetAfgekapt ? { truncatie: { reden: "kandidaten" as const } } : {}),
       };
     },
 

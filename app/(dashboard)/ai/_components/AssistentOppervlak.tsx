@@ -1506,7 +1506,9 @@ export default function AssistentOppervlak() {
           <div className="mb-2 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-2 max-w-full bg-accent-tint border border-accent/30 text-accent-ink text-xs rounded-full pl-3 pr-2 py-1">
               <span className="truncate">
-                SharePoint-document: «{sharepointScope.labels[0] || "dit document"}»
+                {sharepointScope.soort === "map" ? "SharePoint-map" : "SharePoint-document"}: «{
+                  sharepointScope.labels[0] || (sharepointScope.soort === "map" ? "deze map" : "dit document")
+                }»
               </span>
               <button
                 onClick={() => zetSharepointScope(null)}
@@ -1601,7 +1603,9 @@ export default function AssistentOppervlak() {
             }}
             placeholder={
               sharepointScope
-                ? "Stel een vraag over dit SharePoint-document..."
+                ? sharepointScope.soort === "map"
+                  ? "Stel een vraag over deze SharePoint-map..."
+                  : "Stel een vraag over dit SharePoint-document..."
                 : documentScope
                 ? "Stel een vraag over dit document... (@ om te wisselen)"
                 : "Stel een vraag... (@ om een specifiek document te kiezen)"
