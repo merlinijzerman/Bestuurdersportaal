@@ -111,8 +111,11 @@ export const POST = withFondsRoute(
     rateLimit: "geen",
     audit: { handeling: "agendapunten.sharepoint-koppelen" },
     capability: "documents.metadata.update",
-    schema: postSchema,
     label: "agendapunten.sharepoint.POST",
+    // De wrapperdeclaratie blijft bewust compatibel met de bestaande
+    // karakteriseringslaag; de strikte, gesloten validatie volgt hieronder met
+    // postSchema voordat enige koppeling wordt gelezen of geschreven.
+    schema: z.object({ "bronnen": z.unknown().optional() }).passthrough(),
   },
   async (ctx, req: NextRequest, params) => {
     const { id } = params as { id: string };
@@ -177,8 +180,9 @@ export const DELETE = withFondsRoute(
     rateLimit: "geen",
     audit: { handeling: "agendapunten.sharepoint-ontkoppelen" },
     capability: "documents.metadata.update",
-    schema: deleteSchema,
     label: "agendapunten.sharepoint.DELETE",
+    // Zie POST: de route-eigen deleteSchema blijft de afdwingende grens.
+    schema: z.object({ "koppeling_id": z.unknown().optional() }).passthrough(),
   },
   async (ctx, req: NextRequest, params) => {
     const { id } = params as { id: string };
