@@ -43,6 +43,7 @@ export interface AssistentIngangProps {
   module: string;
   className?: string;
   title?: string;
+  role?: React.AriaRole;
   /**
    * Een beurt die deze ingang meteen laat versturen (T2, #304) — vandaag alleen
    * "Bereid dit punt voor" / "Opnieuw opstellen". De ingang blijft een <a>: bij
@@ -69,6 +70,7 @@ export default function AssistentIngang({
   module,
   className,
   title,
+  role,
   startbeurt,
   onClick,
   children,
@@ -79,6 +81,7 @@ export default function AssistentIngang({
   return (
     <a
       href={bouwAssistentDeeplink(ingangen)}
+      role={role}
       className={className}
       title={title}
       aria-expanded={paneel ? paneel.stand !== "dicht" : undefined}

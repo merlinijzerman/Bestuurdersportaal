@@ -260,7 +260,7 @@ export function useAssistent(opties: UseAssistentOpties) {
    * krijgt een chip. Naam en pad worden hierdoor nooit uit jsonb hersteld.
    */
   const resolveerLiveSharePointScope = useCallback(
-    async (refs: string[]): Promise<SharePointScope | null> => {
+    async (refs: string[], soort: SharePointScope["soort"]): Promise<SharePointScope | null> => {
       if (refs.length !== 1) return null;
       try {
         const response = await fetch("/api/microsoft/sharepoint/documenten", {
@@ -270,18 +270,20 @@ export function useAssistent(opties: UseAssistentOpties) {
           beschikbaar?: boolean;
           aiContextBeschikbaar?: boolean;
           documenten?: Array<{ ref?: unknown; naam?: unknown }>;
+          mapRefs?: Array<{ ref?: unknown; naam?: unknown }>;
         } | null;
         if (
           !response.ok ||
           data?.beschikbaar !== true ||
           data.aiContextBeschikbaar !== true
         ) return null;
-        const document = data.documenten?.find((d) => d.ref === refs[0]);
-        if (!document || typeof document.naam !== "string") return null;
+        const object = (soort === "map" ? data.mapRefs : data.documenten)
+          ?.find((item) => item.ref === refs[0]);
+        if (!object || typeof object.naam !== "string") return null;
         return {
-          soort: "document",
+          soort,
           refs: [refs[0].toLowerCase()],
-          labels: [document.naam],
+          labels: [object.naam],
         };
       } catch {
         return null;
@@ -389,7 +391,10 @@ export function useAssistent(opties: UseAssistentOpties) {
     const opgeslagenSharePoint = leesSharePointScope(item.document_scope);
     if (opgeslagenSharePoint) {
       context.zetModuleScope(null);
-      void resolveerLiveSharePointScope(opgeslagenSharePoint.refs).then((scope) => {
+      void resolveerLiveSharePointScope(
+        opgeslagenSharePoint.refs,
+        opgeslagenSharePoint.soort
+      ).then((scope) => {
         // Het live Graph-antwoord kan later komen dan een klik op een ander
         // gesprek. Laat een oude resolutie nooit de nieuwe context overschrijven.
         if (gesprekId.current === item.id) context.zetSharepointScope(scope);
@@ -741,7 +746,10 @@ export function useAssistent(opties: UseAssistentOpties) {
       for (const ingang of ingangen) {
         const opgelost =
           ingang.soort === "sharepoint"
-            ? await resolveerLiveSharePointScope([ingang.ref]).then((scope) => ({
+            ? await resolveerLiveSharePointScope(
+                [ingang.ref],
+                ingang.objectsoort
+              ).then((scope) => ({
                 patch: scope
                   ? {
                       documentScope: null,
@@ -875,7 +883,8 @@ export function useAssistent(opties: UseAssistentOpties) {
               if (opgeslagenSharePoint) {
                 zetModuleScope(null);
                 void resolveerLiveSharePointScope(
-                  opgeslagenSharePoint.refs
+                  opgeslagenSharePoint.refs,
+                  opgeslagenSharePoint.soort
                 ).then((scope) => {
                   if (gesprekId.current === laatste.id) zetSharepointScope(scope);
                 });
