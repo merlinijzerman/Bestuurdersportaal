@@ -78,6 +78,14 @@ export interface Spoor {
   query: RetrievalQuery;
   grenzen: SelectiegrenzenPerQuery;
   /**
+   * Markeert dit spoor als primair materiaal. Als geen enkel spoor dit veld
+   * zet, blijft het historische contract gelden: alleen spoor nul is primair.
+   * Zodra één spoor het veld expliciet zet, zijn uitsluitend de sporen met
+   * `primair: true` primair. Zo kunnen meerdere provider-adapters gezamenlijk
+   * de gekoppelde bronset vormen zonder aanvullend materiaal op te waarderen.
+   */
+  primair?: boolean;
+  /**
    * #426 — de adapter VOOR DIT SPOOR. Ontbreekt hij, dan geldt
    * `opdracht.adapter`. Dat is geen gemak maar de byte-identiteitsgarantie:
    * zolang geen enkel spoor dit veld zet, is er precies één adaptergroep en kan
@@ -519,10 +527,15 @@ export async function voerRetrievalUit(
     }
 
     // ── 8. Samenvoegen ──────────────────────────────────────────────────────
-    const primair = geselecteerdPerSpoor[0] ?? [];
+    const heeftExplicietePrimaireSporen = sporen.some((spoor) => spoor.primair !== undefined);
+    const isPrimairSpoor = (index: number) =>
+      heeftExplicietePrimaireSporen ? sporen[index].primair === true : index === 0;
+    const primair = geselecteerdPerSpoor
+      .filter((_lijst, index) => isPrimairSpoor(index))
+      .flat();
     const primaireDocIds = new Set(primair.map((b) => b.documentIdentiteit.id));
     const aanvullend = geselecteerdPerSpoor
-      .slice(1)
+      .filter((_lijst, index) => !isPrimairSpoor(index))
       .flat()
       .filter((b) => !primaireDocIds.has(b.documentIdentiteit.id));
     const geselecteerd = [...primair, ...aanvullend];

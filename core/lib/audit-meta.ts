@@ -178,6 +178,9 @@ export const META_BRON = [
   // rang + status/reden. BronIDENTITEIT, geen documenttekst; zelfde niveau als
   // `chunks`/`bronversie_audit`. De tellingen staan los op basis-niveau (`selectie`).
   "selectie_kandidaten",
+  // #462 PR-5 — lokale opaque document-/maprefs met uitsluitend inhoudsarme
+  // tellingen. Het hele object blijft conservatief op bronniveau.
+  "agendapunt_sharepoint",
 ] as const;
 
 /**

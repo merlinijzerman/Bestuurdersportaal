@@ -733,6 +733,11 @@ test("PR-C — elke basis-/bronsleutel uit TypeScript staat óók in `meta_proje
   // vorm in plaats van de sleutel stil te laten vallen. Het patroon matcht
   // daarom op die helper.
   if (/meta_adapters_projectie[\s\S]*?jsonb_build_object\('adapters'/.test(aanvullingen)) basis.add("adapters");
+  // #462 PR-5 — lokale SharePoint-koppelrefs blijven volledig op bronniveau;
+  // de gesloten helper weigert ieder onbekend/vrij veld.
+  if (/meta_agendapunt_sharepoint_projectie[\s\S]*?jsonb_build_object\('agendapunt_sharepoint'/.test(aanvullingen)) {
+    bron.add("agendapunt_sharepoint");
+  }
   const { META_BASIS, META_BRON } = await import("../../core/lib/audit-meta");
   const verschil = (a: Iterable<string>, b: Set<string>) => [...a].filter((x) => !b.has(x)).sort();
   assert.deepEqual(verschil(META_BASIS as readonly string[], basis), [], `basis ontbreekt in ${laatste} plus wrappers`);

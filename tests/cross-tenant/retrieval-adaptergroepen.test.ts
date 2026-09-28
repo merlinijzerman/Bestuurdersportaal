@@ -242,6 +242,39 @@ test("GELIJKE ref uit twee adapters: beide bronnen overleven met eigen standen",
   assert.equal(uit.perAdapter.length, 2);
 });
 
+test("meerdere expliciete primaire sporen blijven primair en dedupliceren aanvullend materiaal", async () => {
+  const portaal = bron("portaal", "doc-portaal", 1, "primair portaal");
+  const sharepoint = bron("sharepoint", "doc-sharepoint", 1, "primair sharepoint");
+  const duplicaat = { ...portaal, passage: "aanvullende kopie" };
+  const bibliotheek = bron("bibliotheek", "doc-bibliotheek", 1, "aanvullend fondsbreed");
+  const a = stub({
+    namespace: "portaal",
+    perQuery: { portaal: [portaal], aanvullend: [duplicaat, bibliotheek] },
+  });
+  const b = stub({ namespace: "sharepoint", perQuery: { sharepoint: [sharepoint] } });
+
+  const uit = await voerRetrievalUit(CTX, {
+    adapter: a,
+    sporen: [
+      { query: QUERY("portaal"), grenzen: GRENZEN, adapter: a, primair: true },
+      { query: QUERY("sharepoint"), grenzen: GRENZEN, adapter: b, primair: true },
+      { query: QUERY("aanvullend"), grenzen: GRENZEN, adapter: a, primair: false },
+    ],
+  });
+  uit.grendel?.stop();
+
+  assert.deepEqual(
+    uit.geselecteerd.map((item) => item.passage),
+    ["primair portaal", "primair sharepoint", "aanvullend fondsbreed"],
+  );
+  assert.deepEqual(
+    [...uit.metaBasis.primaireRefs],
+    [portaal.ref, sharepoint.ref],
+    "beide provider-sporen moeten als primaire bron worden geaudit",
+  );
+  assert.ok(!uit.geselecteerd.some((item) => item.passage === "aanvullende kopie"));
+});
+
 test("de filtercontrole gebruikt de EFFECTIEVE adapter van elk spoor", async () => {
   const a = stub({ namespace: "ns-a", perQuery: { primair: [bron("ns-a", "doc-1", 1)] } });
   const b = stub({ namespace: "ns-b", perQuery: { aanvullend: [bron("ns-b", "doc-2", 2)] } });

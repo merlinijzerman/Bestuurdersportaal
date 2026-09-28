@@ -19,6 +19,7 @@ import type { Bronresultaat } from "./retrieval/contract";
 import { maakDocumentIdentiteit } from "./retrieval/identiteit";
 import { sharepointDocumenten } from "./microsoft-sharepoint";
 import {
+  selecteerSharePointDocumentKandidaten,
   selecteerSharePointMapDocumenten,
   type SharePointMapSelectie,
 } from "./microsoft-sharepoint-map-ai-core";
@@ -89,6 +90,10 @@ export interface ProductieSharePointAdapter {
   lokaleDocumentRefVoor(identiteit: string): string | undefined;
   /** Tijdelijke brug zolang de chatroute stroomafwaarts nog DocumentChunk leest. */
   chunksVoor(bronnen: Bronresultaat[]): SharePointPromptChunk[];
+}
+
+export interface GekoppeldeSharePointAdapter extends ProductieSharePointAdapter {
+  gekoppeldeScopes: DirecteSharePointScope[];
 }
 
 /** Structurele migratiebrug; bewust zonder import uit de Supabase-RAG-kern. */
@@ -241,6 +246,194 @@ export async function maakProductieDirecteSharePointAdapter(args: {
     scopeRef: args.scope.ref,
     scopeLabel,
     ...(mapSelectie ? { mapSelectie } : {}),
+    lokaleDocumentRefVoor: (identiteit) => lokaalPerIdentiteit.get(identiteit),
+    chunksVoor: (bronnen) => bronnen.flatMap((resultaat, index) => {
+      const lokaleRef = lokaalPerIdentiteit.get(resultaat.documentIdentiteit.id);
+      if (!lokaleRef) return [];
+      return [{
+        id: resultaat.ref,
+        document_id: lokaleRef,
+        tekst: resultaat.passage,
+        pagina: resultaat.locator.pagina ?? null,
+        paragraaf: resultaat.locator.paragraaf ?? null,
+        chunk_index: index,
+        rang: resultaat.rang.score,
+        documenten: {
+          titel: resultaat.titel,
+          bron: resultaat.documentIdentiteit.bron ?? "SharePoint",
+          bibliotheek: "sharepoint",
+          opslag_pad: null,
+          fonds_id: args.fondsId,
+          documentstatus: null,
+          bronstatus: resultaat.status.bronstatus,
+          extern_url: resultaat.weergave?.externUrl ?? null,
+          bestandstype: resultaat.weergave?.bestandstype ?? null,
+        },
+      } satisfies SharePointPromptChunk];
+    }),
+  };
+}
+
+/**
+ * PR-5: bouwt één request-lokale adapter over alle SharePoint-bronnen die aan
+ * een agendapunt zijn gekoppeld. De private refs leveren alleen locators. Eerst
+ * wordt de volledige security-trimmed boom met het delegated token herlezen;
+ * daarna worden register, bron/configversie, drive/root en live ref gekruist.
+ * De adapter zelf herbevestigt ieder geselecteerd DriveItem nogmaals vóór en
+ * ná download. Eén ongeldige gekoppelde ref laat de hele bronset fail-closed.
+ */
+export async function maakProductieGekoppeldeSharePointAdapter(args: {
+  fondsId: string;
+  gebruikerId: string;
+  correlationId: string;
+  scopes: DirecteSharePointScope[];
+  vraag: string;
+  signal?: AbortSignal;
+}): Promise<GekoppeldeSharePointAdapter> {
+  const scopes = [...new Map(args.scopes.map((scope) => [
+    `${scope.soort}:${scope.ref}`,
+    scope,
+  ])).values()];
+  if (scopes.length === 0 || scopes.length > 25) {
+    throw new SharePointGraphError("bron_niet_toegankelijk");
+  }
+
+  const [bronRij, token, live] = await Promise.all([
+    vault.leesSharePointBron(args.fondsId),
+    sharepointAccessToken({ fondsId: args.fondsId, gebruikerId: args.gebruikerId }),
+    sharepointDocumenten({
+      fondsId: args.fondsId,
+      gebruikerId: args.gebruikerId,
+      correlationId: args.correlationId,
+    }, args.signal),
+  ]);
+  if (!bronRij || bronRij.status !== "actief") {
+    throw new SharePointGraphError("bron_niet_geconfigureerd");
+  }
+  if (token.tenantId !== bronRij.tenant_id) {
+    throw new SharePointGraphError("toestemming_of_token");
+  }
+  const bron = alsBronSnapshot(bronRij);
+  const liveDocumenten = new Map(live.documenten.map((document) => [document.ref, document]));
+  const liveMappen = new Map(live.mapRefs.map((map) => [map.ref, map]));
+  const kandidaten = new Map<string, (typeof live.documenten)[number]>();
+
+  for (const scope of scopes) {
+    if (scope.soort === "document") {
+      const [registratie, liveDocument] = await Promise.all([
+        vault.leesSharePointDocument(args.fondsId, scope.ref),
+        Promise.resolve(liveDocumenten.get(scope.ref)),
+      ]);
+      if (
+        !registratie || !liveDocument ||
+        registratie.bron_id !== bron.id ||
+        registratie.drive_id !== bron.driveId ||
+        registratie.root_item_id !== bron.rootItemId ||
+        registratie.site_hostnaam !== bron.siteHostnaam ||
+        registratie.configuratieversie !== bron.configuratieversie ||
+        registratie.status !== "gezien" ||
+        registratie.bron_status !== "actief" ||
+        registratie.mappad !== liveDocument.mappad ||
+        registratie.naam !== liveDocument.naam
+      ) {
+        throw new SharePointGraphError("bron_niet_toegankelijk");
+      }
+      kandidaten.set(liveDocument.ref, liveDocument);
+      continue;
+    }
+
+    const [registratie, liveMap] = await Promise.all([
+      vault.leesSharePointMap(args.fondsId, scope.ref),
+      Promise.resolve(liveMappen.get(scope.ref)),
+    ]);
+    if (
+      !registratie || !liveMap ||
+      registratie.bron_id !== bron.id ||
+      registratie.drive_id !== bron.driveId ||
+      registratie.root_item_id !== bron.rootItemId ||
+      registratie.site_hostnaam !== bron.siteHostnaam ||
+      registratie.configuratieversie !== bron.configuratieversie ||
+      registratie.status !== "gezien" ||
+      registratie.bron_status !== "actief" ||
+      registratie.mappad !== liveMap.mappad ||
+      registratie.naam !== liveMap.naam
+    ) {
+      throw new SharePointGraphError("bron_niet_toegankelijk");
+    }
+    for (const document of live.documenten) {
+      if (
+        document.mappad === liveMap.mappad ||
+        document.mappad.startsWith(`${liveMap.mappad}/`)
+      ) {
+        kandidaten.set(document.ref, document);
+      }
+    }
+  }
+
+  const selectie = selecteerSharePointDocumentKandidaten(
+    [...kandidaten.values()],
+    args.vraag
+  );
+  const mapSelectie: SharePointMapSelectie = {
+    ...selectie,
+    afgekapt: selectie.afgekapt || live.afgekapt,
+  };
+  const documentRijen = await Promise.all(
+    selectie.documenten.map((document) =>
+      vault.leesSharePointDocument(args.fondsId, document.ref)
+    )
+  );
+  const documenten = documentRijen.map((rij) => {
+    if (!rij) throw new SharePointGraphError("niet_gevonden");
+    const document = alsGeregistreerdDocument(rij);
+    const liveDocument = liveDocumenten.get(document.ref);
+    if (
+      !liveDocument ||
+      document.bronId !== bron.id ||
+      document.driveId !== bron.driveId ||
+      document.rootItemId !== bron.rootItemId ||
+      document.siteHostnaam !== bron.siteHostnaam ||
+      document.configuratieversie !== bron.configuratieversie ||
+      document.status !== "gezien" ||
+      document.bronStatus !== "actief" ||
+      document.mappad !== liveDocument.mappad ||
+      document.naam !== liveDocument.naam
+    ) {
+      throw new SharePointGraphError("bron_niet_toegankelijk");
+    }
+    return { document };
+  });
+
+  const leesItem: ItemLezer = (itemId, signal) =>
+    graphJson<GraphDriveItem>(token.accessToken, itemUrl(bron.driveId, itemId), { signal });
+  const herleesBron: DirectSharePointAdapterDeps["herleesBron"] = async () => {
+    const nu = await vault.leesSharePointBron(args.fondsId);
+    return nu ? alsBronSnapshot(nu) : undefined;
+  };
+  const lokaalPerIdentiteit = new Map(
+    documenten.map(({ document }) => [
+      maakDocumentIdentiteit(`fonds:${args.fondsId}:sharepoint`, document.ref),
+      document.ref,
+    ])
+  );
+
+  return {
+    adapter: maakDirecteSharePointAdapter({
+      bron,
+      tokenTenantId: token.tenantId,
+      accessToken: token.accessToken,
+      documenten,
+      leesItem,
+      herleesBron,
+      maxTotaalBytes: MAX_DIRECTE_TOTAAL_BYTES,
+      maxTotaalTekens: MAX_DIRECTE_TOTAAL_TEKENS,
+    }),
+    documentIdentiteiten: [...lokaalPerIdentiteit.keys()],
+    scopeSoort: scopes.every((scope) => scope.soort === "map") ? "map" : "document",
+    scopeRef: scopes[0].ref,
+    scopeLabel: "Gekoppelde SharePoint-bronnen",
+    mapSelectie,
+    gekoppeldeScopes: scopes,
     lokaleDocumentRefVoor: (identiteit) => lokaalPerIdentiteit.get(identiteit),
     chunksVoor: (bronnen) => bronnen.flatMap((resultaat, index) => {
       const lokaleRef = lokaalPerIdentiteit.get(resultaat.documentIdentiteit.id);
