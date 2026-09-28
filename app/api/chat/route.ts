@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import { isVoorNetwerkGestopt } from "@/core/lib/ai-gateway/fout";
 import type { GatewayContext, TekstBlok } from "@/core/lib/ai-gateway/contract";
+import { effortVoorChatAntwoord } from "@/core/lib/ai-effort";
+import { markeerLaatsteGebruikersberichtVoorCache, promptCacheScopeVoor } from "@/core/lib/prompt-cache";
 import {
   preflight,
   preflightRespons,
@@ -398,7 +400,7 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
  */
 export const maxDuration = 300;
 
-export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route-eigen", audit: { handeling: "chat.gebruiken" }, capability: "chat.use", schema: z.object({ "actieve_antwoordmodus": z.unknown().optional(), "agendapunt_context": z.unknown().optional(), "algemeen_perspectief": z.unknown().optional(), "alleen_fondsdocumenten": z.unknown().optional(), "bron_intent_bron": z.unknown().optional(), "bron_intent_herkomst": z.unknown().optional(), "bron_intent_override": z.unknown().optional(), "bronkeuze_vorige_log_id": z.unknown().optional(), "const": z.unknown().optional(), "document_scope": z.unknown().optional(), "doorgrond": z.unknown().optional(), "fonds_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "messages": z.unknown().optional(), "module_scope": z.unknown().optional(), "neem_niet_vastgestelde_mee": z.unknown().optional(), "reflectie_antwoord": z.unknown().optional(), "reflectie_herformuleren": z.unknown().optional(), "reflectie_start": z.unknown().optional(), "reflectie_tegenperspectief": z.unknown().optional(), "reflectie_verdiepen": z.unknown().optional(), "startvraag_bron": z.unknown().optional(), "stukvoorbereiding": z.unknown().optional(), "transformatie": z.unknown().optional(), "volledige_analyse": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route-eigen", audit: { handeling: "chat.gebruiken" }, capability: "chat.use", schema: z.object({ "actieve_antwoordmodus": z.unknown().optional(), "agendapunt_context": z.unknown().optional(), "algemeen_perspectief": z.unknown().optional(), "alleen_fondsdocumenten": z.unknown().optional(), "bron_intent_bron": z.unknown().optional(), "bron_intent_herkomst": z.unknown().optional(), "bron_intent_override": z.unknown().optional(), "bronkeuze_vorige_log_id": z.unknown().optional(), "const": z.unknown().optional(), "document_scope": z.unknown().optional(), "doorgrond": z.unknown().optional(), "fonds_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "grondige_analyse": z.unknown().optional(), "messages": z.unknown().optional(), "module_scope": z.unknown().optional(), "neem_niet_vastgestelde_mee": z.unknown().optional(), "reflectie_antwoord": z.unknown().optional(), "reflectie_herformuleren": z.unknown().optional(), "reflectie_start": z.unknown().optional(), "reflectie_tegenperspectief": z.unknown().optional(), "reflectie_verdiepen": z.unknown().optional(), "startvraag_bron": z.unknown().optional(), "stukvoorbereiding": z.unknown().optional(), "transformatie": z.unknown().optional(), "volledige_analyse": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json()) as {
       // nieuw: volledige conversatiegeschiedenis
@@ -477,6 +479,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // niet verwijderbaar. Puur correlatie: de waarde wordt niet vertrouwd voor
       // autorisatie (verwijder_gesprek() toetst het eigenaarschap zelf).
       gesprek_id?: string;
+      // Expliciete eenmalige productknop: alleen true mag effort `max` kiezen.
+      grondige_analyse?: boolean;
       // ── Plateau B — de reflectiedialoog ────────────────────────────────────
       // `reflectie_antwoord` = deze beurt komt uit het GELABELDE reflectie-
       // invoerveld, niet uit de normale invoerbalk. Het onderscheid volgt
@@ -544,6 +548,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     }
     const messages: ChatBericht[] = invoer.messages;
     const vraag = invoer.vraag;
+    const gesprekAuditId =
+      typeof body.gesprek_id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.gesprek_id)
+        ? body.gesprek_id
+        : null;
     // B1: opsteltaak-detectie → opsteller-register (TOON_BLOK_OPSTELLER) i.p.v. de
     // gesprekspartner-toon op de normale antwoord-takken (algemeen/combineren/
     // documenten). Corrigeert alleen de toon; ontsluit geen bevoegdheid.
@@ -580,6 +589,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         { status: 403 }
       );
     }
+    const promptCacheScope = promptCacheScopeVoor({
+      fondsId,
+      actorId: ctx.gebruikerId,
+      gesprekId: gesprekAuditId,
+    });
 
     // T1.3 — host↔fonds-afdwinging (defense-in-depth náást RLS), vóór retrieval/
     // Anthropic. Observe + fail-closed onder TENANT_ENFORCE=on; gedrag-neutraal
@@ -613,6 +627,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       taaktype: "chat_generatie" as const,
       bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
       correlationId: ctx.requestId,
+      ...(promptCacheScope ? { cacheScopeId: promptCacheScope } : {}),
       verzoekStartOp: ctx.verzoekStartOp,
       signal: contextSignal,
     };
@@ -741,6 +756,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       vingerafdruk: vingerafdruk({
         vraag: body.vraag ?? null,
         berichten: body.messages?.length ?? 0,
+        grondige_analyse: body.grondige_analyse === true,
         volledige_analyse_log_id: volledigeAnalyseVorigeLogId,
         volledige_analyse_document_id: volledigeAnalyseDocumentId,
       }),
@@ -1886,16 +1902,6 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         ? body.bronkeuze_vorige_log_id
         : null;
 
-    // Plateau A — correlatie met het gesprek. Alleen een welgevormde UUID gaat
-    // door; een onzinwaarde zou de insert laten falen en daarmee de hele beurt.
-    // Ontbreekt hij, dan wordt de regel niet gekoppeld en is de interactie niet
-    // door de gebruiker te verwijderen — dat is een gemis, geen storing.
-    const gesprekAuditId =
-      typeof body.gesprek_id === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.gesprek_id)
-        ? body.gesprek_id
-        : null;
-
     // ── Plateau B — de reflectieflowstatus, SERVER-SIDE bepaald ─────────────
     // Vier gedragswijzigingen (G1-G4) hangen aan de vraag "loopt er nu een
     // reflectie?". Dat antwoord komt uit `gesprek_reflectie_state` via de
@@ -2840,10 +2846,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     let chunks: DocumentChunk[] = [];
     let bronnen: BronVerwijzing[] = [];
     let contextTekst = "";
-    // H-10 — afbakening van de bronblokken. Eén sentinel per request: alle
-    // contextblokken in deze prompt dragen dezelfde markering, zodat het model
-    // consistent kan onderscheiden wat door het portaal is aangeleverd.
-    let bronSentinel = maakBronSentinel();
+    // H-10 — afbakening van de bronblokken. Binnen een gesprek is de sentinel
+    // stabiel maar HMAC-onvoorspelbaar, zodat exacte documentcontext een uur kan
+    // worden hergebruikt zonder dat een document de markering kan namaken. Zonder
+    // cache-scope blijft de bestaande willekeurige per-requestwaarde gelden.
+    let bronSentinel = maakBronSentinel(promptCacheScope);
     let contextGeneutraliseerd = 0;
     // #434 — de GESLOTEN projectie van de bronstatus. `undefined` zolang er
     // niets te melden is, zodat het bestaande antwoordcontract ongewijzigd blijft.
@@ -2884,7 +2891,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           chunks = await verrijkNotulenChunks(chunks, reflectieGrendel.signal);
           chunks = await verrijkDocumentmetadata(chunks, fondsId, reflectieGrendel.signal);
           reflectieGrendel.bewaak();
-          const ctx = maakContext(chunks);
+          const ctx = maakContext(chunks, 0, bronSentinel);
           contextTekst = ctx.contextTekst;
           const lokaleDocumenten = new Map(chunks.map((chunk) => {
             const identiteit = chunkAlsBronresultaat(chunk).documentIdentiteit.id;
@@ -3111,6 +3118,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
         scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
         correlationId: ctx.requestId,
+        ...(promptCacheScope ? { cacheScopeId: promptCacheScope } : {}),
         // V4 — server-side vastgelegd bij binnenkomst in de wrapper.
         verzoekStartOp: ctx.verzoekStartOp,
         // PR-B — de clientverbinding. Verbreekt de bestuurder de verbinding,
@@ -3199,6 +3207,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
           // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
           hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
+          sentinel: bronSentinel,
         }
       );
       // #367 — dezelfde request-id moet de hele keten ongewijzigd verlaten.
@@ -4323,8 +4332,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             signal: generatieGrendel.signal,
             taaktype: "chat_generatie",
             systeem: streamSysteem,
-            berichten: streamMessages,
+            berichten: markeerLaatsteGebruikersberichtVoorCache(streamMessages),
             maxTokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
+            effort: effortVoorChatAntwoord({
+              antwoordmodus,
+              grondigeAnalyse: body.grondige_analyse === true,
+              stukvoorbereiding: stukActief,
+              opsteltaak: opstelTaak,
+            }),
             ...(webTool ? { tools: [webTool] } : {}),
             ...(scopeStrategie === "targeted"
               ? {}

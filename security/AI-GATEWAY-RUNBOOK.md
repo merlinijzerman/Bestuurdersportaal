@@ -81,6 +81,59 @@ Thinking-tokens zijn een subset van `tokens_out`; tel ze nooit nogmaals op bij
 stopreden of een aanwezige thinkingtelling bevat. Exporteer/behoud het append-only spoor; maak
 het niet leeg om een rollback af te dwingen. Rol eerst de code terug, daarna pas het SQL-contract.
 
+### #438 — effortobservability en prompt caching (PR2)
+
+`supabase/migrations/2026_09_28_ai_gateway_effort_observability.sql` voegt alleen de
+nullable kolom `effort` toe en vervangt `schrijf_log(jsonb)` zodat het werkelijk toegepaste
+niveau inhoudsvrij wordt vastgelegd. Er wijzigen geen modellen, allowlistregels,
+fondsconfiguraties, rollen, grants of RLS-policies. De transactionele CI-controle staat in
+`supabase/checks/2026_09_28_ai_gateway_effort_observability.sql`. Controleer na toepassing:
+
+```sql
+select column_name, is_nullable, column_default
+  from information_schema.columns
+ where table_schema = 'ai_gateway_private'
+   and table_name = 'gateway_log'
+   and column_name = 'effort';
+
+select has_function_privilege(
+  'ai_gateway', 'ai_gateway_private.schrijf_log(jsonb)', 'execute'
+);
+
+select effort, count(*)
+  from ai_gateway_private.gateway_log
+ group by effort
+ order by effort nulls first;
+```
+
+Verwacht bij actieve 4.x-modellen `effort is null`: de gateway logt niet de aanvraag, maar
+wat de adapter daadwerkelijk heeft toegepast. Na een Preview-canary met een effortmodel
+moeten de gekozen niveaus zichtbaar zijn zonder prompt- of antwoordinhoud.
+
+Controleer prompt caching over minimaal twee opeenvolgende berichten in hetzelfde gesprek:
+
+```sql
+select taaktype, model, effort,
+       sum(tokens_cache_lezen) as cache_lezen,
+       sum(tokens_cache_creatie) as cache_creatie,
+       avg(latency_ms)::integer as gemiddelde_latency_ms
+  from ai_gateway_private.gateway_log
+ where created_at >= now() - interval '1 hour'
+ group by taaktype, model, effort
+ order by taaktype, model, effort;
+```
+
+Het cachebereik is server-side HMAC-afgeleid uit fonds, gebruiker en gesprek; het staat niet
+in de gatewaylog. Zonder geldige gesprek-id of `AUDIT_HMAC_SLEUTEL` wordt alleen de statische
+systeemprompt gecachet en blijven dynamische bronsentinels per request wisselen. Prompt-,
+tool- of effortwijzigingen kunnen een cachemiss veroorzaken en zijn daarom onderdeel van de
+Preview-meting.
+
+De handmatige rollback
+`supabase/rollbacks/2026_09_28_ai_gateway_effort_observability_ROLLBACK.sql` weigert zodra
+een logregel een effortwaarde bevat. Rol eerst de code terug. Behoud/exporteer het append-only
+auditspoor en verwijder geen logregels om de rollback te forceren.
+
 ## Lokaal / CI
 
 `scripts/testdb-apply-migrations.sh` maakt in de wegwerp-DB een wachtwoordloze `ai_gateway`-fixture met dezelfde flags (zoals voor `microsoft_vault`), zodat de migratie en de suite in `scripts/cross-tenant-ci.sh` ongewijzigd draaien. Preview en Productie vereisen een echt, beheerd wachtwoord.

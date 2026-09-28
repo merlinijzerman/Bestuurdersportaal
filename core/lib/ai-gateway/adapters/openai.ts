@@ -13,7 +13,7 @@
 
 import type { Credentials } from "../secrets";
 import { GatewayFout } from "../fout";
-import { maakUsage, systeemNaarTekst, type AdapterResultaat, type AdapterVerzoek, type ProviderAdapter } from "./types";
+import { berichtNaarTekst, maakUsage, systeemNaarTekst, type AdapterResultaat, type AdapterVerzoek, type ProviderAdapter } from "./types";
 
 export const OPENAI_STANDAARD_BASE_URL = "https://api.openai.com/v1";
 const MAX_RETRIES = 2;
@@ -43,7 +43,10 @@ export function maakOpenAIAdapter(deps?: { fetchImpl?: typeof fetch }): Provider
 
     async genereer(v: AdapterVerzoek, credentials: Credentials): Promise<AdapterResultaat> {
       const baseUrl = (credentials.baseUrl ?? OPENAI_STANDAARD_BASE_URL).replace(/\/+$/, "");
-      const messages = [{ role: "system" as const, content: systeemNaarTekst(v.systeem) }, ...v.berichten];
+      const messages = [
+        { role: "system" as const, content: systeemNaarTekst(v.systeem) },
+        ...v.berichten.map((bericht) => ({ ...bericht, content: berichtNaarTekst(bericht.content) })),
+      ];
       const body = v.redeneermodel
         ? {
             model: v.model,
@@ -79,6 +82,7 @@ export function maakOpenAIAdapter(deps?: { fetchImpl?: typeof fetch }): Provider
             inhoud: [{ type: "text", text: tekst }],
             stopReden: finish === "length" ? "max_tokens" : finish === "stop" ? "einde" : "onbekend",
             stopDetailsCategorie: null,
+            effort: null,
             usage: maakUsage({ in: data.usage?.prompt_tokens ?? 0, out: data.usage?.completion_tokens ?? 0 }),
             latencyMs: Date.now() - start,
           };

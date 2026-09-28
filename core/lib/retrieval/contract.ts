@@ -47,6 +47,8 @@ export interface RetrievalContext {
     bevrorenChunkIds?: string[];
   };
   correlationId: string;
+  /** Opaque, server-HMAC-afgeleide gespreksscope voor veilige cache-sentinels. */
+  cacheScopeId?: string;
   /**
    * PR-C — SERVER-SIDE wandkloktijd van binnenkomst (ISO), vastgelegd in
    * `withFondsRoute` naast `startMonotoonMs`. V4 toetst
