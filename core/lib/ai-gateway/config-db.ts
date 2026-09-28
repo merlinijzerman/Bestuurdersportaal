@@ -54,6 +54,8 @@ export interface GatewayLogRegel {
   tokens_cache_creatie: number;
   tokens_thinking: number | null;
   tokens_totaal: number;
+  /** Werkelijk door de provider toegepast; null bij modellen zonder effort. */
+  effort: import("./contract").EffortNiveau | null;
   correlatie_id: string;
   actie_id: string | null;
   label: string | null;

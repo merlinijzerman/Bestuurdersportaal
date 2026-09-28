@@ -4,7 +4,7 @@
 //  Dit is de ENIGE plek waar het verzoek aan `/api/chat` wordt samengesteld.
 //
 //  WAAROM een eigen module. De agendapuntchat is ooit als kopie van een oudere
-//  aanroep ontstaan en niet meegegroeid: zij stuurt 9 van de 24 velden. Dat is
+//  aanroep ontstaan en niet meegegroeid: zij stuurt slechts een deel van de
 //  geen bug in de zin van "het werkt niet" — het is een verschil dat niemand
 //  bewust heeft ontworpen, en dat je aan de interface niet ziet (ontwerpdoc
 //  "Eén generieke assistent" §2). Zolang elke surface zijn eigen object-literal
@@ -66,6 +66,8 @@ export interface ChatPayloadInvoer {
   documentScope: DocumentScope | null;
   /** De EFFECTIEVE antwoordmodus voor deze beurt; null = auto-detectie. */
   antwoordmodus: Antwoordmodus | null;
+  /** Eenmalige, expliciete keuze voor maximale modelinspanning. */
+  grondigeAnalyse: boolean;
   agendapuntContext: AgendapuntContext | null;
   moduleScope: ModuleScope | null;
   /** Koppelt de auditregel van deze beurt aan dit gesprek (plateau A). */
@@ -92,6 +94,7 @@ export function bouwChatPayload(invoer: ChatPayloadInvoer): Record<string, unkno
     herkomst,
     documentScope: effScope,
     antwoordmodus: effAntwoordmodus,
+    grondigeAnalyse,
     agendapuntContext,
     moduleScope,
     gesprekId,
@@ -120,6 +123,7 @@ export function bouwChatPayload(invoer: ChatPayloadInvoer): Record<string, unkno
       : undefined,
     // Increment G — vastgezette antwoordmodus (null = auto-detectie).
     actieve_antwoordmodus: effAntwoordmodus,
+    grondige_analyse: grondigeAnalyse,
     // Increment F (FO §14) — "algemeen perspectief": profielsturing overslaan.
     algemeen_perspectief: algemeenPerspectief,
     // FO §13 — transformatie-vervolgactie (herschrijf-intent op vorige antwoord).
@@ -215,6 +219,7 @@ export const CHAT_PAYLOAD_VELDEN = [
   "bron_intent_herkomst",
   "document_scope",
   "actieve_antwoordmodus",
+  "grondige_analyse",
   "algemeen_perspectief",
   "transformatie",
   "agendapunt_context",

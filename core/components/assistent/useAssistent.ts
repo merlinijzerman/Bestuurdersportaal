@@ -185,6 +185,9 @@ export function useAssistent(opties: UseAssistentOpties) {
   const [algemeenPerspectief, setAlgemeenPerspectief] = useState(false);
   // Increment G — vastgezette antwoordmodus (null = auto-detectie).
   const [antwoordmodus, setAntwoordmodus] = useState<Antwoordmodus | null>(null);
+  // #438 — eenmalige productknop. Wordt na verzenden direct teruggezet; `max`
+  // mag nooit impliciet uit een routeruitkomst volgen.
+  const [grondigeAnalyse, setGrondigeAnalyse] = useState(false);
   // ── Plateau B — de reflectiedialoog ───────────────────────────────────────
   // De status komt van de SERVER (gesprek_reflectie_state via
   // /api/reflectie/transitie) en wordt hier alleen weergegeven. De client
@@ -328,6 +331,7 @@ export function useAssistent(opties: UseAssistentOpties) {
   // zodat een hervat gesprek herkenbaar "over «titel»" blijft.
   function openGesprek(item: GesprekItem) {
     if (laden) return;
+    setGrondigeAnalyse(false);
     markeerActiefGesprek(item.id);
     gesprekBestaatInDb.current = true;   // komt uit de lijst, staat dus in de DB
     // T5 C2 — een geopend gesprek start onderaan bij het laatste bericht.
@@ -850,7 +854,9 @@ export function useAssistent(opties: UseAssistentOpties) {
       laden
     )
       return;
+    const grondigeAnalyseVoorDezeBeurt = grondigeAnalyse;
     setInvoer("");
+    setGrondigeAnalyse(false);
     setVrijeVraagOpen(false);
     setLaden(true);
 
@@ -930,6 +936,7 @@ export function useAssistent(opties: UseAssistentOpties) {
             herkomst: context.herkomst,
             documentScope: effScope,
             antwoordmodus: effAntwoordmodus,
+            grondigeAnalyse: grondigeAnalyseVoorDezeBeurt,
             agendapuntContext: effAgendapunt,
             moduleScope: context.moduleScope,
             gesprekId: zorgVoorGesprekId(),
@@ -1323,6 +1330,7 @@ export function useAssistent(opties: UseAssistentOpties) {
 
   function startNieuwGesprek() {
     if (laden) return;
+    setGrondigeAnalyse(false);
     // Met het gesprekken-overzicht hoeft "nieuw" niets te wissen: het lopende
     // gesprek blijft gewoon in de lijst staan. We starten enkel een schone chat.
     gesprekId.current = null;
@@ -1437,6 +1445,8 @@ export function useAssistent(opties: UseAssistentOpties) {
     setAlgemeenPerspectief,
     antwoordmodus,
     setAntwoordmodus,
+    grondigeAnalyse,
+    setGrondigeAnalyse,
     voorbereidingsstand,
     setVoorbereidingsstand,
 

@@ -98,7 +98,7 @@ export interface TekstBlok {
 
 export interface Bericht {
   role: "user" | "assistant";
-  content: string;
+  content: string | TekstBlok[];
 }
 
 /**
@@ -192,6 +192,8 @@ export interface GenereerResultaat {
   stopReden: StopReden;
   /** Inhoudsvrije categorie; de provideruitleg wordt bewust niet doorgegeven of gelogd. */
   stopDetailsCategorie: StopDetailsCategorie | null;
+  /** Werkelijk door de provider toegepast; null wanneer het model effort negeert. */
+  effort: EffortNiveau | null;
   usage: Usage;
   latencyMs: number;
   provider: Provider;

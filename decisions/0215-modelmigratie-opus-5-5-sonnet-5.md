@@ -36,6 +36,18 @@ Naast de modelwissel zijn drie optimalisaties relevant, maar niet allemaal tegel
 - PR2 bepaalt en test de effortpolicy en caching. PR3 voert de Preview-canary en AQLab-vergelijking uit. Productiepromotie vereist apart akkoord en gemeten kwaliteit, latency, kosten en foutgedrag.
 - Het eerder in #438 genoemde nummer 0196 was al bezet; conform het append-only besluitlog is dit besluit vastgelegd als 0215.
 
+## Implementatiestatus 2026-09-28
+
+- PR1 heeft het providercontract, adaptive thinking, strict-toolherstel en observability
+  voorbereid zonder een model te activeren.
+- PR2 implementeert de effortmapping uit dit besluit, inclusief de eenmalige knop
+  **Grondige analyse**, de beide vergelijkingscalls en logging van werkelijk toegepast effort.
+- PR2 activeert één-uurs caching voor stabiele chatprefixen. Dynamische sessie- en
+  broncontext is gebonden aan een HMAC-afgeleide scope per fonds, gebruiker en gesprek;
+  zonder veilige scope valt die optimalisatie gesloten terug.
+- De Preview-canary/modelactivatie en directe PDF-/beeldanalyse blijven afzonderlijke
+  vervolgtranches.
+
 ## Referenties
 
 - [Migrating to Claude Opus 5.5](https://platform.claude.com/docs/en/about-claude/models/migrating-to-claude-opus-5-5)
@@ -45,3 +57,4 @@ Naast de modelwissel zijn drie optimalisaties relevant, maar niet allemaal tegel
 - `core/lib/ai-gateway/anthropic-modelprofiel.ts`
 - `MODEL-MIGRATIE-OPUS-5-5-SONNET-5-INVENTARIS.md`
 - `supabase/migrations/2026_09_27_ai_gateway_opus_5_5_contract.sql`
+- `supabase/migrations/2026_09_28_ai_gateway_effort_observability.sql`

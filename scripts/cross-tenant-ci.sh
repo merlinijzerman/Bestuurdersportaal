@@ -194,6 +194,9 @@ SQL_AIGW="supabase/checks/2026_09_04_ai_gateway.sql"
 # #438 PR1 — nieuwe stopredenen en afzonderlijke thinking-tokenobservability;
 # schrijft alleen transactionele testregels via de minimale ai_gateway-rol.
 SQL_AIGW55="supabase/checks/2026_09_27_ai_gateway_opus_5_5_contract.sql"
+# #438 PR2 — nullable effortobservability; legacy blijft NULL en de minimale
+# gatewayrol kan uitsluitend een waarde uit het gesloten contract schrijven.
+SQL_AIGW_EFFORT="supabase/checks/2026_09_28_ai_gateway_effort_observability.sql"
 # #322 PR-C — de toelatingssamenvatting (en `gateway`) overleven beide
 # leesniveaus van het auditspoor, met de tellingen intact.
 SQL_TOELATING="supabase/checks/2026_09_11_toelating_auditprojectie.sql"
@@ -476,6 +479,8 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
 echo
 echo "-- #438 PR1 (Opus 5.5/Sonnet 5 gatewaycontract) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW55"
+echo "-- #438 PR2 (werkelijk toegepast effort in gatewayaudit) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW_EFFORT"
 echo
 
 echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van het auditspoor --"
