@@ -44,5 +44,4 @@ Naast de modelwissel zijn drie optimalisaties relevant, maar niet allemaal tegel
 - [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
 - `core/lib/ai-gateway/anthropic-modelprofiel.ts`
 - `MODEL-MIGRATIE-OPUS-5-5-SONNET-5-INVENTARIS.md`
-- `supabase/migrations/20260927172711_ai_gateway_opus_5_5_contract.sql`
-
+- `supabase/migrations/2026_09_27_ai_gateway_opus_5_5_contract.sql`

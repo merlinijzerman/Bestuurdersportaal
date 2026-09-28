@@ -60,7 +60,7 @@ De trigger dwingt af dat het profiel bestaat en actief is, dat de provider bij h
 
 ### #438 — Opus 5.5/Sonnet 5-contract (PR1)
 
-`supabase/migrations/20260927172711_ai_gateway_opus_5_5_contract.sql` voegt uitsluitend
+`supabase/migrations/2026_09_27_ai_gateway_opus_5_5_contract.sql` voegt uitsluitend
 `tokens_thinking` en de stopredenen `contextvenster`, `pauze` en `weigering` toe. De migratie
 wijzigt geen model, allowlist of fondsconfiguratie. Controleer na toepassing:
 

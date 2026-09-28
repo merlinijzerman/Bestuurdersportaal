@@ -1,4 +1,4 @@
--- Handmatige rollback voor 20260927172711_ai_gateway_opus_5_5_contract.sql.
+-- Handmatige rollback voor 2026_09_27_ai_gateway_opus_5_5_contract.sql.
 -- Fail-closed zodra nieuwe data niet zonder verlies in het oude contract past.
 
 begin;
