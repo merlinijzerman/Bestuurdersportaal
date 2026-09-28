@@ -906,7 +906,12 @@ export default function AssistentOppervlak() {
                       key={o.intent}
                       disabled={laden}
                       onClick={() =>
-                        kiesVerduidelijking(o.intent, b.verduidelijking!.origineleVraag, i)
+                        kiesVerduidelijking(
+                          o.intent,
+                          b.verduidelijking!.origineleVraag,
+                          i,
+                          b.verduidelijking!.grondigeAnalyse === true
+                        )
                       }
                       className="text-xs text-ink border border-app-line-strong px-3 py-1.5 rounded-full hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
