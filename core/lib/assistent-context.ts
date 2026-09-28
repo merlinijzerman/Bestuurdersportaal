@@ -27,6 +27,7 @@ import type {
   AgendapuntContext,
   DocumentScope,
   ModuleScope,
+  SharePointScope,
 } from "@/core/lib/assistent-types";
 import type { Herkomst } from "@/core/lib/assistent-payload";
 
@@ -34,6 +35,8 @@ import type { Herkomst } from "@/core/lib/assistent-payload";
 export type AssistentContextSoort =
   | "fondsbreed"
   | "document"
+  | "sharepoint_document"
+  | "sharepoint_map"
   | "agendapunt"
   | "proces"
   | "risicomatrix"
@@ -49,6 +52,8 @@ export type AssistentContextSoort =
 export interface AssistentContextWaarde {
   documentScope: DocumentScope | null;
   zetDocumentScope: (scope: DocumentScope | null) => void;
+  sharepointScope: SharePointScope | null;
+  zetSharepointScope: (scope: SharePointScope | null) => void;
   agendapuntContext: AgendapuntContext | null;
   zetAgendapuntContext: (context: AgendapuntContext | null) => void;
   moduleScope: ModuleScope | null;
@@ -73,13 +78,36 @@ export interface AssistentContextWaarde {
  */
 export function bepaalContextSoort(velden: {
   documentScope: DocumentScope | null;
+  sharepointScope?: SharePointScope | null;
   agendapuntContext: AgendapuntContext | null;
   moduleScope: ModuleScope | null;
 }): AssistentContextSoort {
   if (velden.agendapuntContext) return "agendapunt";
   if (velden.moduleScope) return velden.moduleScope.soort;
+  if (velden.sharepointScope) {
+    return velden.sharepointScope.soort === "map"
+      ? "sharepoint_map"
+      : "sharepoint_document";
+  }
   if (velden.documentScope) return "document";
   return "fondsbreed";
+}
+
+/** Leest uitsluitend de niet-gevoelige lokale refs uit opgeslagen jsonb. */
+export function leesSharePointScope(ruw: unknown): SharePointScope | null {
+  if (!ruw || typeof ruw !== "object") return null;
+  const scope = (ruw as { sharepoint_scope?: unknown }).sharepoint_scope;
+  if (!scope || typeof scope !== "object") return null;
+  const soort = (scope as { soort?: unknown }).soort;
+  const refs = Array.isArray((scope as { refs?: unknown }).refs)
+    ? (scope as { refs: unknown[] }).refs.filter(
+        (x): x is string =>
+          typeof x === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x)
+      )
+    : [];
+  if ((soort !== "document" && soort !== "map") || refs.length !== 1) return null;
+  return { soort, refs: [refs[0].toLowerCase()], labels: [] };
 }
 
 /** Leest de jsonb-scope uit een gesprek terug naar de UI-vorm (of null). */
@@ -196,10 +224,11 @@ export interface ContextChip {
 
 export function contextChip(velden: {
   documentScope: DocumentScope | null;
+  sharepointScope?: SharePointScope | null;
   agendapuntContext: AgendapuntContext | null;
   moduleScope: ModuleScope | null;
 }): ContextChip {
-  const { documentScope, agendapuntContext, moduleScope } = velden;
+  const { documentScope, sharepointScope, agendapuntContext, moduleScope } = velden;
   const aantalStukken = documentScope?.document_ids.length ?? 0;
   const stukken = `${aantalStukken} ${aantalStukken === 1 ? "stuk" : "stukken"}`;
 
@@ -236,6 +265,19 @@ export function contextChip(velden: {
     return {
       label: "Risicomatrix",
       bronbereik: `alle open risico's van het fonds${ernaast}`,
+      losTeLaten: true,
+    };
+  }
+
+  if (sharepointScope) {
+    const isMap = sharepointScope.soort === "map";
+    return {
+      label: `${isMap ? "SharePoint-map" : "SharePoint-document"} · «${
+        sharepointScope.labels[0] || (isMap ? "deze map" : "dit document")
+      }»`,
+      bronbereik: isMap
+        ? "relevante documenten uit deze live gecontroleerde SharePoint-map"
+        : "alleen dit live gecontroleerde SharePoint-document",
       losTeLaten: true,
     };
   }

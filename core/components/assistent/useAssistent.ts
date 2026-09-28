@@ -55,6 +55,7 @@ import {
 } from "@/core/lib/assistent-stream";
 import {
   leesScope,
+  leesSharePointScope,
   leesAgendapuntContext,
   type AssistentContextWaarde,
 } from "@/core/lib/assistent-context";
@@ -72,6 +73,7 @@ import type {
   DocSuggestie,
   OnderbouwingMeta,
   DocumentScope,
+  SharePointScope,
   GesprekItem,
   StuurOpties,
   VolledigeAnalyseAanbod,
@@ -156,6 +158,7 @@ export function useAssistent(opties: UseAssistentOpties) {
   // keer draaien.
   const {
     zetDocumentScope,
+    zetSharepointScope,
     zetAgendapuntContext,
     zetModuleScope,
     zetRisicoLijst,
@@ -185,6 +188,9 @@ export function useAssistent(opties: UseAssistentOpties) {
   const [algemeenPerspectief, setAlgemeenPerspectief] = useState(false);
   // Increment G — vastgezette antwoordmodus (null = auto-detectie).
   const [antwoordmodus, setAntwoordmodus] = useState<Antwoordmodus | null>(null);
+  // #438 — eenmalige productknop. Wordt na verzenden direct teruggezet; `max`
+  // mag nooit impliciet uit een routeruitkomst volgen.
+  const [grondigeAnalyse, setGrondigeAnalyse] = useState(false);
   // ── Plateau B — de reflectiedialoog ───────────────────────────────────────
   // De status komt van de SERVER (gesprek_reflectie_state via
   // /api/reflectie/transitie) en wordt hier alleen weergegeven. De client
@@ -247,6 +253,44 @@ export function useAssistent(opties: UseAssistentOpties) {
   // voorkomt dat een gewone rerender een nieuwe client (en daarmee een nieuw
   // initialisatie-effect) oplevert.
   const [supabase] = useState(createClient);
+
+  /**
+   * Herleidt een lokale SharePoint-ref opnieuw via de bestaande live listing.
+   * Alleen een document dat Microsoft voor de huidige gebruiker teruggeeft
+   * krijgt een chip. Naam en pad worden hierdoor nooit uit jsonb hersteld.
+   */
+  const resolveerLiveSharePointScope = useCallback(
+    async (refs: string[], soort: SharePointScope["soort"]): Promise<SharePointScope | null> => {
+      if (refs.length !== 1) return null;
+      try {
+        const response = await fetch("/api/microsoft/sharepoint/documenten", {
+          cache: "no-store",
+        });
+        const data = (await response.json().catch(() => null)) as {
+          beschikbaar?: boolean;
+          aiContextBeschikbaar?: boolean;
+          documenten?: Array<{ ref?: unknown; naam?: unknown }>;
+          mapRefs?: Array<{ ref?: unknown; naam?: unknown }>;
+        } | null;
+        if (
+          !response.ok ||
+          data?.beschikbaar !== true ||
+          data.aiContextBeschikbaar !== true
+        ) return null;
+        const object = (soort === "map" ? data.mapRefs : data.documenten)
+          ?.find((item) => item.ref === refs[0]);
+        if (!object || typeof object.naam !== "string") return null;
+        return {
+          soort,
+          refs: [refs[0].toLowerCase()],
+          labels: [object.naam],
+        };
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
 
   // RLS beperkt dit al tot de eigen gesprekken; de gebruiker_id-filter maakt het
   // expliciet. Best-effort.
@@ -328,6 +372,7 @@ export function useAssistent(opties: UseAssistentOpties) {
   // zodat een hervat gesprek herkenbaar "over «titel»" blijft.
   function openGesprek(item: GesprekItem) {
     if (laden) return;
+    setGrondigeAnalyse(false);
     markeerActiefGesprek(item.id);
     gesprekBestaatInDb.current = true;   // komt uit de lijst, staat dus in de DB
     // T5 C2 — een geopend gesprek start onderaan bij het laatste bericht.
@@ -342,6 +387,19 @@ export function useAssistent(opties: UseAssistentOpties) {
         : []
     );
     context.zetDocumentScope(leesScope(item.document_scope));
+    context.zetSharepointScope(null);
+    const opgeslagenSharePoint = leesSharePointScope(item.document_scope);
+    if (opgeslagenSharePoint) {
+      context.zetModuleScope(null);
+      void resolveerLiveSharePointScope(
+        opgeslagenSharePoint.refs,
+        opgeslagenSharePoint.soort
+      ).then((scope) => {
+        // Het live Graph-antwoord kan later komen dan een klik op een ander
+        // gesprek. Laat een oude resolutie nooit de nieuwe context overschrijven.
+        if (gesprekId.current === item.id) context.zetSharepointScope(scope);
+      });
+    }
     context.zetAgendapuntContext(leesAgendapuntContext(item.document_scope));
     setAntwoordmodus(leesAntwoordmodus(item.actieve_antwoordmodus));
     // B2-vervolg: herstel de stuk-context, zodat de Word-export beschikbaar is op
@@ -412,6 +470,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     wisActiefGesprek();
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     context.zetAgendapuntContext(null);
+    context.zetSharepointScope(null);
     // De voorganger komt ALLEEN in de scope (en het auditspoor) als "Afwijkingen"
     // gekozen is — anders zou een pure "Samenvatting" de hele vorige versie
     // meetrekken (retrieval-dilutie) en een niet-gevraagde vergelijking loggen.
@@ -462,6 +521,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     wisActiefGesprek();
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     context.zetAgendapuntContext(null);
+    context.zetSharepointScope(null);
     // Bij de bronloze variant is er geen document-scope: de server draait dan de
     // concept-skelet-tak. Bij de bron-variant leveren de stukken de bronnen.
     const scope: DocumentScope | null = bronloos
@@ -559,6 +619,7 @@ export function useAssistent(opties: UseAssistentOpties) {
       wisActiefGesprek();
       setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
       context.zetDocumentScope(null);
+      context.zetSharepointScope(null);
       context.zetAgendapuntContext(null);
     }
     laadGesprekken();
@@ -577,7 +638,8 @@ export function useAssistent(opties: UseAssistentOpties) {
     scopeVoorOpslag: DocumentScope | null,
     // T2 (#304): net als `scopeVoorOpslag` — bij een startbeurt is de
     // agendapuntcontext in dezelfde tick gezet en nog niet gecommit.
-    agendapuntVoorOpslag: AgendapuntContext | null = context.agendapuntContext
+    agendapuntVoorOpslag: AgendapuntContext | null = context.agendapuntContext,
+    sharepointVoorOpslag: SharePointScope | null = context.sharepointScope
   ) {
     try {
       const uid = userIdRef.current;
@@ -590,7 +652,7 @@ export function useAssistent(opties: UseAssistentOpties) {
       // ADR 0028: in agendapunt-modus bewaren we additief agendapunt_context, ook
       // als er 0 stukken zijn (documentScope null) — zodat de framing terugkomt.
       const scopePayload =
-        scopeVoorOpslag || agendapuntVoorOpslag
+        scopeVoorOpslag || agendapuntVoorOpslag || sharepointVoorOpslag
           ? {
               type: "single",
               document_ids: scopeVoorOpslag?.document_ids ?? [],
@@ -601,6 +663,16 @@ export function useAssistent(opties: UseAssistentOpties) {
                     agendapunt_context: {
                       id: agendapuntVoorOpslag.id,
                       titel: agendapuntVoorOpslag.titel,
+                    },
+                  }
+                : {}),
+              ...(sharepointVoorOpslag
+                ? {
+                    // Alleen de lokale refs; label/pad worden na restore opnieuw
+                    // met het delegated token van de gebruiker vastgesteld.
+                    sharepoint_scope: {
+                      soort: sharepointVoorOpslag.soort,
+                      refs: sharepointVoorOpslag.refs,
                     },
                   }
                 : {}),
@@ -665,10 +737,39 @@ export function useAssistent(opties: UseAssistentOpties) {
       // aan zijn signatuur te zien dat hij nooit schrijft. De generieke typen
       // van de echte client matchen daar niet structureel op (tsc loopt vast op
       // de diepte), vandaar deze ene, bewuste versmalling.
-      const urlContext = await resolveerAssistentContext(
-        supabase as unknown as ContextLezer,
-        ingangen
-      );
+      let urlContext = {
+        patch: {} as AssistentContextPatch,
+        startSchoonGesprek: false,
+      };
+      // Volgorde blijft betekenisvol: net als bij de bestaande resolver wint
+      // een latere ingang voor de velden die zij zet.
+      for (const ingang of ingangen) {
+        const opgelost =
+          ingang.soort === "sharepoint"
+            ? await resolveerLiveSharePointScope(
+                [ingang.ref],
+                ingang.objectsoort
+              ).then((scope) => ({
+                patch: scope
+                  ? {
+                      documentScope: null,
+                      agendapuntContext: null,
+                      moduleScope: null,
+                      sharepointScope: scope,
+                    }
+                  : {},
+                startSchoonGesprek: scope !== null,
+              }))
+            : await resolveerAssistentContext(
+                supabase as unknown as ContextLezer,
+                [ingang]
+              );
+        urlContext = {
+          patch: { ...urlContext.patch, ...opgelost.patch },
+          startSchoonGesprek:
+            urlContext.startSchoonGesprek || opgelost.startSchoonGesprek,
+        };
+      }
       if (urlContext.startSchoonGesprek) {
         // Een schoon gesprek, zodat de scope niet over een bestaand gesprek
         // heen valt.
@@ -681,6 +782,8 @@ export function useAssistent(opties: UseAssistentOpties) {
       // veld met rust (zie AssistentContextPatch).
       const { patch } = urlContext;
       if (patch.documentScope !== undefined) zetDocumentScope(patch.documentScope);
+      if (patch.sharepointScope !== undefined)
+        zetSharepointScope(patch.sharepointScope);
       if (patch.agendapuntContext !== undefined)
         zetAgendapuntContext(patch.agendapuntContext);
       if (patch.moduleScope !== undefined) zetModuleScope(patch.moduleScope);
@@ -692,7 +795,9 @@ export function useAssistent(opties: UseAssistentOpties) {
     },
     [
       supabase,
+      resolveerLiveSharePointScope,
       zetDocumentScope,
+      zetSharepointScope,
       zetAgendapuntContext,
       zetModuleScope,
       zetRisicoLijst,
@@ -771,6 +876,19 @@ export function useAssistent(opties: UseAssistentOpties) {
               markeerScrollNaarOnder(true);
               setBerichten(herstelVoltooidVlag(opgeslagen));
               zetDocumentScope(leesScope(laatste.document_scope));
+              zetSharepointScope(null);
+              const opgeslagenSharePoint = leesSharePointScope(
+                laatste.document_scope
+              );
+              if (opgeslagenSharePoint) {
+                zetModuleScope(null);
+                void resolveerLiveSharePointScope(
+                  opgeslagenSharePoint.refs,
+                  opgeslagenSharePoint.soort
+                ).then((scope) => {
+                  if (gesprekId.current === laatste.id) zetSharepointScope(scope);
+                });
+              }
               zetAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
               setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
               // B2-vervolg: herstel de stuk-context na een refresh (Word-export).
@@ -831,10 +949,12 @@ export function useAssistent(opties: UseAssistentOpties) {
     supabase,
     pasIngangToe,
     zetDocumentScope,
+    zetSharepointScope,
     zetAgendapuntContext,
     zetModuleScope,
     zetRisicoLijst,
     zetHerkomst,
+    resolveerLiveSharePointScope,
     markeerScrollNaarOnder,
   ]);
 
@@ -850,7 +970,10 @@ export function useAssistent(opties: UseAssistentOpties) {
       laden
     )
       return;
+    const grondigeAnalyseVoorDezeBeurt =
+      opties?.grondigeAnalyseOverride ?? grondigeAnalyse;
     setInvoer("");
+    setGrondigeAnalyse(false);
     setVrijeVraagOpen(false);
     setLaden(true);
 
@@ -929,7 +1052,9 @@ export function useAssistent(opties: UseAssistentOpties) {
             voorbereidingsstand,
             herkomst: context.herkomst,
             documentScope: effScope,
+            sharepointScope: context.sharepointScope,
             antwoordmodus: effAntwoordmodus,
+            grondigeAnalyse: grondigeAnalyseVoorDezeBeurt,
             agendapuntContext: effAgendapunt,
             moduleScope: context.moduleScope,
             gesprekId: zorgVoorGesprekId(),
@@ -965,7 +1090,12 @@ export function useAssistent(opties: UseAssistentOpties) {
         const evt = leesStreamRegel(raw);
         if (!evt) return;
         const vorige = stand;
-        const { stand: nu, uitwerking } = pasStreamEventToe(vorige, evt, tekst);
+        const { stand: nu, uitwerking } = pasStreamEventToe(
+          vorige,
+          evt,
+          tekst,
+          grondigeAnalyseVoorDezeBeurt
+        );
         stand = nu;
 
         // Alleen zetten wat écht wijzigde, zodat de volgorde en het aantal
@@ -1206,7 +1336,8 @@ export function useAssistent(opties: UseAssistentOpties) {
   function kiesVerduidelijking(
     intent: "fonds" | "algemeen",
     origineleVraag: string,
-    idx: number
+    idx: number,
+    grondigeAnalyse = false
   ) {
     if (laden) return;
     const voorTerugvraag = berichten.slice(0, idx); // laat de verduidelijkingsbubbel vallen
@@ -1224,6 +1355,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     stuurBericht(origineleVraag, {
       bronIntentOverride: intent,
       bronIntentBron: "chip",
+      grondigeAnalyseOverride: grondigeAnalyse,
       geenNieuweVraag: true,
       basisBerichten: basis,
     });
@@ -1323,6 +1455,7 @@ export function useAssistent(opties: UseAssistentOpties) {
 
   function startNieuwGesprek() {
     if (laden) return;
+    setGrondigeAnalyse(false);
     // Met het gesprekken-overzicht hoeft "nieuw" niets te wissen: het lopende
     // gesprek blijft gewoon in de lijst staan. We starten enkel een schone chat.
     gesprekId.current = null;
@@ -1331,6 +1464,7 @@ export function useAssistent(opties: UseAssistentOpties) {
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setInvoer("");
     context.zetDocumentScope(null);
+    context.zetSharepointScope(null);
     context.zetAgendapuntContext(null);
     // Besluit 0151 — de module-scope + verdiep-lijst golden voor het vorige gesprek.
     context.zetModuleScope(null);
@@ -1437,6 +1571,8 @@ export function useAssistent(opties: UseAssistentOpties) {
     setAlgemeenPerspectief,
     antwoordmodus,
     setAntwoordmodus,
+    grondigeAnalyse,
+    setGrondigeAnalyse,
     voorbereidingsstand,
     setVoorbereidingsstand,
 

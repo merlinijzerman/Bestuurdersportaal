@@ -264,6 +264,51 @@ test("#368 modelcontextreader — scope/status/provider/cap falen gesloten", asy
   }), /modelcontext_providerfout/);
 });
 
+test("#438 modelcontextreader — alleen documentlabels mogen historische vergelijkversies benoemen", async () => {
+  const signal = new AbortController().signal;
+  const historisch = fondsModelcontextRij(
+    { fonds_id: "fonds-a", id: "doc-v1", titel: "Plan v1" },
+    "fonds-a",
+    null,
+    geverifieerdeModelcontextGeldigheid({
+      status: "historisch", actief: true, geldigVanaf: null, geldigTot: null,
+    })
+  );
+
+  const toegestaan = await leesModelcontext({
+    context: { ...context, signal },
+    soort: "documentlabels",
+    scope: { fondsId: "fonds-a" },
+    maxItems: 1,
+    levenscyclusbeleid: "vergelijkbare_versies",
+    lees: async () => ({ data: [historisch], error: null }),
+  });
+  assert.equal(toegestaan[0]?.id, "doc-v1");
+
+  await assert.rejects(() => leesModelcontext({
+    context: { ...context, signal },
+    soort: "risico",
+    scope: { fondsId: "fonds-a" },
+    maxItems: 1,
+    levenscyclusbeleid: "vergelijkbare_versies",
+    lees: async () => ({ data: [historisch], error: null }),
+  }), /modelcontext_providerfout/);
+
+  await assert.rejects(() => leesModelcontext({
+    context: { ...context, signal },
+    soort: "documentlabels",
+    scope: { fondsId: "fonds-a" },
+    maxItems: 1,
+    levenscyclusbeleid: "vergelijkbare_versies",
+    lees: async () => ({ data: [fondsModelcontextRij(
+      { fonds_id: "fonds-a", id: "doc-uit" }, "fonds-a", null,
+      geverifieerdeModelcontextGeldigheid({
+        status: "historisch", actief: false, geldigVanaf: null, geldigTot: null,
+      })
+    )], error: null }),
+  }), /modelcontext_niet_actueel/);
+});
+
 test("#368 modelcontextreader — ontbrekende servermetadata en private binding falen gesloten", async () => {
   const signal = new AbortController().signal;
   await assert.rejects(() => leesModelcontext({
@@ -784,6 +829,43 @@ test("#368 semantic evidence — inactief, ingetrokken en verlopen document faal
     }) as never, { context: { ...context, scope: { documentIds: [documentRij.id] } }, maxItems: 10, maxGerenderdeTekens: 10_000 }, documentRij.id);
     assert.equal(uit.status, "geweigerd");
   }
+});
+
+test("#438 semantic evidence — historische vergelijking valt zonder units veilig terug op retrieval", async () => {
+  const historisch = {
+    ...documentRij,
+    status: "historisch",
+    bronstatus: "historisch",
+  };
+  const contextMetScope = { ...context, scope: { documentIds: [documentRij.id] } };
+
+  const standaard = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: historisch, error: null }],
+    semantic_units: [{ data: [], error: null }],
+  }) as never, {
+    context: contextMetScope, maxItems: 10, maxGerenderdeTekens: 10_000,
+  }, documentRij.id);
+  assert.equal(standaard.status, "geweigerd");
+
+  const vergelijking = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: historisch, error: null }],
+    semantic_units: [{ data: [], error: null }],
+  }) as never, {
+    context: contextMetScope, maxItems: 10, maxGerenderdeTekens: 10_000,
+    levenscyclusbeleid: "vergelijkbare_versies",
+  }, documentRij.id);
+  assert.equal(vergelijking.status, "compleet");
+  assert.deepEqual(vergelijking.items, []);
+  assert.equal(vergelijking.audit.toegelaten, 0);
+
+  const inactief = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: { ...historisch, actief: false }, error: null }],
+    semantic_units: [{ data: [], error: null }],
+  }) as never, {
+    context: contextMetScope, maxItems: 10, maxGerenderdeTekens: 10_000,
+    levenscyclusbeleid: "vergelijkbare_versies",
+  }, documentRij.id);
+  assert.equal(inactief.status, "geweigerd");
 });
 
 test("#368 semantic evidence — geldige generieke vergelijkbron valt begrensd door naar retrieval", async () => {

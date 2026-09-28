@@ -178,3 +178,87 @@ export async function markeerSharePointDocument(fondsId: string, ref: string, st
 export async function registreerSharePointGebeurtenis(args: { fondsId: string; gebruikerId: string; gebeurtenis: string; correlationId: string; foutcategorie: string | null; details: Record<string, string | number | boolean | null> }) {
   await db().query("select microsoft_private.sharepoint_registreer_gebeurtenis($1,$2,$3,$4,$5,$6::jsonb)", [args.fondsId, args.gebruikerId, args.gebeurtenis, args.correlationId, args.foutcategorie, JSON.stringify(args.details)]);
 }
+
+// ── #462 PR-2 — SharePoint-mapregister en agendapuntkoppeling ──────────────
+// Alle functies hieronder zijn smalle wrappers om SECURITY DEFINER-RPC's in
+// `microsoft_private`; de vaultrol heeft geen enkel direct tabelrecht. Wat een
+// wrapper teruggeeft dat een Graph-id bevat (`SharePointMap`) is uitsluitend
+// voor server-side gebruik. `SharePointAgendakoppeling` bevat per constructie
+// alleen lokale refs en weergavemetadata en mag naar een routeantwoord.
+export type SharePointMap = {
+  id: string; bron_id: string; drive_id: string; item_id: string; root_item_id: string; naam: string;
+  mappad: string; status: string; bron_status: string; site_hostnaam: string; configuratieversie: number;
+};
+export type SharePointKoppelsoort = "document" | "map";
+export type SharePointAgendakoppeling = {
+  koppeling_id: string; agendapunt_id: string; vergadering_id: string; soort: SharePointKoppelsoort; ref: string;
+  naam: string | null; mappad: string | null; bestandstype: string | null; status: string | null; beschikbaar: boolean;
+  aangemaakt_door: string | null; aangemaakt: string;
+};
+/** Maximum aantal agendapunten per leesaanroep; de DB-functie weigert meer. */
+export const SHAREPOINT_KOPPELINGEN_MAX_AGENDAPUNTEN = 500;
+
+export async function upsertSharePointMappen(args: { fondsId: string; bronId: string; configuratieversie: number; mappen: Array<{ itemId: string; naam: string; ouderItemId: string | null; mappad: string }> }) {
+  if (args.mappen.length === 0) return [] as Array<{ ref: string; item_id: string }>;
+  const r = await db().query("select ref, extern_item_id from microsoft_private.sharepoint_upsert_mappen($1,$2,$3,$4::jsonb)", [args.fondsId, args.bronId, args.configuratieversie, JSON.stringify(args.mappen.map((m) => ({ item_id: m.itemId, naam: m.naam, ouder_item_id: m.ouderItemId, mappad: m.mappad })))]);
+  return (r.rows as Array<{ ref: string; extern_item_id: string }>).map((rij) => ({ ref: rij.ref, item_id: rij.extern_item_id }));
+}
+/** Fondsgebonden opzoeking met dezelfde poorten als `leesSharePointDocument`:
+ * actieve bron, zelfde drive, actuele configuratieversie. Anders `undefined`. */
+export async function leesSharePointMap(fondsId: string, ref: string): Promise<SharePointMap | undefined> {
+  const r = await db().query("select * from microsoft_private.sharepoint_lees_map($1,$2)", [fondsId, ref]);
+  return r.rows[0] as SharePointMap | undefined;
+}
+/** Idempotent koppelen. Weigering (onbekende/vreemde ref, inactieve bron, oude
+ * configuratie, agendapunt van ander fonds) komt als DB-exceptie met een
+ * uniforme melding; de aanroepende route vertaalt die naar één fout zonder
+ * bestaansorakel. `vergadering_id` leidt de database zelf af. */
+export async function koppelSharePointAanAgendapunt(args: { fondsId: string; gebruikerId: string; agendapuntId: string; soort: SharePointKoppelsoort; ref: string }) {
+  const r = await db().query("select koppeling_id, nieuw from microsoft_private.sharepoint_koppel_agendapunt($1,$2,$3,$4,$5)", [args.fondsId, args.gebruikerId, args.agendapuntId, args.soort, args.ref]);
+  const rij = r.rows[0] as { koppeling_id: string; nieuw: boolean } | undefined;
+  if (!rij) throw new Error("sharepoint koppeling niet vastgelegd");
+  return { koppelingId: rij.koppeling_id, nieuw: rij.nieuw === true };
+}
+/**
+ * Koppelt een gevalideerde set in één SQL-statement. Als één private RPC
+ * weigert, rolt PostgreSQL het hele statement terug; de browser krijgt dus
+ * nooit een ongemelde halve multiselectie.
+ */
+export async function koppelSharePointBronnenAanAgendapunt(args: {
+  fondsId: string;
+  gebruikerId: string;
+  agendapuntId: string;
+  bronnen: Array<{ soort: SharePointKoppelsoort; ref: string }>;
+}) {
+  if (args.bronnen.length === 0) return [] as Array<{ koppelingId: string; nieuw: boolean }>;
+  const r = await db().query(
+    `select resultaat.koppeling_id, resultaat.nieuw
+       from jsonb_to_recordset($4::jsonb) as bron(soort text, ref uuid)
+       cross join lateral microsoft_private.sharepoint_koppel_agendapunt(
+         $1, $2, $3, bron.soort, bron.ref
+       ) as resultaat`,
+    [args.fondsId, args.gebruikerId, args.agendapuntId, JSON.stringify(args.bronnen)]
+  );
+  return (r.rows as Array<{ koppeling_id: string; nieuw: boolean }>).map((rij) => ({
+    koppelingId: rij.koppeling_id,
+    nieuw: rij.nieuw === true,
+  }));
+}
+/** Verwijdert uitsluitend de koppelrij; register en SharePoint blijven onaangeroerd. */
+export async function ontkoppelSharePointVanAgendapunt(args: { fondsId: string; agendapuntId: string; koppelingId: string }) {
+  const r = await db().query("select microsoft_private.sharepoint_ontkoppel_agendapunt($1,$2,$3) as verwijderd", [args.fondsId, args.agendapuntId, args.koppelingId]);
+  return r.rows[0]?.verwijderd === true;
+}
+export async function leesSharePointAgendakoppelingen(fondsId: string, agendapuntIds: string[]): Promise<SharePointAgendakoppeling[]> {
+  const uniek = [...new Set(agendapuntIds)];
+  if (uniek.length === 0) return [];
+  if (uniek.length > SHAREPOINT_KOPPELINGEN_MAX_AGENDAPUNTEN) throw new Error("te veel agendapunten in een aanroep");
+  const r = await db().query("select * from microsoft_private.sharepoint_lees_agendapunt_koppelingen($1,$2::uuid[])", [fondsId, uniek]);
+  return (r.rows as Array<Omit<SharePointAgendakoppeling, "aangemaakt"> & { aangemaakt: unknown }>).map((rij) => ({
+    // timestamptz, geen date: `normaliseerPostgresDatum` zou de tijd afkappen.
+    ...rij, beschikbaar: rij.beschikbaar === true, aangemaakt: rij.aangemaakt instanceof Date ? rij.aangemaakt.toISOString() : String(rij.aangemaakt),
+  }));
+}
+export async function leesSharePointAgendapuntKoppelingen(fondsId: string, agendapuntId: string) {
+  return leesSharePointAgendakoppelingen(fondsId, [agendapuntId]);
+}

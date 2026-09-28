@@ -52,7 +52,7 @@ function toolUse(inhoud: unknown[]): { input: unknown } | null {
 
 // Reproduceerbaarheids-stempels (belanden in comparison_run). Bump bij een bewuste
 // wijziging aan het prompt- of comparator-gedrag.
-export const VERGELIJK_PROMPT_VERSIE = "t5-vergelijk-v1";
+export const VERGELIJK_PROMPT_VERSIE = "t5-vergelijk-v2";
 export const VERGELIJK_COMPARATOR_VERSIE = "t5-v1";
 // Het synthese-/duidingsmodel voor het LLM-pad (Opus). Haiku doet alleen de
 // dimensiebepaling; het geregistreerde run-model is het zwaarste model in de keten.
@@ -231,7 +231,7 @@ async function haalPassages(
   dimensie: Dimensie,
   maxResultaten = MAX_PASSAGES_PER_ZIJDE
 ): Promise<PassageLite[]> {
-  const vraag = `${dimensie.label} (${dimensie.key})`;
+  const vraag = dimensie.zoekvraag ?? `${dimensie.label} (${dimensie.key})`;
   const auditDocumentId = maakDocumentIdentiteit(`fonds:${retrieval.context.fondsId}`, documentId);
   try {
     const uitkomst = await voerVolledigeRetrievalUit(
@@ -328,6 +328,7 @@ async function haalExtraDimensies(
 
     const resp = await gw.gateway.genereer(gw.ctx, {
       taaktype: "vergelijk_dimensies",
+      effort: "low",
       maxTokens: 512,
       temperature: 0,
       signal: retrieval.context.signal,
@@ -403,7 +404,11 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
   try {
     const resp = await gw.gateway.genereer(gw.ctx, {
       taaktype: "vergelijk_waarde",
-      maxTokens: 700,
+      effort: "medium",
+      // Adaptive thinking telt mee in max_tokens. Gebruik hetzelfde ruime
+      // generatieplafond als chat zodat de verplichte toolcall niet wordt
+      // verdrongen door reasoning-tokens.
+      maxTokens: 32_000,
       // Opus 4.7+ weigert niet-standaard samplingparameters met HTTP 400.
       // De verplichte functietool en de strikte prompt begrenzen de uitvoer;
       // laat de provider daarom zijn standaardtemperatuur gebruiken.
@@ -463,6 +468,9 @@ async function leesSemanticUnits(retrieval: VergelijkRetrieval, supabase: Supaba
     context: retrieval.context,
     maxItems: 500,
     maxGerenderdeTekens: 60_000,
+    // De vergelijkroute mag een expliciet gekoppelde historische voorganger
+    // lezen. Alle overige evidencelezingen behouden het actuele beleid.
+    levenscyclusbeleid: "vergelijkbare_versies",
   }, documentId);
   if (uitkomst.status === "geweigerd") {
     throw new Error(`semantic_evidence_${uitkomst.audit.fout}`);

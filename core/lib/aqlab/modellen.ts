@@ -73,7 +73,7 @@ export interface ToegestaanModel {
   toelichting: string;
 }
 
-// De allowlist. sonnet-4-6 = productiekern (lib/generatie-kern.ts AI_MODEL).
+// De allowlist. opus-5-5 = productiekern (lib/generatie-kern.ts AI_MODEL).
 // De overige Anthropic-modellen zijn challengers die in de infra beschikbaar zijn.
 // AQL-6: OpenAI (gpt-*) en Mistral (mistral-*) zijn UITSLUITEND challengers
 // ("ander provider dan productie"); baseline blijft Claude, judge blijft Claude-opus.
@@ -84,22 +84,40 @@ export interface ToegestaanModel {
 // account vóór de eerste live call (identiek aan de hedging bij AI_MODEL).
 export const AQLAB_TOEGESTANE_MODELLEN: ToegestaanModel[] = [
   {
-    model_name: "claude-sonnet-4-6",
+    model_name: "claude-opus-5-5",
     provider: "anthropic",
     label: "Productiekern",
-    korteNaam: "sonnet-4-6",
-    defaultMaxTokens: 3200,
+    korteNaam: "opus-5-5",
+    defaultMaxTokens: 32_000,
     isBaseline: true,
-    toelichting: "Exact het model dat live draait (productiekern).",
+    toelichting: "Preview-baseline met adaptive thinking en productgestuurde effort.",
+  },
+  {
+    model_name: "claude-sonnet-5",
+    provider: "anthropic",
+    label: "Sonnet 5-challenger",
+    korteNaam: "sonnet-5",
+    defaultMaxTokens: 16_000,
+    isBaseline: false,
+    toelichting: "Sneller model voor concept- en hulptaken, met adaptive thinking en expliciete effort.",
   },
   {
     model_name: "claude-opus-4-8",
     provider: "anthropic",
-    label: "Opus-challenger",
+    label: "Opus 4.8 (rollback-baseline)",
     korteNaam: "opus-4-8",
-    defaultMaxTokens: 4500,
+    defaultMaxTokens: 5000,
     isBaseline: false,
-    toelichting: "Sterker/duurder model — test of extra kwaliteit de kosten/latency waard is.",
+    toelichting: "Vorige generatie-baseline voor regressievergelijking en rollbackmeting.",
+  },
+  {
+    model_name: "claude-sonnet-4-6",
+    provider: "anthropic",
+    label: "Sonnet 4.6 (rollback-baseline)",
+    korteNaam: "sonnet-4-6",
+    defaultMaxTokens: 3200,
+    isBaseline: false,
+    toelichting: "Vorige sterke hulpbaseline voor regressievergelijking.",
   },
   {
     model_name: "claude-haiku-4-5-20251001",

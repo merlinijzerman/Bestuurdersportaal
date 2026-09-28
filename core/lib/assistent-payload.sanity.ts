@@ -4,7 +4,7 @@
 //  Dit is het vangnet onder de laagsplitsing, en het dekt twee verschillende
 //  risico's die je niet met één test tegelijk afdekt:
 //
-//  1. VERSCHRALING. De agendapuntchat stuurt 9 van de 24 velden, omdat zij een
+//  1. VERSCHRALING. De agendapuntchat stuurt slechts een deel van de velden,
 //     kopie van een oudere aanroep is die niet is meegegroeid. Niemand heeft dat
 //     verschil ontworpen en aan de interface zie je het niet. §"volledigheid"
 //     hieronder maakt een weggevallen veld zichtbaar.
@@ -61,7 +61,9 @@ function referentieLiteral(invoer: ChatPayloadInvoer): Record<string, unknown> {
     voorbereidingsstand,
     herkomst,
     documentScope: effScope,
+    sharepointScope,
     antwoordmodus: effAntwoordmodus,
+    grondigeAnalyse,
     agendapuntContext,
     moduleScope,
     gesprekId,
@@ -82,7 +84,11 @@ function referentieLiteral(invoer: ChatPayloadInvoer): Record<string, unknown> {
           algemene_kennis: effScope.algemene_kennis === true,
         }
       : undefined,
+    sharepoint_scope: sharepointScope
+      ? { soort: sharepointScope.soort, refs: sharepointScope.refs }
+      : undefined,
     actieve_antwoordmodus: effAntwoordmodus,
+    grondige_analyse: grondigeAnalyse,
     algemeen_perspectief: algemeenPerspectief,
     transformatie: opties?.transformatie === true,
     agendapunt_context: agendapuntContext
@@ -143,7 +149,9 @@ const BASIS: ChatPayloadInvoer = {
   voorbereidingsstand: false,
   herkomst: null,
   documentScope: null,
+  sharepointScope: null,
   antwoordmodus: null,
+  grondigeAnalyse: false,
   agendapuntContext: null,
   moduleScope: null,
   gesprekId: "00000000-0000-4000-8000-00000000c501",
@@ -163,6 +171,7 @@ const SCENARIOS: { naam: string; invoer: ChatPayloadInvoer }[] = [
       algemeenPerspectief: true,
       voorbereidingsstand: true,
       antwoordmodus: "feitelijk",
+      grondigeAnalyse: true,
       documentScope: {
         document_ids: ["00000000-0000-4000-8000-0000000d0c01"],
         titels: ["Verklaring beleggingsbeginselen"],
@@ -292,6 +301,22 @@ check("document_scope stuurt de ids, niet de titels", () => {
   assert.ok(!JSON.stringify(p).includes("Geheime titel"));
 });
 
+check("sharepoint_scope stuurt alleen de lokale ref, nooit het live label", () => {
+  const p = bouwChatPayload({
+    ...BASIS,
+    sharepointScope: {
+      soort: "document",
+      refs: ["00000000-0000-4000-8000-00000000a365"],
+      labels: ["Vertrouwelijke live naam.docx"],
+    },
+  });
+  assert.deepStrictEqual(p.sharepoint_scope, {
+    soort: "document",
+    refs: ["00000000-0000-4000-8000-00000000a365"],
+  });
+  assert.ok(!JSON.stringify(p).includes("Vertrouwelijke live naam"));
+});
+
 // ── 2. Volledigheid: het vangnet tegen verschraling ─────────────────────────
 check(`elke beurt draagt alle ${CHAT_PAYLOAD_VELDEN.length} velden`, () => {
   for (const { naam, invoer } of SCENARIOS) {
@@ -323,11 +348,11 @@ check("het auditspoor van een beurt is nooit stilzwijgend leeg", () => {
 //  per definitie een gedragswijziging.
 const GOLDEN: Record<string, string> = {
   "vrije vraag":
-    '{"messages":[{"role":"user","content":"Wat is onze dekkingsgraad?"}],"fonds_id":"00000000-0000-4000-8000-000000000001","alleen_fondsdocumenten":false,"actieve_antwoordmodus":null,"algemeen_perspectief":false,"transformatie":false,"neem_niet_vastgestelde_mee":false,"gesprek_id":"00000000-0000-4000-8000-00000000c501","reflectie_antwoord":false,"reflectie_herformuleren":false,"reflectie_verdiepen":false,"reflectie_tegenperspectief":false}',
+    '{"messages":[{"role":"user","content":"Wat is onze dekkingsgraad?"}],"fonds_id":"00000000-0000-4000-8000-000000000001","alleen_fondsdocumenten":false,"actieve_antwoordmodus":null,"grondige_analyse":false,"algemeen_perspectief":false,"transformatie":false,"neem_niet_vastgestelde_mee":false,"gesprek_id":"00000000-0000-4000-8000-00000000c501","reflectie_antwoord":false,"reflectie_herformuleren":false,"reflectie_verdiepen":false,"reflectie_tegenperspectief":false}',
   documentscope:
-    '{"messages":[{"role":"user","content":"Vat dit stuk samen"}],"fonds_id":"00000000-0000-4000-8000-000000000001","alleen_fondsdocumenten":true,"bron_intent_override":"fonds","bron_intent_bron":"startvraag","document_scope":{"document_ids":["00000000-0000-4000-8000-0000000d0c01"],"algemene_kennis":true},"actieve_antwoordmodus":"feitelijk","algemeen_perspectief":true,"transformatie":true,"module_scope":{"soort":"risico","risico_id":"00000000-0000-4000-8000-0000000715c1"},"doorgrond":{"secties":["samenvatting"]},"startvraag_bron":"voorbeeldvraag","neem_niet_vastgestelde_mee":true,"gesprek_id":"00000000-0000-4000-8000-00000000c501","reflectie_antwoord":false,"reflectie_herformuleren":false,"reflectie_verdiepen":false,"reflectie_tegenperspectief":false}',
+    '{"messages":[{"role":"user","content":"Vat dit stuk samen"}],"fonds_id":"00000000-0000-4000-8000-000000000001","alleen_fondsdocumenten":true,"bron_intent_override":"fonds","bron_intent_bron":"startvraag","document_scope":{"document_ids":["00000000-0000-4000-8000-0000000d0c01"],"algemene_kennis":true},"actieve_antwoordmodus":"feitelijk","grondige_analyse":true,"algemeen_perspectief":true,"transformatie":true,"module_scope":{"soort":"risico","risico_id":"00000000-0000-4000-8000-0000000715c1"},"doorgrond":{"secties":["samenvatting"]},"startvraag_bron":"voorbeeldvraag","neem_niet_vastgestelde_mee":true,"gesprek_id":"00000000-0000-4000-8000-00000000c501","reflectie_antwoord":false,"reflectie_herformuleren":false,"reflectie_verdiepen":false,"reflectie_tegenperspectief":false}',
   "agendapunt-scope":
-    '{"messages":[{"role":"user","content":"Waar moet ik op letten?"},{"role":"assistant","content":"Drie punten."},{"role":"user","content":"En het derde?"}],"fonds_id":"00000000-0000-4000-8000-000000000001","alleen_fondsdocumenten":false,"bron_intent_override":"fonds","bron_intent_bron":"herkomst","bron_intent_herkomst":"vergaderingen","document_scope":{"document_ids":["00000000-0000-4000-8000-0000000d0c01"],"algemene_kennis":false},"actieve_antwoordmodus":null,"algemeen_perspectief":false,"transformatie":false,"agendapunt_context":{"id":"00000000-0000-4000-8000-0000000a9001","titel":"Vaststellen jaarrekening"},"module_scope":{"soort":"proces","procedure_id":"00000000-0000-4000-8000-00000000cd01"},"stukvoorbereiding":{"stuksoort":"memo"},"neem_niet_vastgestelde_mee":true,"bronkeuze_vorige_log_id":"00000000-0000-4000-8000-00000000109d","gesprek_id":"00000000-0000-4000-8000-00000000c501","reflectie_antwoord":false,"reflectie_herformuleren":false,"reflectie_verdiepen":false,"reflectie_tegenperspectief":false,"reflectie_start":{"ingang":"twijfel"},"volledige_analyse":{"origineel_log_id":"00000000-0000-4000-8000-00000000109e","document_id":"00000000-0000-4000-8000-0000000d0c01"}}',
+    '{"messages":[{"role":"user","content":"Waar moet ik op letten?"},{"role":"assistant","content":"Drie punten."},{"role":"user","content":"En het derde?"}],"fonds_id":"00000000-0000-4000-8000-000000000001","alleen_fondsdocumenten":false,"bron_intent_override":"fonds","bron_intent_bron":"herkomst","bron_intent_herkomst":"vergaderingen","document_scope":{"document_ids":["00000000-0000-4000-8000-0000000d0c01"],"algemene_kennis":false},"actieve_antwoordmodus":null,"grondige_analyse":false,"algemeen_perspectief":false,"transformatie":false,"agendapunt_context":{"id":"00000000-0000-4000-8000-0000000a9001","titel":"Vaststellen jaarrekening"},"module_scope":{"soort":"proces","procedure_id":"00000000-0000-4000-8000-00000000cd01"},"stukvoorbereiding":{"stuksoort":"memo"},"neem_niet_vastgestelde_mee":true,"bronkeuze_vorige_log_id":"00000000-0000-4000-8000-00000000109d","gesprek_id":"00000000-0000-4000-8000-00000000c501","reflectie_antwoord":false,"reflectie_herformuleren":false,"reflectie_verdiepen":false,"reflectie_tegenperspectief":false,"reflectie_start":{"ingang":"twijfel"},"volledige_analyse":{"origineel_log_id":"00000000-0000-4000-8000-00000000109e","document_id":"00000000-0000-4000-8000-0000000d0c01"}}',
 };
 
 for (const { naam, invoer } of SCENARIOS) {

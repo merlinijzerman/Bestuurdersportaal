@@ -103,13 +103,13 @@ test("voorbereiding — het aantal bouwSysteemBlokken-call-sites is onveranderd"
 test("voorbereiding — zonder gekoppelde stukken wordt er wél geretrieved", () => {
   assert.match(
     route,
-    /const voorbereidingZonderStukken =\s*agendapuntModusActief &&\s*!agendapuntMetStukken &&\s*antwoordmodus === "persoonlijke_voorbereiding";/,
-    "de conditie moet uitsluitend door de nieuwe modus bereikbaar zijn"
+    /const voorbereidingZonderStukken =\s*agendapuntModusActief &&\s*!agendapuntMetStukken &&\s*!agendapuntSharePointActief &&\s*antwoordmodus === "persoonlijke_voorbereiding";/,
+    "alleen een agendapunt zonder portaal- én SharePoint-bronnen mag fondsbreed terugvallen"
   );
   assert.match(
     route,
-    /agendapuntModusActief\s*\?\s*agendapuntMetStukken \|\| voorbereidingZonderStukken/,
-    "moetRetrieven moet de bronloze voorbereiding toelaten"
+    /agendapuntModusActief\s*\?\s*agendapuntMetStukken \|\| agendapuntSharePointActief \|\| voorbereidingZonderStukken/,
+    "moetRetrieven moet gekoppelde SharePoint-bronnen én de bronloze voorbereiding toelaten"
   );
 });
 

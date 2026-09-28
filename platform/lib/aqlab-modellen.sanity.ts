@@ -30,23 +30,25 @@ function check(naam: string, fn: () => void) {
 console.log("aqlab/modellen sanity-tests:");
 
 const base: VariantInstellingen = {
-  model: "claude-sonnet-4-6",
+  model: "claude-opus-5-5",
   temperature: null,
-  maxTokens: 3200,
+  maxTokens: 32_000,
   topP: null,
   retrieval: {},
 };
 
 // ── Allowlist ───────────────────────────────────────────────────────────────
-check("allowlist bevat de productiekern-baseline (sonnet-4-6)", () => {
+check("allowlist bevat de productiekern-baseline (opus-5-5)", () => {
   const b = AQLAB_TOEGESTANE_MODELLEN.filter((m) => m.isBaseline);
   assert.equal(b.length, 1);
-  assert.equal(b[0].model_name, "claude-sonnet-4-6");
+  assert.equal(b[0].model_name, "claude-opus-5-5");
 });
 check("allowlist telt ≥3 modellen (DoD)", () => {
   assert.ok(AQLAB_TOEGESTANE_MODELLEN.length >= 3);
 });
 check("isToegestaanModel accepteert allowlist, weigert vrije tekst", () => {
+  assert.equal(isToegestaanModel("claude-opus-5-5"), true);
+  assert.equal(isToegestaanModel("claude-sonnet-5"), true);
   assert.equal(isToegestaanModel("claude-opus-4-8"), true);
   // Niet-allowlisted modelstrings (ook plausibel klinkende) blijven geweigerd —
   // modelkeuze is nooit vrije tekst.
@@ -76,7 +78,7 @@ check("providerVanModel leidt provider af uit de modelnaam (default anthropic)",
 check("config-hash is provider-onafhankelijk (decision 0064): model draagt identiteit", () => {
   // Twee verschillende modellen (dus providers) → verschillende hash via model,
   // niet via een aparte provider-as. Zelfde model → zelfde hash ongeacht provider.
-  const claude: VariantInstellingen = { model: "claude-sonnet-4-6", temperature: null, maxTokens: 3200, topP: null, retrieval: {} };
+  const claude: VariantInstellingen = { model: "claude-opus-5-5", temperature: null, maxTokens: 32_000, topP: null, retrieval: {} };
   const gpt: VariantInstellingen = { ...claude, model: "gpt-4.1" };
   assert.notEqual(configHash(claude), configHash(gpt));
   // Canoniek bevat geen provider-veld → hash blijft stabiel over herhaalde opbouw.
@@ -90,7 +92,7 @@ check("reasoning-modellen (GPT-5-serie) staan op de allowlist en zijn geflagd", 
   assert.equal(isRedeneermodel("gpt-5-mini"), true);
   // Chat-modellen zijn géén reasoning-model.
   assert.equal(isRedeneermodel("gpt-4.1"), false);
-  assert.equal(isRedeneermodel("claude-sonnet-4-6"), false);
+  assert.equal(isRedeneermodel("claude-opus-5-5"), false);
 });
 check("reasoning_effort is back-compat in de hash: null == weggelaten", () => {
   const zonder: VariantInstellingen = { model: "gpt-5", temperature: null, maxTokens: 8000, topP: null, retrieval: {} };
@@ -138,10 +140,10 @@ check("provider-default (null temp) ≠ expliciete temp 0", () => {
 
 // ── Auto-naam ────────────────────────────────────────────────────────────────
 check("autoNaam gebruikt korte alias + provider-default", () => {
-  assert.equal(autoNaam(base), "sonnet-4-6 · provider-default · 3200");
+  assert.equal(autoNaam(base), "opus-5-5 · provider-default · 32000");
 });
 check("autoNaam toont expliciete temperature", () => {
-  assert.equal(autoNaam({ ...base, temperature: 0.2 }), "sonnet-4-6 · temp0.2 · 3200");
+  assert.equal(autoNaam({ ...base, temperature: 0.2 }), "opus-5-5 · temp0.2 · 32000");
 });
 
 // ── Gewijzigde as (automatisch afgeleid) ─────────────────────────────────────

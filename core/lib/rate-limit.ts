@@ -94,6 +94,13 @@ export const LIMIETEN = {
   // onbegrensde Graph-downloadlus. De wrapper behandelt deze extern kostende
   // route fail-closed.
   microsoft_sharepoint_retrieval_spike: { endpoint: "microsoft_sharepoint_retrieval_spike", limiet: 30, venster: "1 hour" },
+  // #463 fase A — metadatazoeken in de gekoppelde SharePoint-bron. Eén zoekopdracht
+  // enumereert live de hele bronroot (tot 30 Graph-pagina's) met het token van de
+  // gebruiker. Bewust een EIGEN sleutel, niet gedeeld met de kostendragende
+  // semantische portaalzoekfunctie (`zoeken`): de twee budgetten mogen elkaar niet
+  // opsouperen. Fail-closed (FAIL_CLOSED_LIMIETEN): zonder werkende teller geen
+  // onbegrensde Graph-enumeratielus.
+  microsoft_sharepoint_zoeken: { endpoint: "microsoft_sharepoint_zoeken", limiet: 30, venster: "5 minutes" },
 } as const satisfies Record<string, Limiet>;
 
 /** De limietnamen uit het benoemde register — de enige echte declaratiewaarden

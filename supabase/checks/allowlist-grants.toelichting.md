@@ -388,6 +388,7 @@ grant.
 
 Waarom zij bestaat en waarom het leesrecht op `governance_log` NIET is verruimd:
 de selectpolicy daar is `gebruiker_id = auth.uid() or public.mag_audit(fonds_id)`.
+
 Zonder de grant `governance_audit_read` levert een gewone tabelquery alleen de
 eigen beurten, en die werden als de stand van het fonds getoond.
 
@@ -404,3 +405,13 @@ profiel van `auth.uid()` en is geen parameter; de capabilitypoort is
 `mag_audit()` en niets anders; de inzageregel wordt daadwerkelijk geschreven én
 blijft achterwege bij een eigen-standlezing; en de limiet is begrensd, zodat een
 definer-leespad geen onbegrensde kost kan krijgen.
+
+## #462 PR-5 — `public.meta_agendapunt_sharepoint_projectie(p_meta jsonb)`
+
+Nieuwe `immutable` functie zonder `security definer`; zij leest of schrijft geen
+tabellen. De functie accepteert uitsluitend lokale UUID-refs, begrensde tellingen
+en de afkapstatus voor gekoppelde SharePoint-bronnen. Onbekende velden of vrije
+tekst falen hard. `meta_bronniveau()` roept haar aan, waardoor dezelfde grants
+nodig zijn als bij de bestaande auditprojecties: `authenticated` en
+`service_role` mogen uitvoeren, `anon` niet. De basisprojectie roept haar bewust
+niet aan, zodat lokale bronidentiteiten alleen voor bronauditors zichtbaar zijn.

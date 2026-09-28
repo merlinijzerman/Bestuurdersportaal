@@ -173,6 +173,8 @@ export interface VerduidelijkingKeuze {
   vraag: string;
   opties: { intent: "fonds" | "algemeen"; label: string }[];
   origineleVraag: string;
+  /** Behoudt de eenmalige max-keuze wanneer eerst een bronverduidelijking nodig is. */
+  grondigeAnalyse?: boolean;
 }
 
 export interface VolledigeAnalyseAanbod {
@@ -252,6 +254,16 @@ export interface DocumentScope {
   algemene_kennis?: boolean;
 }
 
+// #462 PR-3/4 — live SharePoint-context. `refs` zijn uitsluitend lokale, opaque
+// UUID-referenties uit het private document- of mapregister. `labels` bestaan
+// alleen in het browsergeheugen voor de contextchip en gaan nooit naar
+// /api/chat of jsonb.
+export interface SharePointScope {
+  soort: "document" | "map";
+  refs: string[];
+  labels: string[];
+}
+
 // Besluit 0151 — AI-modulecontext. De client houdt alleen de sleutel + een label
 // voor de chip bij; de server resolveert de inhoud onder RLS. `risicomatrix` is de
 // enige risico-ingang; `risico` ontstaat door in de chat in te zoomen (verdiep-chip).
@@ -295,6 +307,8 @@ export interface AgendapuntContext {
 export interface StuurOpties {
   antwoordmodusOverride?: Antwoordmodus | null;
   scopeOverride?: DocumentScope | null;
+  /** Eenmalige max-keuze uit de voorafgaande verduidelijkingsbeurt. */
+  grondigeAnalyseOverride?: boolean;
   // Increment I-2 (FO §11a) — bevestigde bron-intentie na een verduidelijkingschip.
   bronIntentOverride?: "fonds" | "algemeen";
   // Waar komt die bevestigde intentie vandaan (ingreep 1/2)? Uitsluitend voor het
@@ -365,4 +379,3 @@ export interface StuurOpties {
   /** Zichtbare actietekst; de server ontvangt voor de analyse de originele vraag. */
   weergaveTekst?: string;
 }
-

@@ -93,12 +93,12 @@ export interface GatewayContext {
 export interface TekstBlok {
   type: "text";
   text: string;
-  cache_control?: { type: "ephemeral" } | null;
+  cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } | null;
 }
 
 export interface Bericht {
   role: "user" | "assistant";
-  content: string;
+  content: string | TekstBlok[];
 }
 
 /**
@@ -116,7 +116,11 @@ export type NeutraleTool =
       verplicht?: boolean;
     };
 
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+/** Providerneutrale superset; het modelprofiel valideert de concrete subset. */
+export type EffortNiveau = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/** OpenAI reasoning-effort blijft vooralsnog begrensd tot deze bestaande subset. */
+export type ReasoningEffort = Extract<EffortNiveau, "minimal" | "low" | "medium" | "high">;
 
 /**
  * Alleen voor platformbrede taaktypes (fonds = null, bv. AQLab): expliciete,
@@ -139,6 +143,8 @@ export interface GenereerVerzoek {
   /** null/undefined → provider-default (zoals de streaming-route altijd deed). */
   temperature?: number | null;
   topP?: number | null;
+  /** Expliciete provider/model-effort; modelprofielen valideren de toegestane waarden. */
+  effort?: EffortNiveau | null;
   tools?: NeutraleTool[];
   /** Harde SDK-/HTTP-timeout voor deze call. */
   timeoutMs?: number;
@@ -152,11 +158,28 @@ export interface Usage {
   out: number;
   cacheLezen: number;
   cacheCreatie: number;
+  /** Subset van `out`; alleen aanwezig als de provider dit afzonderlijk levert. */
+  thinking?: number;
   /** in + cacheLezen + cacheCreatie + out. */
   totaal: number;
 }
 
-export type StopReden = "einde" | "max_tokens" | "stop_sequence" | "tool" | "onbekend";
+export type StopReden =
+  | "einde"
+  | "max_tokens"
+  | "contextvenster"
+  | "stop_sequence"
+  | "tool"
+  | "pauze"
+  | "weigering"
+  | "onbekend";
+
+export type StopDetailsCategorie =
+  | "cyber"
+  | "bio"
+  | "frontier_llm"
+  | "reasoning_extraction"
+  | "general_harms";
 
 export interface GenereerResultaat {
   tekst: string;
@@ -167,6 +190,10 @@ export interface GenereerResultaat {
    */
   inhoud: unknown[];
   stopReden: StopReden;
+  /** Inhoudsvrije categorie; de provideruitleg wordt bewust niet doorgegeven of gelogd. */
+  stopDetailsCategorie: StopDetailsCategorie | null;
+  /** Werkelijk door de provider toegepast; null wanneer het model effort negeert. */
+  effort: EffortNiveau | null;
   usage: Usage;
   latencyMs: number;
   provider: Provider;

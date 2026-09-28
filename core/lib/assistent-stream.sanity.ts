@@ -155,6 +155,20 @@ check("de verduidelijkingsbubbel draagt de originele vraag mee", () => {
   );
 });
 
+check("de verduidelijkingsbubbel behoudt de eenmalige max-keuze", () => {
+  let stand = leegeStreamStand();
+  stand = pasStreamEventToe(
+    stand,
+    { type: "verduidelijking", vraag: "Welke?", opties: [] },
+    "Analyseer dit grondig",
+    true
+  ).stand;
+  assert.equal(
+    stand.verduidelijkingBericht?.verduidelijking?.grondigeAnalyse,
+    true
+  );
+});
+
 check("een vergelijkevent zonder resultaat voegt geen bericht toe", () => {
   const { stand, uitwerkingen } = speel([{ type: "vergelijking" }]);
   assert.deepEqual(uitwerkingen, [{ soort: "geen" }]);

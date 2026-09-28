@@ -342,6 +342,13 @@ test("T2-2 — productieroutes hebben geen directe retrievalcall of service-role
   );
   assert.match(vergelijkRoute, /clientSignal: req\.signal/);
   assert.match(vergelijkRoute, /voerVergelijkingBinnenDeadline/);
+  assert.match(vergelijkRoute, /timeoutMs:\s*vergelijkBudget\.budgetMs/);
+  assert.match(vergelijkRoute, /timeoutMs:\s*retrievalTimeoutMs/);
+  assert.doesNotMatch(vergelijkRoute, /const timeoutMs = timeoutUitConfig/);
+
+  const chatRoute = lees("app/api/chat/route.ts");
+  assert.match(chatRoute, /timeoutMs:\s*vergelijkBudget\.budgetMs/);
+  assert.match(chatRoute, /timeoutMs:\s*vergelijkRetrievalTimeoutMs/);
 });
 
 test("T2-2 audit — persistentie scheidt het HTTP-ordinaal van opaque citation en bewaart actualiteit", () => {

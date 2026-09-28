@@ -29,14 +29,15 @@ import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES } from "@/c
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
-import { timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
+import { RetrievalAfgebroken, timeoutUitConfig } from "@/core/lib/retrieval/afbreken";
+import { effectiefGeneratiebudget, generatieTimeoutUitConfig } from "@/core/lib/generatie-budget";
 import { foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
 import type { Bronsoort } from "@/core/lib/retrieval/contract";
 import { bevatClientScopeSturing, geldigeUuid } from "@/core/lib/retrieval/productiepaden-core";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // meerdere dimensies × retrieval + Opus; ruim genomen.
+export const maxDuration = 300; // gelijk aan chat: keten van retrieval + meerdere modelcalls.
 
 interface VergelijkBody {
   mode?: unknown;
@@ -154,7 +155,12 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
         hybrideZoekenAan(fondsId),
         retrievalVlaggenVoorFonds(fondsId),
       ]);
-      const timeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
+      const retrievalTimeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
+      const vergelijkBudget = effectiefGeneratiebudget(
+        generatieTimeoutUitConfig(retrievalVlaggen.generatieTimeoutMs),
+        performance.now() - ctx.startMonotoonMs
+      );
+      if (!vergelijkBudget.genoeg) throw new RetrievalAfgebroken("timeout");
       resultaat = await voerVergelijkingBinnenDeadline(
         {
           mode: "symmetrisch",
@@ -165,7 +171,7 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
         },
         {
           clientSignal: req.signal,
-          timeoutMs,
+          timeoutMs: vergelijkBudget.budgetMs,
           depsVoorSignal(signal) {
             const retrieval = maakSupabaseAdapter(retrievalVlaggen, {
               gateway: { gateway, ctx: gatewayCtx },
@@ -193,7 +199,7 @@ export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-e
                 },
                 // Binnenste retrievalgrendels mogen nooit langer leven dan de
                 // buitenste; diens signaal blijft de gezaghebbende bovengrens.
-                timeoutMs,
+                timeoutMs: retrievalTimeoutMs,
                 hybrideAan,
                 vlaggen: retrievalVlaggen,
                 audit,

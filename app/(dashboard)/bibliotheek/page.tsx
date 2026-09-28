@@ -431,7 +431,7 @@ export default function BibliotheekPage() {
             . Wissel hierboven van tab om in de andere bibliotheek te zoeken — uw
             zoekterm blijft staan.
           </p>
-          <ZoekenPaneel vasteBronsoort={actieveTab} />
+          <ZoekenPaneel vasteBronsoort={actieveTab} metSharePoint={actieveTab === "fonds"} />
         </>
       ) : (
       <>

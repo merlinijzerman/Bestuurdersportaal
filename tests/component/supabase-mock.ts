@@ -15,7 +15,17 @@ export function maakSupabaseStub({
     const data = tabellen[tabel] ?? null;
     const resultaat = { data, error: null };
     const keten: Record<string, unknown> = {};
-    for (const naam of ["select", "eq", "order", "limit", "ilike", "insert", "update"]) {
+    for (const naam of [
+      "select",
+      "eq",
+      "in",
+      "order",
+      "limit",
+      "ilike",
+      "insert",
+      "update",
+      "abortSignal",
+    ]) {
       keten[naam] = vi.fn(() => keten);
     }
     keten.single = vi.fn(async () => resultaat);

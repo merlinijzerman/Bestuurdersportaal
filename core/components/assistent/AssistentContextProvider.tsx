@@ -39,6 +39,7 @@ import type {
   AgendapuntContext,
   DocumentScope,
   ModuleScope,
+  SharePointScope,
 } from "@/core/lib/assistent-types";
 
 const AssistentContext = createContext<AssistentContextWaarde | null>(null);
@@ -52,6 +53,7 @@ export function AssistentContextProvider({
   // documentscope en een module-scope sluit een documentscope niet uit. Zie de
   // toelichting in core/lib/assistent-context.ts.
   const [documentScope, zetDocumentScope] = useState<DocumentScope | null>(null);
+  const [sharepointScope, zetSharepointScope] = useState<SharePointScope | null>(null);
   const [agendapuntContext, zetAgendapuntContext] =
     useState<AgendapuntContext | null>(null);
   const [moduleScope, zetModuleScope] = useState<ModuleScope | null>(null);
@@ -66,6 +68,8 @@ export function AssistentContextProvider({
     () => ({
       documentScope,
       zetDocumentScope,
+      sharepointScope,
+      zetSharepointScope,
       agendapuntContext,
       zetAgendapuntContext,
       moduleScope,
@@ -75,10 +79,11 @@ export function AssistentContextProvider({
       herkomst,
       zetHerkomst,
       // Afgeleid, niet opgeslagen.
-      soort: bepaalContextSoort({ documentScope, agendapuntContext, moduleScope }),
+      soort: bepaalContextSoort({ documentScope, sharepointScope, agendapuntContext, moduleScope }),
     }),
     [
       documentScope,
+      sharepointScope,
       agendapuntContext,
       moduleScope,
       risicoLijst,
@@ -86,6 +91,7 @@ export function AssistentContextProvider({
       // De setters zijn stabiel, maar de React Compiler leidt ze wél als
       // afhankelijkheid af; ze weglaten laat hem de memoisatie overslaan.
       zetDocumentScope,
+      zetSharepointScope,
       zetAgendapuntContext,
       zetModuleScope,
       zetRisicoLijst,

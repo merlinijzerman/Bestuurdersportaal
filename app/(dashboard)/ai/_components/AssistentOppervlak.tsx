@@ -154,6 +154,8 @@ export default function AssistentOppervlak() {
   const {
     documentScope,
     zetDocumentScope,
+    sharepointScope,
+    zetSharepointScope,
     agendapuntContext,
     zetAgendapuntContext,
     moduleScope,
@@ -184,6 +186,8 @@ export default function AssistentOppervlak() {
     setAlgemeenPerspectief,
     antwoordmodus,
     setAntwoordmodus,
+    grondigeAnalyse,
+    setGrondigeAnalyse,
     voorbereidingsstand,
     setVoorbereidingsstand,
     gesprekken,
@@ -303,6 +307,7 @@ export default function AssistentOppervlak() {
   function scopeUitDocumentlijst(documentIds: string[], titels: string[]) {
     if (laden || documentIds.length === 0) return;
     zetAgendapuntContext(null);
+    zetSharepointScope(null);
     zetDocumentScope({ document_ids: documentIds, titels, algemene_kennis: true });
     focusInvoer();
   }
@@ -345,6 +350,7 @@ export default function AssistentOppervlak() {
     // Een expliciete documentkeuze verlaat de agendapunt-modus (ADR 0028): de
     // gebruiker stuurt nu zelf op één stuk i.p.v. de agendapunt-framing.
     zetAgendapuntContext(null);
+    zetSharepointScope(null);
     zetDocumentScope({ document_ids: [s.id], titels: [s.titel] });
     setInvoer((huidig) => huidig.replace(/@([^\s@]*)$/, "").trimEnd());
     sluitMention();
@@ -377,6 +383,7 @@ export default function AssistentOppervlak() {
     !scherpstelActief &&
     berichten.length <= 1 &&
     !documentScope &&
+    !sharepointScope &&
     !agendapuntContext &&
     // Besluit 0151 — bij een actieve module-scope tonen we direct het chatvenster
     // (met scope-chip), niet het generieke startpunt.
@@ -899,7 +906,12 @@ export default function AssistentOppervlak() {
                       key={o.intent}
                       disabled={laden}
                       onClick={() =>
-                        kiesVerduidelijking(o.intent, b.verduidelijking!.origineleVraag, i)
+                        kiesVerduidelijking(
+                          o.intent,
+                          b.verduidelijking!.origineleVraag,
+                          i,
+                          b.verduidelijking!.grondigeAnalyse === true
+                        )
                       }
                       className="text-xs text-ink border border-app-line-strong px-3 py-1.5 rounded-full hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
@@ -1495,6 +1507,29 @@ export default function AssistentOppervlak() {
         )}
 
         {/* Scope-chip: "Je vraagt nu over: «titel»" + wis-knop + algemene-kennis-toggle */}
+        {sharepointScope && (
+          <div className="mb-2 flex items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-2 max-w-full bg-accent-tint border border-accent/30 text-accent-ink text-xs rounded-full pl-3 pr-2 py-1">
+              <span className="truncate">
+                {sharepointScope.soort === "map" ? "SharePoint-map" : "SharePoint-document"}: «{
+                  sharepointScope.labels[0] || (sharepointScope.soort === "map" ? "deze map" : "dit document")
+                }»
+              </span>
+              <button
+                onClick={() => zetSharepointScope(null)}
+                className="shrink-0 w-4 h-4 rounded-full bg-accent hover:bg-accent text-accent-ink flex items-center justify-center"
+                aria-label="SharePoint-context wissen"
+                title="Onderwerp wissen — weer fondsbreed vragen"
+              >
+                <Icoon sleutel="sluiten" grootte={10} streek={2.2} />
+              </button>
+            </span>
+            <span className="text-xs text-muted">
+              Live gelezen met uw eigen Microsoft-rechten
+            </span>
+          </div>
+        )}
+
         {!agendapuntContext && documentScope && (
           <div className="mb-2 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-2 max-w-full bg-warn-tint border border-warn/30 text-warn-ink text-xs rounded-full pl-3 pr-2 py-1">
@@ -1534,6 +1569,27 @@ export default function AssistentOppervlak() {
           </div>
         )}
 
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGrondigeAnalyse(!grondigeAnalyse)}
+            disabled={laden}
+            aria-pressed={grondigeAnalyse}
+            title="Gebruik eenmalig maximale modelinspanning voor deze vraag. Dit kan langer duren."
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              grondigeAnalyse
+                ? "border-ai bg-ai/10 text-ai"
+                : "border-line bg-card text-muted hover:border-ai hover:text-ink"
+            }`}
+          >
+            <span aria-hidden>✦</span>
+            Grondige analyse
+          </button>
+          {grondigeAnalyse && (
+            <span className="text-[11px] text-muted">Eenmalig voor deze vraag · kan langer duren</span>
+          )}
+        </div>
+
         <div className="assistent-composer">
           <textarea
             ref={invoerRef}
@@ -1551,7 +1607,11 @@ export default function AssistentOppervlak() {
               }
             }}
             placeholder={
-              documentScope
+              sharepointScope
+                ? sharepointScope.soort === "map"
+                  ? "Stel een vraag over deze SharePoint-map..."
+                  : "Stel een vraag over dit SharePoint-document..."
+                : documentScope
                 ? "Stel een vraag over dit document... (@ om te wisselen)"
                 : "Stel een vraag... (@ om een specifiek document te kiezen)"
             }

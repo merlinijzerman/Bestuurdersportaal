@@ -425,8 +425,23 @@ test("PR-B — de route vertaalt een afbreking naar een eigen pad, niet naar een
   // als mislukking, waar `rondAf` beide inslikt.
   assert.match(
     bron,
-    /await rondAfStrikt\(\s*supabase,\s*aiActieId,\s*"mislukt",\s*`\$\{fase\}:\$\{afbreekreden\}`/,
+    /await rondAfStrikt\(\s*supabase,\s*aiActieId,\s*"mislukt",\s*`\$\{fase\}:\$\{duurzameFoutreden\}`/,
     "de afbrekingsreden hoort via de strikte afronding op de ai_actie te landen"
+  );
+  assert.match(
+    bron,
+    /const duurzameFoutreden = afbreekreden \?\? "onverwachte_fout"/,
+    "ook een niet-genormaliseerde streamfout krijgt een inhoudsarme duurzame reden"
+  );
+  assert.match(
+    bron,
+    /if \(!aiActieAfgerond\) \{[\s\S]*?await rondAfStrikt/,
+    "een onbeantwoorde beurt moet ook bij een onverwachte fout strikt worden gesloten"
+  );
+  assert.match(
+    bron,
+    /await rondAf\([\s\S]*?"voltooid",[\s\S]*?\);\s*aiActieAfgerond = true;/,
+    "een fout in naverwerking mag een reeds voltooide beurt niet als mislukt hersluiten"
   );
   assert.match(bron, /let fase: "retrieval" \| "generatie" = "retrieval";/, "de fase is expliciet, niet afgeleid");
   assert.match(bron, /\[chat\]\[ALARM\] ai_actie niet afgerond/, "een niet-gesloten levenscyclus hoort een operationeel signaal te geven");

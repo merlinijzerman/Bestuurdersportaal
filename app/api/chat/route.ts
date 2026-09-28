@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 import { isVoorNetwerkGestopt } from "@/core/lib/ai-gateway/fout";
 import type { GatewayContext, TekstBlok } from "@/core/lib/ai-gateway/contract";
+import { effortVoorChatAntwoord } from "@/core/lib/ai-effort";
+import { markeerLaatsteGebruikersberichtVoorCache, promptCacheScopeVoor } from "@/core/lib/prompt-cache";
 import {
   preflight,
   preflightRespons,
@@ -14,12 +16,23 @@ import {
 } from "@/core/lib/ai-preflight";
 import { rondAfStrikt } from "@/core/lib/ai-actie-afronding";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { voerVolledigeRetrievalUit, foutcategorieVoor, type Spoor } from "@/core/lib/retrieval/orkestratie";
 import { bouwBronstatusDto } from "@/core/lib/retrieval/bronstatus-dto";
 import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, bewaakNaIO, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import {
+  leesDirecteSharePointScope,
+  maakProductieDirecteSharePointAdapter,
+  maakProductieGekoppeldeSharePointAdapter,
+  type DirecteSharePointScope,
+} from "@/core/lib/microsoft-sharepoint-ai-context";
+import {
+  telGebruikteSharePointDocumenten,
+  type SharePointMapSelectie,
+} from "@/core/lib/microsoft-sharepoint-map-ai-core";
+import { microsoftSharePointAiContextActief } from "@/core/lib/microsoft-sharepoint-ai-gate";
 import { controleerChunkPresentie, leesBesluitEvidence } from "@/core/lib/retrieval/supabase-evidence";
 import { bouwModelcontextBlok, combineerModelcontext, maakModelcontextSentinel } from "@/core/lib/retrieval/modelcontext";
 import {
@@ -91,12 +104,19 @@ import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel, bouwRegimeKaderBlok } from "@/core/lib/organisatieprofiel";
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
+import {
+  bepaalGevraagdeDocumentIds,
+  haalAgendapuntDocumenten,
+  type AgendapuntDocument,
+  type AgendapuntDocumentLezer,
+} from "@/core/lib/agendapunt-documenten";
+import { leesSharePointAgendapuntKoppelingen } from "@/core/lib/microsoft-vault";
 import { bouwVoorbereidingProduct } from "@/core/lib/voorbereiding-product";
 import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
 import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
 // T5 — Vergelijkmodus. De logica zit volledig in core/lib/vergelijk-* (los
 // testbaar); deze route is enkel de confidence-gated ingang + governance-logging.
-import { bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "@/core/lib/vergelijk-intent";
+import { bepaalAangevraagdeDimensies, bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "@/core/lib/vergelijk-intent";
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
 import { vergelijkmodusVoorFondsAan } from "@/core/lib/vergelijk-rollout";
 import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
@@ -392,7 +412,7 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
  */
 export const maxDuration = 300;
 
-export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route-eigen", audit: { handeling: "chat.gebruiken" }, capability: "chat.use", schema: z.object({ "actieve_antwoordmodus": z.unknown().optional(), "agendapunt_context": z.unknown().optional(), "algemeen_perspectief": z.unknown().optional(), "alleen_fondsdocumenten": z.unknown().optional(), "bron_intent_bron": z.unknown().optional(), "bron_intent_herkomst": z.unknown().optional(), "bron_intent_override": z.unknown().optional(), "bronkeuze_vorige_log_id": z.unknown().optional(), "const": z.unknown().optional(), "document_scope": z.unknown().optional(), "doorgrond": z.unknown().optional(), "fonds_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "messages": z.unknown().optional(), "module_scope": z.unknown().optional(), "neem_niet_vastgestelde_mee": z.unknown().optional(), "reflectie_antwoord": z.unknown().optional(), "reflectie_herformuleren": z.unknown().optional(), "reflectie_start": z.unknown().optional(), "reflectie_tegenperspectief": z.unknown().optional(), "reflectie_verdiepen": z.unknown().optional(), "startvraag_bron": z.unknown().optional(), "stukvoorbereiding": z.unknown().optional(), "transformatie": z.unknown().optional(), "volledige_analyse": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route-eigen", audit: { handeling: "chat.gebruiken" }, capability: "chat.use", schema: z.object({ "actieve_antwoordmodus": z.unknown().optional(), "agendapunt_context": z.unknown().optional(), "algemeen_perspectief": z.unknown().optional(), "alleen_fondsdocumenten": z.unknown().optional(), "bron_intent_bron": z.unknown().optional(), "bron_intent_herkomst": z.unknown().optional(), "bron_intent_override": z.unknown().optional(), "bronkeuze_vorige_log_id": z.unknown().optional(), "const": z.unknown().optional(), "document_scope": z.unknown().optional(), "sharepoint_scope": z.unknown().optional(), "doorgrond": z.unknown().optional(), "fonds_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "grondige_analyse": z.unknown().optional(), "messages": z.unknown().optional(), "module_scope": z.unknown().optional(), "neem_niet_vastgestelde_mee": z.unknown().optional(), "reflectie_antwoord": z.unknown().optional(), "reflectie_herformuleren": z.unknown().optional(), "reflectie_start": z.unknown().optional(), "reflectie_tegenperspectief": z.unknown().optional(), "reflectie_verdiepen": z.unknown().optional(), "startvraag_bron": z.unknown().optional(), "stukvoorbereiding": z.unknown().optional(), "transformatie": z.unknown().optional(), "volledige_analyse": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json()) as {
       // nieuw: volledige conversatiegeschiedenis
@@ -412,6 +432,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // Document-scope (increment 1): beperk de vraag tot één/enkele document(en).
       // `algemene_kennis` is increment 2 — in increment 1 forceren we strict.
       document_scope?: { document_ids?: string[]; algemene_kennis?: boolean };
+      // #462 — lokale, opaque SharePoint-ref. Naam/pad worden nooit vertrouwd
+      // uit de client en per beurt via de private registratie + Graph herlezen.
+      sharepoint_scope?: { soort?: "document" | "map"; refs?: string[] };
       // Increment G — door de gebruiker vastgezette antwoordmodus (gespreksniveau,
       // gesprekken.actieve_antwoordmodus). null/afwezig = auto-detectie per vraag.
       actieve_antwoordmodus?: Antwoordmodus | null;
@@ -431,8 +454,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // toelichting (agendapunten.beschrijving) zélf op via RLS — zo wordt de
       // fonds-grens server-side afgedwongen en logt het auditspoor de échte
       // toelichting i.p.v. door de client aanleverbare tekst. De meegestuurde
-      // document_scope (de gekoppelde stukken) dient dan als retrieval-scope,
-      // zónder strict-document gedrag.
+      // De route lost de gekoppelde stukken dan zelf actueel op uit de primaire
+      // en secundaire koppelingen. Een meegestuurde document_scope is alleen
+      // clientweergave en wordt in deze modus genegeerd.
       agendapunt_context?: { id?: string; titel?: string };
       // P2 Deel B — "een document doorgronden": de gekozen secties + (bij
       // "Afwijkingen") de aantoonbaar eerdere versie. De zichtbare beurt blijft de
@@ -470,6 +494,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // niet verwijderbaar. Puur correlatie: de waarde wordt niet vertrouwd voor
       // autorisatie (verwijder_gesprek() toetst het eigenaarschap zelf).
       gesprek_id?: string;
+      // Expliciete eenmalige productknop: alleen true mag effort `max` kiezen.
+      grondige_analyse?: boolean;
       // ── Plateau B — de reflectiedialoog ────────────────────────────────────
       // `reflectie_antwoord` = deze beurt komt uit het GELABELDE reflectie-
       // invoerveld, niet uit de normale invoerbalk. Het onderscheid volgt
@@ -537,6 +563,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     }
     const messages: ChatBericht[] = invoer.messages;
     const vraag = invoer.vraag;
+    const gesprekAuditId =
+      typeof body.gesprek_id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.gesprek_id)
+        ? body.gesprek_id
+        : null;
     // B1: opsteltaak-detectie → opsteller-register (TOON_BLOK_OPSTELLER) i.p.v. de
     // gesprekspartner-toon op de normale antwoord-takken (algemeen/combineren/
     // documenten). Corrigeert alleen de toon; ontsluit geen bevoegdheid.
@@ -573,6 +604,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         { status: 403 }
       );
     }
+    const promptCacheScope = promptCacheScopeVoor({
+      fondsId,
+      actorId: ctx.gebruikerId,
+      gesprekId: gesprekAuditId,
+    });
 
     // T1.3 — host↔fonds-afdwinging (defense-in-depth náást RLS), vóór retrieval/
     // Anthropic. Observe + fail-closed onder TENANT_ENFORCE=on; gedrag-neutraal
@@ -597,6 +633,58 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const moduleWeigering = await weigerAlsModuleUit(fondsId, "ai");
     if (moduleWeigering) return moduleWeigering;
 
+    // #462 PR-4 — één expliciet gekozen document of één map. De lokale ref is
+    // slechts een locator; naam, pad, inhoud en toegang worden server-side live
+    // vastgesteld. Een map wordt vervolgens vraaggestuurd en begrensd verwerkt.
+    const directeSharePointScope = leesDirecteSharePointScope(
+      body.sharepoint_scope
+    );
+    if (directeSharePointScope === null) {
+      return NextResponse.json(
+        { error: "De SharePoint-context is ongeldig." },
+        { status: 400 }
+      );
+    }
+    const sharepointScopeActief = directeSharePointScope !== undefined;
+    const sharepointMapActief = directeSharePointScope?.soort === "map";
+    if (
+      sharepointScopeActief &&
+      (
+        (body.document_scope?.document_ids?.length ?? 0) > 0 ||
+        !!body.agendapunt_context?.id ||
+        !!body.module_scope?.soort ||
+        !!body.volledige_analyse
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Kies één document- of mapcontext per gesprek." },
+        { status: 400 }
+      );
+    }
+    if (sharepointScopeActief) {
+      const [vlagAan, magDocumentenZien] = await Promise.all([
+        microsoftSharePointAiContextActief(supabase, fondsId),
+        Promise.resolve(
+          rolHeeftCapability(
+            (profiel as { rol?: string | null } | null)?.rol,
+            "documents.view"
+          )
+        ),
+      ]);
+      if (!vlagAan) {
+        return NextResponse.json(
+          { error: "AI-context voor SharePoint is voor dit fonds niet actief." },
+          { status: 404 }
+        );
+      }
+      if (!magDocumentenZien) {
+        return NextResponse.json(
+          { error: "U heeft geen toegang tot documenten." },
+          { status: 403 }
+        );
+      }
+    }
+
     // Requestbrede grens voor alle evidence én modelcontext, ook lezingen die
     // vóór quotumreservering nodig zijn om een vervolgactie te valideren.
     const contextSignal = AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_DEFAULT_MS)]);
@@ -606,6 +694,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       taaktype: "chat_generatie" as const,
       bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
       correlationId: ctx.requestId,
+      ...(promptCacheScope ? { cacheScopeId: promptCacheScope } : {}),
       verzoekStartOp: ctx.verzoekStartOp,
       signal: contextSignal,
     };
@@ -734,6 +823,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       vingerafdruk: vingerafdruk({
         vraag: body.vraag ?? null,
         berichten: body.messages?.length ?? 0,
+        sharepoint_scope: directeSharePointScope ?? null,
+        grondige_analyse: body.grondige_analyse === true,
         volledige_analyse_log_id: volledigeAnalyseVorigeLogId,
         volledige_analyse_document_id: volledigeAnalyseDocumentId,
       }),
@@ -906,6 +997,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const agendapuntIdRaw =
       typeof body.agendapunt_context?.id === "string" ? body.agendapunt_context.id : "";
     let agendapuntSeed: AgendapuntSeed | null = null;
+    let actueleAgendapuntDocumenten: AgendapuntDocument[] = [];
+    let actueleAgendapuntSharePointScopes: DirecteSharePointScope[] = [];
     if (agendapuntIdRaw) {
       const [apRow] = await leesModelcontext({
         context: evidenceContext,
@@ -941,6 +1034,40 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           titel: (apRow.titel as string) || "dit agendapunt",
           toelichting: (apRow.beschrijving as string | null) ?? null,
         };
+        // B-1 (#462): bepaal de gekoppelde stukken op de server, onder dezelfde
+        // RLS-sessie als de rest van de beurt. Dit verenigt de primaire koppeling
+        // en document_agendapunten. Een clientscope (ook uit een opgeslagen
+        // gesprek) is uitsluitend weergavestatus en krijgt hier geen gezag.
+        actueleAgendapuntDocumenten = await haalAgendapuntDocumenten(
+          supabase as unknown as AgendapuntDocumentLezer,
+          agendapuntSeed.id,
+          req.signal
+        );
+        // PR-5: lokale refs komen uit de private, fondsgebonden koppeltabel.
+        // Alleen als de fondsflag actief is worden ze als kandidaat meegenomen;
+        // de daadwerkelijke autorisatie volgt later per beurt via delegated Graph.
+        if (await microsoftSharePointAiContextActief(supabase, fondsId)) {
+          const koppelingen = await leesSharePointAgendapuntKoppelingen(
+            fondsId,
+            agendapuntSeed.id
+          );
+          actueleAgendapuntSharePointScopes = koppelingen.map((koppeling) => ({
+            soort: koppeling.soort,
+            ref: koppeling.ref,
+          }));
+          if (
+            actueleAgendapuntSharePointScopes.length > 0 &&
+            !rolHeeftCapability(
+              (profiel as { rol?: string | null } | null)?.rol,
+              "documents.view"
+            )
+          ) {
+            return NextResponse.json(
+              { error: "U heeft geen toegang tot documenten." },
+              { status: 403 }
+            );
+          }
+        }
       }
     }
     const agendapuntModusActief = agendapuntSeed !== null;
@@ -1054,11 +1181,16 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // (§7): bestaat, actief, toegang (RLS), geïndexeerd. Faalt een check, dan een
     // concrete melding — nooit een stille terugval naar de hele bibliotheek.
     let scopeHerkomst: VraagScope = "fondscollectie";
-    let gevraagdeScopeIds = volledigeAnalyseDocumentId
-      ? [volledigeAnalyseDocumentId]
-      : (body.document_scope?.document_ids ?? []).filter(
-          (id) => typeof id === "string" && id.length > 0
-        );
+    const gevraagdeScope = bepaalGevraagdeDocumentIds({
+      agendapuntModusActief,
+      actueleAgendapuntDocumentIds: actueleAgendapuntDocumenten.map((d) => d.id),
+      volledigeAnalyseDocumentId,
+      clientDocumentIds: body.document_scope?.document_ids,
+    });
+    if (!gevraagdeScope.ok) {
+      return NextResponse.json({ error: gevraagdeScope.melding }, { status: 400 });
+    }
+    let gevraagdeScopeIds = gevraagdeScope.ids;
     if (gevraagdeScopeIds.length > 0) scopeHerkomst = "geselecteerd_document";
 
     // ── Plateau 1 — vroege contextresolutie ────────────────────────────────
@@ -1086,6 +1218,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       !!body.stukvoorbereiding?.stuksoort ||
       (body.doorgrond?.secties?.length ?? 0) > 0 ||
       agendapuntModusActief ||
+      sharepointScopeActief ||
       gevraagdeScopeIds.length > 0 ||
       !!body.module_scope?.soort ||
       volledigeAnalyseUitgevoerd;
@@ -1115,7 +1248,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               taaktype: "chat_contextresolutie",
               systeem,
               berichten: [{ role: "user", content: gebruiker }],
-              maxTokens: 220,
+              // Sonnet 5 gebruikt adaptive thinking; thinking valt binnen dit
+              // plafond. De parser blijft het antwoord inhoudelijk begrenzen.
+              maxTokens: 4096,
               temperature: 0,
               timeoutMs: CONTEXTRESOLVER_SDK_TIMEOUT_MS,
               signal: ctrl.signal,
@@ -1262,6 +1397,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     }
     let scopeDocumentIds: string[] | undefined;
     let scopeTitels: string[] = [];
+    let sharepointMapSelectie: SharePointMapSelectie | undefined;
     // Titel per (server-gevalideerd) scope-id — bron voor het "Afwijkingen"-label
     // in de doorgrond-instructie (P2 Deel B), zodat de route de voorgangertitel niet
     // van de client hoeft te vertrouwen.
@@ -1727,11 +1863,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // scopeActief = STRICT document-scope. Agendapunt-modus én proces-modus
     // gebruiken de scope-ids wél voor retrieval, maar nooit voor strict-document
     // gedrag (ADR 0028 / besluit 0151).
-    const scopeActief =
+    const lokaleDocumentScopeActief =
       !agendapuntModusActief &&
       !procesModusActief &&
       !!scopeDocumentIds &&
       scopeDocumentIds.length > 0;
+    const scopeActief = lokaleDocumentScopeActief || sharepointScopeActief;
+    const agendapuntSharePointActief =
+      agendapuntModusActief && actueleAgendapuntSharePointScopes.length > 0;
     // Agendapunt-modus mét doorzoekbare gekoppelde stukken: retrieval beperkt tot
     // die stukken ([Bron N]); zonder stukken halen we niets op (toelichting-only).
     const agendapuntMetStukken =
@@ -1753,7 +1892,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             typeof s === "string" && GELDIGE_SECTIES.has(s as DoorgrondSectieId)
         ))
       : [];
-    const doorgrondActief = scopeActief && doorgrondSecties.length > 0;
+    const doorgrondActief = lokaleDocumentScopeActief && doorgrondSecties.length > 0;
     const doorgrondVorigeId =
       doorgrondActief && typeof body.doorgrond?.vorige_document_id === "string"
         ? body.doorgrond.vorige_document_id
@@ -1862,16 +2001,6 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       typeof body.bronkeuze_vorige_log_id === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.bronkeuze_vorige_log_id)
         ? body.bronkeuze_vorige_log_id
-        : null;
-
-    // Plateau A — correlatie met het gesprek. Alleen een welgevormde UUID gaat
-    // door; een onzinwaarde zou de insert laten falen en daarmee de hele beurt.
-    // Ontbreekt hij, dan wordt de regel niet gekoppeld en is de interactie niet
-    // door de gebruiker te verwijderen — dat is een gemis, geen storing.
-    const gesprekAuditId =
-      typeof body.gesprek_id === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.gesprek_id)
-        ? body.gesprek_id
         : null;
 
     // ── Plateau B — de reflectieflowstatus, SERVER-SIDE bepaald ─────────────
@@ -2221,6 +2350,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // Kandidaat-documenten binnen het eigen fonds (RLS scoping).
       const docRijen = await leesModelcontext({
         context: evidenceContext, soort: "documentlabels", scope: { fondsId }, maxItems: 5000,
+        // Vergelijking is juist bedoeld voor versies: historische, nog actieve
+        // labels mogen worden gekoppeld. De inhoud blijft via de evidencegrens
+        // en de expliciete document-scope lopen.
+        levenscyclusbeleid: "vergelijkbare_versies",
         lees: async (signal) => {
           const { data, error } = await supabase.from("documenten")
             .select("id, fonds_id, bibliotheek, titel, status, actief, geldig_vanaf, geldig_tot")
@@ -2246,7 +2379,16 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           hybrideZoekenAan(fondsId),
           retrievalVlaggenVoorFonds(fondsId),
         ]);
-        const vergelijkTimeoutMs = timeoutUitConfig(vergelijkVlaggen.retrievalTimeoutMs);
+        const vergelijkRetrievalTimeoutMs = timeoutUitConfig(vergelijkVlaggen.retrievalTimeoutMs);
+        // Een vergelijking bestaat uit meerdere korte retrievals én meerdere
+        // opeenvolgende modelcalls. De volledige keten is generatiewerk en mag
+        // daarom niet door de 20 s-retrievalgrens worden afgekapt; individuele
+        // retrievals houden wél hun eigen, strakke timeout.
+        const vergelijkBudget = effectiefGeneratiebudget(
+          generatieTimeoutUitConfig(vergelijkVlaggen.generatieTimeoutMs),
+          performance.now() - ctx.startMonotoonMs
+        );
+        if (!vergelijkBudget.genoeg) throw new BeurtAfgebroken("timeout");
         let resultaat;
         try {
           resultaat = await voerVergelijkingBinnenDeadline(
@@ -2254,11 +2396,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               mode: "symmetrisch",
               bronDocumentId: vergelijkBron.id,
               doelDocumentId: vergelijkDoel.id,
+              aangevraagdeDimensies: bepaalAangevraagdeDimensies(effectieveVraag),
               versies: VERGELIJK_VERSIES,
             },
             {
               clientSignal: req.signal,
-              timeoutMs: vergelijkTimeoutMs,
+              timeoutMs: vergelijkBudget.budgetMs,
               depsVoorSignal(signal) {
                 const vergelijkRetrieval = maakSupabaseAdapter(vergelijkVlaggen, {
                   gateway: { gateway, ctx: gatewayCtx },
@@ -2280,7 +2423,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                       verzoekStartOp: ctx.verzoekStartOp,
                       signal,
                     },
-                    timeoutMs: vergelijkTimeoutMs,
+                    timeoutMs: vergelijkRetrievalTimeoutMs,
                     hybrideAan: vergelijkHybrideAan,
                     vlaggen: vergelijkVlaggen,
                     audit: new VergelijkAuditVerzamelaar(ctx.requestId),
@@ -2585,6 +2728,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // verkeerde melding aan de bestuurder én een verkeerde reden in het
         // auditspoor.
         let fase: "retrieval" | "generatie" = "retrieval";
+        // Zodra het antwoord duurzaam als voltooid is aangeboden, mag een fout
+        // in de naverwerking die actie niet alsnog als mislukt proberen te
+        // sluiten. Vóór dat punt geldt het omgekeerde: élke fout moet de
+        // reservering sluiten, ook wanneer zij niet tot de bekende
+        // afbreekcategorieën behoort (zoals een ontbrekende Microsoft-
+        // koppeling bij SharePoint-context).
+        let aiActieAfgerond = false;
         // Het GECONFIGUREERDE budget, gezet zodra de fondsvlaggen bekend zijn.
         // Blijft het ongezet (een pad zonder retrieval), dan geldt de default.
         let generatieBudgetMs = generatieTimeoutUitConfig(undefined);
@@ -2604,7 +2754,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // staat hier los van: het bepaalt alleen of het eindantwoord strict blijft of
     // de drie-deling krijgt. Vraagtype op de ORIGINELE vraag (niet de zoekvraag).
     const algemeneKennis =
-      scopeActief && body.document_scope?.algemene_kennis === true;
+      lokaleDocumentScopeActief && body.document_scope?.algemene_kennis === true;
     let scopeStrategie: Strategie = "targeted";
     let breedChunks: DocumentChunk[] = [];
     let breedBatches: DocumentChunk[][] = [];
@@ -2629,7 +2779,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // G3 (plateau B) — een dekkingsbrede strategie is tijdens een reflectie per
     // definitie fout: de bronset is bevroren op de top-N van één antwoord, niet
     // op een heel document.
-    if (scopeActief && !transformatieActief && !reflectieActief) {
+    if (lokaleDocumentScopeActief && !transformatieActief && !reflectieActief) {
       // Doorgronden forceert breed: de secties zijn dekkingsbreed, ook als de
       // korte zichtbare zin geen breed-signaalwoord bevat (bv. alleen "Afwijkingen").
       const vraagtBredeDekking = vraagRoute
@@ -2694,7 +2844,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       }
     }
     const breedActief =
-      scopeActief && !transformatieActief && scopeStrategie !== "targeted";
+      lokaleDocumentScopeActief && !transformatieActief && scopeStrategie !== "targeted";
 
     // P2 Deel B — de samengestelde doorgrond-instructie (koppen per sectie +
     // vaste lengtenorm) vervangt de korte zichtbare zin ín de prompt. `vraag`
@@ -2758,6 +2908,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const voorbereidingZonderStukken =
       agendapuntModusActief &&
       !agendapuntMetStukken &&
+      !agendapuntSharePointActief &&
       antwoordmodus === "persoonlijke_voorbereiding";
 
     // Retrieval-filters volgen de antwoordmodus (peildatum = vandaag) + de
@@ -2818,10 +2969,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     let chunks: DocumentChunk[] = [];
     let bronnen: BronVerwijzing[] = [];
     let contextTekst = "";
-    // H-10 — afbakening van de bronblokken. Eén sentinel per request: alle
-    // contextblokken in deze prompt dragen dezelfde markering, zodat het model
-    // consistent kan onderscheiden wat door het portaal is aangeleverd.
-    let bronSentinel = maakBronSentinel();
+    // H-10 — afbakening van de bronblokken. Binnen een gesprek is de sentinel
+    // stabiel maar HMAC-onvoorspelbaar, zodat exacte documentcontext een uur kan
+    // worden hergebruikt zonder dat een document de markering kan namaken. Zonder
+    // cache-scope blijft de bestaande willekeurige per-requestwaarde gelden.
+    let bronSentinel = maakBronSentinel(promptCacheScope);
     let contextGeneutraliseerd = 0;
     // #434 — de GESLOTEN projectie van de bronstatus. `undefined` zolang er
     // niets te melden is, zodat het bestaande antwoordcontract ongewijzigd blijft.
@@ -2862,7 +3014,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           chunks = await verrijkNotulenChunks(chunks, reflectieGrendel.signal);
           chunks = await verrijkDocumentmetadata(chunks, fondsId, reflectieGrendel.signal);
           reflectieGrendel.bewaak();
-          const ctx = maakContext(chunks);
+          const ctx = maakContext(chunks, 0, bronSentinel);
           contextTekst = ctx.contextTekst;
           const lokaleDocumenten = new Map(chunks.map((chunk) => {
             const identiteit = chunkAlsBronresultaat(chunk).documentIdentiteit.id;
@@ -2945,7 +3097,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // criterium 5: nooit een stille terugval naar de hele bibliotheek).
     const moetRetrieven = !reflectieActief && !breedActief && !bronloosBureau && (
       agendapuntModusActief
-        ? agendapuntMetStukken || voorbereidingZonderStukken
+        ? agendapuntMetStukken || agendapuntSharePointActief || voorbereidingZonderStukken
         : procesModusInPrompt
         ? procesMetStukken
         : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
@@ -3054,12 +3206,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // Proces-modus (besluit 0151) blijft BEWUST hard afgebakend: daar zijn de
       // bewijsstukken van een procedure de bron, en snapshot-integriteit weegt
       // daar zwaarder dan bredere duiding.
-      const primairPadActief = scopeActief || agendapuntMetStukken;
-      const primaireIds = new Set<string>(
-        primairPadActief
-          ? (scopeDocumentIds ?? []).map((id) => maakDocumentIdentiteit(`fonds:${fondsId}`, id))
-          : []
-      );
+      const primairPadActief =
+        scopeActief || agendapuntMetStukken || agendapuntSharePointActief;
       // ── T2-1 — C1 loopt door het retrievalcontract ───────────────────────
       //  De adapter levert kandidaten; de orkestratie selecteert per spoor,
       //  voegt samen en bouwt het auditspoor (besluit 0213 punt 5). De twee
@@ -3071,11 +3219,56 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // ÉÉN adapterinstantie per beurt: hij houdt de koppeling ref → chunk
       // providerprivaat bij, en de citaatvorming heeft die later nodig.
       const retrievalTimeoutMs = timeoutUitConfig(retrievalVlaggen.retrievalTimeoutMs);
+      let effectiefRetrievalTimeoutMs = retrievalTimeoutMs;
       // #356 — eigen budget voor de generatie, hier vastgesteld omdat de
       // fondsvlaggen op dit punt bekend zijn; gebruikt bij de generatiecall.
       generatieBudgetMs = generatieTimeoutUitConfig(retrievalVlaggen.generatieTimeoutMs);
       const retrieval = maakSupabaseAdapter(retrievalVlaggen, { gateway: { gateway, ctx: gatewayCtx } });
       const retrievalAdapter = retrieval.adapter;
+      let directeSharePoint: Awaited<
+        ReturnType<typeof maakProductieDirecteSharePointAdapter>
+      > | null = null;
+      if (sharepointScopeActief || agendapuntSharePointActief) {
+        // De live mapenumeratie, registercontrole, downloads en centrale
+        // retrieval delen één wandklokbudget. Na de setup krijgt de bestaande
+        // orkestratie alleen het resterende deel; er begint dus geen nieuwe
+        // volledige deadline nadat Graph al tijd heeft verbruikt.
+        const setupGrendel = maakAfbreekgrendel(req.signal, retrievalTimeoutMs);
+        try {
+          directeSharePoint = sharepointScopeActief
+            ? await maakProductieDirecteSharePointAdapter({
+                fondsId,
+                gebruikerId: ctx.gebruikerId,
+                correlationId: ctx.requestId,
+                scope: directeSharePointScope!,
+                vraag: zoekVraag,
+                signal: setupGrendel.signal,
+              })
+            : await maakProductieGekoppeldeSharePointAdapter({
+                fondsId,
+                gebruikerId: ctx.gebruikerId,
+                correlationId: ctx.requestId,
+                scopes: actueleAgendapuntSharePointScopes,
+                vraag: zoekVraag,
+                signal: setupGrendel.signal,
+              });
+          setupGrendel.bewaak();
+          effectiefRetrievalTimeoutMs = Math.max(1, setupGrendel.resterendMs());
+        } finally {
+          setupGrendel.stop();
+        }
+      }
+      sharepointMapSelectie = directeSharePoint?.mapSelectie;
+      const primaireIds = new Set<string>(
+        [
+          ...(primairPadActief
+            ? (scopeDocumentIds ?? []).map((id) =>
+                maakDocumentIdentiteit(`fonds:${fondsId}`, id)
+              )
+            : []),
+          ...(directeSharePoint?.documentIdentiteiten ?? []),
+        ]
+      );
       // De route consumeert (nog) chunks. De adapter houdt de koppeling
       // ref → chunk providerprivaat; deze helper haalt op ná de citatie de
       // chunkvorm terug voor de bestaande, ongewijzigde downstreamlogica.
@@ -3084,11 +3277,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         fondsId,
         actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
         taaktype: "chat_generatie" as const,
-        bronbeleid: { bronsoorten: ["fonds", "generiek", "notulen"] as Bronsoort[] },
+        bronbeleid: {
+          bronsoorten: (
+            sharepointScopeActief
+              ? ["sharepoint"]
+              : agendapuntSharePointActief
+                ? ["fonds", "generiek", "notulen", "sharepoint"]
+                : ["fonds", "generiek", "notulen"]
+          ) as Bronsoort[],
+        },
         // De BEURTscope (audit, vergadering/agendapunt); de DOCUMENTscope is
         // per spoor gezet, want het aanvullende spoor mag hem juist niet erven.
         scope: scopeDocumentIds ? { documentIds: scopeDocumentIds } : undefined,
         correlationId: ctx.requestId,
+        ...(promptCacheScope ? { cacheScopeId: promptCacheScope } : {}),
         // V4 — server-side vastgelegd bij binnenkomst in de wrapper.
         verzoekStartOp: ctx.verzoekStartOp,
         // PR-B — de clientverbinding. Verbreekt de bestuurder de verbinding,
@@ -3096,6 +3298,76 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // de model- en embeddingcalls van een beurt die niemand meer leest.
         signal: req.signal,
       };
+      const grenzenPrimair = {
+        maxPerDoc: maxPerDocVoor(CHUNK_BUDGET),
+        representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+        regimeWeging: geresolveerdeVlaggen.regimeWeging,
+        relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+      };
+      const maakQuery = (
+        naam: string,
+        documentScope: string[] | undefined,
+        maxResultaten: number,
+        filters: RetrievalFilters | undefined
+      ) => ({
+        naam,
+        documentScope,
+        origineleVraag: gereformuleerd ? vraag : zoekVraag,
+        zoekvraag: zoekVraag,
+        strategie: "gericht" as const,
+        maxResultaten,
+        maxKandidaten: kandidatenpool(maxResultaten),
+        maxContextTekens: MAX_CONTEXT_TEKENS,
+        hybrideAan,
+        filters,
+      });
+      const sporen: Spoor[] = [];
+      if (scopeDocumentIds?.length) {
+        sporen.push({
+          query: maakQuery("primair_portaal", scopeDocumentIds, CHUNK_BUDGET, undefined),
+          grenzen: grenzenPrimair,
+          primair: true,
+        });
+      }
+      if (directeSharePoint) {
+        sporen.push({
+          query: maakQuery(
+            sharepointScopeActief ? "primair_sharepoint" : "agendapunt_sharepoint",
+            directeSharePoint.documentIdentiteiten,
+            CHUNK_BUDGET,
+            undefined
+          ),
+          grenzen: grenzenPrimair,
+          adapter: directeSharePoint.adapter,
+          bijBronfout: "stop",
+          primair: true,
+        });
+      }
+      if (sporen.length === 0) {
+        sporen.push({
+          query: maakQuery("primair", undefined, CHUNK_BUDGET, retrievalFilters),
+          grenzen: grenzenPrimair,
+          primair: true,
+        });
+      }
+      if (primairPadActief && !sharepointScopeActief) {
+        sporen.push({
+          query: maakQuery("aanvullend", undefined, AANVULLEND_BUDGET, bibliotheekFilters),
+          grenzen: {
+            maxPerDoc: maxPerDocVoor(AANVULLEND_BUDGET),
+            representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+            regimeWeging: geresolveerdeVlaggen.regimeWeging,
+            relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+          },
+          primair: false,
+        });
+      }
+      const [eersteSpoor, ...overigeSporen] = sporen;
+      if (!eersteSpoor) throw new Error("retrieval_zonder_spoor");
+      const retrievalSporen: readonly [Spoor, ...Spoor[]] = [
+        eersteSpoor,
+        ...overigeSporen,
+      ];
       // ÉÉN aanroep, en die bezit de afbreekgrendel: hij sluit timer en
       // clientluisteraar langs elke uitgang, ook als de weergaveverrijking
       // halverwege faalt. De twee losse fasen zijn intern — een route die ze
@@ -3106,60 +3378,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           adapter: retrievalAdapter,
           // D5 — deadline over de hele retrievalketen; fondsvlag met veilige
           // default (20 s) bij een ontbrekende of buiten-bereik-waarde.
-          timeoutMs: retrievalTimeoutMs,
-          sporen: [
-            {
-              query: {
-                naam: "primair",
-                // Scope PER SPOOR: het primaire spoor is afgebakend tot het
-                // gekozen stuk of de gekoppelde stukken.
-                documentScope: scopeDocumentIds,
-                origineleVraag: gereformuleerd ? vraag : zoekVraag,
-                zoekvraag: zoekVraag,
-                strategie: "gericht" as const,
-                maxResultaten: CHUNK_BUDGET,
-                maxKandidaten: kandidatenpool(CHUNK_BUDGET),
-                maxContextTekens: MAX_CONTEXT_TEKENS,
-                hybrideAan,
-                // Spoor A draagt géén filters in de primaire modi.
-                filters: primairPadActief ? undefined : retrievalFilters,
-              },
-              grenzen: {
-                maxPerDoc: maxPerDocVoor(CHUNK_BUDGET),
-                representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
-                regimeWeging: geresolveerdeVlaggen.regimeWeging,
-                relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
-              },
-            },
-            ...(primairPadActief
-              ? [
-                  {
-                    query: {
-                      naam: "aanvullend",
-                      // GEEN documentscope: dit spoor is juist de verbreding
-                      // naar de bibliotheek. Zou het de primaire scope erven,
-                      // dan zocht het alleen in dezelfde stukken.
-                      documentScope: undefined,
-                      origineleVraag: gereformuleerd ? vraag : zoekVraag,
-                      zoekvraag: zoekVraag,
-                      strategie: "gericht" as const,
-                      maxResultaten: AANVULLEND_BUDGET,
-                      maxKandidaten: kandidatenpool(AANVULLEND_BUDGET),
-                      maxContextTekens: MAX_CONTEXT_TEKENS,
-                      hybrideAan,
-                      // Altijd de bibliotheekfilters, óók in agendapunt-modus.
-                      filters: bibliotheekFilters,
-                    },
-                    grenzen: {
-                      maxPerDoc: maxPerDocVoor(AANVULLEND_BUDGET),
-                      representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
-                      regimeWeging: geresolveerdeVlaggen.regimeWeging,
-                      relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
-                    },
-                  },
-                ]
-              : []),
-          ] as const,
+          timeoutMs: effectiefRetrievalTimeoutMs,
+          sporen: retrievalSporen,
         },
         // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
         // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
@@ -3176,7 +3396,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           peildatum: vandaag,
           // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
           // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
-          hoofddocumentLabel: agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]",
+          hoofddocumentLabel: agendapuntModusActief
+            ? " [gekoppeld stuk]"
+            : sharepointMapActief
+              ? " [document uit gekozen map]"
+              : " [hoofddocument]",
+          sentinel: bronSentinel,
         }
       );
       // #367 — dezelfde request-id moet de hele keten ongewijzigd verlaten.
@@ -3185,7 +3410,30 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       if (voltooid.meta.correlation_id !== gatewayCtx.correlatieId) {
         throw new Error("retrieval_correlation_mismatch");
       }
-      chunks = retrieval.chunksVoor(voltooid.geselecteerd);
+      if (sharepointMapSelectie && voltooid.truncatie) {
+        // Ook een beurtbreed byte-/teken- of contextplafond betekent dat niet
+        // alle geselecteerde mapinhoud in het antwoord terechtkwam.
+        sharepointMapSelectie = { ...sharepointMapSelectie, afgekapt: true };
+      }
+      chunks = [
+        ...retrieval.chunksVoor(voltooid.geselecteerd),
+        ...(directeSharePoint
+          ? directeSharePoint.chunksVoor(voltooid.geselecteerd)
+          : []),
+      ];
+      const gebruikteSharePointDocumenten = directeSharePoint
+        ? telGebruikteSharePointDocumenten(
+            voltooid.geselecteerd,
+            directeSharePoint.lokaleDocumentRefVoor
+          )
+        : 0;
+      if (sharepointScopeActief) {
+        // Vanaf hier consumeert de bestaande prompt-/auditlaag nog de generieke
+        // scopevelden. Vul ze uitsluitend uit de live toegelaten resultaten:
+        // nooit uit een clientlabel of uit de opgeslagen gespreksmetadata.
+        scopeDocumentIds = [directeSharePoint!.scopeRef];
+        scopeTitels = [directeSharePoint!.scopeLabel];
+      }
       contextTekst = voltooid.contextTekst;
       // De retrievalcontractlaag kent uitsluitend opaque identiteiten. Dit
       // bestaande Supabase-antwoordvlak gebruikt `document_id` nog als lokale
@@ -3193,7 +3441,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // `citation_id` en de nieuwe auditidentiteiten blijven providerneutraal.
       bronnen = voltooid.bronverwijzingen.map((bron) => ({
         ...bron,
-        document_id: retrieval.lokaleDocumentRefVoor(bron.document_id) ?? bron.document_id,
+        document_id:
+          retrieval.lokaleDocumentRefVoor(bron.document_id) ??
+          directeSharePoint?.lokaleDocumentRefVoor(bron.document_id) ??
+          bron.document_id,
       }));
       // H-10: bron-afbakening en het aantal geneutraliseerde bronlabel-patronen
       // door naar respectievelijk de systeemprompt en het auditspoor.
@@ -3208,6 +3459,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
       };
+      if (agendapuntSharePointActief) {
+        retrievalMeta.agendapunt_sharepoint = {
+          document_refs: actueleAgendapuntSharePointScopes
+            .filter((scope) => scope.soort === "document")
+            .map((scope) => scope.ref),
+          map_refs: actueleAgendapuntSharePointScopes
+            .filter((scope) => scope.soort === "map")
+            .map((scope) => scope.ref),
+          kandidaten: sharepointMapSelectie?.kandidatenBehandeld ?? 0,
+          gebruikte_documenten: gebruikteSharePointDocumenten,
+          afgekapt: sharepointMapSelectie?.afgekapt ?? false,
+        };
+      }
       // Besluit 0138 (addendum op 0087) — één betekenisvolle retrieval-regel i.p.v.
       // een constante. `res.meta.opgehaald` was het ophaalplafond (CHUNK_BUDGET·3) en
       // varieerde nauwelijks; we tonen nu het aantal UNIEKE documenten en het aantal
@@ -3230,10 +3494,24 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // Auditspoor (§9): leg de scope vast waarop deze vraag is beperkt.
       if (scopeActief) {
         retrievalMeta.scope = {
-          document_ids: scopeDocumentIds!,
-          titels: scopeTitels,
+          document_ids: sharepointScopeActief
+            ? [directeSharePoint!.scopeRef]
+            : scopeDocumentIds!,
+          titels: sharepointScopeActief
+            ? [directeSharePoint!.scopeLabel]
+            : scopeTitels,
           strategie: "targeted",
           algemene_kennis: algemeneKennis,
+          ...(directeSharePoint?.scopeSoort
+            ? { sharepoint_soort: directeSharePoint.scopeSoort }
+            : {}),
+          ...(sharepointMapSelectie
+            ? {
+                kandidaten: sharepointMapSelectie.kandidatenBehandeld,
+                gebruikte_documenten: sharepointMapSelectie.documenten.length,
+                afgekapt: sharepointMapSelectie.afgekapt,
+              }
+            : {}),
           // 12-08-2026 — leg vast dat het gekozen stuk het ONDERWERP was en niet
           // de afbakening. Wat de verbreding toevoegde staat in
           // retrievalMeta.aanvullend (top-level, geldt ook voor agendapunt-modus).
@@ -3321,6 +3599,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       );
       if (
         vraagrouterVlaggen.volledigeAnalyseVervolg &&
+        !sharepointScopeActief &&
         scopeActief &&
         (scopeDocumentIds?.length ?? 0) === 1
       ) {
@@ -3609,7 +3888,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         voorbereidingZonderStukken && chunks.length > 0
           ? `\n\n=== BRONNEN UIT DE BIBLIOTHEEK ===\nEr zijn geen stukken aan dit agendapunt gekoppeld. De bronnen hieronder komen uit de bibliotheek van het fonds en zijn erbij gezocht op de titel en toelichting van het agendapunt; ze zijn dus GEEN vergaderstukken bij dit punt. Duid ze als zodanig.\n\n${contextTekst}`
           : chunks.length > 0
-          ? `\n\n=== BRONNEN BIJ DIT AGENDAPUNT ===\nDe aan dit agendapunt gekoppelde stukken zijn gemarkeerd met [gekoppeld stuk]. Bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken van het fonds en zijn er ter duiding en vergelijking bij gezocht.\n\n${contextTekst}`
+          ? `\n\n=== BRONNEN BIJ DIT AGENDAPUNT ===\nDe aan dit agendapunt gekoppelde stukken zijn gemarkeerd met [gekoppeld stuk]. Bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken van het fonds en zijn er ter duiding en vergelijking bij gezocht.${
+              agendapuntSharePointActief && sharepointMapSelectie?.afgekapt
+                ? " Niet alle ondersteunde documenten uit de gekoppelde SharePoint-bronnen pasten binnen één veilige beurt; doe geen uitspraak over niet-geraadpleegde documenten en benoem deze gedeeltelijke dekking expliciet."
+                : ""
+            }\n\n${contextTekst}`
           : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
       // Module-context (risico's/procedures) na de stukken — zie opbouw hierboven.
       gebruikersPrompt = `${toelichtingBlok}${stukkenBlok}${modulesBlok}\n\n---\n\nVRAAG: ${vraag}`;
@@ -3672,18 +3955,15 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         scopeTitels.length === 1
           ? `«${scopeTitels[0]}»`
           : scopeTitels.map((t) => `«${t}»`).join(", ");
-      // 12-08-2026 — het BREDE pad (doorgronden/samenvatten) laadt het volledige
-      // document en draait geen retrieval; daar bestaan dus geen aanvullende
-      // bibliotheekbronnen en blijft de bestaande instructie staan. Het targeted
-      // pad krijgt de primaire-modus: hoofddocument leidend, bibliotheek
-      // aanvullend en herkenbaar gescheiden.
-      const scopeRegels = breedActief
-        ? algemeneKennis
-          ? SP_DOCUMENT_BREED_ALG_REGELS
-          : SP_DOCUMENT_SCOPE_BREED_REGELS
-        : algemeneKennis
-        ? SP_DOCUMENT_PRIMAIR_ALG_REGELS
-        : SP_DOCUMENT_PRIMAIR_REGELS;
+      const scopeRegels = sharepointMapActief
+        ? SP_DOCUMENTEN_REGELS
+        : breedActief
+          ? algemeneKennis
+            ? SP_DOCUMENT_BREED_ALG_REGELS
+            : SP_DOCUMENT_SCOPE_BREED_REGELS
+          : algemeneKennis
+            ? SP_DOCUMENT_PRIMAIR_ALG_REGELS
+            : SP_DOCUMENT_PRIMAIR_REGELS;
       systeemBlokken = bouwSysteemBlokken(
         scopeRegels,
         ctxBestuurder,
@@ -3693,7 +3973,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         false,
         modelcontextSentinel
       );
-
+      if (sharepointMapActief) {
+        gebruikersPrompt = chunks.length > 0
+          ? `GESELECTEERDE SHAREPOINT-MAP: ${titelLabel}\n\nBESCHIKBARE BRONNEN — deze documenten zijn live toegankelijk bevonden en op relevantie voor de vraag geselecteerd uit de gekozen map en haar submappen:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord uitsluitend op basis van de geselecteerde documenten. Verwijs met [Bron N].${
+              sharepointMapSelectie?.afgekapt
+                ? " De map bevat meer ondersteunde documenten dan binnen één veilige beurt konden worden geraadpleegd. Doe daarom geen uitspraak over niet-geraadpleegde documenten en benoem deze gedeeltelijke dekking expliciet."
+                : ""
+            }`
+          : `In de gekozen SharePoint-map ${titelLabel} zijn voor deze vraag geen bruikbare passages geselecteerd.\n\nVRAAG: ${vraag}\n\nGeef aan dat het antwoord niet uit de geraadpleegde mapdocumenten kan worden vastgesteld. Verzin niets en gebruik geen algemene kennis.`;
+      // 12-08-2026 — het BREDE pad (doorgronden/samenvatten) laadt het volledige
+      // document en draait geen retrieval; daar bestaan dus geen aanvullende
+      // bibliotheekbronnen en blijft de bestaande instructie staan. Het targeted
+      // pad krijgt de primaire-modus: hoofddocument leidend, bibliotheek
+      // aanvullend en herkenbaar gescheiden.
+      } else {
       if (scopeStrategie === "map_reduce") {
         // De gebruikersprompt voor map-reduce wordt in de stream opgebouwd uit de
         // map-deelanalyses; hier een placeholder (wordt daar vervangen).
@@ -3709,6 +4002,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           chunks.length > 0
             ? `HOOFDDOCUMENT: ${titelLabel}\n\nBESCHIKBARE BRONNEN — het gekozen stuk is gemarkeerd met [hoofddocument]; bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag met ${titelLabel} als onderwerp. Gebruik aanvullende bronnen om te duiden, te vergelijken of aan te vullen, en maak in de lopende tekst zichtbaar wanneer u dat doet. U zag alleen geselecteerde passages. Ontbreekt het antwoord daarin, formuleer exact: "Niet gevonden in de geselecteerde passages. Dit is geen uitspraak over het volledige document."`
             : `Voor deze vraag zijn geen passages geselecteerd uit het hoofddocument ${titelLabel} of uit de aanvullende bibliotheek.\n\nVRAAG: ${vraag}\n\nFormuleer exact: "Niet gevonden in de geselecteerde passages. Dit is geen uitspraak over het volledige document." Verzin geen antwoord en vul niet aan uit uw algemene kennis.`;
+      }
       }
     } else if (promptModus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(
@@ -4301,8 +4595,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             signal: generatieGrendel.signal,
             taaktype: "chat_generatie",
             systeem: streamSysteem,
-            berichten: streamMessages,
+            berichten: markeerLaatsteGebruikersberichtVoorCache(streamMessages),
             maxTokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
+            effort: effortVoorChatAntwoord({
+              antwoordmodus,
+              grondigeAnalyse: body.grondige_analyse === true,
+              stukvoorbereiding: stukActief,
+              opsteltaak: opstelTaak,
+            }),
             ...(webTool ? { tools: [webTool] } : {}),
             ...(scopeStrategie === "targeted"
               ? {}
@@ -4430,6 +4730,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // overstap, besluit 0067). De gebruiker kan dan om een vervolg vragen.
           if (finaleMsg.stopReden === "max_tokens") {
             inlineMeldingenFinaal.push(AFGEKAPT_MELDING);
+          }
+          if (sharepointMapSelectie?.afgekapt) {
+            inlineMeldingenFinaal.push({
+              type: "sharepoint_map_afgekapt",
+              tekst: agendapuntSharePointActief
+                ? "De gekoppelde SharePoint-bronnen bevatten meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt."
+                : "Deze SharePoint-map bevat meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt.",
+            });
           }
 
           // Increment I-3 — leid nu (mét de antwoordinhoud) de model_knowledge-
@@ -4807,6 +5115,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             "voltooid",
             logId ? `governance_log:${logId}` : null
           );
+          aiActieAfgerond = true;
 
           // ── T2 (#304) — de voorbereiding als bewaard product ──────────────
           // Server-side, uit dezelfde bron als het antwoord en het auditspoor:
@@ -4967,15 +5276,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // een beurt stopte — een mislukking door een providerstoring en een
           // bewust weggelopen gebruiker zouden er identiek uitzien.
           const afbreekreden = foutcategorieVoor(streamFout);
-          if (afbreekreden) {
-            // STRIKTE afronding op het afbreekpad: hier is geen antwoord, en het
-            // spoor dat zegt waaróm de beurt stopte is het enige dat de beurt
-            // nog oplevert. Stil mislukken is hier geen optie.
+          const duurzameFoutreden = afbreekreden ?? "onverwachte_fout";
+          if (!aiActieAfgerond) {
+            // Ook een niet-genormaliseerde fout (bijvoorbeeld geen geldige
+            // delegated Microsoft-koppeling) is een beëindigde beurt. Zonder
+            // deze afronding blijft de reservering tot het leaseverval als
+            // `in_uitvoering` meetellen en kan zij tijdelijk de quota blokkeren.
+            // De duurzame reden is bewust inhoudsarm: nooit het foutbericht,
+            // tokeninformatie of SharePoint-metadata opslaan.
             const afgerond = await rondAfStrikt(
               supabase,
               aiActieId,
               "mislukt",
-              `${fase}:${afbreekreden}`
+              `${fase}:${duurzameFoutreden}`
             );
             if (!afgerond) {
               // Het GEZAGHEBBENDE spoor is niet gesloten: de levenscyclus van
@@ -4983,11 +5296,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               // wél zijn — die wordt door de gateway zelf geschreven — dus dit
               // is niet "beide sporen ontbreken" maar precies dit ene feit.
               // Operationeel signaal, geen ruis, en het mag de oorspronkelijke
-              // afbreekreden nooit overschrijven.
+              // fout nooit overschrijven.
               console.error(
-                `[chat][ALARM] ai_actie niet afgerond — fase=${fase} reden=${afbreekreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
+                `[chat][ALARM] ai_actie niet afgerond — fase=${fase} reden=${duurzameFoutreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
               );
             }
+          }
+          if (afbreekreden) {
             if (afbreekreden === "timeout") {
               send({
                 type: "error",

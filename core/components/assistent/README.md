@@ -16,8 +16,8 @@
 │  → altijd de VOLLEDIGE payload (core/lib/assistent-payload.ts)   │
 └──────────────────────────────────────────────────────────────────┘
 ┌─ L1  CONTEXT — AssistentContextProvider ─────────────────────────┐
-│  fondsbreed · document · agendapunt · proces · risicomatrix ·    │
-│  risico   (+ de herkomst-ingang)                                 │
+│  fondsbreed · document · SharePoint-document/-map · agendapunt · │
+│  proces · risicomatrix · risico   (+ de herkomst-ingang)         │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,6 +70,7 @@ Alle zeven bestanden zijn in P1a onaangeraakt, dus deze nummers gelden ook op HE
 | `procedures/[id]/page.tsx` — "Bespreek dit proces met de AI" | `→ /ai?proces=` | `AssistentIngang`, module-scope proces | ✓ |
 | `risicomatrix/page.tsx` — "Bespreek met de AI" | `→ /ai?risicomatrix=1` | `AssistentIngang`, risicomatrix; een rij zoomt in de chat in op één risico | ✓ |
 | `bibliotheek/page.tsx` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | `AssistentIngang`, documentscope | ✓ |
+| `bibliotheek/_components/SharePointDocumentenSectie.tsx` — "Vraag de AI" | bestond niet | `AssistentIngang`, één live herbevestigd SharePoint-document of -map; voor een map wordt een begrensde, relevante selectie documenten gebruikt en deeplink/gesprek bewaren alleen de lokale UUID-ref | ✓ |
 | `procedures/_components/StapPaneel.tsx` — "Vraag de AI over dit stuk" | `→ /ai?doc=` | `AssistentIngang`, documentscope (anker blijft: `fieldset disabled`) | ✓ |
 | `(dashboard)/page.tsx` — recente vraag op de home | `→ /ai` | `AssistentIngang`, **fondsbreed** — zie de correctie hieronder | ✓ |
 | ~~`AgendapuntChat.tsx` — "Openen in volledige assistent"~~ | `→ /ai?agendapunt=` | **vervallen**: het bestand bestaat niet meer | ✓ |

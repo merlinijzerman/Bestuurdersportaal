@@ -657,7 +657,8 @@ test("een geweigerde adaptermetadatavorm is een genormaliseerde foutcategorie", 
   // Structureel: de chatroute schrijft de categorie strikt weg (met alarm) en
   // meldt de gebruiker dat er daarom geen antwoord is.
   const chat = lees("app/api/chat/route.ts");
-  assert.match(chat, /rondAfStrikt\(\s*supabase,\s*aiActieId,\s*"mislukt",\s*`\$\{fase\}:\$\{afbreekreden\}`/);
+  assert.match(chat, /rondAfStrikt\(\s*supabase,\s*aiActieId,\s*"mislukt",\s*`\$\{fase\}:\$\{duurzameFoutreden\}`/);
+  assert.match(chat, /const duurzameFoutreden = afbreekreden \?\? "onverwachte_fout"/);
   assert.match(chat, /afbreekreden === "adaptermetadata_ongeldig"/);
   // En `fase` is op het retrievalmoment nog "retrieval", dus de duurzame
   // verwijzing is letterlijk ADAPTERMETA_DUURZAME_REF. Dat is een

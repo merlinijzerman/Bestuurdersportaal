@@ -20,6 +20,7 @@ import {
 } from "@/core/lib/microsoft-connector-error-core";
 import * as vault from "@/core/lib/microsoft-vault";
 import { isSharePointRetrievalSmokePreview } from "@/core/lib/microsoft-sharepoint-retrieval-smoke-core";
+import { gedelegeerdToken } from "@/core/lib/microsoft-delegated-token";
 
 export type ConnectorContext = { fondsId: string; gebruikerId: string };
 type MicrosoftKoppelDoel = "standaard" | "retrieval_smoke";
@@ -211,25 +212,6 @@ export async function statusKoppeling(ctx: ConnectorContext) { return vault.lees
 export async function registreerKoppelfout(ctx: ConnectorContext, categorie: MicrosoftKoppelFoutcategorie) { await vault.registreerKoppelfout(ctx.fondsId, ctx.gebruikerId, categorie); }
 export async function ontkoppelKoppeling(ctx: ConnectorContext) { await vault.ontkoppel(ctx.fondsId, ctx.gebruikerId); }
 
-/** Geeft een gedelegeerd token voor precies één Graph-scope terug en bewaart
- * alleen de vernieuwde MSAL-cache. De route geeft het token nooit door aan de
- * browser of aan logging. Ontbreekt de scope op de verbinding, dan faalt dit
- * gesloten: er is geen terugval naar een bredere scope. */
-async function gedelegeerdToken(ctx: ConnectorContext, scope: "Calendars.Read.Shared" | "Sites.Selected" | "Files.Read.All") {
-  const [verbinding, cache] = await Promise.all([vault.leesVerbinding(ctx.fondsId, ctx.gebruikerId), vault.leesCache(ctx.fondsId, ctx.gebruikerId)]);
-  if (!verbinding || verbinding.status !== "gekoppeld" || !cache || !verbinding.scopes.includes(scope)) throw new MicrosoftConnectorError("test_silent_token");
-  const msal = client(ctx.fondsId);
-  msal.getTokenCache().deserialize(ontsleutelMicrosoftGeheim(cache, aad(ctx.fondsId, ctx.gebruikerId, "cache")));
-  const account = await msal.getTokenCache().getAccountByHomeId(verbinding.home_account_id);
-  if (!account) throw new MicrosoftConnectorError("test_account_lookup");
-  // OIDC scopes belong to the interactive authorization flow; the silent Graph
-  // request intentionally asks only for the one delegated permission it needs.
-  const result = await msal.acquireTokenSilent({ account, scopes: [scope] });
-  if (!result.accessToken) throw new MicrosoftConnectorError("test_silent_token");
-  const bewaard = await vault.bewaarCache({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, expectedVersion: cache.versie, cache: versleutelMicrosoftGeheim(msal.getTokenCache().serialize(), aad(ctx.fondsId,ctx.gebruikerId,"cache")) });
-  if (!bewaard) throw new MicrosoftConnectorError("test_cache_save");
-  return { accessToken: result.accessToken, tenantId: verbinding.tenant_id, objectId: verbinding.microsoft_object_id };
-}
 export async function outlookAccessToken(ctx: ConnectorContext) {
   const token = await gedelegeerdToken(ctx, "Calendars.Read.Shared");
   return { accessToken: token.accessToken, tenantId: token.tenantId, mailboxId: token.objectId };

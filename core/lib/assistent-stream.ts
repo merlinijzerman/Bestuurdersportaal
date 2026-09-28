@@ -239,11 +239,14 @@ function aiBericht(s: StreamStand): Bericht {
  * @param vraag De vraag van deze beurt. Nodig omdat `verbreding` en
  *   `bronkeuzeAanbod` hem meedragen: een chip moet dezelfde vraag letterlijk
  *   opnieuw kunnen stellen.
+ * @param grondigeAnalyse De eenmalige max-keuze die bij een eventuele
+ *   verduidelijkingschip met dezelfde vraag moet doorreizen.
  */
 export function pasStreamEventToe(
   stand: StreamStand,
   evt: AssistentStreamEvent,
-  vraag: string
+  vraag: string,
+  grondigeAnalyse = false
 ): { stand: StreamStand; uitwerking: StreamUitwerking } {
   const geen = (s: StreamStand) => ({ stand: s, uitwerking: { soort: "geen" as const } });
 
@@ -259,6 +262,7 @@ export function pasStreamEventToe(
         vraag: evt.vraag || "",
         opties: evt.opties ?? [],
         origineleVraag: vraag,
+        grondigeAnalyse,
       },
     };
     return {

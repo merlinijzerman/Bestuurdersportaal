@@ -18,7 +18,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 import { resolveAnthropicBaseUrl } from "../../ai-provider-endpoint.mjs";
 import { buildWebSearchTool } from "../../web-retrieval";
-import type { StopReden } from "../contract";
+import type { EffortNiveau, StopReden } from "../contract";
+import { anthropicModelprofiel, isAnthropicEffort } from "../anthropic-modelprofiel";
 import type { Credentials } from "../secrets";
 import { GatewayFout } from "../fout";
 import { maakUsage, type AdapterResultaat, type AdapterStream, type AdapterVerzoek, type ProviderAdapter } from "./types";
@@ -50,30 +51,81 @@ function maakAnthropicClient(credentials: Credentials): Anthropic {
 
 type Params = Anthropic.Messages.MessageCreateParamsNonStreaming;
 
-function bouwParams(v: AdapterVerzoek): Params {
+function sluitObjectSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const kopie: Record<string, unknown> = {};
+  for (const [sleutel, waarde] of Object.entries(schema)) {
+    if (Array.isArray(waarde)) {
+      kopie[sleutel] = waarde.map((item) =>
+        item !== null && typeof item === "object" ? sluitObjectSchema(item as Record<string, unknown>) : item
+      );
+    } else if (waarde !== null && typeof waarde === "object") {
+      kopie[sleutel] = sluitObjectSchema(waarde as Record<string, unknown>);
+    } else {
+      kopie[sleutel] = waarde;
+    }
+  }
+  if (schema.type === "object") kopie.additionalProperties = false;
+  return kopie;
+}
+
+function voegToolInstructieToe(
+  systeem: AdapterVerzoek["systeem"],
+  toolnamen: string[],
+  poging: 0 | 1
+): AdapterVerzoek["systeem"] {
+  const namen = toolnamen.map((naam) => `\`${naam}\``).join(", ");
+  const tekst =
+    poging === 0
+      ? `Gebruik voor je antwoord verplicht ${namen}. Geef het resultaat uitsluitend via de toolcall.`
+      : `HERSTELINSTRUCTIE: je vorige antwoord bevatte geen verplichte toolcall. Roep nu ${namen} aan en geef geen gewoon tekstantwoord.`;
+  if (typeof systeem === "string") return `${systeem}\n\n${tekst}`;
+  return [...systeem, { type: "text", text: tekst }];
+}
+
+export function bouwAnthropicParams(v: AdapterVerzoek, poging: 0 | 1 = 0): Params {
+  const profiel = anthropicModelprofiel(v.model);
+  const effort = v.effort;
+  if (profiel && (effort === null || effort === undefined)) {
+    throw new GatewayFout("configuratie", "anthropic_effort_vereist");
+  }
+  if (profiel && (!isAnthropicEffort(effort) || !profiel.effort.includes(effort))) {
+    throw new GatewayFout("configuratie", "anthropic_effort_niet_ondersteund");
+  }
+
+  const verplichteToolnamen =
+    v.tools?.flatMap((tool) => (tool.soort === "functie" && tool.verplicht ? [tool.naam] : [])) ?? [];
+  const autoVerplichteTool = Boolean(profiel && !profiel.forcedToolOndersteund && verplichteToolnamen.length > 0);
   const params: Params = {
     model: v.model,
     max_tokens: v.maxTokens,
-    system: v.systeem as Params["system"],
+    system: (autoVerplichteTool ? voegToolInstructieToe(v.systeem, verplichteToolnamen, poging) : v.systeem) as Params["system"],
     messages: v.berichten,
   };
-  if (typeof v.temperature === "number") params.temperature = v.temperature;
-  if (typeof v.topP === "number") params.top_p = v.topP;
+  if (profiel) {
+    params.thinking = { type: "adaptive" };
+    params.output_config = { effort: isAnthropicEffort(effort) ? effort : undefined };
+  } else {
+    // Bestaande 4.x-calls houden exact hun huidige requestvorm.
+    if (typeof v.temperature === "number") params.temperature = v.temperature;
+    if (typeof v.topP === "number") params.top_p = v.topP;
+  }
   if (v.tools && v.tools.length > 0) {
     const tools: unknown[] = [];
     let toolChoice: Anthropic.Messages.ToolChoice | undefined;
     for (const t of v.tools) {
       if (t.soort === "webzoek") {
-        // Servertool; SDK 0.39 typeert hem niet, de API ondersteunt hem wel
-        // (identiek aan de route vóór #311).
+        // Servertool; de neutrale gatewayvorm blijft identiek aan de route vóór #311.
         tools.push(buildWebSearchTool(t.domeinen, t.maxGebruik));
       } else {
         tools.push({
           name: t.naam,
           description: t.beschrijving,
-          input_schema: t.schema as Anthropic.Messages.Tool["input_schema"],
+          input_schema: (profiel ? sluitObjectSchema(t.schema) : t.schema) as Anthropic.Messages.Tool["input_schema"],
+          ...(profiel ? { strict: true } : {}),
         });
-        if (t.verplicht) toolChoice = { type: "tool", name: t.naam };
+        if (t.verplicht) {
+          toolChoice = profiel && !profiel.forcedToolOndersteund ? { type: "auto" } : { type: "tool", name: t.naam };
+        }
       }
     }
     (params as { tools?: unknown[] }).tools = tools;
@@ -89,7 +141,7 @@ function bouwOpties(v: AdapterVerzoek): Anthropic.RequestOptions | undefined {
   return Object.keys(opties).length > 0 ? opties : undefined;
 }
 
-function vertaalStop(reden: string | null | undefined): StopReden {
+export function vertaalAnthropicStop(reden: string | null | undefined): StopReden {
   switch (reden) {
     case "end_turn":
       return "einde";
@@ -99,12 +151,22 @@ function vertaalStop(reden: string | null | undefined): StopReden {
       return "stop_sequence";
     case "tool_use":
       return "tool";
+    case "pause_turn":
+      return "pauze";
+    case "refusal":
+      return "weigering";
+    case "model_context_window_exceeded":
+      return "contextvenster";
     default:
       return "onbekend";
   }
 }
 
-function naarResultaat(msg: Anthropic.Messages.Message, latencyMs: number): AdapterResultaat {
+function naarResultaat(
+  msg: Anthropic.Messages.Message,
+  latencyMs: number,
+  effort: EffortNiveau | null
+): AdapterResultaat {
   const tekst = msg.content.map((blok) => (blok.type === "text" ? blok.text : "")).join("");
   const u = msg.usage as
     | (Anthropic.Messages.Usage & { cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null })
@@ -112,12 +174,15 @@ function naarResultaat(msg: Anthropic.Messages.Message, latencyMs: number): Adap
   return {
     tekst,
     inhoud: msg.content as unknown[],
-    stopReden: vertaalStop(msg.stop_reason),
+    stopReden: vertaalAnthropicStop(msg.stop_reason),
+    stopDetailsCategorie: msg.stop_details?.category ?? null,
+    effort,
     usage: maakUsage({
       in: u?.input_tokens ?? 0,
       out: u?.output_tokens ?? 0,
       cacheCreatie: u?.cache_creation_input_tokens ?? 0,
       cacheLezen: u?.cache_read_input_tokens ?? 0,
+      thinking: u?.output_tokens_details?.thinking_tokens,
     }),
     latencyMs,
   };
@@ -137,16 +202,35 @@ export function maakAnthropicAdapter(deps?: {
 
     async genereer(verzoek, credentials) {
       const client = clientVoor(credentials);
-      const params = bouwParams(verzoek);
       const opties = bouwOpties(verzoek);
       const start = Date.now();
-      const msg = await (opties ? client.messages.create(params, opties) : client.messages.create(params));
-      return naarResultaat(msg as Anthropic.Messages.Message, Date.now() - start);
+      const profiel = anthropicModelprofiel(verzoek.model);
+      const verplichteToolnamen =
+        verzoek.tools?.flatMap((tool) => (tool.soort === "functie" && tool.verplicht ? [tool.naam] : [])) ?? [];
+      const controleerTool = Boolean(profiel && !profiel.forcedToolOndersteund && verplichteToolnamen.length > 0);
+
+      for (const poging of [0, 1] as const) {
+        const params = bouwAnthropicParams(verzoek, poging);
+        const msg = (await (opties ? client.messages.create(params, opties) : client.messages.create(params))) as Anthropic.Messages.Message;
+        const effectieveEffort = profiel ? verzoek.effort ?? null : null;
+        if (!controleerTool || msg.stop_reason === "refusal") {
+          return naarResultaat(msg, Date.now() - start, effectieveEffort);
+        }
+        const heeftVerplichteTool = verplichteToolnamen.every((naam) =>
+          msg.content.some((blok) => blok.type === "tool_use" && blok.name === naam)
+        );
+        if (heeftVerplichteTool) return naarResultaat(msg, Date.now() - start, effectieveEffort);
+      }
+      throw new GatewayFout("provider", "verplichte_tool_ontbreekt");
     },
 
     stream(verzoek, credentials) {
+      const profiel = anthropicModelprofiel(verzoek.model);
+      if (profiel && !profiel.forcedToolOndersteund && verzoek.tools?.some((tool) => tool.soort === "functie" && tool.verplicht)) {
+        throw new GatewayFout("configuratie", "verplichte_tool_streaming_niet_ondersteund");
+      }
       const client = clientVoor(credentials);
-      const params = bouwParams(verzoek) as Anthropic.Messages.MessageStreamParams;
+      const params = bouwAnthropicParams(verzoek) as Anthropic.Messages.MessageStreamParams;
       const opties = bouwOpties(verzoek);
       const start = Date.now();
       const stream = opties ? client.messages.stream(params, opties) : client.messages.stream(params);
@@ -172,7 +256,7 @@ export function maakAnthropicAdapter(deps?: {
         },
         async afronden() {
           const msg = await stream.finalMessage();
-          return naarResultaat(msg, Date.now() - start);
+          return naarResultaat(msg, Date.now() - start, profiel ? verzoek.effort ?? null : null);
         },
       };
       return handle;

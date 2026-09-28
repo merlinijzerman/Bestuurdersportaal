@@ -58,6 +58,104 @@ De trigger dwingt af dat het profiel bestaat en actief is, dat de provider bij h
 
 `supabase/rollbacks/2026_09_04_ai_gateway_configuratie_ROLLBACK.sql` — eerst de T3-code terugrollen, dan dit bestand. Het script **weigert** zolang `gateway_log` of `fonds_configuratie_log` regels bevat; exporteer eerst en zet dan in dezelfde sessie `set ai_gateway.rollback_met_dataverlies = 'ja'`. De loginrol wordt op `NOLOGIN` gezet en blijft bestaan; verwijder haar apart nadat is vastgesteld dat geen deployment of secretstore haar nog gebruikt.
 
+### #438 — Opus 5.5/Sonnet 5-contract (PR1)
+
+`supabase/migrations/2026_09_27_ai_gateway_opus_5_5_contract.sql` voegt uitsluitend
+`tokens_thinking` en de stopredenen `contextvenster`, `pauze` en `weigering` toe. De migratie
+wijzigt geen model, allowlist of fondsconfiguratie. Controleer na toepassing:
+
+```sql
+select column_name, is_nullable, column_default
+  from information_schema.columns
+ where table_schema = 'ai_gateway_private'
+   and table_name = 'gateway_log'
+   and column_name = 'tokens_thinking';
+
+select has_function_privilege(
+  'ai_gateway', 'ai_gateway_private.schrijf_log(jsonb)', 'execute'
+);
+```
+
+Thinking-tokens zijn een subset van `tokens_out`; tel ze nooit nogmaals op bij
+`tokens_totaal`. De bijbehorende handmatige rollback weigert zolang een logregel een nieuwe
+stopreden of een aanwezige thinkingtelling bevat. Exporteer/behoud het append-only spoor; maak
+het niet leeg om een rollback af te dwingen. Rol eerst de code terug, daarna pas het SQL-contract.
+
+### #438 — effortobservability en prompt caching (PR2)
+
+`supabase/migrations/2026_09_28_ai_gateway_effort_observability.sql` voegt alleen de
+nullable kolom `effort` toe en vervangt `schrijf_log(jsonb)` zodat het werkelijk toegepaste
+niveau inhoudsvrij wordt vastgelegd. Er wijzigen geen modellen, allowlistregels,
+fondsconfiguraties, rollen, grants of RLS-policies. De transactionele CI-controle staat in
+`supabase/checks/2026_09_28_ai_gateway_effort_observability.sql`. Controleer na toepassing:
+
+```sql
+select column_name, is_nullable, column_default
+  from information_schema.columns
+ where table_schema = 'ai_gateway_private'
+   and table_name = 'gateway_log'
+   and column_name = 'effort';
+
+select has_function_privilege(
+  'ai_gateway', 'ai_gateway_private.schrijf_log(jsonb)', 'execute'
+);
+
+select effort, count(*)
+  from ai_gateway_private.gateway_log
+ group by effort
+ order by effort nulls first;
+```
+
+Verwacht bij actieve 4.x-modellen `effort is null`: de gateway logt niet de aanvraag, maar
+wat de adapter daadwerkelijk heeft toegepast. Na een Preview-canary met een effortmodel
+moeten de gekozen niveaus zichtbaar zijn zonder prompt- of antwoordinhoud.
+
+Controleer prompt caching over minimaal twee opeenvolgende berichten in hetzelfde gesprek:
+
+```sql
+select taaktype, model, effort,
+       sum(tokens_cache_lezen) as cache_lezen,
+       sum(tokens_cache_creatie) as cache_creatie,
+       avg(latency_ms)::integer as gemiddelde_latency_ms
+  from ai_gateway_private.gateway_log
+ where aangemaakt >= now() - interval '1 hour'
+ group by taaktype, model, effort
+ order by taaktype, model, effort;
+```
+
+Het cachebereik is server-side HMAC-afgeleid uit fonds, gebruiker en gesprek; het staat niet
+in de gatewaylog. Zonder geldige gesprek-id of `AUDIT_HMAC_SLEUTEL` wordt alleen de statische
+systeemprompt gecachet en blijven dynamische bronsentinels per request wisselen. Prompt-,
+tool- of effortwijzigingen kunnen een cachemiss veroorzaken en zijn daarom onderdeel van de
+Preview-meting.
+
+De handmatige rollback
+`supabase/rollbacks/2026_09_28_ai_gateway_effort_observability_ROLLBACK.sql` weigert zodra
+een logregel een effortwaarde bevat. Rol eerst de code terug. Behoud/exporteer het append-only
+auditspoor en verwijder geen logregels om de rollback te forceren.
+
+### #438 — Preview-canary Opus 5.5/Sonnet 5 (PR3)
+
+Volgorde voor `portal_preview`:
+
+1. Pas eerst `2026_09_27_ai_gateway_opus_5_5_contract.sql` en
+   `2026_09_28_ai_gateway_effort_observability.sql` toe en draai hun checks.
+2. Pas `2026_09_28_438_opus_5_5_sonnet_5_register.sql` toe. Dit registreert de
+   modellen en wijzigt alleen defaults voor nieuwe fondsen.
+3. Draai daarna uitsluitend op Preview
+   `supabase/seeds/preview/2026_09_28_438_opus_5_5_sonnet_5_canary.sql`. De seed
+   bevestigt eerst de Preview-fingerprint en wijzigt alleen `m365-demo`.
+4. Draai de read-only postcheck
+   `supabase/checks/2026_09_28_438_opus_5_5_sonnet_5_canary.sql`.
+5. Deploy de code en rooktest chat, Grondige analyse en documentvergelijking.
+   Controleer in `gateway_log` het effectieve model, effort, stopreden,
+   thinking-/cachetokens en resultaat; log geen prompt of antwoordinhoud.
+
+Rollback: eerst
+`2026_09_28_438_opus_5_5_sonnet_5_canary_ROLLBACK.sql`, zodat `m365-demo` weer
+op 4.x staat. De generieke registerrollback mag pas daarna en weigert zolang een
+fonds nog een 5.x-model gebruikt. Productie is geen onderdeel van deze procedure.
+
 ## Lokaal / CI
 
 `scripts/testdb-apply-migrations.sh` maakt in de wegwerp-DB een wachtwoordloze `ai_gateway`-fixture met dezelfde flags (zoals voor `microsoft_vault`), zodat de migratie en de suite in `scripts/cross-tenant-ci.sh` ongewijzigd draaien. Preview en Productie vereisen een echt, beheerd wachtwoord.

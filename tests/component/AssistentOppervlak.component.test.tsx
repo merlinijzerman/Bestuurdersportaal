@@ -12,7 +12,7 @@
 //  schrijvers naar dezelfde `gesprekken`-rij.
 // ============================================================================
 
-import { act, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AssistentOppervlak from "@/app/(dashboard)/ai/_components/AssistentOppervlak";
 import { AssistentHarnas } from "./assistent-harnas";
@@ -159,5 +159,61 @@ describe("AssistentOppervlak — de startbeurt (T2)", () => {
     await waitFor(() => expect(paneelStaat()!.aanvraag).toBeNull());
     expect(vi.mocked(fetch).mock.calls.filter((c) => String(c[0]) === "/api/chat")).toHaveLength(0);
     expect(paneelStaat()!.productSignaal).toBeNull();
+  });
+
+  it("stuurt Grondige analyse eenmalig mee en zet de knop direct terug", async () => {
+    monteer();
+    const knop = await screen.findByRole("button", { name: "Grondige analyse" });
+    fireEvent.click(knop);
+    expect(knop).toHaveAttribute("aria-pressed", "true");
+
+    const verzoek = verwachtSseStroomEenmaal("/api/chat", [
+      { type: "delta", text: "Een grondige analyse." },
+      { type: "done" },
+    ]);
+    const invoer = screen.getByPlaceholderText(/Stel een vraag/);
+    fireEvent.change(invoer, { target: { value: "Analyseer dit grondig" } });
+    fireEvent.click(screen.getByRole("button", { name: "Vraag versturen" }));
+
+    await waitFor(() => expect(verzoek.lichaam()).toBeTruthy());
+    expect(verzoek.lichaam()).toMatchObject({ grondige_analyse: true });
+    expect(knop).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("behoudt Grondige analyse wanneer eerst bronverduidelijking nodig is", async () => {
+    monteer();
+    const knop = await screen.findByRole("button", { name: "Grondige analyse" });
+    fireEvent.click(knop);
+
+    const terugvraag = verwachtSseStroomEenmaal("/api/chat", [
+      {
+        type: "verduidelijking",
+        vraag: "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?",
+        opties: [
+          { intent: "fonds", label: "Voor mijn fonds" },
+          { intent: "algemeen", label: "In algemene zin" },
+        ],
+      },
+      { type: "done" },
+    ]);
+    const invoer = screen.getByPlaceholderText(/Stel een vraag/);
+    fireEvent.change(invoer, { target: { value: "Analyseer dit grondig" } });
+    fireEvent.click(screen.getByRole("button", { name: "Vraag versturen" }));
+
+    await waitFor(() => expect(terugvraag.lichaam()).toBeTruthy());
+    expect(terugvraag.lichaam()).toMatchObject({ grondige_analyse: true });
+
+    const antwoord = verwachtSseStroomEenmaal("/api/chat", [
+      { type: "delta", text: "Een grondige analyse." },
+      { type: "done" },
+    ]);
+    fireEvent.click(await screen.findByRole("button", { name: "In algemene zin" }));
+
+    await waitFor(() => expect(antwoord.lichaam()).toBeTruthy());
+    expect(antwoord.lichaam()).toMatchObject({
+      grondige_analyse: true,
+      bron_intent_override: "algemeen",
+    });
+    expect(knop).toHaveAttribute("aria-pressed", "false");
   });
 });

@@ -328,13 +328,12 @@ test("feitelijke modus eindigt exact op TOON_BLOK (regels + \\n\\n + toon)", () 
   assert.equal(statisch, `${SP_COMBINEREN_REGELS}\n\n${TOON_BLOK}`);
 });
 
-test("bouwSysteemBlokken: 2 blokken, statisch gecachet (ephemeral) + dynamisch ongecachet", () => {
+test("bouwSysteemBlokken: statische instructies en sessiecontext hebben elk een cache van één uur", () => {
   const blokken = bouwSysteemBlokken(SP_COMBINEREN_REGELS, CTX, "feitelijk");
   assert.equal(blokken.length, 2);
   assert.equal(blokken[0].type, "text");
-  assert.deepEqual(blokken[0].cache_control, { type: "ephemeral" });
-  // Het dynamische blok draagt GEEN cache-breakpoint (blijft ongecachet).
-  assert.equal(blokken[1].cache_control, undefined);
+  assert.deepEqual(blokken[0].cache_control, { type: "ephemeral", ttl: "1h" });
+  assert.deepEqual(blokken[1].cache_control, { type: "ephemeral", ttl: "1h" });
   // Statisch blok == de bouwStatischeInstructies-uitvoer.
   assert.equal(blokken[0].text, bouwStatischeInstructies(SP_COMBINEREN_REGELS, "feitelijk"));
   assert.equal(sha(blokken[1].text), PIN.dyn_block);
@@ -384,9 +383,9 @@ test("model-/budgetconstanten zijn de productiewaarden (parity)", () => {
   //
   // Code-default voor hermetische tests/AQLab. Productieconfiguratie staat per
   // fonds in de private gatewaylaag en kent geen env-override meer (#311 R2).
-  assert.equal(AI_MODEL, "claude-opus-4-8");
-  assert.equal(MAX_TOKENS, 5000);
-  assert.equal(MAX_TOKENS_BESTUURLIJK, 8000);
+  assert.equal(AI_MODEL, "claude-opus-5-5");
+  assert.equal(MAX_TOKENS, 32_000);
+  assert.equal(MAX_TOKENS_BESTUURLIJK, 32_000);
 });
 
 // ── T5 B1 — bronloze bureau-regelset (concept-skelet) ───────────────────────

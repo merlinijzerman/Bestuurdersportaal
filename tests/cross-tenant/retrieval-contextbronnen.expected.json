@@ -1,6 +1,6 @@
 {
   "_doc": "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie PER LEZING (bestand::tabel → een of meer van evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte lezing zonder klasse maakt de gate rood. Padresolutie volgt de tsconfig-alias en echte relatieve paden, inclusief ../ en indexbestanden. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
-  "bereikte_bestanden": 136,
+  "bereikte_bestanden": 170,
   "lezingen_per_klasse": {
     "evidence": [
       "core/lib/rag.ts::document_chunks",
@@ -42,6 +42,8 @@
     ],
     "configuratie": [
       "app/api/chat/route.ts::profielen",
+      "core/lib/agendapunt-documenten.ts::document_agendapunten",
+      "core/lib/agendapunt-documenten.ts::documenten",
       "core/lib/capabilities.ts::profielen",
       "core/lib/fonds-config.ts::fonds_config_log",
       "core/lib/fonds-config.ts::fonds_content_overrides",
@@ -49,6 +51,10 @@
       "core/lib/fonds-config.ts::fonds_module_manifest",
       "core/lib/fonds-config.ts::fonds_theming",
       "core/lib/fonds-sessie.ts::profielen",
+      "core/lib/microsoft-connector.ts::fonds_feature_flags",
+      "core/lib/microsoft-connector.ts::fonds_integratie_profielen",
+      "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_feature_flags",
+      "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_integratie_profielen",
       "core/lib/profiel.ts::profielen",
       "core/lib/vergelijk-productie.ts::concepts",
       "core/lib/vergelijk-rollout.ts::fonds_feature_flags",
@@ -77,10 +83,14 @@
     "decision_objects": [
       "evidence"
     ],
+    "document_agendapunten": [
+      "configuratie"
+    ],
     "document_chunks": [
       "evidence"
     ],
     "documenten": [
+      "configuratie",
       "evidence",
       "modelcontext"
     ],
@@ -94,6 +104,9 @@
       "configuratie"
     ],
     "fonds_feature_flags": [
+      "configuratie"
+    ],
+    "fonds_integratie_profielen": [
       "configuratie"
     ],
     "fonds_module_manifest": [
@@ -183,6 +196,12 @@
         "voorbereidingen"
       ]
     },
+    "core/lib/agendapunt-documenten.ts": {
+      "tabellen": [
+        "document_agendapunten",
+        "documenten"
+      ]
+    },
     "core/lib/capabilities.ts": {
       "tabellen": [
         "profielen"
@@ -200,6 +219,18 @@
     "core/lib/fonds-sessie.ts": {
       "tabellen": [
         "profielen"
+      ]
+    },
+    "core/lib/microsoft-connector.ts": {
+      "tabellen": [
+        "fonds_feature_flags",
+        "fonds_integratie_profielen"
+      ]
+    },
+    "core/lib/microsoft-sharepoint-ai-gate.ts": {
+      "tabellen": [
+        "fonds_feature_flags",
+        "fonds_integratie_profielen"
       ]
     },
     "core/lib/organisatieprofiel.ts": {

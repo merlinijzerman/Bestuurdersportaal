@@ -32,6 +32,7 @@ import { GatewayFout, classificeerProviderFout, isGatewayFout } from "./fout";
 import { resolveerCredentials, type Credentials } from "./secrets";
 import type { GatewayDb, GatewayLogRegel } from "./config-db";
 import type { AdapterResultaat, AdapterVerzoek, ProviderAdapter } from "./adapters/types";
+import { standaardEffortVoorTaaktype } from "../ai-effort";
 
 export interface GatewayDeps {
   db: GatewayDb;
@@ -129,6 +130,7 @@ function adapterVerzoek(verzoek: GenereerVerzoek, model: string): AdapterVerzoek
     maxTokens: verzoek.maxTokens,
     temperature: verzoek.temperature,
     topP: verzoek.topP,
+    effort: verzoek.effort ?? standaardEffortVoorTaaktype(verzoek.taaktype),
     tools: verzoek.tools,
     timeoutMs: verzoek.timeoutMs,
     signal: verzoek.signal,
@@ -184,7 +186,9 @@ export function maakGateway(deps: GatewayDeps): AiGateway {
       tokens_out: uitkomst.ok ? uitkomst.r.usage.out : 0,
       tokens_cache_lezen: uitkomst.ok ? uitkomst.r.usage.cacheLezen : 0,
       tokens_cache_creatie: uitkomst.ok ? uitkomst.r.usage.cacheCreatie : 0,
+      tokens_thinking: uitkomst.ok ? (uitkomst.r.usage.thinking ?? null) : null,
       tokens_totaal: uitkomst.ok ? uitkomst.r.usage.totaal : 0,
+      effort: uitkomst.ok ? uitkomst.r.effort : null,
       correlatie_id: ctx.correlatieId,
       actie_id: ctx.actieId,
       label: ctx.label,
@@ -209,6 +213,8 @@ export function maakGateway(deps: GatewayDeps): AiGateway {
       tekst: r.tekst,
       inhoud: r.inhoud,
       stopReden: r.stopReden,
+      stopDetailsCategorie: r.stopDetailsCategorie,
+      effort: r.effort,
       usage: r.usage,
       latencyMs: r.latencyMs,
       provider: res.provider,

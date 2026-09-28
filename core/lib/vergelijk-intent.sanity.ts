@@ -8,7 +8,7 @@
 // ============================================================================
 
 import assert from "node:assert/strict";
-import { bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "./vergelijk-intent";
+import { bepaalAangevraagdeDimensies, bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "./vergelijk-intent";
 
 let n = 0;
 function test(naam: string, fn: () => void) {
@@ -48,6 +48,19 @@ test("trigger zonder twee onderscheiden hints → onzeker (verduidelijking nodig
   const i = bepaalVergelijkIntent("Kun je het transitieplan vergelijken?");
   assert.equal(i.isVergelijk, true);
   assert.equal(i.vertrouwen, "onzeker");
+});
+
+test("expliciete vergelijkingsassen worden uit de vervolginstructie gehaald", () => {
+  assert.deepEqual(
+    bepaalAangevraagdeDimensies(
+      "Vergelijk Transitieplan v1 met Transitieplan v2. Geef per document de planning, bestuurlijke rapportage, belangrijkste risico’s en maatregelen, en sluit af met de verschillen."
+    ),
+    ["planning", "bestuurlijke rapportage", "belangrijkste risico’s", "maatregelen"]
+  );
+});
+
+test("zonder expliciete assen blijft de catalogus/Haiku-route leidend", () => {
+  assert.deepEqual(bepaalAangevraagdeDimensies("Vergelijk transitieplan v3 met v4"), []);
 });
 
 // ── Documentkoppeling ────────────────────────────────────────────────────────

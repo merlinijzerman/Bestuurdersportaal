@@ -7,7 +7,7 @@
 //  eigen regressietest (chat-invoer.sanity.ts).
 // ============================================================================
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 // ── H-10: brontekst is ONBETROUWBARE DATA ─────────────────────────────────
 // De contextregels werden opgebouwd als `[Bron N] titel: "tekst"`, samengevoegd
@@ -68,6 +68,9 @@ export function neutraliseerBrontekst(tekst: string): {
 
 /** Per-request sentinel voor de bron-afbakening. Onvoorspelbaar, dus een
  *  document kan geen geldig <bron>-blok openen of sluiten. */
-export function maakBronSentinel(): string {
+export function maakBronSentinel(cacheScopeId?: string | null): string {
+  if (cacheScopeId) {
+    return createHash("sha256").update(`bron-v1:${cacheScopeId}`).digest("hex").slice(0, 12);
+  }
   return randomUUID().replace(/-/g, "").slice(0, 12);
 }

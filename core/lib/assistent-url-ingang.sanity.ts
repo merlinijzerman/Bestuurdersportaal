@@ -19,6 +19,7 @@
 
 import assert from "node:assert/strict";
 import {
+  bouwAssistentDeeplink,
   leesAssistentContextUitUrl,
   resolveerAssistentContext,
   type ContextLezer,
@@ -50,7 +51,7 @@ check("zonder parameters is er geen ingang en geen herkomst", () => {
   assert.deepEqual(leesAssistentContextUitUrl("?x=1"), { ingangen: [], herkomst: null });
 });
 
-check("de vier scope-ingangen worden herkend", () => {
+check("de vijf scope-ingangen worden herkend", () => {
   assert.deepEqual(leesAssistentContextUitUrl("?doc=d1").ingangen[0], {
     soort: "document",
     documentId: "d1",
@@ -66,6 +67,57 @@ check("de vier scope-ingangen worden herkend", () => {
   assert.deepEqual(leesAssistentContextUitUrl("?risicomatrix=1").ingangen[0], {
     soort: "risicomatrix",
   });
+  assert.deepEqual(
+    leesAssistentContextUitUrl(
+      "?sharepoint=7D5EF460-162E-4C34-A1BC-287337CBDF09"
+    ).ingangen[0],
+    {
+      soort: "sharepoint",
+      objectsoort: "document",
+      ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+    }
+  );
+});
+
+check("de SharePoint-deeplink bevat alleen de lokale ref en is omkeerbaar", () => {
+  const href = bouwAssistentDeeplink([
+    {
+      soort: "sharepoint",
+      objectsoort: "document",
+      ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+      label: "vertrouwelijk bestuursstuk.docx",
+    },
+  ]);
+  assert.equal(
+    href,
+    "/ai?sharepoint=7d5ef460-162e-4c34-a1bc-287337cbdf09"
+  );
+  assert.ok(!href.includes("vertrouwelijk"));
+  assert.deepEqual(leesAssistentContextUitUrl(href.slice(3)).ingangen, [
+    {
+      soort: "sharepoint",
+      objectsoort: "document",
+      ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+    },
+  ]);
+});
+
+check("een SharePoint-map gebruikt een eigen deeplink en is omkeerbaar", () => {
+  const ingang = {
+    soort: "sharepoint" as const,
+    objectsoort: "map" as const,
+    ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+  };
+  const href = bouwAssistentDeeplink([ingang]);
+  assert.equal(href, "/ai?sharepoint_map=7d5ef460-162e-4c34-a1bc-287337cbdf09");
+  assert.deepEqual(leesAssistentContextUitUrl(href.slice(3)).ingangen, [ingang]);
+});
+
+check("een ongeldige SharePoint-ref wordt genegeerd", () => {
+  assert.deepEqual(
+    leesAssistentContextUitUrl("?sharepoint=geen-uuid").ingangen,
+    []
+  );
 });
 
 check("meerdere parameters leveren MEERDERE ingangen, in bronvolgorde", () => {
@@ -153,10 +205,12 @@ function maakLezer(perTabel: Record<string, unknown>) {
       const data = perTabel[tabel] ?? null;
       const bouwer = {
         eq: () => bouwer,
+        in: () => bouwer,
         order: () => bouwer,
+        abortSignal: () => bouwer,
         maybeSingle: () => Promise.resolve({ data }),
-        then: (op: (w: { data: unknown }) => unknown) =>
-          Promise.resolve({ data }).then(op),
+        then: (op: (w: { data: unknown; error: null }) => unknown) =>
+          Promise.resolve({ data, error: null }).then(op),
       };
       return { select: () => bouwer as never };
     },
@@ -170,6 +224,18 @@ checkAsync("zonder ingang wordt er niets opgezocht", async () => {
   assert.deepEqual(gelezen, []);
   assert.equal(uit.startSchoonGesprek, false);
   assert.deepEqual(uit.patch, {}, "zonder ingang wordt geen enkel veld aangeraakt");
+});
+
+checkAsync("SharePoint wordt hier niet uit Supabase opgelost", async () => {
+  const { lezer, gelezen } = maakLezer({});
+  const uit = await resolveerAssistentContext(lezer, [{
+    soort: "sharepoint",
+    objectsoort: "document",
+    ref: "7d5ef460-162e-4c34-a1bc-287337cbdf09",
+  }]);
+  assert.deepEqual(gelezen, []);
+  assert.deepEqual(uit.patch, {});
+  assert.equal(uit.startSchoonGesprek, false);
 });
 
 checkAsync("?doc= zet de documentscope en start een schoon gesprek", async () => {
@@ -205,8 +271,8 @@ checkAsync("?agendapunt= zet de framing én de gekoppelde stukken", async () => 
   const { lezer } = maakLezer({
     agendapunten: { id: "a1", titel: "Vaststellen jaarrekening" },
     documenten: [
-      { id: "s1", titel: "Jaarrekening" },
-      { id: "s2", titel: null },
+      { id: "s1", titel: "Jaarrekening", agendapunt_id: "a1", actief: true },
+      { id: "s2", titel: null, agendapunt_id: "a1", actief: true },
       { id: null, titel: "kapot" },
     ],
   });
@@ -290,7 +356,9 @@ checkAsync("twee ingangen worden samengevoegd; de latere overschrijft", async ()
   // Zoals de losse blokken deden: ?doc= zet de documentscope, en de
   // agendapunt-tak overschrijft die daarna met de stukken van het agendapunt.
   const { lezer } = maakLezer({
-    documenten: [{ id: "s1", titel: "Stuk van het agendapunt" }],
+    documenten: [
+      { id: "s1", titel: "Stuk van het agendapunt", agendapunt_id: "a1", actief: true },
+    ],
     agendapunten: { id: "a1", titel: "Jaarrekening" },
   });
   const uit = await resolveerAssistentContext(lezer, [

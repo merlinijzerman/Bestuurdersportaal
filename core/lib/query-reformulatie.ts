@@ -184,7 +184,9 @@ export async function reformuleerVraag(
     const ruw = await roep({
       systeem: REFORMULATIE_SYSTEEM,
       gebruiker: `GESPREK TOT NU TOE:\n${transcript}\n\nLAATSTE VRAAG: ${vraag}\n\nHerschreven zelfstandige zoekvraag:`,
-      maxTokens: 150,
+      // Sonnet 5 reserveert binnen max_tokens ook ruimte voor adaptive thinking.
+      // De lengtecontrole hieronder blijft de zichtbare zoekvraag begrenzen.
+      maxTokens: 4096,
       // Besluit 0139 — reproduceerbare retrieval: zonder temperature levert
       // dezelfde vraag + historie twee verschillende zoekvragen (incident
       // 06-08 15:29/15:34). temperature:0 maakt de herschrijving deterministisch.

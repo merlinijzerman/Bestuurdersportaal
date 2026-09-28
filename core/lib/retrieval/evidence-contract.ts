@@ -10,6 +10,7 @@ import type { Bronsoort, RetrievalContext, Versiebewijs } from "./contract";
 
 export type EvidenceSoort = "besluitregistratie" | "semantische_unit";
 export type EvidenceFout = "buiten_scope" | "providerfout" | "onvolledig" | "afgekapt";
+export type EvidenceLevenscyclusbeleid = "actueel" | "vergelijkbare_versies";
 export type AuditPiiSoort = "bsn" | "email" | "iban" | "telefoon" | "persoonsaanduiding" | "fondsnaam";
 
 export interface EvidenceAudit {
@@ -62,6 +63,8 @@ export interface EvidenceOpdracht {
   context: RetrievalContext;
   maxItems: number;
   maxGerenderdeTekens: number;
+  /** Uitsluitend voor een expliciete, server-gescopete versievergelijking. */
+  levenscyclusbeleid?: EvidenceLevenscyclusbeleid;
 }
 
 /** Typed uitkomst van een contentvrije chunk-presentiecheck. */
