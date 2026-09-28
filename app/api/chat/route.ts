@@ -2728,6 +2728,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // verkeerde melding aan de bestuurder én een verkeerde reden in het
         // auditspoor.
         let fase: "retrieval" | "generatie" = "retrieval";
+        // Zodra het antwoord duurzaam als voltooid is aangeboden, mag een fout
+        // in de naverwerking die actie niet alsnog als mislukt proberen te
+        // sluiten. Vóór dat punt geldt het omgekeerde: élke fout moet de
+        // reservering sluiten, ook wanneer zij niet tot de bekende
+        // afbreekcategorieën behoort (zoals een ontbrekende Microsoft-
+        // koppeling bij SharePoint-context).
+        let aiActieAfgerond = false;
         // Het GECONFIGUREERDE budget, gezet zodra de fondsvlaggen bekend zijn.
         // Blijft het ongezet (een pad zonder retrieval), dan geldt de default.
         let generatieBudgetMs = generatieTimeoutUitConfig(undefined);
@@ -5108,6 +5115,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             "voltooid",
             logId ? `governance_log:${logId}` : null
           );
+          aiActieAfgerond = true;
 
           // ── T2 (#304) — de voorbereiding als bewaard product ──────────────
           // Server-side, uit dezelfde bron als het antwoord en het auditspoor:
@@ -5268,15 +5276,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // een beurt stopte — een mislukking door een providerstoring en een
           // bewust weggelopen gebruiker zouden er identiek uitzien.
           const afbreekreden = foutcategorieVoor(streamFout);
-          if (afbreekreden) {
-            // STRIKTE afronding op het afbreekpad: hier is geen antwoord, en het
-            // spoor dat zegt waaróm de beurt stopte is het enige dat de beurt
-            // nog oplevert. Stil mislukken is hier geen optie.
+          const duurzameFoutreden = afbreekreden ?? "onverwachte_fout";
+          if (!aiActieAfgerond) {
+            // Ook een niet-genormaliseerde fout (bijvoorbeeld geen geldige
+            // delegated Microsoft-koppeling) is een beëindigde beurt. Zonder
+            // deze afronding blijft de reservering tot het leaseverval als
+            // `in_uitvoering` meetellen en kan zij tijdelijk de quota blokkeren.
+            // De duurzame reden is bewust inhoudsarm: nooit het foutbericht,
+            // tokeninformatie of SharePoint-metadata opslaan.
             const afgerond = await rondAfStrikt(
               supabase,
               aiActieId,
               "mislukt",
-              `${fase}:${afbreekreden}`
+              `${fase}:${duurzameFoutreden}`
             );
             if (!afgerond) {
               // Het GEZAGHEBBENDE spoor is niet gesloten: de levenscyclus van
@@ -5284,11 +5296,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               // wél zijn — die wordt door de gateway zelf geschreven — dus dit
               // is niet "beide sporen ontbreken" maar precies dit ene feit.
               // Operationeel signaal, geen ruis, en het mag de oorspronkelijke
-              // afbreekreden nooit overschrijven.
+              // fout nooit overschrijven.
               console.error(
-                `[chat][ALARM] ai_actie niet afgerond — fase=${fase} reden=${afbreekreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
+                `[chat][ALARM] ai_actie niet afgerond — fase=${fase} reden=${duurzameFoutreden} correlatie=${ctx.requestId} actie=${aiActieId ?? "geen"}`
               );
             }
+          }
+          if (afbreekreden) {
             if (afbreekreden === "timeout") {
               send({
                 type: "error",
