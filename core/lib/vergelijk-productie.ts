@@ -468,6 +468,9 @@ async function leesSemanticUnits(retrieval: VergelijkRetrieval, supabase: Supaba
     context: retrieval.context,
     maxItems: 500,
     maxGerenderdeTekens: 60_000,
+    // De vergelijkroute mag een expliciet gekoppelde historische voorganger
+    // lezen. Alle overige evidencelezingen behouden het actuele beleid.
+    levenscyclusbeleid: "vergelijkbare_versies",
   }, documentId);
   if (uitkomst.status === "geweigerd") {
     throw new Error(`semantic_evidence_${uitkomst.audit.fout}`);

@@ -26,6 +26,9 @@ import { bevatPersoonsgegevens } from "../pii-gate";
 import { generiekGeldigheidsstatus, isReviewVerlopen } from "../generiek-status";
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
+const VERGELIJKBARE_HISTORISCHE_STATUSSEN = new Set([
+  "ingetrokken", "gearchiveerd", "historisch", "vervallen",
+]);
 export const MAX_PRESENTIE_DOCUMENTEN = 2000;
 export const MAX_PRESENTIE_RIJEN = 2000;
 export const MAX_BESLUITEN = 12;
@@ -43,6 +46,13 @@ function isGeneriekDocument(document: Pick<DocumentVersieRij, "fonds_id" | "bibl
   return document.fonds_id == null && document.bibliotheek === "generiek";
 }
 
+function isVergelijkbareHistorischeVersie(document: DocumentVersieRij, opdracht: EvidenceOpdracht): boolean {
+  if (opdracht.levenscyclusbeleid !== "vergelijkbare_versies" || isGeneriekDocument(document)) return false;
+  if (!VERGELIJKBARE_HISTORISCHE_STATUSSEN.has(document.status ?? "")) return false;
+  const bronstatus = document.bronstatus ?? "actief";
+  return bronstatus === "actief" || VERGELIJKBARE_HISTORISCHE_STATUSSEN.has(bronstatus);
+}
+
 function documentIsActueel(
   document: DocumentVersieRij,
   opdracht: EvidenceOpdracht,
@@ -50,6 +60,15 @@ function documentIsActueel(
 ): boolean {
   const peil = peildatum(opdracht);
   if (document.actief === false) return false;
+  if (document.geldig_vanaf && !/^\d{4}-\d{2}-\d{2}$/.test(document.geldig_vanaf)) return false;
+  if (document.geldig_tot && !/^\d{4}-\d{2}-\d{2}$/.test(document.geldig_tot)) return false;
+  const vergelijkbareHistorischeVersie = isVergelijkbareHistorischeVersie(document, opdracht);
+  // Een expliciet benoemde voorganger is juist het onderwerp van de vergelijking.
+  // Alleen de vaste historische statussen mogen de huidige peildatum passeren;
+  // inactieve rijen en onbekende/uitgesloten bronstatussen blijven dicht.
+  if (vergelijkbareHistorischeVersie) {
+    return document.fonds_id === opdracht.context.fondsId;
+  }
   if (document.geldig_vanaf && document.geldig_vanaf > peil) return false;
   if (document.geldig_tot && document.geldig_tot < peil) return false;
   if (isGeneriekDocument(document)) {
@@ -714,6 +733,12 @@ export async function leesSemantischeEvidence(
       // valt daarom gecontroleerd door naar het gewone retrieval/LLM-pad.
       return legeAudit();
     }
+    if (opdracht.levenscyclusbeleid === "vergelijkbare_versies" && gelezenRows.length === 0) {
+      // Semantic units zijn een optionele versnelling voor vergelijking. Een
+      // lege, geldig gescopete set levert geen deterministisch bewijs en valt
+      // daarom terug op de bestaande retrieval/LLM-route; er komt geen inhoud vrij.
+      return legeAudit();
+    }
     if (gelezenRows.some((r) => r.fonds_id !== document.fonds_id || r.document_id !== privateDocumentRef)) {
       return geweigerd(opdracht, "semantische_unit", 1, "buiten_scope");
     }
@@ -757,7 +782,7 @@ export async function leesSemantischeEvidence(
           documentstatus: document.status,
           bronstatus: document.bronstatus,
           geldigTot: document.geldig_tot,
-          actueel: true,
+          actueel: !isVergelijkbareHistorischeVersie(document, opdracht),
         },
         locator: { pagina: r.page },
         passage: r.evidence,

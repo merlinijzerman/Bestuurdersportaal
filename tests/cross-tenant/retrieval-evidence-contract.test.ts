@@ -831,6 +831,43 @@ test("#368 semantic evidence — inactief, ingetrokken en verlopen document faal
   }
 });
 
+test("#438 semantic evidence — historische vergelijking valt zonder units veilig terug op retrieval", async () => {
+  const historisch = {
+    ...documentRij,
+    status: "historisch",
+    bronstatus: "historisch",
+  };
+  const contextMetScope = { ...context, scope: { documentIds: [documentRij.id] } };
+
+  const standaard = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: historisch, error: null }],
+    semantic_units: [{ data: [], error: null }],
+  }) as never, {
+    context: contextMetScope, maxItems: 10, maxGerenderdeTekens: 10_000,
+  }, documentRij.id);
+  assert.equal(standaard.status, "geweigerd");
+
+  const vergelijking = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: historisch, error: null }],
+    semantic_units: [{ data: [], error: null }],
+  }) as never, {
+    context: contextMetScope, maxItems: 10, maxGerenderdeTekens: 10_000,
+    levenscyclusbeleid: "vergelijkbare_versies",
+  }, documentRij.id);
+  assert.equal(vergelijking.status, "compleet");
+  assert.deepEqual(vergelijking.items, []);
+  assert.equal(vergelijking.audit.toegelaten, 0);
+
+  const inactief = await leesSemantischeEvidence(fakeSupabase({
+    documenten: [{ data: { ...historisch, actief: false }, error: null }],
+    semantic_units: [{ data: [], error: null }],
+  }) as never, {
+    context: contextMetScope, maxItems: 10, maxGerenderdeTekens: 10_000,
+    levenscyclusbeleid: "vergelijkbare_versies",
+  }, documentRij.id);
+  assert.equal(inactief.status, "geweigerd");
+});
+
 test("#368 semantic evidence — geldige generieke vergelijkbron valt begrensd door naar retrieval", async () => {
   const generiek = {
     ...documentRij, id: "generic-a", fonds_id: null, bibliotheek: "generiek",
