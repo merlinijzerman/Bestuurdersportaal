@@ -28,8 +28,10 @@ import {
   type GraphDriveItem,
   type GraphSite,
   type MapProjectie,
+  type MapregisterProjectie,
   type SiteProjectie,
 } from "@/core/lib/microsoft-sharepoint-graph-core";
+import { projecteerMapRefs, type SharePointMapRef } from "@/core/lib/microsoft-sharepoint-mapregister-core";
 import { maakRootgrens, selecteerZoekresultaten } from "@/core/lib/microsoft-sharepoint-zoeken-core";
 
 /** Maximale mapdiepte die een beheerder als rootmap kan aanwijzen. */
@@ -211,6 +213,21 @@ async function enumereerBoom(accessToken: string, driveId: string, rootItemId: s
   return { ...bouwDocumentboom(items, driveId, rootItemId), afgekapt, items };
 }
 
+/** #462 — legt de mappen uit dezelfde enumeratie vast in het private
+ * mapregister en levert de browserveilige projectie `{ ref, naam, mappad }`.
+ * Bewust fail-soft: de documentenlijst is een bestaande productieroute en mag
+ * niet omvallen op het (nieuwere) mapregister. Mislukt de registratie, dan
+ * krijgt de browser geen maprefs — nooit paden als vervanging — en meldt de
+ * inhoudsarme audit `mapregister: null`. */
+async function registreerMappen(fondsId: string, bronId: string, configuratieversie: number, mapItems: MapregisterProjectie[]) {
+  try {
+    const refs = await vault.upsertSharePointMappen({ fondsId, bronId, configuratieversie, mappen: mapItems });
+    return { geregistreerd: true as const, mappen: projecteerMapRefs(mapItems, refs) };
+  } catch {
+    return { geregistreerd: false as const, mappen: [] as SharePointMapRef[] };
+  }
+}
+
 export async function sharepointDocumenten(ctx: BronContext) {
   const start = Date.now();
   const bron = await actieveBron(ctx.fondsId);
@@ -223,8 +240,11 @@ export async function sharepointDocumenten(ctx: BronContext) {
       const ref = refVan.get(doc.itemId);
       return ref ? [{ ref, naam: doc.naam, bestandstype: doc.bestandstype, grootte: doc.grootte, gewijzigdOp: doc.gewijzigdOp, mappad: doc.mappad, previewMogelijk: doc.bestandstype !== null, webUrl: doc.webUrl }] : [];
     });
-    await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.lijst.geslaagd", correlationId: ctx.correlationId, foutcategorie: null, details: { bron_id: bron.id, aantal: documenten.length, mappen: boom.mappen.length, afgekapt: boom.afgekapt, latency_ms: Date.now() - start } }).catch(() => undefined);
-    return { bron: { weergavenaam: bron.weergavenaam, site: bron.site_weergavenaam, bibliotheek: bron.drive_weergavenaam, map: bron.root_pad }, documenten, mappen: boom.mappen, afgekapt: boom.afgekapt };
+    const mapRefs = await registreerMappen(ctx.fondsId, bron.id, bron.configuratieversie, boom.mapItems);
+    await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.lijst.geslaagd", correlationId: ctx.correlationId, foutcategorie: null, details: { bron_id: bron.id, aantal: documenten.length, mappen: boom.mappen.length, mapregister: mapRefs.geregistreerd ? mapRefs.mappen.length : null, afgekapt: boom.afgekapt, latency_ms: Date.now() - start } }).catch(() => undefined);
+    // `mappen` (paden) blijft ongewijzigd voor de bestaande bibliotheek-UI;
+    // `mapRefs` is het #462-additief: lokale ref, naam en pad — nooit een Graph-id.
+    return { bron: { weergavenaam: bron.weergavenaam, site: bron.site_weergavenaam, bibliotheek: bron.drive_weergavenaam, map: bron.root_pad }, documenten, mappen: boom.mappen, mapRefs: mapRefs.mappen, afgekapt: boom.afgekapt };
   } catch (fout) {
     const categorie = sharepointFoutcategorie(fout);
     await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.lijst.mislukt", correlationId: ctx.correlationId, foutcategorie: categorie, details: { bron_id: bron.id, latency_ms: Date.now() - start } }).catch(() => undefined);

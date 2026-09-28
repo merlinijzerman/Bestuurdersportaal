@@ -39,13 +39,35 @@ De vergelijkingscall is volledig in scope. `vergelijk_dimensies` en `vergelijk_w
 - Opus 5.5 + verplichte tool: `auto`, expliciete instructie, één retry, daarna fail-closed; verplichte-toolstreaming vooraf geweigerd.
 - Refusal-uitleg verlaat de adapter niet; alleen categorie en genormaliseerde stopreden worden doorgegeven.
 - `thinking_tokens` is afzonderlijk observeerbaar en blijft onderdeel van `output_tokens`.
-- Cache-TTL `1h` is contractueel mogelijk maar nog nergens geactiveerd.
+- Cache-TTL `1h` is contractueel mogelijk; PR2 activeert die voor stabiele chatprefixen.
 - Er wordt geen 5.x-model in configuratie, allowlist of defaults gezet.
+
+## PR2 — effort en prompt caching
+
+- Iedere gatewaytaak heeft een providerneutrale effortdefault. Korte hulp-, router-,
+  rerank- en extractietaken gebruiken `low`; samenvattingen `medium`; generatie en
+  AQLab `high`; afschrift- en besluitconcepten `xhigh`.
+- De chatrouter verfijnt `chat_generatie`: feitelijk/bronoverzicht `low`, historisch
+  `medium`, duiding/sparring `high` en besluitrijpheid/persoonlijke voorbereiding of
+  stukvoorbereiding `xhigh`.
+- **Grondige analyse** is een eenmalige productkeuze voor het volgende bericht en zet
+  uitsluitend die call op `max`. Er is geen impliciete opschaling naar `max`.
+- De vergelijkingscall is meegenomen: `vergelijk_dimensies` draait op `low` en
+  `vergelijk_waarde` op `medium`.
+- De gateway logt het werkelijk door het model toegepaste niveau. Modellen zonder
+  effortondersteuning krijgen `NULL`; aangevraagde effort wordt dus niet ten onrechte als
+  toegepast geregistreerd.
+- Statische systeeminstructies, stabiele sessie-/broncontext en het laatste
+  gebruikersbericht krijgen een cachebreekpunt met TTL `1h`. Een HMAC-afgeleide scope op
+  fonds, gebruiker en gesprek maakt de sessieprefix herbruikbaar zonder voorspelbare
+  sentinels of inhoud in logs op te nemen.
+- Wijzigingen in prompts, tools of effort kunnen de providercache ongeldig maken; de
+  bestaande velden `tokens_cache_lezen` en `tokens_cache_creatie` blijven daarom de bron
+  voor hitratio, latency- en kostenanalyse.
+- Ook PR2 activeert geen 5.x-model en wijzigt geen allowlist of fondsconfiguratie.
 
 ## Vervolgtranches
 
-1. Effortpolicy per taaktype en de productknop **Grondige analyse**; cacheblokken en meetpunten.
-2. Allowlist/configuratie uitsluitend in Preview, gevolgd door AQLab-baseline/challenger en route-smokes — inclusief documentvergelijking.
-3. Directe PDF-/beeldinput als aparte proef met visuele paginaselectie en meetset voor tabellen/grafieken.
-4. Productie-go/no-go op kwaliteit, refusal-rate, tool-retry/fail-closed, latency, tokens/kosten en cache-hitratio.
-
+1. Allowlist/configuratie uitsluitend in Preview, gevolgd door AQLab-baseline/challenger en route-smokes — inclusief documentvergelijking en controle van effort/cachemetingen.
+2. Directe PDF-/beeldinput als aparte proef met visuele paginaselectie en meetset voor tabellen/grafieken.
+3. Productie-go/no-go op kwaliteit, refusal-rate, tool-retry/fail-closed, latency, tokens/kosten en cache-hitratio.

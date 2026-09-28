@@ -194,6 +194,9 @@ SQL_AIGW="supabase/checks/2026_09_04_ai_gateway.sql"
 # #438 PR1 — nieuwe stopredenen en afzonderlijke thinking-tokenobservability;
 # schrijft alleen transactionele testregels via de minimale ai_gateway-rol.
 SQL_AIGW55="supabase/checks/2026_09_27_ai_gateway_opus_5_5_contract.sql"
+# #438 PR2 — nullable effortobservability; legacy blijft NULL en de minimale
+# gatewayrol kan uitsluitend een waarde uit het gesloten contract schrijven.
+SQL_AIGW_EFFORT="supabase/checks/2026_09_28_ai_gateway_effort_observability.sql"
 # #322 PR-C — de toelatingssamenvatting (en `gateway`) overleven beide
 # leesniveaus van het auditspoor, met de tellingen intact.
 SQL_TOELATING="supabase/checks/2026_09_11_toelating_auditprojectie.sql"
@@ -234,6 +237,11 @@ SQL_M365_WEBURL="supabase/checks/2026_09_20_413_weburl_gedrag.sql"
 # `tests/cross-tenant/copilot-mapping.test.ts` bewaakt dat beide lijsten gelijk
 # blijven. Lopen ze uiteen, dan vindt de arm stil niets meer.
 SQL_M365_WEBURL_VECTOREN="supabase/checks/2026_09_20_413_weburl_canonicalisering_vectoren.sql"
+# #462 PR-2 — SharePoint-mapregister en agendapuntkoppeling (private): geen
+# browser-/vaulttabelrechten, fonds B-ref niet aan agendapunt fonds A (RPC,
+# composite-FK én trigger), xor document_ref/map_ref, ontkoppelen raakt het
+# register niet, oude configuratieversie of inactieve bron levert niets.
+SQL_M365_462_KOPPELING="supabase/checks/2026_09_28_462_sharepoint_mapregister_agendakoppeling.sql"
 # Microsoft-login fase 1B (#335, T1, besluit 0211) — privaat schema login_private,
 # minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
 # SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
@@ -454,6 +462,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL_VECTOREN"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_462_KOPPELING"
 echo
 echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
@@ -476,6 +485,8 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW"
 echo
 echo "-- #438 PR1 (Opus 5.5/Sonnet 5 gatewaycontract) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW55"
+echo "-- #438 PR2 (werkelijk toegepast effort in gatewayaudit) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW_EFFORT"
 echo
 
 echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van het auditspoor --"

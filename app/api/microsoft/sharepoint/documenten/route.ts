@@ -17,7 +17,7 @@ export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoo
     return NextResponse.json({ beschikbaar: true, aiContextBeschikbaar, ...documenten }, { headers: { "Cache-Control": "no-store" } });
   } catch (fout) {
     const categorie = sharepointFoutcategorie(fout);
-    if (categorie === "bron_niet_geconfigureerd") return NextResponse.json({ beschikbaar: true, bron: null, documenten: [], mappen: [], afgekapt: false }, { headers: { "Cache-Control": "no-store" } });
+    if (categorie === "bron_niet_geconfigureerd") return NextResponse.json({ beschikbaar: true, bron: null, documenten: [], mappen: [], mapRefs: [], afgekapt: false }, { headers: { "Cache-Control": "no-store" } });
     const melding = categorie === "toestemming_of_token" ? "Verleen eerst SharePoint-toestemming op uw profiel." : "SharePoint-documenten kunnen nu niet worden opgehaald.";
     return NextResponse.json({ beschikbaar: true, error: melding, foutcategorie: categorie }, { status: 409, headers: { "Cache-Control": "no-store" } });
   }

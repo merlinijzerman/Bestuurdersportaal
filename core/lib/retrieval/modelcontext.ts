@@ -41,7 +41,7 @@ const PII_NIVEAUS = new Set<string>(["geen", "persoonsgebonden", "bijzonder"]);
  * blokken in één prompt moeten dezelfde systeemgedefinieerde grens dragen. */
 export function maakModelcontextSentinel(context: RetrievalContext): string {
   return createHash("sha256")
-    .update(`modelcontext-v1:${context.correlationId}`)
+    .update(`modelcontext-v1:${context.cacheScopeId ?? context.correlationId}`)
     .digest("hex")
     .slice(0, 24);
 }

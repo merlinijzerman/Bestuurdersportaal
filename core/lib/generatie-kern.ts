@@ -766,8 +766,9 @@ JE SPREEKT NU MET: een geauthenticeerde gebruiker (${rolLabel}). Naam, aanspreek
 }
 
 // Bouwt de system-parameter als content-blokken: het statische blok eerst met
-// een cache-breakpoint (ephemeral), gevolgd door het kleine dynamische blok.
-// Zo wordt de zware, herhaalde instructie-tekst hergebruikt uit de cache.
+// een cache-breakpoint van één uur, gevolgd door de sessiecontext met een eigen
+// breakpoint. Exacte prefixmatching voorkomt verouderde context: wijzigt profiel,
+// portaalstand of documentcontext, dan ontstaat vanzelf een cachemiss.
 export function bouwSysteemBlokken(
   regels: string,
   ctx: BestuurderContext,
@@ -813,11 +814,12 @@ export function bouwSysteemBlokken(
     {
       type: "text",
       text: bouwStatischeInstructies(statisch, antwoordmodus, bureauToon, opstelToon),
-      cache_control: { type: "ephemeral" },
+      cache_control: { type: "ephemeral", ttl: "1h" },
     },
     {
       type: "text",
       text: dynamisch,
+      cache_control: { type: "ephemeral", ttl: "1h" },
     },
   ];
 }

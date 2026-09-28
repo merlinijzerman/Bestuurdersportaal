@@ -186,6 +186,8 @@ export default function AssistentOppervlak() {
     setAlgemeenPerspectief,
     antwoordmodus,
     setAntwoordmodus,
+    grondigeAnalyse,
+    setGrondigeAnalyse,
     voorbereidingsstand,
     setVoorbereidingsstand,
     gesprekken,
@@ -1559,6 +1561,27 @@ export default function AssistentOppervlak() {
             </label>
           </div>
         )}
+
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGrondigeAnalyse(!grondigeAnalyse)}
+            disabled={laden}
+            aria-pressed={grondigeAnalyse}
+            title="Gebruik eenmalig maximale modelinspanning voor deze vraag. Dit kan langer duren."
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              grondigeAnalyse
+                ? "border-ai bg-ai/10 text-ai"
+                : "border-line bg-card text-muted hover:border-ai hover:text-ink"
+            }`}
+          >
+            <span aria-hidden>✦</span>
+            Grondige analyse
+          </button>
+          {grondigeAnalyse && (
+            <span className="text-[11px] text-muted">Eenmalig voor deze vraag · kan langer duren</span>
+          )}
+        </div>
 
         <div className="assistent-composer">
           <textarea

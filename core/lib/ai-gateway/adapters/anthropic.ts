@@ -18,7 +18,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 import { resolveAnthropicBaseUrl } from "../../ai-provider-endpoint.mjs";
 import { buildWebSearchTool } from "../../web-retrieval";
-import type { StopReden } from "../contract";
+import type { EffortNiveau, StopReden } from "../contract";
 import { anthropicModelprofiel, isAnthropicEffort } from "../anthropic-modelprofiel";
 import type { Credentials } from "../secrets";
 import { GatewayFout } from "../fout";
@@ -162,7 +162,11 @@ export function vertaalAnthropicStop(reden: string | null | undefined): StopRede
   }
 }
 
-function naarResultaat(msg: Anthropic.Messages.Message, latencyMs: number): AdapterResultaat {
+function naarResultaat(
+  msg: Anthropic.Messages.Message,
+  latencyMs: number,
+  effort: EffortNiveau | null
+): AdapterResultaat {
   const tekst = msg.content.map((blok) => (blok.type === "text" ? blok.text : "")).join("");
   const u = msg.usage as
     | (Anthropic.Messages.Usage & { cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null })
@@ -172,6 +176,7 @@ function naarResultaat(msg: Anthropic.Messages.Message, latencyMs: number): Adap
     inhoud: msg.content as unknown[],
     stopReden: vertaalAnthropicStop(msg.stop_reason),
     stopDetailsCategorie: msg.stop_details?.category ?? null,
+    effort,
     usage: maakUsage({
       in: u?.input_tokens ?? 0,
       out: u?.output_tokens ?? 0,
@@ -207,11 +212,14 @@ export function maakAnthropicAdapter(deps?: {
       for (const poging of [0, 1] as const) {
         const params = bouwAnthropicParams(verzoek, poging);
         const msg = (await (opties ? client.messages.create(params, opties) : client.messages.create(params))) as Anthropic.Messages.Message;
-        if (!controleerTool || msg.stop_reason === "refusal") return naarResultaat(msg, Date.now() - start);
+        const effectieveEffort = profiel ? verzoek.effort ?? null : null;
+        if (!controleerTool || msg.stop_reason === "refusal") {
+          return naarResultaat(msg, Date.now() - start, effectieveEffort);
+        }
         const heeftVerplichteTool = verplichteToolnamen.every((naam) =>
           msg.content.some((blok) => blok.type === "tool_use" && blok.name === naam)
         );
-        if (heeftVerplichteTool) return naarResultaat(msg, Date.now() - start);
+        if (heeftVerplichteTool) return naarResultaat(msg, Date.now() - start, effectieveEffort);
       }
       throw new GatewayFout("provider", "verplichte_tool_ontbreekt");
     },
@@ -248,7 +256,7 @@ export function maakAnthropicAdapter(deps?: {
         },
         async afronden() {
           const msg = await stream.finalMessage();
-          return naarResultaat(msg, Date.now() - start);
+          return naarResultaat(msg, Date.now() - start, profiel ? verzoek.effort ?? null : null);
         },
       };
       return handle;
