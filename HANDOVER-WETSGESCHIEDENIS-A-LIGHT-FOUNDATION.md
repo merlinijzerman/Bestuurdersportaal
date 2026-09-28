@@ -6,7 +6,7 @@
 | **Worktree** | `…/MVP bestuurdersportaal/mvp-wetsgeschiedenis-foundation` |
 | **Basis** | `origin/preview` @ `5b0f581` (28-09-2026), inclusief de afgeronde Microsoft-release. Rebase op 28-09-2026 was conflictvrij. |
 | **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md` en `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md` (in deze branch, aparte documentatiecommit). De tijdelijke agentinstructie blijft bewust buiten de PR: die bevat release-specifieke uitvoeringsafspraken. |
-| **Status** | PR-klaar, getest, **niet gemerged, niet gedeployd, niet live gemigreerd, niets geïmporteerd.** |
+| **Status** | Preview-database gemigreerd en structureel gecontroleerd; PR nog **niet gemerged of naar de vaste Preview-hosts gedeployd**. Niets geïmporteerd en Productie niet gewijzigd. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -53,9 +53,9 @@ Wat niet gewijzigd is: `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/lib/ret
 git diff --name-only 5b0f581
 ```
 
-## 3. Migratie en deployvolgorde — **NOG NIET UITVOEREN**
+## 3. Migratie en deployvolgorde
 
-De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afgerond. Onderstaande live stappen zijn nog niet uitgevoerd.
+De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afgerond. Stappen 1–3 zijn op 28-09-2026 uitgevoerd; stap 4 en verder staan nog open.
 
 1. Vlak voor uitrol controleren dat `origin/preview` nog op de geteste basis staat of alleen verwachte aanvullingen bevat. De rebase op `5b0f581` gaf geen conflict of objectoverlap met `documenten_documenttype_check` of `fn_chunk_denorm`.
 2. **Preview-DB (`portal_preview`)**: eerst de controlequery uit de migratie (moet 0 zijn), dan de migratie `2026_09_23_wetsgeschiedenis_a_light_foundation.sql`.
@@ -65,6 +65,19 @@ De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afger
 6. Productie alleen via de reguliere promotie (akkoord opdrachtgever) en in dezelfde volgorde: eerst de migratie op `portal_production`, dan de code. De documentimport gebeurt pas daarna op Productie, waar de scanner werkt: eerst een canary van twee representatieve documenten, controle op scan, extractie, chunking, metadata en vindbaarheid, en pas dan de rest van de batch.
 
 Rollback: eerst juridische documenten herclassificeren of verwijderen via de curatie, dan het rollbackscript. Het script weigert anders.
+
+### 3a. Preview-databasebewijs — 28-09-2026
+
+| Onderdeel | Uitkomst |
+|---|---|
+| Doel | `portal_preview` / Supabase `bestuurdersportaal-preview` (`swviwoytzvaqypieqgji`), status `ACTIVE_HEALTHY` |
+| Geteste PR-head | `e1bbdb2` — alle GitHub- en Vercelchecks groen |
+| Preflight | 11 documenten; 0 juridische documenten; beide nieuwe kolommen en de vier nieuwe constraints afwezig |
+| Toepassing | `wetsgeschiedenis_a_light_foundation`, Supabase-migratieversie `20260928192012` |
+| Postcheck | Nog steeds 11 documenten; 2 nullable tekstkolommen en 5 gevalideerde CHECKs aanwezig; 0 juridische documenten en 0 rijen met nieuwe metadata |
+| Gedrags- en securitychecks | W1–W10 groen; R1 structurele gates groen; V3 grants-gate groen |
+| Supabase Advisors | Gedraaid. Bestaande projectbrede meldingen blijven staan; deze migratie voegt geen tabel, functie, policy of grant toe en introduceerde geen nieuwe objectmelding. |
+| Bewuste begrenzing | Geen documentupload, vervanging of import; geen Storage-mutatie; Productie niet geraakt |
 
 ## 4. Uitgevoerde tests (lokaal, 23 en 28-09-2026)
 
@@ -129,7 +142,7 @@ Geen inhoudelijke overlap met `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/
 
 | # | Stap | Verwachte bestanden | Tests |
 |---|---|---|---|
-| R-0 | Preview-rollout volgens §3; rebase en lokale hertest zijn gereed | — | Preview-preflight, W1–W10, R1 en V3 |
+| R-0 | Preview-rollout volgens §3; databasehelft afgerond, merge/deploy en metadata-UI-smoke nog open | — | Preview-preflight, W1–W10, R1 en V3 groen; visuele metadata-smoke volgt na deploy |
 | I-1 | Import en structuur (werkticket PR 2): `structureerParlementairStuk` → `alsStructuurUnits` aansluiten op de ingest voor `documenttype='wetsgeschiedenis'` | `core/lib/chunk-bouw.ts` of `chunk-ingest.ts`, `platform/lib/generiek-pipeline.ts` | chunk-bouw-sanity met MvT/amendement-fixture; census regenereren als de antwoordgraaf verandert |
 | I-2 | Actuele PW/Wvb opnemen (BWB-id in de titel/URL); max. één actieve versie per wet via `curatieVervangen`; Wtp-Staatsblad-pdf's herclassificeren | curatiehandeling (data), eventueel een DB-check "één actieve wetgeving per regime + titel-BWB" | DB-check + Preview-controle |
 | R-1 | Retrievalmetadata: subtype, dossiernummer en documenttype in het retrieval-/auditcontract; eventueel `fn_chunk_denorm` uitbreiden | nieuwe migratie (denorm), `core/lib/retrieval/contract.ts`, `selectie.ts`, meta-projectie (TS-allowlist én migratie) | `retrieval-contract.test.ts`, census, W10 aanpassen |
@@ -143,4 +156,4 @@ Geen inhoudelijke overlap met `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/
 
 ## 8. Bevestiging
 
-Niets is gemerged, gedeployd, live gemigreerd of live geïmporteerd. Migraties zijn alleen uitgevoerd op een lokale, wegwerpbare Supabase-stack (Docker, poort 54322).
+De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. De PR is nog niet gemerged en de vaste Preview-hosts draaien de nieuwe code nog niet. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd.
