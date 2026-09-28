@@ -231,6 +231,11 @@ SQL_M365_WEBURL="supabase/checks/2026_09_20_413_weburl_gedrag.sql"
 # `tests/cross-tenant/copilot-mapping.test.ts` bewaakt dat beide lijsten gelijk
 # blijven. Lopen ze uiteen, dan vindt de arm stil niets meer.
 SQL_M365_WEBURL_VECTOREN="supabase/checks/2026_09_20_413_weburl_canonicalisering_vectoren.sql"
+# #462 PR-2 — SharePoint-mapregister en agendapuntkoppeling (private): geen
+# browser-/vaulttabelrechten, fonds B-ref niet aan agendapunt fonds A (RPC,
+# composite-FK én trigger), xor document_ref/map_ref, ontkoppelen raakt het
+# register niet, oude configuratieversie of inactieve bron levert niets.
+SQL_M365_462_KOPPELING="supabase/checks/2026_09_28_462_sharepoint_mapregister_agendakoppeling.sql"
 # Microsoft-login fase 1B (#335, T1, besluit 0211) — privaat schema login_private,
 # minimale rol login_gateway (exact 13 executes), hookhelper onder login_hook_owner,
 # SECURITY INVOKER-hook die de exacte identiteit toetst, toestandsmodel en rolgrenzen.
@@ -451,6 +456,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3A"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F3B"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_WEBURL_VECTOREN"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365_462_KOPPELING"
 echo
 echo "-- Microsoft-login F1B (#335): login_private, login_gateway, hookhelper, INVOKER-hook, toestandsmodel --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_M365F1B"
