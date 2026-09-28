@@ -304,6 +304,22 @@ begin
   if not v_geweigerd then raise exception 'FAALT: herkoppelen op ontkoppelde bron gaf de bestaande koppeling terug'; end if;
   if not microsoft_private.sharepoint_ontkoppel_agendapunt(fb, ap_b, v_k1) then raise exception 'FAALT: ontkoppelen bij inactieve bron mislukt'; end if;
 
+  -- ── Soft-delete: lees-RPC dwingt `verwijderd_op is null` zelf af ─────────
+  -- ap1 draagt hier nog de (onbeschikbare) mapkoppeling v_k2. Na soft-delete
+  -- mag de projectie niets meer opleveren; na herstel komt de rij terug. Zo
+  -- bewijst de check dat precies `verwijderd_op` de filter is, en dat de rij
+  -- zelf blijft bestaan (geen verborgen delete).
+  select count(*) into v_aantal from microsoft_private.sharepoint_lees_agendapunt_koppelingen(fa, array[ap1]);
+  if v_aantal < 1 then raise exception 'FAALT: soft-delete-voorwaarde: ap1 heeft geen koppeling om te verbergen'; end if;
+  update public.agendapunten set verwijderd_op = now() where id = ap1;
+  select count(*) into v_aantal from microsoft_private.sharepoint_lees_agendapunt_koppelingen(fa, array[ap1]);
+  if v_aantal <> 0 then raise exception 'FAALT: % koppeling(en) van een soft-deleted agendapunt geprojecteerd', v_aantal; end if;
+  if not exists (select 1 from microsoft_private.agendapunt_sharepoint_koppelingen where id = v_k2) then
+    raise exception 'FAALT: soft-delete verwijderde de koppelrij'; end if;
+  update public.agendapunten set verwijderd_op = null where id = ap1;
+  select count(*) into v_aantal from microsoft_private.sharepoint_lees_agendapunt_koppelingen(fa, array[ap1]);
+  if v_aantal < 1 then raise exception 'FAALT: koppeling na herstel van het agendapunt niet terug'; end if;
+
   -- ── Cascade: verwijderen agendapunt ruimt koppelingen op, register blijft ─
   delete from public.agendapunten where id = ap2;
   if exists (select 1 from microsoft_private.agendapunt_sharepoint_koppelingen where agendapunt_id = ap2) then
@@ -311,6 +327,6 @@ begin
   if not exists (select 1 from microsoft_private.sharepoint_documenten where id = v_doc_a) then
     raise exception 'FAALT: verwijderen agendapunt raakte het documentregister'; end if;
 
-  raise notice '#462 SharePoint mapregister/agendakoppeling gedrag OK: één mapref per item, cross-fonds dicht (RPC, FK en trigger), xor, idempotent koppelen, ontkoppelen alleen koppelrij, oude configuratie en inactieve bron dicht, cascade.';
+  raise notice '#462 SharePoint mapregister/agendakoppeling gedrag OK: één mapref per item, cross-fonds dicht (RPC, FK en trigger), xor, idempotent koppelen, ontkoppelen alleen koppelrij, oude configuratie en inactieve bron dicht, soft-deleted agendapunt verborgen, cascade.';
 end $gedrag$;
 rollback;

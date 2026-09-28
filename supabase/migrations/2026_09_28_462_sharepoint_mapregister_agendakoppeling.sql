@@ -290,6 +290,9 @@ end $$;
 -- `beschikbaar = false`, zodat de UI ze als blokkade kan tonen en de gebruiker
 -- kan ontkoppelen. Contextresolutie (PR-3+) moet op `beschikbaar` filteren én
 -- per beurt opnieuw via `sharepoint_lees_document`/`sharepoint_lees_map` gaan.
+-- Koppelingen van een soft-deleted agendapunt (`verwijderd_op is not null`)
+-- komen NIET terug: de functie dwingt dat zelf af en leunt niet op een
+-- voorafgaande RLS-read van de aanroeper.
 create or replace function microsoft_private.sharepoint_lees_agendapunt_koppelingen(p_fonds uuid, p_agendapunten uuid[])
 returns table(koppeling_id uuid, agendapunt_id uuid, vergadering_id uuid, soort text, ref uuid, naam text, mappad text, bestandstype text, status text, beschikbaar boolean, aangemaakt_door uuid, aangemaakt timestamptz)
 language plpgsql security definer set search_path = microsoft_private, public, pg_temp as $$
@@ -310,6 +313,7 @@ begin
                   and coalesce(d.status, m.status) = 'gezien', false),
          k.aangemaakt_door, k.aangemaakt
     from agendapunt_sharepoint_koppelingen k
+    join public.agendapunten a on a.id = k.agendapunt_id and a.verwijderd_op is null
     left join sharepoint_documenten d on d.id = k.document_ref and d.fonds_id = k.fonds_id
     left join sharepoint_mappen m on m.id = k.map_ref and m.fonds_id = k.fonds_id
     left join sharepoint_bronnen b on b.id = coalesce(d.bron_id, m.bron_id) and b.fonds_id = k.fonds_id
