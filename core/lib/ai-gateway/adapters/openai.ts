@@ -78,6 +78,7 @@ export function maakOpenAIAdapter(deps?: { fetchImpl?: typeof fetch }): Provider
             tekst,
             inhoud: [{ type: "text", text: tekst }],
             stopReden: finish === "length" ? "max_tokens" : finish === "stop" ? "einde" : "onbekend",
+            stopDetailsCategorie: null,
             usage: maakUsage({ in: data.usage?.prompt_tokens ?? 0, out: data.usage?.completion_tokens ?? 0 }),
             latencyMs: Date.now() - start,
           };

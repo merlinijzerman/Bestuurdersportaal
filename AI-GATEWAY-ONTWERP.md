@@ -268,7 +268,11 @@ Er komt **geen tweede adapterhiërarchie**. `core/lib/llm-providers/` wordt de a
 
 Nieuwe append-only tabel `ai_gateway_log` (deny-by-default; lezen alleen via platformlaag):
 
-`id, aangemaakt, fonds_id (null bij globaal), actor_soort ('gebruiker'|'systeem'), actor_id, proces, taaktype, taakgroep, provider, model, profiel_id, config_versie, poort_config_versie, resultaat ('ok'|'configuratiefout'|'poort_gesloten'|'providerfout'|'timeout'|'rate_limit'|'geannuleerd'), stop_reden, latency_ms, tokens_in, tokens_out, tokens_cache_lezen, tokens_cache_creatie, tokens_totaal, correlatie_id, actie_id, label`
+`id, aangemaakt, fonds_id (null bij globaal), actor_soort ('gebruiker'|'systeem'), actor_id, proces, taaktype, taakgroep, provider, model, profiel_id, config_versie, poort_config_versie, resultaat ('ok'|'configuratiefout'|'poort_gesloten'|'providerfout'|'timeout'|'rate_limit'|'geannuleerd'), stop_reden, latency_ms, tokens_in, tokens_out, tokens_cache_lezen, tokens_cache_creatie, tokens_thinking, tokens_totaal, correlatie_id, actie_id, label`
+
+Sinds #438 is `tokens_thinking` een afzonderlijke uitsplitsing van `tokens_out` en dus geen
+extra term in `tokens_totaal`. De genormaliseerde stopredenen omvatten ook `contextvenster`,
+`pauze` en `weigering`; alleen de inhoudsarme refusal-categorie passeert het runtimecontract.
 
 Geen prompt, geen documentinhoud, geen secrets, geen providerrespons. De tabel heet `ai_gateway_private.gateway_log` en is alleen via `schrijf_log`/`lees_log_platform` bereikbaar (§3.3a). Schrijven gebeurt ná de call, **best-effort** (reviewbesluit R3): een mislukte insert blokkeert een al gegenereerd antwoord niet, maar wordt **gestructureerd geregistreerd** via `logAppFout({label, categorie:"retrieval_ai", severity:"hoog", correlatieId, …})` in `app_errors` mét correlatie-id, taaktype en fonds, en telt mee in een nieuw monitoringssignaal "gateway-logfouten" (`platform/lib/monitoring-signalen.ts`) zodat een stille uitval zichtbaar is. `governance_log.retrieval_meta.tokens` blijft de bron voor de bestaande dashboards (`monitoring-queries.ts`, `verbruik-bundel-lees.ts`), ongewijzigd; het chat-auditrecord krijgt additief `gateway: {provider, model, profiel_id, config_versie}` in `META_BASIS` (sanity-pin bijwerken). `p_model: AI_MODEL` in `schrijf_ai_interactie` wordt het **effectieve** model uit de gateway.
 
