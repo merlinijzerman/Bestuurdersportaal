@@ -96,7 +96,8 @@ export async function genereerSamenvatting(
 
     const response = await aanroep.gateway.genereer(aanroep.ctx, {
       taaktype: "samenvatting",
-      maxTokens: 800,
+      // Sonnet 5: ruim plafond voor adaptive thinking + het zichtbare JSON.
+      maxTokens: 16_384,
       systeem: SP_SAMENVATTING,
       berichten: [
         {

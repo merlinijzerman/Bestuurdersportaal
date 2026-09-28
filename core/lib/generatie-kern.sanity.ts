@@ -383,9 +383,9 @@ test("model-/budgetconstanten zijn de productiewaarden (parity)", () => {
   //
   // Code-default voor hermetische tests/AQLab. Productieconfiguratie staat per
   // fonds in de private gatewaylaag en kent geen env-override meer (#311 R2).
-  assert.equal(AI_MODEL, "claude-opus-4-8");
-  assert.equal(MAX_TOKENS, 5000);
-  assert.equal(MAX_TOKENS_BESTUURLIJK, 8000);
+  assert.equal(AI_MODEL, "claude-opus-5-5");
+  assert.equal(MAX_TOKENS, 32_000);
+  assert.equal(MAX_TOKENS_BESTUURLIJK, 32_000);
 });
 
 // ── T5 B1 — bronloze bureau-regelset (concept-skelet) ───────────────────────

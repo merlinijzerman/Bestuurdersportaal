@@ -118,7 +118,7 @@ select taaktype, model, effort,
        sum(tokens_cache_creatie) as cache_creatie,
        avg(latency_ms)::integer as gemiddelde_latency_ms
   from ai_gateway_private.gateway_log
- where created_at >= now() - interval '1 hour'
+ where aangemaakt >= now() - interval '1 hour'
  group by taaktype, model, effort
  order by taaktype, model, effort;
 ```
@@ -133,6 +133,28 @@ De handmatige rollback
 `supabase/rollbacks/2026_09_28_ai_gateway_effort_observability_ROLLBACK.sql` weigert zodra
 een logregel een effortwaarde bevat. Rol eerst de code terug. Behoud/exporteer het append-only
 auditspoor en verwijder geen logregels om de rollback te forceren.
+
+### #438 — Preview-canary Opus 5.5/Sonnet 5 (PR3)
+
+Volgorde voor `portal_preview`:
+
+1. Pas eerst `2026_09_27_ai_gateway_opus_5_5_contract.sql` en
+   `2026_09_28_ai_gateway_effort_observability.sql` toe en draai hun checks.
+2. Pas `2026_09_28_438_opus_5_5_sonnet_5_register.sql` toe. Dit registreert de
+   modellen en wijzigt alleen defaults voor nieuwe fondsen.
+3. Draai daarna uitsluitend op Preview
+   `supabase/seeds/preview/2026_09_28_438_opus_5_5_sonnet_5_canary.sql`. De seed
+   bevestigt eerst de Preview-fingerprint en wijzigt alleen `m365-demo`.
+4. Draai de read-only postcheck
+   `supabase/checks/2026_09_28_438_opus_5_5_sonnet_5_canary.sql`.
+5. Deploy de code en rooktest chat, Grondige analyse en documentvergelijking.
+   Controleer in `gateway_log` het effectieve model, effort, stopreden,
+   thinking-/cachetokens en resultaat; log geen prompt of antwoordinhoud.
+
+Rollback: eerst
+`2026_09_28_438_opus_5_5_sonnet_5_canary_ROLLBACK.sql`, zodat `m365-demo` weer
+op 4.x staat. De generieke registerrollback mag pas daarna en weigert zolang een
+fonds nog een 5.x-model gebruikt. Productie is geen onderdeel van deze procedure.
 
 ## Lokaal / CI
 

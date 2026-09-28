@@ -85,10 +85,12 @@ export interface BatchOpties {
 // AQL-6: OpenAI/Mistral-tarieven zijn INDICATIEF — verifieer tegen de actuele
 // prijslijst van de provider vóór ze in een formeel kostenoordeel meewegen.
 const KOSTEN_PER_MTOK: Record<string, { in: number; out: number }> = {
+  "claude-opus-5-5": { in: 4, out: 20 },
+  "claude-sonnet-5": { in: 2, out: 10 },
   "claude-sonnet-4-6": { in: 3, out: 15 },
   "claude-sonnet-4-5": { in: 3, out: 15 },
-  "claude-opus-4-8": { in: 15, out: 75 },
-  "claude-haiku-4-5-20251001": { in: 0.8, out: 4 },
+  "claude-opus-4-8": { in: 5, out: 25 },
+  "claude-haiku-4-5-20251001": { in: 1, out: 5 },
   // Challengers (ander provider dan productie) — indicatieve tarieven.
   "gpt-4.1": { in: 3, out: 12 },
   "gpt-4.1-mini": { in: 0.8, out: 3.2 },

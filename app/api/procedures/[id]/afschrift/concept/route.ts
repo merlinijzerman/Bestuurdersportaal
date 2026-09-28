@@ -163,7 +163,7 @@ export const POST = withFondsRoute({ module: "procedures", hostGuard: "afdwingen
     try {
       const respons = await gateway.genereer(gatewayCtx, {
         taaktype: "afschrift_concept",
-        maxTokens: 1500,
+        maxTokens: 16_384,
         systeem: SYSTEM_PROMPT,
         berichten: [{ role: "user", content: JSON.stringify(feitenkaart) }],
       });

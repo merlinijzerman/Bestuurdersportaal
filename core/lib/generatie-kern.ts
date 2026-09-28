@@ -34,12 +34,11 @@ import type { GatewayAanroep, TekstBlok } from "@/core/lib/ai-gateway/contract";
 // #311 (reviewbesluit R2): geen runtime-override via AI_MODEL meer. Dit is de
 // seed-/backfill-default van taakgroep `generatie` (ai_gateway_private) en de
 // AQLab-baseline-constante; op productiepaden beslist de database.
-export const AI_MODEL = "claude-opus-4-8";
-// Verhoogd naar 5000 (was 3200) na de overstap naar Opus 4.8 (besluit 0067):
-// ook feitelijke antwoorden schrijft Opus uitgebreider, dus ruimer plafond tegen
-// afkappen. Plafond, geen streefwaarde; het afkap-signaal (AFGEKAPT_MELDING) vangt
-// de resterende randgevallen zichtbaar op.
-export const MAX_TOKENS = 5000;
+export const AI_MODEL = "claude-opus-5-5";
+// Opus 5.5 gebruikt adaptive thinking; thinking-tokens vallen binnen max_tokens.
+// 32k laat daarom ook bij high/xhigh/max voldoende ruimte voor het zichtbare
+// antwoord. Dit is een plafond, geen streefwaarde.
+export const MAX_TOKENS = 32_000;
 
 // Feature-flag: bestuurlijke antwoordstijl (antwoordstatus + adaptieve
 // lichte/volledige structuur). Default uit → huidige gesprekspartner-stijl.
@@ -50,7 +49,7 @@ export const BESTUURLIJKE_STIJL = process.env.BESTUURLIJKE_STIJL === "on";
 // uitgebreider, waardoor gestructureerde duiding-/besluitantwoorden tegen de
 // oude limiet aanliepen en middenin een sectie afbraken. Het is een plafond,
 // geen streefwaarde — kortere antwoorden kosten niets extra.
-export const MAX_TOKENS_BESTUURLIJK = 8000;
+export const MAX_TOKENS_BESTUURLIJK = 32_000;
 
 // ============================================================
 //  Toon-instructies — gemeenschappelijk voor alle modi
