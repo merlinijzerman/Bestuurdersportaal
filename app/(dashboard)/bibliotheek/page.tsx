@@ -34,6 +34,9 @@ interface Document {
   bestandstype: "pdf" | "docx" | "xlsx" | null;
   paginas: number | null;
   geindexeerd: boolean;
+  /** Serverprojecties: houden UI-acties gelijk aan download- en retrievalpoort. */
+  bestand_beschikbaar: boolean;
+  ai_beschikbaar: boolean;
   // Async ingest (F3/F4): de pipeline-status waar de UI "Verwerken…"/"Mislukt"
   // uit afleidt. `null` = geen async-pipeline (bv. oud document of OCR-kandidaat).
   verwerkingsstatus: string | null;
@@ -428,7 +431,7 @@ export default function BibliotheekPage() {
             . Wissel hierboven van tab om in de andere bibliotheek te zoeken — uw
             zoekterm blijft staan.
           </p>
-          <ZoekenPaneel vasteBronsoort={actieveTab} />
+          <ZoekenPaneel vasteBronsoort={actieveTab} metSharePoint={actieveTab === "fonds"} />
         </>
       ) : (
       <>
@@ -524,8 +527,8 @@ export default function BibliotheekPage() {
                 <th className="w-[92px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
                   Bronstatus
                 </th>
-                <th className="w-[78px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
-                  Omvang
+                <th className="w-[112px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
+                  Pagina&apos;s / bladen
                 </th>
                 <th className="w-[100px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
                   Toegevoegd
@@ -583,7 +586,8 @@ export default function BibliotheekPage() {
                 </tr>
                 {getoond.map((doc) => {
             const inactief = !doc.actief;
-            const kanInzien = !!doc.opslag_pad;
+            const heeftOrigineel = !!doc.opslag_pad;
+            const kanInzien = doc.bestand_beschikbaar;
             const isGeneriek = doc.bibliotheek === "generiek";
             // Besluit 0140 — de bijzonderheden komen uit één pure, geteste
             // functie (core/lib/document-bijzonderheden.ts). Hier stond eerder
@@ -632,7 +636,9 @@ export default function BibliotheekPage() {
                       title={
                         kanInzien
                           ? doc.titel
-                          : `${doc.titel} — origineel niet beschikbaar (vóór mei 2026 geüpload)`
+                          : heeftOrigineel
+                            ? `${doc.titel} — wacht op een geldige veiligheidscontrole`
+                            : `${doc.titel} — origineel niet beschikbaar (vóór mei 2026 geüpload)`
                       }
                     >
                       {doc.titel}
@@ -664,7 +670,7 @@ export default function BibliotheekPage() {
                 <td className="whitespace-nowrap border-b border-line px-3 py-2 text-right text-[12px] tabular-nums text-muted">
                   {doc.paginas
                     ? `${doc.paginas} ${doc.bestandstype === "xlsx" ? "tabbladen" : "pag."}`
-                    : "—"}
+                    : "Niet bepaald"}
                 </td>
 
                 <td className="whitespace-nowrap border-b border-line px-3 py-2 text-right text-[12px] tabular-nums text-muted">
@@ -762,7 +768,7 @@ export default function BibliotheekPage() {
                             {isGeneriek ? "Metadata bekijken" : "Metadata bewerken"}
                           </button>
                         )}
-                        {!inactief && doc.geindexeerd && (
+                        {!inactief && doc.ai_beschikbaar && (
                           <AssistentIngang
                             ingangen={[{ soort: "document", documentId: doc.id }]}
                             module="bibliotheek"
@@ -787,7 +793,7 @@ export default function BibliotheekPage() {
                         {/* B13: schrijfacties (her-indexeren/deactiveren) zijn
                             voor generieke documenten verborgen — tenants zijn
                             read-only op generiek; RLS blokkeert ze hoe dan ook. */}
-                        {kanInzien && !inactief && !isGeneriek && (
+                        {heeftOrigineel && !inactief && !isGeneriek && (
                           <button
                             onClick={() => {
                               herindexeer(doc);
@@ -798,7 +804,9 @@ export default function BibliotheekPage() {
                             title={
                               tekstherkenningNodig
                                 ? "Tekstherkenning (OCR) op het origineel uitvoeren en het document alsnog doorzoekbaar maken (voorzitter/beheerder). Kan enkele minuten duren."
-                                : "Origineel opnieuw door de extractie-pipeline halen: structuur-bewuste fragmenten + verbeterde (contextuele) zoekindex (voorzitter/beheerder)"
+                                : kanInzien
+                                  ? "Origineel opnieuw door de extractie-pipeline halen: structuur-bewuste fragmenten + verbeterde (contextuele) zoekindex (voorzitter/beheerder)"
+                                  : "Het bestaande origineel veilig controleren en daarna opnieuw indexeren (voorzitter/beheerder)"
                             }
                           >
                             {herindexId === doc.id
@@ -807,7 +815,9 @@ export default function BibliotheekPage() {
                                 : "Bezig met her-indexeren..."
                               : tekstherkenningNodig
                                 ? "Tekstherkenning uitvoeren"
-                                : "Her-indexeren"}
+                                : kanInzien
+                                  ? "Her-indexeren"
+                                  : "Veilig controleren en herindexeren"}
                           </button>
                         )}
                         {!inactief && !isGeneriek && verwerkingMislukt && (

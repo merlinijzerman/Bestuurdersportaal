@@ -30,6 +30,7 @@ import {
   type MapProjectie,
   type SiteProjectie,
 } from "@/core/lib/microsoft-sharepoint-graph-core";
+import { maakRootgrens, selecteerZoekresultaten } from "@/core/lib/microsoft-sharepoint-zoeken-core";
 
 /** Maximale mapdiepte die een beheerder als rootmap kan aanwijzen. */
 export const SHAREPOINT_MAX_ROOTMAP_DIEPTE = 8;
@@ -182,11 +183,11 @@ async function actieveBron(fondsId: string) {
  * stroom ongeacht diepte). Werkt delta niet onder de verleende scope, dan
  * volgt een begrensde recursieve children-listing; beide zijn read-only
  * metadata-calls zonder content. */
-async function enumereerBoom(accessToken: string, driveId: string, rootItemId: string) {
+async function enumereerBoom(accessToken: string, driveId: string, rootItemId: string, signal?: AbortSignal) {
   let afgekapt = false;
   let items: GraphDriveItem[];
   try {
-    const delta = await graphCollectie<GraphDriveItem>(accessToken, deltaUrl(driveId, rootItemId), { maxItems: SHAREPOINT_MAX_DOCUMENTEN, maxPaginas: 30 });
+    const delta = await graphCollectie<GraphDriveItem>(accessToken, deltaUrl(driveId, rootItemId), { maxItems: SHAREPOINT_MAX_DOCUMENTEN, maxPaginas: 30, signal });
     items = delta.items; afgekapt = delta.afgekapt;
   } catch (fout) {
     const categorie = sharepointFoutcategorie(fout);
@@ -195,7 +196,7 @@ async function enumereerBoom(accessToken: string, driveId: string, rootItemId: s
     const wachtrij: Array<{ id: string; diepte: number }> = [{ id: rootItemId, diepte: 0 }];
     while (wachtrij.length > 0 && items.length < SHAREPOINT_MAX_DOCUMENTEN) {
       const { id, diepte } = wachtrij.shift()!;
-      const kinderen = await graphCollectie<GraphDriveItem>(accessToken, kinderenUrl(driveId, id), { maxItems: SHAREPOINT_MAX_DOCUMENTEN - items.length, maxPaginas: 10 });
+      const kinderen = await graphCollectie<GraphDriveItem>(accessToken, kinderenUrl(driveId, id), { maxItems: SHAREPOINT_MAX_DOCUMENTEN - items.length, maxPaginas: 10, signal });
       afgekapt = afgekapt || kinderen.afgekapt;
       for (const kind of kinderen.items) {
         items.push(kind);
@@ -207,7 +208,7 @@ async function enumereerBoom(accessToken: string, driveId: string, rootItemId: s
     }
     if (wachtrij.length > 0) afgekapt = true;
   }
-  return { ...bouwDocumentboom(items, driveId, rootItemId), afgekapt };
+  return { ...bouwDocumentboom(items, driveId, rootItemId), afgekapt, items };
 }
 
 export async function sharepointDocumenten(ctx: BronContext) {
@@ -227,6 +228,39 @@ export async function sharepointDocumenten(ctx: BronContext) {
   } catch (fout) {
     const categorie = sharepointFoutcategorie(fout);
     await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.lijst.mislukt", correlationId: ctx.correlationId, foutcategorie: categorie, details: { bron_id: bron.id, latency_ms: Date.now() - start } }).catch(() => undefined);
+    throw fout;
+  }
+}
+
+/** #463 fase A — metadatazoeken over de VOLLEDIGE bronroot, live met het
+ * token van de gebruiker (Microsofts security trimming geldt dus). Dezelfde
+ * enumeratie als de lijst, gevolgd door matching en een tweede, onafhankelijke
+ * grenscontrole per resultaat. Alleen de getoonde resultaten krijgen een
+ * lokale referentie; de zoekterm wordt niet gelogd. */
+export async function sharepointZoeken(ctx: BronContext, term: string, signal?: AbortSignal) {
+  const start = Date.now();
+  const bron = await actieveBron(ctx.fondsId);
+  try {
+    const { accessToken } = await token(ctx);
+    const boom = await enumereerBoom(accessToken, bron.drive_id, bron.root_item_id, signal);
+    const selectie = selecteerZoekresultaten(boom.documenten, term, maakRootgrens(boom.items, bron.drive_id, bron.root_item_id));
+    const refs = await vault.upsertSharePointDocumenten({ fondsId: ctx.fondsId, bronId: bron.id, configuratieversie: bron.configuratieversie, documenten: selectie.resultaten });
+    const refVan = new Map(refs.map((x) => [x.item_id, x.ref]));
+    const resultaten = selectie.resultaten.flatMap((doc: DocumentProjectie) => {
+      const ref = refVan.get(doc.itemId);
+      return ref ? [{ ref, naam: doc.naam, bestandstype: doc.bestandstype, extensie: doc.naam.toLowerCase().match(/\.([a-z0-9]{1,10})$/)?.[1] ?? null, grootte: doc.grootte, gewijzigdOp: doc.gewijzigdOp, mappad: doc.mappad, previewMogelijk: doc.bestandstype !== null, webUrl: doc.webUrl }] : [];
+    });
+    await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.zoeken.geslaagd", correlationId: ctx.correlationId, foutcategorie: null, details: { bron_id: bron.id, aantal: resultaten.length, totaal: selectie.totaal, boom_afgekapt: boom.afgekapt, resultaten_afgekapt: selectie.resultatenAfgekapt, buiten_root_geweigerd: selectie.buitenRootGeweigerd, latency_ms: Date.now() - start } }).catch(() => undefined);
+    return {
+      bron: { weergavenaam: bron.weergavenaam, map: bron.root_pad },
+      resultaten,
+      totaal: selectie.totaal,
+      boomAfgekapt: boom.afgekapt,
+      resultatenAfgekapt: selectie.resultatenAfgekapt,
+    };
+  } catch (fout) {
+    const categorie = sharepointFoutcategorie(fout);
+    await vault.registreerSharePointGebeurtenis({ fondsId: ctx.fondsId, gebruikerId: ctx.gebruikerId, gebeurtenis: "microsoft.sharepoint.zoeken.mislukt", correlationId: ctx.correlationId, foutcategorie: categorie, details: { bron_id: bron.id, latency_ms: Date.now() - start } }).catch(() => undefined);
     throw fout;
   }
 }

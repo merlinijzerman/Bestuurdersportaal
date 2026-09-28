@@ -55,3 +55,15 @@ De fonds-tab toont onder de bestaande tabel een aparte kaart met badge "SharePoi
 ### Audit
 
 Wrapper-handeling `microsoft.sharepoint.documenten.previewen`; private gebeurtenissen `microsoft.sharepoint.lijst.geslaagd|mislukt` (bron-id, aantallen, afgekapt, latency, correlation-id) en `preview.geslaagd|mislukt` (document-referentie, categorie, latency, correlation-id).
+
+## Deel C — zoeken in de documentbibliotheek (#463 fase A)
+
+`GET /api/microsoft/sharepoint/zoeken?q=` zoekt op **metadata** (bestandsnaam, mapnaam en volledig mappad, extensie/typenaam) over de volledige bronroot. Er wordt geen inhoud opgehaald en niets geïndexeerd in Supabase; inhoudelijk zoeken is fase B en wacht op werkende Copilot Retrieval-hits (#413).
+
+- **Toegang:** `zoeken.use` én `documents.view` inline, vlagpoort als bij de lijst, `hostGuard: "afdwingen"`. Eigen fail-closed limiet `microsoft_sharepoint_zoeken` (30/5 min), los van de portaalzoeklimiet.
+- **Werkwijze:** dezelfde live enumeratie als de lijst (delta, terugval children), met het token van de gebruiker en een afbreeksignaal (8 s). Matching in de pure kern `microsoft-sharepoint-zoeken-core.ts`: alle woorden moeten voorkomen, hoofdletter- en accentongevoelig; `pdf`/`.pdf`/`word`/`excel`/`powerpoint` herkend als type.
+- **Grenzen:** `bouwDocumentboom` laat items zonder ouderketen naar het rootitem al vallen; daarnaast loopt `maakRootgrens` per resultaat de keten opnieuw af over de ruwe items (andere drive, lus, ontbrekende ouder, map of snelkoppeling = weigeren). Waarom geen Graph-`search`: die hangt van de zoekindex af, doorzoekt ook inhoud en is niet betrouwbaar tot een map te begrenzen.
+- **Respons:** max. 100 resultaten met lokale referentie, `totaal` vóór de limiet, `boomAfgekapt` en `resultatenAfgekapt` apart. Openen via de bestaande preview (Deel B).
+- **UI:** eigen `Zoekbron` (Alles/Portaal/SharePoint) in `ZoekenPaneel` op de fondstab, los van de portaal-`Bronsoort`; bronnen parallel met gescheiden statussen.
+- **Audit:** private gebeurtenissen `microsoft.sharepoint.zoeken.geslaagd|mislukt` zonder zoekterm.
+
