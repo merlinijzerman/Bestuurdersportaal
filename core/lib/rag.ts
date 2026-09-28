@@ -763,6 +763,16 @@ export interface RetrievalMeta {
   // agendapunt. Legt voor de audit de herkomst vast als "agendapunt:<id>", zodat
   // herleidbaar is dat de toelichting (geen vastgestelde fondsbron) de context was.
   herkomst?: string;
+  /** #462 PR-5 — inhoudsarme audit van automatisch gebruikte SharePoint-
+   * koppelingen bij een agendapunt. Uitsluitend lokale refs en tellingen; geen
+   * Graph-id, naam, pad, token, URL, prompt of documentinhoud. */
+  agendapunt_sharepoint?: {
+    document_refs: string[];
+    map_refs: string[];
+    kandidaten: number;
+    gebruikte_documenten: number;
+    afgekapt: boolean;
+  };
   // Document-scope (increment 1/2). Aanwezig zodra een vraag tot één/enkele
   // document(en) is beperkt; legt voor de audit vast waarop gescoopt is en welke
   // retrievalstrategie is gekozen.

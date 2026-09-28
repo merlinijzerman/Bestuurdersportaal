@@ -16,7 +16,7 @@ import {
 } from "@/core/lib/ai-preflight";
 import { rondAfStrikt } from "@/core/lib/ai-actie-afronding";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { voerVolledigeRetrievalUit, foutcategorieVoor } from "@/core/lib/retrieval/orkestratie";
+import { voerVolledigeRetrievalUit, foutcategorieVoor, type Spoor } from "@/core/lib/retrieval/orkestratie";
 import { bouwBronstatusDto } from "@/core/lib/retrieval/bronstatus-dto";
 import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, bewaakNaIO, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
@@ -25,6 +25,8 @@ import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import {
   leesDirecteSharePointScope,
   maakProductieDirecteSharePointAdapter,
+  maakProductieGekoppeldeSharePointAdapter,
+  type DirecteSharePointScope,
 } from "@/core/lib/microsoft-sharepoint-ai-context";
 import type { SharePointMapSelectie } from "@/core/lib/microsoft-sharepoint-map-ai-core";
 import { microsoftSharePointAiContextActief } from "@/core/lib/microsoft-sharepoint-ai-gate";
@@ -105,6 +107,7 @@ import {
   type AgendapuntDocument,
   type AgendapuntDocumentLezer,
 } from "@/core/lib/agendapunt-documenten";
+import { leesSharePointAgendapuntKoppelingen } from "@/core/lib/microsoft-vault";
 import { bouwVoorbereidingProduct } from "@/core/lib/voorbereiding-product";
 import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
 import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
@@ -992,6 +995,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       typeof body.agendapunt_context?.id === "string" ? body.agendapunt_context.id : "";
     let agendapuntSeed: AgendapuntSeed | null = null;
     let actueleAgendapuntDocumenten: AgendapuntDocument[] = [];
+    let actueleAgendapuntSharePointScopes: DirecteSharePointScope[] = [];
     if (agendapuntIdRaw) {
       const [apRow] = await leesModelcontext({
         context: evidenceContext,
@@ -1036,6 +1040,31 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           agendapuntSeed.id,
           req.signal
         );
+        // PR-5: lokale refs komen uit de private, fondsgebonden koppeltabel.
+        // Alleen als de fondsflag actief is worden ze als kandidaat meegenomen;
+        // de daadwerkelijke autorisatie volgt later per beurt via delegated Graph.
+        if (await microsoftSharePointAiContextActief(supabase, fondsId)) {
+          const koppelingen = await leesSharePointAgendapuntKoppelingen(
+            fondsId,
+            agendapuntSeed.id
+          );
+          actueleAgendapuntSharePointScopes = koppelingen.map((koppeling) => ({
+            soort: koppeling.soort,
+            ref: koppeling.ref,
+          }));
+          if (
+            actueleAgendapuntSharePointScopes.length > 0 &&
+            !rolHeeftCapability(
+              (profiel as { rol?: string | null } | null)?.rol,
+              "documents.view"
+            )
+          ) {
+            return NextResponse.json(
+              { error: "U heeft geen toegang tot documenten." },
+              { status: 403 }
+            );
+          }
+        }
       }
     }
     const agendapuntModusActief = agendapuntSeed !== null;
@@ -1835,6 +1864,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       !!scopeDocumentIds &&
       scopeDocumentIds.length > 0;
     const scopeActief = lokaleDocumentScopeActief || sharepointScopeActief;
+    const agendapuntSharePointActief =
+      agendapuntModusActief && actueleAgendapuntSharePointScopes.length > 0;
     // Agendapunt-modus mét doorzoekbare gekoppelde stukken: retrieval beperkt tot
     // die stukken ([Bron N]); zonder stukken halen we niets op (toelichting-only).
     const agendapuntMetStukken =
@@ -2851,6 +2882,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     const voorbereidingZonderStukken =
       agendapuntModusActief &&
       !agendapuntMetStukken &&
+      !agendapuntSharePointActief &&
       antwoordmodus === "persoonlijke_voorbereiding";
 
     // Retrieval-filters volgen de antwoordmodus (peildatum = vandaag) + de
@@ -3039,7 +3071,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // criterium 5: nooit een stille terugval naar de hele bibliotheek).
     const moetRetrieven = !reflectieActief && !breedActief && !bronloosBureau && (
       agendapuntModusActief
-        ? agendapuntMetStukken || voorbereidingZonderStukken
+        ? agendapuntMetStukken || agendapuntSharePointActief || voorbereidingZonderStukken
         : procesModusInPrompt
         ? procesMetStukken
         : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
@@ -3148,7 +3180,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // Proces-modus (besluit 0151) blijft BEWUST hard afgebakend: daar zijn de
       // bewijsstukken van een procedure de bron, en snapshot-integriteit weegt
       // daar zwaarder dan bredere duiding.
-      const primairPadActief = scopeActief || agendapuntMetStukken;
+      const primairPadActief =
+        scopeActief || agendapuntMetStukken || agendapuntSharePointActief;
       // ── T2-1 — C1 loopt door het retrievalcontract ───────────────────────
       //  De adapter levert kandidaten; de orkestratie selecteert per spoor,
       //  voegt samen en bouwt het auditspoor (besluit 0213 punt 5). De twee
@@ -3169,21 +3202,30 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       let directeSharePoint: Awaited<
         ReturnType<typeof maakProductieDirecteSharePointAdapter>
       > | null = null;
-      if (sharepointScopeActief) {
+      if (sharepointScopeActief || agendapuntSharePointActief) {
         // De live mapenumeratie, registercontrole, downloads en centrale
         // retrieval delen één wandklokbudget. Na de setup krijgt de bestaande
         // orkestratie alleen het resterende deel; er begint dus geen nieuwe
         // volledige deadline nadat Graph al tijd heeft verbruikt.
         const setupGrendel = maakAfbreekgrendel(req.signal, retrievalTimeoutMs);
         try {
-          directeSharePoint = await maakProductieDirecteSharePointAdapter({
-            fondsId,
-            gebruikerId: ctx.gebruikerId,
-            correlationId: ctx.requestId,
-            scope: directeSharePointScope!,
-            vraag: zoekVraag,
-            signal: setupGrendel.signal,
-          });
+          directeSharePoint = sharepointScopeActief
+            ? await maakProductieDirecteSharePointAdapter({
+                fondsId,
+                gebruikerId: ctx.gebruikerId,
+                correlationId: ctx.requestId,
+                scope: directeSharePointScope!,
+                vraag: zoekVraag,
+                signal: setupGrendel.signal,
+              })
+            : await maakProductieGekoppeldeSharePointAdapter({
+                fondsId,
+                gebruikerId: ctx.gebruikerId,
+                correlationId: ctx.requestId,
+                scopes: actueleAgendapuntSharePointScopes,
+                vraag: zoekVraag,
+                signal: setupGrendel.signal,
+              });
           setupGrendel.bewaak();
           effectiefRetrievalTimeoutMs = Math.max(1, setupGrendel.resterendMs());
         } finally {
@@ -3192,13 +3234,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       }
       sharepointMapSelectie = directeSharePoint?.mapSelectie;
       const primaireIds = new Set<string>(
-        directeSharePoint
-          ? directeSharePoint.documentIdentiteiten
-          : primairPadActief
+        [
+          ...(primairPadActief
             ? (scopeDocumentIds ?? []).map((id) =>
                 maakDocumentIdentiteit(`fonds:${fondsId}`, id)
               )
-            : []
+            : []),
+          ...(directeSharePoint?.documentIdentiteiten ?? []),
+        ]
       );
       // De route consumeert (nog) chunks. De adapter houdt de koppeling
       // ref → chunk providerprivaat; deze helper haalt op ná de citatie de
@@ -3212,7 +3255,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           bronsoorten: (
             sharepointScopeActief
               ? ["sharepoint"]
-              : ["fonds", "generiek", "notulen"]
+              : agendapuntSharePointActief
+                ? ["fonds", "generiek", "notulen", "sharepoint"]
+                : ["fonds", "generiek", "notulen"]
           ) as Bronsoort[],
         },
         // De BEURTscope (audit, vergadering/agendapunt); de DOCUMENTscope is
@@ -3227,6 +3272,76 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // de model- en embeddingcalls van een beurt die niemand meer leest.
         signal: req.signal,
       };
+      const grenzenPrimair = {
+        maxPerDoc: maxPerDocVoor(CHUNK_BUDGET),
+        representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+        regimeWeging: geresolveerdeVlaggen.regimeWeging,
+        relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+      };
+      const maakQuery = (
+        naam: string,
+        documentScope: string[] | undefined,
+        maxResultaten: number,
+        filters: RetrievalFilters | undefined
+      ) => ({
+        naam,
+        documentScope,
+        origineleVraag: gereformuleerd ? vraag : zoekVraag,
+        zoekvraag: zoekVraag,
+        strategie: "gericht" as const,
+        maxResultaten,
+        maxKandidaten: kandidatenpool(maxResultaten),
+        maxContextTekens: MAX_CONTEXT_TEKENS,
+        hybrideAan,
+        filters,
+      });
+      const sporen: Spoor[] = [];
+      if (scopeDocumentIds?.length) {
+        sporen.push({
+          query: maakQuery("primair_portaal", scopeDocumentIds, CHUNK_BUDGET, undefined),
+          grenzen: grenzenPrimair,
+          primair: true,
+        });
+      }
+      if (directeSharePoint) {
+        sporen.push({
+          query: maakQuery(
+            sharepointScopeActief ? "primair_sharepoint" : "agendapunt_sharepoint",
+            directeSharePoint.documentIdentiteiten,
+            CHUNK_BUDGET,
+            undefined
+          ),
+          grenzen: grenzenPrimair,
+          adapter: directeSharePoint.adapter,
+          bijBronfout: "stop",
+          primair: true,
+        });
+      }
+      if (sporen.length === 0) {
+        sporen.push({
+          query: maakQuery("primair", undefined, CHUNK_BUDGET, retrievalFilters),
+          grenzen: grenzenPrimair,
+          primair: true,
+        });
+      }
+      if (primairPadActief && !sharepointScopeActief) {
+        sporen.push({
+          query: maakQuery("aanvullend", undefined, AANVULLEND_BUDGET, bibliotheekFilters),
+          grenzen: {
+            maxPerDoc: maxPerDocVoor(AANVULLEND_BUDGET),
+            representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
+            regimeWeging: geresolveerdeVlaggen.regimeWeging,
+            relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+          },
+          primair: false,
+        });
+      }
+      const [eersteSpoor, ...overigeSporen] = sporen;
+      if (!eersteSpoor) throw new Error("retrieval_zonder_spoor");
+      const retrievalSporen: readonly [Spoor, ...Spoor[]] = [
+        eersteSpoor,
+        ...overigeSporen,
+      ];
       // ÉÉN aanroep, en die bezit de afbreekgrendel: hij sluit timer en
       // clientluisteraar langs elke uitgang, ook als de weergaveverrijking
       // halverwege faalt. De twee losse fasen zijn intern — een route die ze
@@ -3238,63 +3353,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // D5 — deadline over de hele retrievalketen; fondsvlag met veilige
           // default (20 s) bij een ontbrekende of buiten-bereik-waarde.
           timeoutMs: effectiefRetrievalTimeoutMs,
-          sporen: [
-            {
-              query: {
-                naam: "primair",
-                // Scope PER SPOOR: het primaire spoor is afgebakend tot het
-                // gekozen stuk of de gekoppelde stukken.
-                documentScope:
-                  directeSharePoint?.documentIdentiteiten ?? scopeDocumentIds,
-                origineleVraag: gereformuleerd ? vraag : zoekVraag,
-                zoekvraag: zoekVraag,
-                strategie: "gericht" as const,
-                maxResultaten: CHUNK_BUDGET,
-                maxKandidaten: kandidatenpool(CHUNK_BUDGET),
-                maxContextTekens: MAX_CONTEXT_TEKENS,
-                hybrideAan,
-                // Spoor A draagt géén filters in de primaire modi.
-                filters: primairPadActief ? undefined : retrievalFilters,
-              },
-              grenzen: {
-                maxPerDoc: maxPerDocVoor(CHUNK_BUDGET),
-                representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
-                regimeWeging: geresolveerdeVlaggen.regimeWeging,
-                relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
-              },
-              ...(directeSharePoint
-                ? { adapter: directeSharePoint.adapter, bijBronfout: "stop" as const }
-                : {}),
-            },
-            ...(primairPadActief && !sharepointScopeActief
-              ? [
-                  {
-                    query: {
-                      naam: "aanvullend",
-                      // GEEN documentscope: dit spoor is juist de verbreding
-                      // naar de bibliotheek. Zou het de primaire scope erven,
-                      // dan zocht het alleen in dezelfde stukken.
-                      documentScope: undefined,
-                      origineleVraag: gereformuleerd ? vraag : zoekVraag,
-                      zoekvraag: zoekVraag,
-                      strategie: "gericht" as const,
-                      maxResultaten: AANVULLEND_BUDGET,
-                      maxKandidaten: kandidatenpool(AANVULLEND_BUDGET),
-                      maxContextTekens: MAX_CONTEXT_TEKENS,
-                      hybrideAan,
-                      // Altijd de bibliotheekfilters, óók in agendapunt-modus.
-                      filters: bibliotheekFilters,
-                    },
-                    grenzen: {
-                      maxPerDoc: maxPerDocVoor(AANVULLEND_BUDGET),
-                      representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
-                      regimeWeging: geresolveerdeVlaggen.regimeWeging,
-                      relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
-                    },
-                  },
-                ]
-              : []),
-          ] as const,
+          sporen: retrievalSporen,
         },
         // Citaatvorming is orkestratiewerk (besluit 0213 punt 5): nummering,
         // sentinel, neutralisatie en BronVerwijzing komen centraal tot stand.
@@ -3330,9 +3389,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // alle geselecteerde mapinhoud in het antwoord terechtkwam.
         sharepointMapSelectie = { ...sharepointMapSelectie, afgekapt: true };
       }
-      chunks = directeSharePoint
-        ? directeSharePoint.chunksVoor(voltooid.geselecteerd)
-        : retrieval.chunksVoor(voltooid.geselecteerd);
+      chunks = [
+        ...retrieval.chunksVoor(voltooid.geselecteerd),
+        ...(directeSharePoint
+          ? directeSharePoint.chunksVoor(voltooid.geselecteerd)
+          : []),
+      ];
       if (sharepointScopeActief) {
         // Vanaf hier consumeert de bestaande prompt-/auditlaag nog de generieke
         // scopevelden. Vul ze uitsluitend uit de live toegelaten resultaten:
@@ -3365,6 +3427,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
       };
+      if (agendapuntSharePointActief) {
+        retrievalMeta.agendapunt_sharepoint = {
+          document_refs: actueleAgendapuntSharePointScopes
+            .filter((scope) => scope.soort === "document")
+            .map((scope) => scope.ref),
+          map_refs: actueleAgendapuntSharePointScopes
+            .filter((scope) => scope.soort === "map")
+            .map((scope) => scope.ref),
+          kandidaten: sharepointMapSelectie?.kandidatenBehandeld ?? 0,
+          gebruikte_documenten: sharepointMapSelectie?.documenten.length ?? 0,
+          afgekapt: sharepointMapSelectie?.afgekapt ?? false,
+        };
+      }
       // Besluit 0138 (addendum op 0087) — één betekenisvolle retrieval-regel i.p.v.
       // een constante. `res.meta.opgehaald` was het ophaalplafond (CHUNK_BUDGET·3) en
       // varieerde nauwelijks; we tonen nu het aantal UNIEKE documenten en het aantal
@@ -3781,7 +3856,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         voorbereidingZonderStukken && chunks.length > 0
           ? `\n\n=== BRONNEN UIT DE BIBLIOTHEEK ===\nEr zijn geen stukken aan dit agendapunt gekoppeld. De bronnen hieronder komen uit de bibliotheek van het fonds en zijn erbij gezocht op de titel en toelichting van het agendapunt; ze zijn dus GEEN vergaderstukken bij dit punt. Duid ze als zodanig.\n\n${contextTekst}`
           : chunks.length > 0
-          ? `\n\n=== BRONNEN BIJ DIT AGENDAPUNT ===\nDe aan dit agendapunt gekoppelde stukken zijn gemarkeerd met [gekoppeld stuk]. Bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken van het fonds en zijn er ter duiding en vergelijking bij gezocht.\n\n${contextTekst}`
+          ? `\n\n=== BRONNEN BIJ DIT AGENDAPUNT ===\nDe aan dit agendapunt gekoppelde stukken zijn gemarkeerd met [gekoppeld stuk]. Bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken van het fonds en zijn er ter duiding en vergelijking bij gezocht.${
+              agendapuntSharePointActief && sharepointMapSelectie?.afgekapt
+                ? " Niet alle ondersteunde documenten uit de gekoppelde SharePoint-bronnen pasten binnen één veilige beurt; doe geen uitspraak over niet-geraadpleegde documenten en benoem deze gedeeltelijke dekking expliciet."
+                : ""
+            }\n\n${contextTekst}`
           : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
       // Module-context (risico's/procedures) na de stukken — zie opbouw hierboven.
       gebruikersPrompt = `${toelichtingBlok}${stukkenBlok}${modulesBlok}\n\n---\n\nVRAAG: ${vraag}`;
@@ -4623,8 +4702,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           if (sharepointMapSelectie?.afgekapt) {
             inlineMeldingenFinaal.push({
               type: "sharepoint_map_afgekapt",
-              tekst:
-                "Deze SharePoint-map bevat meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt.",
+              tekst: agendapuntSharePointActief
+                ? "De gekoppelde SharePoint-bronnen bevatten meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt."
+                : "Deze SharePoint-map bevat meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt.",
             });
           }
 

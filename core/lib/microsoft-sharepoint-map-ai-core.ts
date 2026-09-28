@@ -56,19 +56,15 @@ function score(document: MapDocumentKandidaat, termen: readonly string[]): numbe
   }, 0);
 }
 
-/**
- * Rangschikt eerst de volledige live zichtbare set onder de map. Pas daarna
- * gelden de twee grenzen. Hierdoor is de Graph-/arrayvolgorde nooit de reden
- * dat juist de eerste zes documenten worden gebruikt.
- */
-export function selecteerSharePointMapDocumenten(
+/** Rangschikt een reeds server-side afgebakende set, bijvoorbeeld de vereniging
+ * van losse agendadocumenten en documenten uit meerdere gekoppelde mappen. */
+export function selecteerSharePointDocumentKandidaten(
   documenten: readonly MapDocumentKandidaat[],
-  gekozenMapPad: string,
   vraag: string,
   grenzen: { maxKandidaten?: number; maxDocumenten?: number } = {}
 ): SharePointMapSelectie {
-  const onderMap = documenten.filter((document) => isOnderMap(document.mappad, gekozenMapPad));
-  const ondersteund = onderMap.filter((document) =>
+  const uniek = [...new Map(documenten.map((document) => [document.ref, document])).values()];
+  const ondersteund = uniek.filter((document) =>
     !!document.bestandstype &&
     SHAREPOINT_MAP_AI_TYPES.has(document.bestandstype) &&
     (document.grootte === null || document.grootte <= SHAREPOINT_MAP_MAX_DOCUMENT_BYTES)
@@ -99,9 +95,24 @@ export function selecteerSharePointMapDocumenten(
   const geselecteerd = kandidaten.slice(0, maxDocumenten).map((x) => x.document);
   return {
     documenten: geselecteerd,
-    totaalOnderMap: onderMap.length,
+    totaalOnderMap: uniek.length,
     ondersteundOnderMap: ondersteund.length,
     kandidatenBehandeld: kandidaten.length,
     afgekapt: ondersteund.length > geselecteerd.length,
   };
+}
+
+/**
+ * Rangschikt eerst de volledige live zichtbare set onder de map. Pas daarna
+ * gelden de twee grenzen. Hierdoor is de Graph-/arrayvolgorde nooit de reden
+ * dat juist de eerste zes documenten worden gebruikt.
+ */
+export function selecteerSharePointMapDocumenten(
+  documenten: readonly MapDocumentKandidaat[],
+  gekozenMapPad: string,
+  vraag: string,
+  grenzen: { maxKandidaten?: number; maxDocumenten?: number } = {}
+): SharePointMapSelectie {
+  const onderMap = documenten.filter((document) => isOnderMap(document.mappad, gekozenMapPad));
+  return selecteerSharePointDocumentKandidaten(onderMap, vraag, grenzen);
 }
