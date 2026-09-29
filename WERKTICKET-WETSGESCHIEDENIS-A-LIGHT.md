@@ -108,6 +108,9 @@ De bronweergave maakt het onderscheid expliciet, bijvoorbeeld:
 - Pas hetzelfde onderscheid toe in de afzonderlijke documentvergelijking. Expliciet gekozen
   historische documenten blijven vergelijkbaar, maar de vergelijking presenteert wetgeving
   en wetsgeschiedenis nooit als twee gelijkwaardige bindende normen.
+  *Status V-1 (#493): gebouwd in PR naar `preview`, nog niet gemerged. Juridische rol per
+  zijde, servergeschreven kop/opdracht, bron- en auditmetadata; één kleine migratie op de
+  vergelijkingsauditprojectie. Zie `HANDOVER-WETSGESCHIEDENIS-A-LIGHT-FOUNDATION.md` §6a.*
 - Voeg documenttype, subtype, dossiernummer, versie/datum, normgewicht en rechtsregime toe
   aan de bestaande retrieval- en auditmetadata. Gebruik de documenttitel voor de volledige
   officiële bronverwijzing.
