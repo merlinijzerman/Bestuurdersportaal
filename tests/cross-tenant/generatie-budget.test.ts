@@ -242,11 +242,40 @@ test("#356 — de route legt de platformgrens expliciet vast", async () => {
   assert.ok(iFase > 0 && iFase < iBudget, "de fase moet VÓÓR de budgetcontrole op generatie staan");
   assert.doesNotMatch(bron, /const fase = generatieGrendel \?/, "niet afleiden uit het bestaan van de grendel");
   assert.match(bron, /signal: generatieGrendel\.signal/, "de generatiecall moet het beurtsignaal krijgen");
+  assert.match(
+    bron,
+    /generatieGrendel\.bewaak\(\);\s*const postGeneratieSignal = generatieGrendel\.signal;/,
+    "de post-generatiefase bevriest het nog actieve generatiebudget"
+  );
   // De SDK-`timeout` BLIJFT staan, maar in zijn eigen rol: hij begrenst
   // uitsluitend time-to-first-byte (gemeten: `clearTimeout` in de `.finally()`
   // van de fetch, die resolvet zodra de headers binnen zijn). De duur van het
   // streamen wordt door het signaal begrensd. Twee grenzen, twee taken.
   assert.match(bron, /timeoutMs: VOLLEDIGE_ANALYSE_GENERATIE_TIMEOUT_MS/, "de TTFB-grens blijft nuttig");
+  // Regressie #462: de 20-seconden contextgrens is na een lang, geldig
+  // Opus-antwoord al verlopen. Governance en het voorbereidingsproduct moeten
+  // daarom onder de nog actieve generatiegrendel worden geschreven; anders
+  // verschijnt het antwoord wel, maar eindigt ai_actie als
+  // `generatie:timeout` zonder governance_log.
+  const postGeneratie = bron.slice(bron.indexOf("const { data: logId, error: logFout }"));
+  const governanceWrite = postGeneratie.slice(0, postGeneratie.indexOf("if (logFout)"));
+  const productWrite = postGeneratie.slice(
+    postGeneratie.indexOf("const { error: productFout }"),
+    postGeneratie.indexOf("if (productFout) throw productFout;")
+  );
+  for (const [naam, schrijfblok] of [
+    ["governance-write", governanceWrite],
+    ["voorbereidingsproduct", productWrite],
+  ] as const) {
+    assert.match(schrijfblok, /voerDuurzameSchrijfBinnenDeadlineUit\(/, `${naam} blijft deadline-bewaakt`);
+    assert.match(schrijfblok, /postGeneratieSignal/, `${naam} gebruikt het resterende generatiebudget`);
+    assert.doesNotMatch(schrijfblok, /contextSignal/, `${naam} gebruikt niet de verlopen contextgrens`);
+  }
+  assert.doesNotMatch(
+    postGeneratie.slice(0, postGeneratie.indexOf("// ── Plateau B")),
+    /contextSignal/,
+    "de verlopen retrieval/contextgrens mag post-generatie niet terugkeren"
+  );
 });
 
 test("#356 — SSE-uitvoer en -afsluiting overleven een verbroken verbinding", async () => {

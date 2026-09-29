@@ -4647,6 +4647,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           const finaleMsg = await claudeStream.afronden();
           const generatieDuurMs = Date.now() - generatieStart;
           generatieGrendel.bewaak();
+          const postGeneratieSignal = generatieGrendel.signal;
 
           if (bufferReflectievraag) {
             // ── B-opt tranche 3b — genereren → valideren → tonen (guardrail 6) ──
@@ -5084,7 +5085,14 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           const zegel = bouwInhoudZegel(vraag, zichtbaarAntwoord);
 
           const { data: logId, error: logFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
-            contextSignal,
+            // De requestbrede contextgrens bewaakt uitsluitend evidence- en
+            // modelcontextlezingen. Na een legitiem lang Opus-antwoord is die
+            // 20-secondenklok al verlopen; hergebruik hier zou het zichtbare
+            // antwoord alsnog als `generatie:timeout` markeren en het
+            // governance-spoor verliezen. De generatiegrendel is juist geklemd
+            // op de resterende functieduur inclusief afrondmarge en blijft tot
+            // de `finally` hieronder eigenaar van deze post-generatieschrijfsels.
+            postGeneratieSignal,
             () => supabase.rpc("schrijf_ai_interactie", {
             p_vraag: vraag,
             p_antwoord: zichtbaarAntwoord,
@@ -5097,7 +5105,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
             p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
             p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
-            }).abortSignal(contextSignal)
+            }).abortSignal(postGeneratieSignal)
           );
           // Ongewijzigd gedrag: een mislukte logregel valt in de outer catch en
           // levert de client {type:"error"} in plaats van {type:"done"}. Het
@@ -5144,7 +5152,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               // blijven staan. Dat is geen aanname: het is gepind in
               // tests/cross-tenant/voorbereiding-product.test.ts.
               const { error: productFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
-                contextSignal,
+                postGeneratieSignal,
                 () => supabase.from("voorbereidingen").upsert(
                   {
                     agendapunt_id: agendapuntSeed.id,
@@ -5155,7 +5163,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                     bijgewerkt_op: product.ai_output.opgesteld_op,
                   },
                   { onConflict: "agendapunt_id,gebruiker_id" }
-                ).abortSignal(contextSignal)
+                ).abortSignal(postGeneratieSignal)
               );
               if (productFout) throw productFout;
             } catch (productFout) {
