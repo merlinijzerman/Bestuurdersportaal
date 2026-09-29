@@ -44,6 +44,9 @@ export interface Bron {
   // niet gebackfilld (metadata-review-queue), en oude, opgeslagen gesprekken
   // kennen de velden helemaal niet.
   documenttype?: string | null;
+  wetsgeschiedenis_subtype?: string | null;
+  dossiernummer?: string | null;
+  wettelijk_regime?: string | null;
   bestandstype?: string | null;
 }
 

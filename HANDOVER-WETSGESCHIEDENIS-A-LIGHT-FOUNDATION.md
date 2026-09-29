@@ -1,12 +1,12 @@
-# Handover — wetsgeschiedenis A-light (foundation + I-1 structuur-ingest)
+# Handover — wetsgeschiedenis A-light (foundation + I-1 structuur-ingest + R-1 bronduiding)
 
 | Veld | Waarde |
 |---|---|
-| **Branch** | `codex/wetsgeschiedenis-structure-ingest` |
+| **Branch** | `codex/wetsgeschiedenis-retrieval-metadata` |
 | **Worktree** | `…/MVP bestuurdersportaal/mvp-wetsgeschiedenis-structure-ingest` |
-| **Basis** | `origin/preview` @ `f67e01d` (29-09-2026), inclusief de gemergde foundation en de actuele Microsoft-wijzigingen. |
+| **Basis** | `origin/preview` @ `861f45d` (29-09-2026), inclusief de gemergde foundation en I-1. |
 | **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md` en `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md` (in deze branch, aparte documentatiecommit). De tijdelijke agentinstructie blijft bewust buiten de PR: die bevat release-specifieke uitvoeringsafspraken. |
-| **Status** | Foundation staat op Preview en de metadata-UI-smoke is groen. I-1 (parlementaire structuur in ingest en herindexering) is op de vervolgbranch gebouwd en getest, maar nog niet gemerged of gedeployd. Niets geïmporteerd en Productie niet gewijzigd. |
+| **Status** | Foundation en I-1 staan op Preview. R-1 is lokaal gebouwd en getest: juridische metadata loopt door naar prompt, bronkaarten en audit en wetsgeschiedenis krijgt een zichtbare niet-normatieve duiding. Nog niet gemerged of gedeployd. Niets geïmporteerd en Productie niet gewijzigd. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -50,7 +50,13 @@ Niet toegevoegd, zoals de opdracht vraagt: publicatiekenmerk, behandelingsstatus
 | `app/(platform)/platform/(beveiligd)/generieke-bibliotheek/page.tsx` | Leest de 4 kolommen mee in. |
 | `tests/karakterisering/__snapshots__/w4.documents-upload.get.bestuurder.json` | Bestaand GET-contract aangevuld met de twee nieuwe nullable kolommen. De eerste GitHub-run maakte dit verschil zichtbaar; overige responsvelden bleven gelijk. |
 
-Wat in I-1 niet gewijzigd is: `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/lib/retrieval/*`, `core/lib/generiek-curatie.ts`, `fn_chunk_denorm` en de triggers, alle RPC's, en alle Microsoft-, SharePoint-, OAuth-, tenant- en tokencode. De retrieval-census bleef 11/11 groen.
+I-1 wijzigde het antwoordpad nog niet. R-1 doet dat bewust wel: na de bestaande
+retrievalselectie leest `verrijkDocumentmetadata()` in één batch het subtype,
+dossiernummer en rechtsregime uit `documenten`. Die waarden lopen door het publieke
+retrievalcontract, de promptkop, bronkaart en het vaste auditspoor. `fn_chunk_denorm`,
+de zoek-RPC's, ranking, Microsoft-, SharePoint-, OAuth-, tenant- en tokencode blijven
+ongewijzigd. De antwoordpadgraaf groeide verklaarbaar met alleen de bestaande pure
+module `wetsgeschiedenis.ts`; er kwam geen tabel- of RPC-lezer bij.
 
 ## 3. Migratie en deployvolgorde
 
@@ -141,7 +147,7 @@ zie §3b. Productie, Microsoft en SharePoint zijn voor I-1 niet geraakt.
 - **A-1 — regime via `wettelijk_regime`, niet via `toepassingsgebied`.** De instructie noemt `toepassingsgebied` voor PW/Wvb/beide. In de code is dat een inert vrije-tekstveld. Het echte, gecontroleerde en al gedenormaliseerde regimefacet is `wettelijk_regime` (T4). Dat stond nog niet in het curatieformulier en is nu toegevoegd: optioneel voor gewone generieke documenten, verplicht (`pw|wvb|beide`) voor juridische typen. Gevolg: bij `REGIME_WEGING` aan kan een gecureerd regime het bestaande demotiegedrag voeden. Dat is bestaand retrievalgedrag op data; er is geen codewijziging.
 - **A-2 — juridische validatie in een wrapper, niet in `generiek-curatie.ts`.** De eerste versie breidde `valideerCuratie` uit. Daarmee groeide de bevroren importgraaf van het antwoordpad van 134 naar 136 bestanden (`retrieval-census.test.ts` rood), omdat `rag.ts` die module importeert. Dat is een raakvlak met de retrieval-release. Daarom staat de logica nu in `generiek-curatie-juridisch.ts` en blijft `generiek-curatie.ts` byte-identiek. Post-release kan dit worden samengevoegd, met een bewuste regeneratie van het census-register.
 - **A-3 — extra servereisen voor juridische typen:** een officiële URL (beide typen), plus documentdatum en dossiernummer in de titel (wetsgeschiedenis), of het Staatsbladnummer in de titel (nota van toelichting). Dit volgt uit de werkticket-eisen "kamerstuknummer, datum, officiële link". Alleen de app-laag dwingt dit af; de DB niet.
-- **A-4 — subtype en dossiernummer niet gedenormaliseerd naar `document_chunks`.** `documenttype` staat al op de chunk en volstaat voor het onderscheid wet/wetsgeschiedenis. Uitbreiden vereist een wijziging aan `fn_chunk_denorm` (retrievalterrein); zie post-release stap R-1.
+- **A-4 — OPGELOST zonder extra denormalisatie (R-1, 29-09-2026).** Subtype, dossiernummer en rechtsregime worden na selectie in dezelfde bestaande batch uit `documenten` verrijkt. Daardoor zijn zij beschikbaar voor prompt, bronweergave en audit zonder `document_chunks`, `fn_chunk_denorm`, trigger of zoek-RPC te wijzigen. Het documenttype stond al op de chunk.
 - **A-5 — geen type-/subtypefilter in de bibliotheeklijst.** Het werkticket noemt filters; de agentinstructie vraagt invoeren, tonen, wijzigen en auditen. De lijst toont type, dossier en regime per document. Een filter is een kleine post-releaseaanvulling (B-1).
 - **A-6 — dossiernummerformaat.** Opslag: 3–6 cijfers, optioneel `-SUFFIX` (bv. `36200-XV`). Aanname: dit dekt de pilotdossiers. Controleer het tegen de broncuratielijst vóór de import.
 - **A-7 — OPGELOST (besluit opdrachtgever 23-09-2026).** Subtypen `memorie_van_antwoord` (ook voor een nadere memorie van antwoord; het onderscheid staat in de titel) en `nota_van_toelichting` zijn toegevoegd aan de bestaande foundationmigratie. Die was nog nergens uitgevoerd of gepusht, dus er is geen tweede migratie nodig. Dossiernummer is alleen optioneel bij `nota_van_toelichting`; dan moet het Staatsbladnummer in de titel staan (servervalidatie) en is de officiële URL verplicht. Beide subtypen zijn `wetsgeschiedenis` met `normgewicht = informatief` (app én DB). Bijgewerkt: CHECKs, servervalidatie, UI-opties en -hint, schema.sql, sanity-tests en DB-check W3. Audit loopt ongewijzigd mee via de bestaande diff. Oorspronkelijke bevinding: De broninventaris §3.2/§3.4 noemt P0-stukken die geen van de vier subtypen zijn:
@@ -159,27 +165,29 @@ zie §3b. Productie, Microsoft en SharePoint zijn voor I-1 niet geraakt.
 | `scripts/cross-tenant-ci.sh` | Gedeeld bestand; de release heeft checks toegevoegd | Rebase was conflictvrij; de wetsgeschiedenischeck staat na T6 en de Microsoft-checks zijn behouden. Volledige suite groen. |
 | `supabase/schema.sql` | Gedeelde documentatie | Alleen het `documenten`-blok; kans op een tekstueel conflict is klein. |
 | Migratievolgorde | Onze datum 2026-09-23, naast `2026_09_23_434_adapterstand_fonds.sql` | Geen objectoverlap (alleen `documenten`-CHECKs en -kolommen). Bij een rebase de volgorde controleren. |
-| Importgraaf antwoordpad (census) | Bewust **niet** geraakt | Zie A-2. |
-| `document_chunks` / `fn_chunk_denorm` | Niet gewijzigd | Denormalisatie van `documenttype` loopt al; W10 bewijst dat. |
+| Importgraaf antwoordpad (census) | R-1 voegt de bestaande pure juridische-duidingsmodule toe | Register bewust van 170 naar 171 bereikte bestanden; lezingen, tabelclassificatie en retrievalingangen ongewijzigd. |
+| `document_chunks` / `fn_chunk_denorm` | Niet gewijzigd | R-1 haalt de aanvullende metadata na selectie in één batch uit `documenten`; geen migratie nodig. |
 
-Geen inhoudelijke overlap met `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/lib/retrieval/*`, Microsoft-, SharePoint-, OAuth-, tenant- of tokencode. De foundation is alleen tegen die releasebasis gehertest.
+R-1 raakt gericht `app/api/chat/route.ts`, `core/lib/rag.ts` en `core/lib/retrieval/*` om
+metadata te projecteren. Selectie, ranking en RPC's blijven inhoudelijk gelijk. Er is
+geen overlap met Microsoft-, SharePoint-, OAuth-, tenant- of tokencode.
 
 ## 7. Volgende fasen
 
 | # | Stap | Verwachte bestanden | Tests |
 |---|---|---|---|
 | R-0 | **Afgerond:** Preview-database, merge/deploy en metadata-UI-smoke volgens §3 zijn groen | — | Preview-preflight, W1–W10, R1 en V3 groen; visuele metadata-smoke 29-09-2026 groen |
-| I-1 | **Afgerond op de vervolgbranch, PR volgt:** `structureerParlementairStuk` / `alsStructuurUnits` zijn aangesloten op de actuele worker, centrale chunkbouw en herindexering voor `documenttype='wetsgeschiedenis'` | chunking/chunk-bouw/chunk-ingest, worker, reindex en generiek pad | MvT/amendement/fallback/meerdere pagina's groen; census 11/11, geen regeneratie nodig |
+| I-1 | **Afgerond en op Preview:** `structureerParlementairStuk` / `alsStructuurUnits` zijn aangesloten op de actuele worker, centrale chunkbouw en herindexering voor `documenttype='wetsgeschiedenis'` | chunking/chunk-bouw/chunk-ingest, worker, reindex en generiek pad | MvT/amendement/fallback/meerdere pagina's groen; census 11/11 |
 | I-2 | Actuele PW/Wvb opnemen (BWB-id in de titel/URL); max. één actieve versie per wet via `curatieVervangen`; Wtp-Staatsblad-pdf's herclassificeren | curatiehandeling (data), eventueel een DB-check "één actieve wetgeving per regime + titel-BWB" | DB-check + Preview-controle |
-| R-1 | Retrievalmetadata: subtype, dossiernummer en documenttype in het retrieval-/auditcontract; eventueel `fn_chunk_denorm` uitbreiden | nieuwe migratie (denorm), `core/lib/retrieval/contract.ts`, `selectie.ts`, meta-projectie (TS-allowlist én migratie) | `retrieval-contract.test.ts`, census, W10 aanpassen |
+| R-1 | **Gebouwd, PR volgt:** documenttype, subtype, dossiernummer, normgewicht en rechtsregime lopen door naar prompt, bronkaart en audit; na-selectie batchverrijking, dus geen migratie/denormalisatie | `rag.ts`, retrievalcontract/citatie/meta, assistant-source, bronkaart | identiteit 14/14, prompt-/bronlijst-sanities groen; censusregister verklaarbaar +1 bestand en 11/11 groen |
 | R-2 | Intentherkenning geldend recht vs. bedoeling/totstandkoming | `core/lib/vraagtype.ts` (of router) | `vraagtype.test.ts` (pariteitspin bijwerken) |
 | R-3 | Ranking/routing: actuele wet vóór wetsgeschiedenis bij normatieve vragen; wetsgeschiedenis alleen aanvullend | `core/lib/rag.ts`, `core/lib/retrieval/selectie.ts` | retrievalregressies + nieuwe evalcases |
-| A-1 | Antwoordregels: wetsgeschiedenis nooit zelfstandig normatief ("moet/mag niet/termijn") | `app/api/chat/route.ts` / `generatie-kern.ts` (sha256-pin bewust bijwerken) | `generatie-kern.sanity.ts` |
+| A-1 | **Afgerond binnen R-1:** prompt schrijft voor dat de normatieve conclusie eerst uit geldend recht komt en wetsgeschiedenis alleen uitleg/achtergrond geeft; ook een aangenomen amendement is geen zelfstandige actuele norm | `generatie-kern.ts` | `generatie-kern.sanity.ts` |
 | V-1 | Afzonderlijke vergelijkingscall: juridische metadata en rol meenemen in vergelijking/audit; expliciet gekozen historische documenten niet door een impliciet `actueel`-filter verwijderen; norm en toelichting nooit als gelijkwaardig bindend presenteren | `app/api/vergelijk/route.ts`, `core/lib/vergelijk-productie.ts`, `core/lib/vergelijk-kern.ts` | `retrieval-productiepaden.test.ts`, `retrieval-evidence-contract.test.ts`, vergelijkingsgoldens |
-| B-1 | Bronweergave: labels uit `juridischeDuiding` in het onderbouwing-/bronnenpaneel; filter in de bibliotheek | `OnderbouwingPaneel.tsx`, `AntwoordWeergave.tsx`, `assistant-source.ts`, `GeneriekeBibliotheekClient.tsx` | component-tests |
+| B-1 | **Bronweergave afgerond binnen R-1:** bronkaarten tonen geldend recht versus wetsgeschiedenis/geen norm, plus dossier en regime. Alleen het type-/subtypefilter in de bibliotheek staat nog open. | `AntwoordWeergave.tsx`, `assistant-source.ts`; later `GeneriekeBibliotheekClient.tsx` | bronlijst-/assistant-source-sanities groen; filtertest volgt |
 | W-1 | Live web: `officielebekendmakingen.nl` `kst-*` niet bindend via de whitelist | `core/lib/web-whitelist.ts`, `web-retrieval.ts` | `web-whitelist.sanity.ts`, `web-retrieval.test.ts` |
 | E-1 | Evaluatieset (werkticket PR 4) + Preview-pilot met bron- en antwoordcontrole | `evals/…` | evalrun op Preview |
 
 ## 8. Bevestiging
 
-De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. De foundation draait op de vaste Preview-hosts en de metadata-UI-smoke is groen. I-1 is op de vervolgbranch gebouwd en getest, maar nog niet gemerged of gedeployd. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd.
+De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. Foundation en I-1 draaien op de vaste Preview-hosts. R-1 is lokaal gebouwd en getest, zonder migratie. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd. Door de defecte Preview-antivirusscanner blijft de eerste echte bronimport een gecontroleerde Productiestap na de reguliere promotie. R-2/R-3, de afzonderlijke vergelijkingscall V-1, de bibliotheekfilter, webclassificatie en evaluatie blijven open.

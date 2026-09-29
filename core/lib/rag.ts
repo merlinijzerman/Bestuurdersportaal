@@ -51,6 +51,11 @@ function alsAuditBron(c: DocumentChunk): AuditBron {
     documentstatus: c.documenten.documentstatus ?? null,
     bronstatus: c.documenten.bronstatus ?? null,
     documentdatum: c.documenten.documentdatum ?? null,
+    documenttype: c.documenten.documenttype ?? null,
+    wetsgeschiedenisSubtype: c.documenten.wetsgeschiedenis_subtype ?? null,
+    dossiernummer: c.documenten.dossiernummer ?? null,
+    normgewicht: c.documenten.normgewicht ?? null,
+    wettelijkRegime: c.documenten.wettelijk_regime ?? null,
     score: c.rang ?? null,
     fts: c.fts_rang ?? null,
     vec: c.vec_rang ?? null,
@@ -555,6 +560,8 @@ export interface DocumentChunk {
     // rangschik- of filterpad leest deze velden. Gevuld door
     // verrijkDocumentmetadata() ná retrieval; zie daar waarom niet via de select.
     documenttype?: string | null;
+    wetsgeschiedenis_subtype?: string | null;
+    dossiernummer?: string | null;
     bestandstype?: string | null;
     /** Adapterprivate ingrediënt voor R1-versiebewijs; niet publiek gemaakt. */
     bestand_hash?: string | null;
@@ -713,6 +720,11 @@ export interface RetrievalMeta {
     documentstatus: string | null;
     bronstatus: string | null;
     documentdatum: string | null;
+    documenttype?: string;
+    wetsgeschiedenis_subtype?: string;
+    dossiernummer?: string;
+    normgewicht?: string;
+    wettelijk_regime?: string;
     document_identiteit?: string;
     passage_identiteit?: string;
     citation_id?: string;
@@ -1207,6 +1219,9 @@ export interface BronVerwijzing {
   // teruggaf. Een ontbrekende waarde mag nooit een lege chip of gebroken kaart
   // opleveren — de weergave laat het element dan simpelweg weg.
   documenttype?: string | null;
+  wetsgeschiedenis_subtype?: string | null;
+  dossiernummer?: string | null;
+  wettelijk_regime?: string | null;
   bestandstype?: string | null;
   // Increment G — bronkaartvelden (status/bronstatus/datum/bronsoort + generiek-
   // metadata). Optioneel: de fallback-cascade levert ze niet.
@@ -2016,6 +2031,8 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       opslagPad: d.opslag_pad ?? null,
       externUrl: d.extern_url ?? null,
       documenttype: d.documenttype ?? null,
+      wetsgeschiedenisSubtype: d.wetsgeschiedenis_subtype ?? null,
+      dossiernummer: d.dossiernummer ?? null,
       bestandstype: d.bestandstype ?? null,
       notulen: chunk.notulen
         ? {
@@ -2466,12 +2483,15 @@ interface DocumentmetadataRij {
   fonds_id: string | null;
   bibliotheek: string | null;
   documenttype: string | null;
+  wetsgeschiedenis_subtype: string | null;
+  dossiernummer: string | null;
   bestandstype: string | null;
   documentdatum: string | null;
   geldig_tot: string | null;
   normgewicht: string | null;
   bronorganisatie: string | null;
   extern_url: string | null;
+  wettelijk_regime: string | null;
 }
 
 export async function verrijkDocumentmetadata(
@@ -2486,7 +2506,7 @@ export async function verrijkDocumentmetadata(
   const { data, error } = await metSignaal(supabase
     .from("documenten")
     .select(
-      "id, fonds_id, bibliotheek, documenttype, bestandstype, documentdatum, geldig_tot, normgewicht, bronorganisatie, extern_url"
+      "id, fonds_id, bibliotheek, documenttype, wetsgeschiedenis_subtype, dossiernummer, bestandstype, documentdatum, geldig_tot, normgewicht, bronorganisatie, extern_url, wettelijk_regime"
     )
     .in("id", ids), signal);
 
@@ -2516,6 +2536,8 @@ export async function verrijkDocumentmetadata(
       continue;
     }
     c.documenten.documenttype = d.documenttype ?? null;
+    c.documenten.wetsgeschiedenis_subtype = d.wetsgeschiedenis_subtype ?? null;
+    c.documenten.dossiernummer = d.dossiernummer ?? null;
     c.documenten.bestandstype = d.bestandstype ?? null;
     // De overige velden alleen AANVULLEN. De RPC's leveren ze op het
     // gerangschikte pad al; overschrijven zou daar niets toevoegen en een
@@ -2529,6 +2551,7 @@ export async function verrijkDocumentmetadata(
     doc.normgewicht ??= d.normgewicht ?? null;
     doc.bronorganisatie ??= d.bronorganisatie ?? null;
     doc.extern_url ??= d.extern_url ?? null;
+    doc.wettelijk_regime ??= d.wettelijk_regime ?? null;
   }
   return chunks;
 }

@@ -55,6 +55,13 @@ import {
   type Documentregel,
 } from "@/core/lib/documentlijst";
 import { pillLabelVoor } from "@/core/lib/bronsamenvatting";
+import {
+  WETTELIJK_REGIME_LABEL,
+  formatteerDossiernummer,
+  isWettelijkRegime,
+  juridischeDocumentstatusLabel,
+  juridischeDuiding,
+} from "@/core/lib/wetsgeschiedenis";
 
 // P1a — `Bron` woont sinds de laagsplitsing in `core/lib/assistent-types.ts`,
 // zodat de gesprekslaag (L2) hem kan gebruiken zonder uit `app/` te importeren.
@@ -162,7 +169,9 @@ function statusOordeel(bron: Bron): Statusoordeel {
 
   const status = bron.documentstatus ?? null;
   const label = status
-    ? (DOCUMENT_STATUS_LABEL as Record<string, string>)[status] ?? status
+    ? juridischeDocumentstatusLabel(bron.documenttype, status) ??
+      (DOCUMENT_STATUS_LABEL as Record<string, string>)[status] ??
+      status
     : null;
 
   let gemarkeerd =
@@ -1324,12 +1333,22 @@ function BronkaartMeta({ bron }: { bron: Bron }) {
       geldig_tot: bron.geldig_tot,
     }
   );
+  const juridischeRol = juridischeDuiding(
+    bron.documenttype,
+    bron.wetsgeschiedenis_subtype
+  );
+  const regimeLabel = isWettelijkRegime(bron.wettelijk_regime)
+    ? WETTELIJK_REGIME_LABEL[bron.wettelijk_regime]
+    : null;
   const heeftIets =
     statusLabel ||
     bronstatusLabel ||
     bron.documentdatum ||
     labels.isGeneriek ||
-    labels.vervallen;
+    labels.vervallen ||
+    juridischeRol ||
+    bron.dossiernummer ||
+    regimeLabel;
   if (!heeftIets) return null;
 
   // Zebra i.p.v. wit-op-wit: de bronkaart is sinds deze tranche zelf wit.
@@ -1337,6 +1356,17 @@ function BronkaartMeta({ bron }: { bron: Bron }) {
     "text-[10px] px-1.5 py-0.5 rounded border bg-app-zebra border-line text-muted";
   return (
     <div className="flex flex-wrap items-center gap-1.5 mt-2">
+      {juridischeRol && (
+        <span
+          className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${
+            juridischeRol.magNormDragen
+              ? "bg-ok-tint border-ok/30 text-ok-ink"
+              : "bg-warn-tint border-warn/30 text-warn-ink"
+          }`}
+        >
+          {juridischeRol.label}
+        </span>
+      )}
       {labels.isGeneriek && (
         <span className="text-[10px] px-1.5 py-0.5 rounded border bg-accent-tint border-accent/30 text-accent-ink">
           {labels.bronsoortLabel}
@@ -1349,6 +1379,10 @@ function BronkaartMeta({ bron }: { bron: Bron }) {
         </span>
       )}
       {bron.documentdatum && <span className={chip}>📅 {bron.documentdatum}</span>}
+      {bron.dossiernummer && (
+        <span className={chip}>Dossier {formatteerDossiernummer(bron.dossiernummer)}</span>
+      )}
+      {regimeLabel && <span className={chip}>{regimeLabel}</span>}
       {labels.isGeneriek && bron.normgewicht && (
         <span className={chip}>{normgewichtLabel(bron.normgewicht)}</span>
       )}

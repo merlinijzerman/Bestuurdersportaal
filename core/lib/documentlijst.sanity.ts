@@ -144,6 +144,17 @@ test("een onbekende typewaarde valt niet stil weg", () => {
   assert.equal(g[0].label, "verzonnen");
 });
 
+test("juridische documenttypen krijgen een bestuurlijk helder label", () => {
+  assert.equal(
+    documenttypeLabel(bron({ document_id: "wet", documenttype: "wetgeving" })),
+    "Wetgeving (actuele geconsolideerde tekst)"
+  );
+  const groepen = groepeerDocumentbronnen([
+    bron({ document_id: "mvt", documenttype: "wetsgeschiedenis" }),
+  ]);
+  assert.equal(groepen[0].label, "Wetsgeschiedenis");
+});
+
 // Randgeval: een waarde buiten de elf toegestane (alleen mogelijk na een
 // schemawijziging) mag de restgroep niet van de laatste plek verdringen.
 test("de restgroep blijft onderaan, óók onder een onbekende typewaarde", () => {
