@@ -425,6 +425,60 @@ eerdere migraties gebeurt dat bij de volgende inventarisatie. De functie-md5 van
 zoals bij R-1. (4) De dimensiebepaling (Haiku) blijft ongewijzigd; valt buiten
 scope.
 
+## 6b. #499 — metadatawijziging op documenten met veel chunks
+
+**Aanleiding.** Op Productie (29-09-2026) liep het omzetten van de Pensioenwet
+(968 chunks) naar `wetgeving`/`pw` op een statement-time-out; de UI meldde ten
+onrechte "mogelijk een ongeldige statusovergang".
+
+**Oorzaak (gemeten op de lokale stack, CLI 2.114.0, PG 17.6, pgvector 0.8.2).**
+De platform-client praat als `service_role` via PostgREST; `service_role` heeft
+zelf geen `statement_timeout`, dus de 8 s van `authenticator` geldt.
+`trg_chunk_denorm_refresh` werkt synchroon alle chunks bij. Elke chunk-UPDATE is
+een nieuwe tuple (geen HOT) en krijgt dus een nieuw element in elke index,
+ook in de HNSW-index op `embedding vector(1024)`. Meetreeks met 1.000 chunks en
+10.000 chunks in de graaf: de volledige update kost 1,4 s. Zonder HNSW is dat 38 ms,
+zonder HNSW en GIN 30 ms. HNSW is dus ~97 % van de kosten. Een no-op-update
+(`set documenttype = documenttype`) kostte óók 1,3 s, omdat de trigger
+op de SET-lijst vuurde en de functie geen `IS DISTINCT FROM`-filter had. Met
+productie-achtige rekenkracht (0,25 vCPU) gaf de tabel-PATCH via PostgREST
+exact het productiebeeld: `57014` na 8,0 s. Het volledige werk kost daar 11–14 s.
+
+**Oplossing (migratie `2026_09_30_499_generieke_metadatawijziging_timeout.sql`).**
+(1) De denorm-functie herschrijft alleen afwijkende chunks. (2) De trigger krijgt een
+WHEN-clausule en vuurt dus alleen bij een echte waardewijziging. (3) De nieuwe RPC
+`fn_platform_generiek_document_bijwerken` draagt `statement_timeout = 120s` op haar
+definitie. PostgREST hijst die waarde vóór het statement. De RPC voert de wijziging,
+de chunk-denorm en de `document_metadata_log`-regels in één transactie uit. Bij
+dezelfde 0,25 vCPU slaagt de RPC in 13,5 s, met 1.000/1.000 chunks consistent en
+vier auditregels. `curatieBijwerken`, `curatieDepreceren`, `curatieWithdrawn` en
+`curatieHerpubliceren` gebruiken de RPC. `platform/lib/generiek-mutatie-fout.ts`
+onderscheidt de gebruikersmelding voor een time-out (57014), een statusovergang
+(P0001), een CHECK-fout, een niet-gevonden document en een ontbrekende RPC.
+De melding bevat geen interne details; de SQLSTATE gaat alleen naar het audit-effect.
+
+**Verworpen.** Asynchrone verwerking: retrieval filtert op chunk-`bronstatus`/
+`documenttype`/`wettelijk_regime`, dus een venster met inconsistente chunks zou
+bijvoorbeeld een ingetrokken bron nog als actueel kunnen tonen. Een `SET` binnen de
+functie verlengt het lopende statement niet. Een hogere `statement_timeout` op
+`service_role`/`authenticator` zou alle platformverkeer raken. Fillfactor/HOT helpt
+niet, omdat `bronstatus`, `documentstatus` en `geldig_*` geïndexeerd zijn. Denorm
+uit `document_chunks` halen of embeddings splitsen is een retrievalrefactor.
+
+**Deploy.** Voer eerst de migratie uit op `portal_preview`, deploy daarna preview,
+en volg later dezelfde volgorde voor `portal_production` en `main`. Oude code (PATCH)
+blijft na de migratie werken. Nieuwe code zonder migratie geeft een nette melding
+("tijdelijk niet beschikbaar"), zonder gedeeltelijke wijziging. Postcheck: draai de
+Pensioenwet-wijziging opnieuw via de beheerUI en controleer chunkconsistentie met de
+preflight- en postcheckqueries in de PR.
+
+**Open.** (1) De hijsing is lokaal geverifieerd op PostgREST v14.1. Controleer
+de PostgREST-versie van Preview en Productie (v12.1+ hijst functie-instellingen).
+(2) `curatieVervangen` zet de oude versie nog via een tabel-PATCH op
+historisch; bij een groot document geldt daar nog de 8 s-grens (de fout wordt nu
+genegeerd). (3) De `440-*`-drift-artefacten zijn niet geregenereerd, net als
+bij eerdere migraties.
+
 ## 7. Volgende fasen
 
 | # | Stap | Verwachte bestanden | Tests |

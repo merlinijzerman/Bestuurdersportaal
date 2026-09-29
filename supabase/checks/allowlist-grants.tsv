@@ -300,6 +300,9 @@ FUNC	public	fn_platform_event_hash()	function	service_role	-
 FUNC	public	fn_platform_event_immutable()	function	anon	-
 FUNC	public	fn_platform_event_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_platform_event_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_platform_generiek_document_bijwerken(p_document_id uuid, p_wijzigingen jsonb, p_logregels jsonb, p_gewijzigd_door uuid, p_gewijzigd_door_naam text, p_wijzig_reden text)	function	anon	-
+FUNC	public	fn_platform_generiek_document_bijwerken(p_document_id uuid, p_wijzigingen jsonb, p_logregels jsonb, p_gewijzigd_door uuid, p_gewijzigd_door_naam text, p_wijzig_reden text)	function	authenticated	-
+FUNC	public	fn_platform_generiek_document_bijwerken(p_document_id uuid, p_wijzigingen jsonb, p_logregels jsonb, p_gewijzigd_door uuid, p_gewijzigd_door_naam text, p_wijzig_reden text)	function	service_role	EXECUTE
 FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	anon	-
 FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	authenticated	EXECUTE
 FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	service_role	-
