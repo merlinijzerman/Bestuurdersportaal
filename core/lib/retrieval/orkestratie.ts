@@ -20,6 +20,7 @@ import { effectievePeildatum } from "../rag";
 import type { AdapterMeta, AdapterTellers, RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
+import { bepaalArtikelfocus } from "./artikelverwijzing";
 import type { JuridischeVraagintentieResultaat } from "../vraagtype";
 import { bouwCitaties } from "./citatie";
 import {
@@ -202,6 +203,9 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
     // weergavemetadata die de adapter al in fase 3 (vóór de poort) verrijkte.
     documenttype: b.weergave?.documenttype ?? null,
     wetsgeschiedenisSubtype: b.weergave?.wetsgeschiedenisSubtype ?? null,
+    // #500 — alleen aanwezig als de adapter het artikelspoor draaide.
+    ...(b.locator.structuurLabel !== undefined ? { structuurLabel: b.locator.structuurLabel } : {}),
+    ...(b.rang.poging === "artikelspoor" ? { artikelspoor: true } : {}),
   };
 }
 
@@ -390,6 +394,14 @@ export async function voerRetrievalUit(
     ...ctxMetGrendel,
     scope: { ...ctx.scope, documentIds: query.documentScope },
   }));
+  // #500 — artikelfocus per spoor: ALLEEN op sporen die het juridisch beleid
+  // dragen (R-3: de bibliotheeksporen), achter dezelfde poort. Zonder focus
+  // krijgt de adapter exact dezelfde query als vóór #500.
+  const artikelfocusPerSpoor = sporen.map(({ query, grenzen }) =>
+    grenzen.juridischeIntentie
+      ? bepaalArtikelfocus([query.zoekvraag, query.origineleVraag], grenzen.juridischeIntentie)
+      : null
+  );
   try {
     // ── 1a. Filterbelofte, VÓÓR `zoek()` ─────────────────────────────────────
     const contextBronsoortenGeldig = geldigeBronsoorten(ctx.bronbeleid.bronsoorten);
@@ -421,7 +433,10 @@ export async function voerRetrievalUit(
               opgehaald: 0,
               fout: "configuratiefout",
             })
-          : adapterVanSpoor(i).zoek(spoorContext[i], query)
+          : adapterVanSpoor(i).zoek(
+              spoorContext[i],
+              artikelfocusPerSpoor[i] ? { ...query, artikelfocus: artikelfocusPerSpoor[i] ?? undefined } : query
+            )
       )
     );
     grendel.bewaak();
@@ -535,6 +550,7 @@ export async function voerRetrievalUit(
           regimeWeging: g.regimeWeging,
           relevantieDrempel: g.relevantieDrempel,
           ...(g.juridischeIntentie ? { juridischeIntentie: g.juridischeIntentie } : {}),
+          ...(artikelfocusPerSpoor[i] ? { artikelfocus: artikelfocusPerSpoor[i] } : {}),
         }
       );
       geselecteerdPerSpoor.push(

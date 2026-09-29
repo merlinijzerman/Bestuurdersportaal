@@ -17,6 +17,7 @@ import {
   chunkAlsBronresultaat,
   verrijkNotulenChunks,
   verrijkDocumentmetadata,
+  vulAanMetArtikelkandidaten,
   type DocumentChunk,
   type RetrievalMeta,
   type RetrievalOpties,
@@ -76,6 +77,8 @@ export interface SupabaseAdapterDependencies {
    */
   verrijkNotulen?: typeof verrijkNotulenChunks;
   verrijkDocumentmeta?: typeof verrijkDocumentmetadata;
+  /** #500 — injecteerbaar gericht artikelspoor (hermetische tests). */
+  artikelkandidaten?: typeof vulAanMetArtikelkandidaten;
 }
 
 export function maakSupabaseAdapter(
@@ -94,6 +97,7 @@ export function maakSupabaseAdapter(
   const leesVersies = dependencies.leesVersies ?? leesSupabaseVersies;
   const doeNotulen = dependencies.verrijkNotulen ?? verrijkNotulenChunks;
   const doeDocumentmeta = dependencies.verrijkDocumentmeta ?? verrijkDocumentmetadata;
+  const doeArtikel = dependencies.artikelkandidaten ?? vulAanMetArtikelkandidaten;
 
   const behoudIdentiteit = (bron: Bronresultaat): Bronresultaat => {
     const eerder = identiteitPerRef.get(bron.ref);
@@ -135,7 +139,7 @@ export function maakSupabaseAdapter(
 
     async zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst> {
       const t0 = Date.now();
-      const { chunks, meta } = await zoek(
+      const { chunks: gerangschikt, meta } = await zoek(
         query.zoekvraag,
         ctx.fondsId,
         query.maxResultaten,
@@ -155,6 +159,21 @@ export function maakSupabaseAdapter(
           signal: ctx.signal,
         }
       );
+
+      // #500 — het gerichte artikelspoor. Alleen als de orkestratie een
+      // artikelfocus meegaf (juridische poort + expliciet artikel); anders is dit
+      // exact de kandidatenset van vóór #500. Zelfde fonds, scope en filters als
+      // het hoofdspoor; zie `vulAanMetArtikelkandidaten`.
+      const chunks = query.artikelfocus
+        ? await doeArtikel(gerangschikt, {
+            focus: query.artikelfocus,
+            fondsId: ctx.fondsId,
+            scope: ctx.scope?.documentIds,
+            filters: query.filters,
+            maxKandidaten: query.maxKandidaten,
+            signal: ctx.signal,
+          })
+        : gerangschikt;
 
       const diagnostiek: Partial<RetrievalMeta> = { ...meta };
       for (const veld of SELECTIE_AFGELEID) delete (diagnostiek as Record<string, unknown>)[veld];

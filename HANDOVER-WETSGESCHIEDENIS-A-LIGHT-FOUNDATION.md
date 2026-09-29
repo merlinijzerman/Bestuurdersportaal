@@ -9,6 +9,7 @@
 | **Status** | Foundation, I-1 en R-1 staan op Preview. R-1 is via PR #489 gemerged als `580304f`; alle post-mergechecks en beide vaste Preview-deployments zijn groen. Niets geïmporteerd en Productie niet gewijzigd. |
 | **R-2 (#491)** | Branch `codex/491-juridische-vraagintentie` vanaf `origin/preview` @ `e71a049`, één PR naar `preview`. Observe-only juridische vraagintentie; geen migratie, geen gedragswijziging. Zie §2a. |
 | **R-3 (#492)** | Branch `codex/492-juridische-routing` vanaf `origin/preview` @ `bdb92b1` (incl. R-2, PR #494), één PR naar `preview`. Centraal juridisch bronbeleid in de selectie + juridische antwoordgrens; geen migratie, geen RPC-, RLS- of grantwijziging. Zie §2b. |
+| **#500** | Branch `codex/500-artikelpassage-boost` vanaf `origin/preview` @ `7c6c8a8`, één PR naar `preview`. Exacte artikelpassage: gericht kandidatenspoor binnen de bestaande RPC-filters + deterministische boost vóór het R-3-beleid; geen migratie. Zie §2c. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -172,6 +173,50 @@ alleen `bereikte_bestanden`); lezingen, tabelclassificatie en retrievalingangen
 zijn ongewijzigd. `R2-A3` is bewust bijgewerkt: naast declaratie + vier
 auditwaarden zijn precies drie doorgiftes aan de centrale juridische laag
 toegestaan; elk ander gebruik (routefilter, promptblok, bronkaart) blijft rood.
+
+### 2c. #500 — exacte artikelpassage in juridische retrieval
+
+**Faalplek (gemeten tegen code en een lokale PG17).** De passage
+"Artikelsgewijze toelichting — Artikel 150d" (MvT Wtp, p. 395) viel al vóór de
+selectie weg: zij kwam niet in de kandidatenset van `zoek_chunks_hybride`.
+`websearch_to_tsquery('dutch', …)` maakt van de bedoelingsvraag
+`'bedoel' & 'wetgever' & 'artikel' & '150d' & 'pensioenwet'`; de artikeltekst
+bevat 'bedoel'/'wetgever' niet (`@@` = false), en van de gecombineerde vraag een
+AND-keten van tien termen (ook false). De vectorarm neemt de top-40 over alle
+chunks (2.738 uit hetzelfde document) en is ongevoelig voor een artikelnummer;
+daarna kapt `p_limit` (kandidatenpool 30) de fusie af. Een boost alleen in de
+selectie had dus niets opgelost.
+
+**Oplossing (geen migratie, geen RPC-, RLS- of grantwijziging).**
+
+| Onderdeel | Vorm |
+|---|---|
+| Herkenning + poort | Nieuwe pure module `core/lib/retrieval/artikelverwijzing.ts`: `herkenArtikelnummers` ("artikel/art./artikelen 150d en 150e"), `herkenWet` (Pensioenwet → pw, Wvb → wvb), `bepaalArtikelfocus`. Poort = R-3-beleid van toepassing **én** signaal `juridisch_anker` of `zwak_anker` zonder `fondscontext`; vertrouwen `zeker` alleen telt niet. Nummers exact na normalisatie: 150 ≠ 150d ≠ 1500. |
+| Doorgifte | `orkestratie.ts` berekent de focus per spoor uit `zoekvraag` + `origineleVraag`, alleen op sporen met `grenzen.juridischeIntentie` (de bibliotheeksporen). Alleen dan krijgt de adapter `RetrievalQuery.artikelfocus` (optioneel contractveld); anders exact dezelfde query-referentie. |
+| Gericht kandidatenspoor (Supabase) | `rag.ts` `vulAanMetArtikelkandidaten`, aangeroepen in `supabase-adapter.ts` direct na de ranking. (1) Opzoeking onder RLS op `document_chunks` van documenten met `documenttype` wetgeving/wetsgeschiedenis (via `documenten!inner`, niet de denormalisatie), label of tekstbegin **exact in de database** via PostgREST `imatch` (`~*`) met woordgrens (`(^\|[^a-z])artikel +N([^0-9a-z]\|$)` resp. `^(artikel\|art[.]?) +N(…)`), zodat buurlabels (150, 150a–z, 1500 bij artikel 15) de passage niet uit de limiet van 50 drukken (reviewpunt PR #501); `artikelmatch` is de tweede grens. (2) Nieuwe passages komen alleen binnen als de **bestaande** `zoek_chunks` ze teruggeeft met hetzelfde filterblok (`rpcFilterParams` + `p_fonds_id` + scope) en frasequery `"artikel N" OR "art N"`, gevolgd door `handhaafFondsdiscipline`. (3) Binnen `maxKandidaten`: nieuwe exacte passages vervangen de zwakste niet-exacte staart. Fail-open bij een fout (afbreking gaat door). |
+| Boost | `selectie.ts`: ná bronsoort- en regimeweging, vóór het R-3-beleid zet `boostArtikelpassages` per document de beste exacte **juridische** passage vooraan (kopregel wint van label; max 3). Fondsdocumenten en niet-juridische bronnen nooit; regime-gedemoveerde bronnen blijven vast; een tegengesteld regime of een wettekst waarvan de titel de genoemde wet niet noemt, wordt niet geboost. R-3 bepaalt daarna de rollen: normvraag → wet vóór toelichting (MvT nooit primaire normbron, normbasismelding intact); bedoeling/gecombineerd → exacte wet + exacte MvT aaneen in de kop. |
+| Contractvelden | `Bronresultaat.locator.structuurLabel` en `rang.poging = "artikelspoor"`, alleen gezet door het artikelspoor. `DocumentChunk.structuur_label`/`artikelspoor` adapterprivaat. |
+| Diagnostiek | `selectie.juridisch.artikel = { verwijzingen, wet_genoemd, exact, geboost, geboost_geselecteerd, via_artikelspoor }` — alleen bij een focus; tellingen en een vlag, geen nummer of tekst. Migratievrij (subsleutel van `selectie`). |
+| Census | Importgraaf 172 → 173 (de nieuwe pure module); register: `supabase-adapter.ts` importeert daarnaast `vulAanMetArtikelkandidaten` uit `rag.ts`. Lezingen (`rag.ts::document_chunks`/`documenten`, evidence) en RPC-ingangen ongewijzigd. |
+
+Continuatiechunks van een lange artikeltoelichting (zelfde label, zonder de
+frase in tekst of contextprefix) worden niet via het spoor toegelaten; bij
+parent-retrieval haalt de structuur-unit ze alsnog mee.
+
+**Tests.** `tests/cross-tenant/retrieval-artikelpassage.test.ts` 21/21
+(herkenning, poort, match met buurartikelen 150/150c/150e/1500/15,
+bedoeling/norm/gecombineerd, regime/andere wet, fondsdocumenten, byte-identiteit,
+adapter met nep-client, eind-tot-eind orkestratie + Supabase-adapter met de
+nagebootste pilotsituatie, negatieve controle). Mutaties: boost uit → 5 rood;
+nummergrens weg → H1 rood; poort altijd open → 3 rood; rol-eis weg → S5 rood.
+Reviewronde: `#500-A4` (nep-PostgREST die `or`/`limit` echt uitvoert; >50 buurlabels vóór de passage) is rood op de oude prefix-`ilike` en groen op `imatch`; tegen echte PostgREST + PG17 vindt artikel 15 één rij van 122, artikel 1 één, artikel 150 precies de tien 150-rijen. DB-check `supabase/checks/2026_09_29_500_artikelspoor.sql` (A1–A6, onder RLS)
+aangesloten in `cross-tenant-ci.sh`; zonder rol en fondsfilter → `LEK A4`.
+PostgREST-syntaxis van opzoeking en toelating lokaal tegen PostgREST + PG17
+bevestigd.
+
+**Controle bij de herhaalde productiepilot.** Zie de PR-beschrijving; kern:
+`retrieval_meta.selectie.juridisch.artikel` moet `exact ≥ 1` en
+`geboost_geselecteerd ≥ 1` tonen, en de bronkaart p. 395.
 
 ## 3. Migratie en deployvolgorde
 
@@ -424,6 +469,60 @@ eerdere migraties gebeurt dat bij de volgende inventarisatie. De functie-md5 van
 8-argumentvariant wijzigt. (3) Een release-regel in `HANDOVER.md` volgt na de merge,
 zoals bij R-1. (4) De dimensiebepaling (Haiku) blijft ongewijzigd; valt buiten
 scope.
+
+## 6b. #499 — metadatawijziging op documenten met veel chunks
+
+**Aanleiding.** Op Productie (29-09-2026) liep het omzetten van de Pensioenwet
+(968 chunks) naar `wetgeving`/`pw` op een statement-time-out; de UI meldde ten
+onrechte "mogelijk een ongeldige statusovergang".
+
+**Oorzaak (gemeten op de lokale stack, CLI 2.114.0, PG 17.6, pgvector 0.8.2).**
+De platform-client praat als `service_role` via PostgREST; `service_role` heeft
+zelf geen `statement_timeout`, dus de 8 s van `authenticator` geldt.
+`trg_chunk_denorm_refresh` werkt synchroon alle chunks bij. Elke chunk-UPDATE is
+een nieuwe tuple (geen HOT) en krijgt dus een nieuw element in elke index,
+ook in de HNSW-index op `embedding vector(1024)`. Meetreeks met 1.000 chunks en
+10.000 chunks in de graaf: de volledige update kost 1,4 s. Zonder HNSW is dat 38 ms,
+zonder HNSW en GIN 30 ms. HNSW is dus ~97 % van de kosten. Een no-op-update
+(`set documenttype = documenttype`) kostte óók 1,3 s, omdat de trigger
+op de SET-lijst vuurde en de functie geen `IS DISTINCT FROM`-filter had. Met
+productie-achtige rekenkracht (0,25 vCPU) gaf de tabel-PATCH via PostgREST
+exact het productiebeeld: `57014` na 8,0 s. Het volledige werk kost daar 11–14 s.
+
+**Oplossing (migratie `2026_09_30_499_generieke_metadatawijziging_timeout.sql`).**
+(1) De denorm-functie herschrijft alleen afwijkende chunks. (2) De trigger krijgt een
+WHEN-clausule en vuurt dus alleen bij een echte waardewijziging. (3) De nieuwe RPC
+`fn_platform_generiek_document_bijwerken` draagt `statement_timeout = 120s` op haar
+definitie. PostgREST hijst die waarde vóór het statement. De RPC voert de wijziging,
+de chunk-denorm en de `document_metadata_log`-regels in één transactie uit. Bij
+dezelfde 0,25 vCPU slaagt de RPC in 13,5 s, met 1.000/1.000 chunks consistent en
+vier auditregels. `curatieBijwerken`, `curatieDepreceren`, `curatieWithdrawn` en
+`curatieHerpubliceren` gebruiken de RPC. `platform/lib/generiek-mutatie-fout.ts`
+onderscheidt de gebruikersmelding voor een time-out (57014), een statusovergang
+(P0001), een CHECK-fout, een niet-gevonden document en een ontbrekende RPC.
+De melding bevat geen interne details; de SQLSTATE gaat alleen naar het audit-effect.
+
+**Verworpen.** Asynchrone verwerking: retrieval filtert op chunk-`bronstatus`/
+`documenttype`/`wettelijk_regime`, dus een venster met inconsistente chunks zou
+bijvoorbeeld een ingetrokken bron nog als actueel kunnen tonen. Een `SET` binnen de
+functie verlengt het lopende statement niet. Een hogere `statement_timeout` op
+`service_role`/`authenticator` zou alle platformverkeer raken. Fillfactor/HOT helpt
+niet, omdat `bronstatus`, `documentstatus` en `geldig_*` geïndexeerd zijn. Denorm
+uit `document_chunks` halen of embeddings splitsen is een retrievalrefactor.
+
+**Deploy.** Voer eerst de migratie uit op `portal_preview`, deploy daarna preview,
+en volg later dezelfde volgorde voor `portal_production` en `main`. Oude code (PATCH)
+blijft na de migratie werken. Nieuwe code zonder migratie geeft een nette melding
+("tijdelijk niet beschikbaar"), zonder gedeeltelijke wijziging. Postcheck: draai de
+Pensioenwet-wijziging opnieuw via de beheerUI en controleer chunkconsistentie met de
+preflight- en postcheckqueries in de PR.
+
+**Open.** (1) De hijsing is lokaal geverifieerd op PostgREST v14.1. Controleer
+de PostgREST-versie van Preview en Productie (v12.1+ hijst functie-instellingen).
+(2) `curatieVervangen` zet de oude versie nog via een tabel-PATCH op
+historisch; bij een groot document geldt daar nog de 8 s-grens (de fout wordt nu
+genegeerd). (3) De `440-*`-drift-artefacten zijn niet geregenereerd, net als
+bij eerdere migraties.
 
 ## 7. Volgende fasen
 

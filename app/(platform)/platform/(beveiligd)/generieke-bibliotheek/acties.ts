@@ -8,6 +8,10 @@
 //    • curatieAanmaken  — upload + §8.1-metadata + uploadsecurity-pipeline.
 //    • curatieBijwerken — metadata wijzigen ZONDER re-upload (auto-doorwerking
 //                         naar de chunks via de bestaande denorm-trigger, #4).
+//                         Sinds #499 atomisch via de RPC
+//                         fn_platform_generiek_document_bijwerken (wijziging +
+//                         chunk-denorm + metadata-log in één transactie, eigen
+//                         statement_timeout); idem deprecate/withdraw/herpubliceren.
 //    • curatieIntrekken — laten vervallen (status alleen_historisch + bronstatus
 //                         historisch + geldig_tot), append-only geaudit.
 //    • curatieVervangen — nieuwe versie koppelen; oude → historisch (self-FK's).
@@ -42,6 +46,11 @@ import {
   GENERIEK_PAD_PREFIX,
   QUARANTAINE_PAD_PATROON,
 } from "@/platform/lib/generiek-pipeline";
+import {
+  auditFoutcode,
+  classificeerMutatieFout,
+  mutatieFoutMelding,
+} from "@/platform/lib/generiek-mutatie-fout";
 import { herindexeerDocument } from "@/core/lib/reindex";
 import { INDEXERING_VERSIE, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
 import { beheerSleutel, preflightSysteem, rondAf, vingerafdruk } from "@/core/lib/ai-preflight";
@@ -163,6 +172,56 @@ async function logMetadata(
     }))
   );
   if (error) console.error("[P1] metadata-log mislukt:", error.message);
+}
+
+// ── #499: atomische curatiewijziging via de RPC ─────────────────────────────
+// Documenten-UPDATE, de chunk-denorm (trigger) én de document_metadata_log-
+// regels lopen in ÉÉN transactie in de database. De RPC draagt een eigen
+// statement_timeout (120 s) die PostgREST vóór het statement zet; de 8 s van de
+// authenticator-sessie gold anders ook voor documenten met ~1.000 chunks, waar
+// elke chunk-update een nieuw HNSW-element kost. Mislukt er iets, dan rolt alles
+// terug: geen gedeeltelijke chunkmetadata en geen auditregel zonder wijziging.
+type MutatieUitkomst =
+  | { ok: true }
+  | { ok: false; resultaat: CuratieResultaat; effect: Record<string, unknown> };
+
+async function voerGeneriekeMutatieUit(
+  svc: SupabaseClient,
+  args: {
+    documentId: string;
+    update: Record<string, unknown>;
+    logRijen: LogRij[];
+    identiteit: PlatformIdentiteit;
+    reden: string | null;
+    /** Korte naam van de handeling voor de gebruikersmelding ("Bijwerken" …). */
+    handeling: string;
+    /** Bestaande foutcode van de handeling (bv. "update_mislukt"). */
+    foutcode: string;
+  }
+): Promise<MutatieUitkomst> {
+  const { error } = await svc.rpc("fn_platform_generiek_document_bijwerken", {
+    p_document_id: args.documentId,
+    p_wijzigingen: args.update,
+    p_logregels: args.logRijen,
+    p_gewijzigd_door: args.identiteit.id, // 3b: platform-identiteit = auth.users-id
+    p_gewijzigd_door_naam: args.identiteit.naam,
+    p_wijzig_reden: args.reden,
+  });
+  if (!error) return { ok: true };
+
+  const oorzaak = classificeerMutatieFout(error);
+  if (oorzaak === "onbekend" || oorzaak === "niet_beschikbaar") {
+    console.error(`[P1] curatiewijziging mislukt (${args.foutcode}):`, auditFoutcode(error) ?? "zonder code");
+  }
+  return {
+    ok: false,
+    resultaat: {
+      ok: false,
+      foutcode: oorzaak === "niet_gevonden" ? "niet_gevonden" : args.foutcode,
+      melding: mutatieFoutMelding(oorzaak, args.handeling),
+    },
+    effect: { afgewezen: args.foutcode, oorzaak, sqlstate: auditFoutcode(error) },
+  };
 }
 
 // ── Gedeelde create-kern (gebruikt door aanmaken én vervangen) ──────────────
@@ -504,16 +563,17 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
           };
         }
 
-        const { error: updErr } = await svc.from("documenten").update(update).eq("id", documentId);
-        if (updErr) {
-          // bv. een statusovergang die de DB-trigger weigert.
-          return {
-            resultaat: { ok: false, foutcode: "update_mislukt", melding: "Bijwerken geweigerd door de database (mogelijk een ongeldige statusovergang)." },
-            effect: { afgewezen: "update_mislukt" },
-          };
-        }
-
-        await logMetadata(svc, documentId, meta.titel, identiteit, reden || null, logRijen);
+        // #499: wijziging + chunk-denorm + metadata-log atomisch in één RPC.
+        const mutatie = await voerGeneriekeMutatieUit(svc, {
+          documentId,
+          update,
+          logRijen,
+          identiteit,
+          reden: reden || null,
+          handeling: "Bijwerken",
+          foutcode: "update_mislukt",
+        });
+        if (!mutatie.ok) return { resultaat: mutatie.resultaat, effect: mutatie.effect };
         revalidatePath(LIJST_PAD);
 
         return {
@@ -571,22 +631,20 @@ export async function curatieDepreceren(documentId: string, reden: string): Prom
 
         const vandaag = new Date().toISOString().slice(0, 10);
         const nieuwGeldigTot = huidig.geldig_tot ?? vandaag;
-        const { error: updErr } = await svc
-          .from("documenten")
-          .update({ status: "historisch", bronstatus: "historisch", geldig_tot: nieuwGeldigTot })
-          .eq("id", documentId);
-        if (updErr) {
-          return {
-            resultaat: { ok: false, foutcode: "deprecate_mislukt", melding: "Markeren als verouderd geweigerd door de database (mogelijk een ongeldige statusovergang)." },
-            effect: { afgewezen: "deprecate_mislukt" },
-          };
-        }
-
-        await logMetadata(svc, documentId, huidig.titel, identiteit, redenTrim, [
-          { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "historisch", wijzig_type: "status", rag_impact: true },
-          { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "historisch", wijzig_type: "bronstatus", rag_impact: true },
-          { veld_naam: "geldig_tot", oude_waarde: huidig.geldig_tot, nieuwe_waarde: nieuwGeldigTot, wijzig_type: "metadata", rag_impact: true },
-        ]);
+        const mutatie = await voerGeneriekeMutatieUit(svc, {
+          documentId,
+          update: { status: "historisch", bronstatus: "historisch", geldig_tot: nieuwGeldigTot },
+          logRijen: [
+            { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "historisch", wijzig_type: "status", rag_impact: true },
+            { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "historisch", wijzig_type: "bronstatus", rag_impact: true },
+            { veld_naam: "geldig_tot", oude_waarde: huidig.geldig_tot, nieuwe_waarde: nieuwGeldigTot, wijzig_type: "metadata", rag_impact: true },
+          ],
+          identiteit,
+          reden: redenTrim,
+          handeling: "Markeren als verouderd",
+          foutcode: "deprecate_mislukt",
+        });
+        if (!mutatie.ok) return { resultaat: mutatie.resultaat, effect: mutatie.effect };
         revalidatePath(LIJST_PAD);
 
         return {
@@ -644,21 +702,19 @@ export async function curatieWithdrawn(documentId: string, reden: string): Promi
 
         const vandaag = new Date().toISOString().slice(0, 10);
         const nieuwGeldigTot = huidig.geldig_tot ?? vandaag;
-        const { error: updErr } = await svc
-          .from("documenten")
-          .update({ bronstatus: "uitgesloten", geldig_tot: nieuwGeldigTot })
-          .eq("id", documentId);
-        if (updErr) {
-          return {
-            resultaat: { ok: false, foutcode: "withdraw_mislukt", melding: "Intrekken geweigerd door de database (mogelijk een ongeldige statusovergang)." },
-            effect: { afgewezen: "withdraw_mislukt" },
-          };
-        }
-
-        await logMetadata(svc, documentId, huidig.titel, identiteit, redenTrim, [
-          { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "uitgesloten", wijzig_type: "bronstatus", rag_impact: true },
-          { veld_naam: "geldig_tot", oude_waarde: huidig.geldig_tot, nieuwe_waarde: nieuwGeldigTot, wijzig_type: "metadata", rag_impact: true },
-        ]);
+        const mutatie = await voerGeneriekeMutatieUit(svc, {
+          documentId,
+          update: { bronstatus: "uitgesloten", geldig_tot: nieuwGeldigTot },
+          logRijen: [
+            { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "uitgesloten", wijzig_type: "bronstatus", rag_impact: true },
+            { veld_naam: "geldig_tot", oude_waarde: huidig.geldig_tot, nieuwe_waarde: nieuwGeldigTot, wijzig_type: "metadata", rag_impact: true },
+          ],
+          identiteit,
+          reden: redenTrim,
+          handeling: "Intrekken",
+          foutcode: "withdraw_mislukt",
+        });
+        if (!mutatie.ok) return { resultaat: mutatie.resultaat, effect: mutatie.effect };
         revalidatePath(LIJST_PAD);
 
         return {
@@ -726,22 +782,20 @@ export async function curatieHerpubliceren(
         }
 
         const nieuweReview = reviewInvoer || standaardVolgendeReview();
-        const { error: updErr } = await svc
-          .from("documenten")
-          .update({ status: "van_kracht", bronstatus: "actief", volgende_review: nieuweReview })
-          .eq("id", documentId);
-        if (updErr) {
-          return {
-            resultaat: { ok: false, foutcode: "herpubliceren_mislukt", melding: "Herpubliceren geweigerd door de database (mogelijk een ongeldige statusovergang)." },
-            effect: { afgewezen: "herpubliceren_mislukt" },
-          };
-        }
-
-        await logMetadata(svc, documentId, huidig.titel, identiteit, redenTrim, [
-          { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "van_kracht", wijzig_type: "status", rag_impact: true },
-          { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "actief", wijzig_type: "bronstatus", rag_impact: true },
-          { veld_naam: "volgende_review", oude_waarde: huidig.volgende_review, nieuwe_waarde: nieuweReview, wijzig_type: "metadata", rag_impact: true },
-        ]);
+        const mutatie = await voerGeneriekeMutatieUit(svc, {
+          documentId,
+          update: { status: "van_kracht", bronstatus: "actief", volgende_review: nieuweReview },
+          logRijen: [
+            { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "van_kracht", wijzig_type: "status", rag_impact: true },
+            { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "actief", wijzig_type: "bronstatus", rag_impact: true },
+            { veld_naam: "volgende_review", oude_waarde: huidig.volgende_review, nieuwe_waarde: nieuweReview, wijzig_type: "metadata", rag_impact: true },
+          ],
+          identiteit,
+          reden: redenTrim,
+          handeling: "Herpubliceren",
+          foutcode: "herpubliceren_mislukt",
+        });
+        if (!mutatie.ok) return { resultaat: mutatie.resultaat, effect: mutatie.effect };
         revalidatePath(LIJST_PAD);
 
         return {
