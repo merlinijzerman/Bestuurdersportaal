@@ -547,7 +547,7 @@ const INLINE_MELDING_TEKST: Record<InlineMeldingType, string> = {
   historische_wetsversie_niet_beschikbaar:
     "Historische wetsversies zijn in het portaal niet beschikbaar. Wat op een eerdere datum gold, kan hieruit niet worden vastgesteld; de actuele wettekst geeft alleen weer wat nu geldt.",
   geen_actuele_normbasis:
-    "Er is geen passage uit de actuele wettekst gevonden. De geraadpleegde wetsgeschiedenis licht de wet toe, maar is zelf geen geldende norm; een wettelijke plicht, verbod, bevoegdheid of termijn volgt er niet zelfstandig uit.",
+    "Er is geen passage uit de actuele wettekst gevonden. Een wettelijke plicht, verbod, bevoegdheid of termijn kan daarom niet uit de geraadpleegde bronnen worden vastgesteld. Eventuele wetsgeschiedenis licht de wet alleen toe en is zelf geen geldende norm.",
 };
 
 /**

@@ -216,8 +216,14 @@ export type JuridischeGrens = "historische_wetsversie_niet_beschikbaar" | "geen_
  * intentie en de UITEINDELIJK geselecteerde bronnen (over alle sporen).
  *   • historische peildatum → altijd: historische wetsversies zijn niet
  *     beschikbaar en de actuele tekst is niet als historisch antwoord gebruikt;
- *   • anders: wetsgeschiedenis geselecteerd zónder actuele wetspassage → de
- *     actuele normbasis ontbreekt.
+ *   • anders: géén actuele wetspassage geselecteerd → de actuele normbasis
+ *     ontbreekt, wanneer (a) er wel wetsgeschiedenis is geselecteerd, of (b) de
+ *     intentie zeker normatief is (`geldend_recht` / `geldend_recht_en_
+ *     wetsgeschiedenis` met vertrouwen `zeker`), óók bij nul juridische bronnen.
+ *     Hotfix na de Preview-smoke (29-09-2026): vóór de bronimport gaf "Wat
+ *     bepaalt artikel 150d Pensioenwet?" alleen "Geen relevante fondsdocumenten
+ *     gevonden". Tak (b) vereist `zeker`, zodat een onzekere juridische vraag
+ *     met fondscontext ("de Wtp-transitie voor ons fonds") geen ruis krijgt.
  */
 export function juridischeAntwoordgrens(
   intentie: JuridischeVraagintentieResultaat | null | undefined,
@@ -228,6 +234,10 @@ export function juridischeAntwoordgrens(
   if (besluit.beleid === "historische_peildatum") return ["historische_wetsversie_niet_beschikbaar"];
   const rollen = geselecteerd.map((b) => juridischeRolVan(b.documenttype, b.wetsgeschiedenisSubtype));
   const heeftWet = rollen.includes("geldend_recht");
+  if (heeftWet) return [];
   const heeftToelichting = rollen.includes("wetsgeschiedenis");
-  return heeftToelichting && !heeftWet ? ["geen_actuele_normbasis"] : [];
+  const zekerNormatief =
+    (besluit.beleid === "geldend_recht" || besluit.beleid === "geldend_recht_en_wetsgeschiedenis") &&
+    intentie?.vertrouwen === "zeker";
+  return heeftToelichting || zekerNormatief ? ["geen_actuele_normbasis"] : [];
 }
