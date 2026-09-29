@@ -59,6 +59,8 @@ export interface HerindexDocument {
   titel: string;
   opslag_pad: string | null;
   bestandstype: string | null;
+  documenttype?: string | null;
+  wetsgeschiedenis_subtype?: string | null;
 }
 
 export interface HerindexResultaat {
@@ -137,6 +139,8 @@ export async function herindexeerDocument(
     documentId: doc.id,
     titel: doc.titel,
     segmenten: extractie.segmenten,
+    documenttype: doc.documenttype,
+    wetsgeschiedenisSubtype: doc.wetsgeschiedenis_subtype,
     poort: { supabase: client, label: "reindex" },
     gateway: begrenzing.gateway,
   });

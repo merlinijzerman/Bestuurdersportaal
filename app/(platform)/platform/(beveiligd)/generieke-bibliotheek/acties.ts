@@ -1033,7 +1033,9 @@ export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> 
 
         const { data: doc } = await svc
           .from("documenten")
-          .select("id, titel, opslag_pad, bestandstype, bibliotheek")
+          .select(
+            "id, titel, opslag_pad, bestandstype, bibliotheek, documenttype, wetsgeschiedenis_subtype"
+          )
           .eq("id", chunkRij.document_id)
           .maybeSingle();
 

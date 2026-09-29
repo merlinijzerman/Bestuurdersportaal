@@ -111,7 +111,90 @@ check("labelloze chunks krijgen elk een eigen groep (niets te groeperen)", () =>
   assert.equal(new Set(g).size, 3);
 });
 
-// ── Test 3 — verrijkTekst spiegelt zoek_vector ──────────────────────────────
+// ── Test 3 — wetsgeschiedenisstructuur in de ingest ────────────────────────
+check("MvT krijgt deel- en artikellabels via de centrale chunk-bouw", () => {
+  const records = bouwChunkRecordsZonderVerrijking({
+    documentId: "mvt-1",
+    documenttype: "wetsgeschiedenis",
+    wetsgeschiedenisSubtype: "memorie_van_toelichting",
+    segmenten: [
+      {
+        pagina: 8,
+        paragraaf: null,
+        tekst: [
+          "I. ALGEMEEN",
+          "1. Inleiding",
+          "Deze synthetische toelichting beschrijft waarom de voorgestelde pensioenregeling nodig is.",
+          "II. ARTIKELSGEWIJS",
+          "Artikel I, onderdeel A",
+          "Dit onderdeel licht een synthetische wijziging van de Pensioenwet toe.",
+        ].join("\n"),
+      },
+    ],
+  });
+
+  assert.ok(records.some((r) => r.structuur_label === "Algemeen deel — §1"));
+  assert.ok(
+    records.some(
+      (r) =>
+        r.structuur_type === "artikel" &&
+        r.structuur_label === "Artikelsgewijze toelichting — Artikel I, onderdeel A"
+    )
+  );
+  assert.ok(records.every((r) => r.pagina === 8));
+});
+
+check("aangenomen amendement scheidt wijziging en toelichting in de ingest", () => {
+  const records = bouwChunkRecordsZonderVerrijking({
+    documentId: "amendement-1",
+    documenttype: "wetsgeschiedenis",
+    wetsgeschiedenisSubtype: "aangenomen_amendement",
+    segmenten: [
+      {
+        pagina: 1,
+        paragraaf: null,
+        tekst: [
+          "Artikel I, onderdeel C",
+          "In het voorgestelde artikel wordt vijf jaar vervangen door zes jaar.",
+          "Toelichting",
+          "Dit amendement geeft pensioenuitvoerders synthetisch meer tijd voor de overgang.",
+        ].join("\n"),
+      },
+    ],
+  });
+
+  assert.ok(
+    records.some((r) => r.structuur_label === "Amendement — wijziging — Artikel I, onderdeel C")
+  );
+  assert.ok(records.some((r) => r.structuur_label === "Amendement — toelichting"));
+});
+
+check("onherkende opmaak valt terug op de bestaande generieke structuurdetectie", () => {
+  const segmenten: TekstSegment[] = [
+    {
+      pagina: 3,
+      paragraaf: null,
+      tekst: "Artikel 7\nDeze generieke artikeltekst is lang genoeg om als zelfstandig testfragment te blijven bestaan.",
+    },
+  ];
+  const generiek = bouwChunkRecordsZonderVerrijking({
+    documentId: "generiek",
+    segmenten,
+  });
+  const fallback = bouwChunkRecordsZonderVerrijking({
+    documentId: "fallback",
+    documenttype: "wetsgeschiedenis",
+    wetsgeschiedenisSubtype: "memorie_van_toelichting",
+    segmenten,
+  });
+
+  assert.deepEqual(
+    fallback.map(({ document_id: _id, ...record }) => record),
+    generiek.map(({ document_id: _id, ...record }) => record)
+  );
+});
+
+// ── Test 4 — verrijkTekst spiegelt zoek_vector ──────────────────────────────
 // SQL: coalesce(context_prefix || ' ', '') || tekst. Domein: prefix is null of
 // een niet-lege string (genereerPrefix geeft nooit een lege string terug).
 check("verrijkTekst == coalesce(prefix || ' ', '') || tekst", () => {
