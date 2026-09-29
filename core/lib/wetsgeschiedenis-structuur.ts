@@ -12,9 +12,8 @@
 //  hergebruikt de bestaande chunkvelden structuur_type en structuur_label, er
 //  komt geen nieuw chunkveld bij.
 //
-//  NOG NIET AANGESLOTEN op de ingest (chunk-bouw/chunk-ingest) — dat volgt in
-//  de post-releasefase (PR 2 van het werkticket), samen met de eerste echte
-//  import. Hier alleen de pure logica + tests met synthetische fixtures.
+//  Aangesloten op de pure chunk-bouw voor documenttype `wetsgeschiedenis`.
+//  Zowel de eerste ingest als herindexering gebruikt daardoor dezelfde logica.
 //
 //  Conservatief: alleen een kop op een EIGEN, korte regel telt als grens. Een
 //  verwijzing midden in een zin ("zoals artikel 150d bepaalt") splitst nooit.
@@ -22,7 +21,12 @@
 //  bestaande generieke chunking terug op haar eigen structuurdetectie.
 // ============================================================================
 
-import type { StructuurType, StructuurUnit } from "./chunking";
+import type {
+  GestructureerdTekstSegment,
+  StructuurType,
+  StructuurUnit,
+} from "./chunking";
+import type { TekstSegment } from "./document-extractie";
 import type { WetsgeschiedenisSubtype } from "./wetsgeschiedenis";
 
 export type ParlementairDeel =
@@ -48,6 +52,12 @@ export interface ParlementaireUnit {
   tekst: string;
 }
 
+interface ParlementaireToestand {
+  deel: ParlementairDeel;
+  huidigArtikel: string | null;
+  voortzetting: Pick<ParlementaireUnit, "deel" | "type" | "label"> | null;
+}
+
 // Maximale lengte van een kopregel. Langer = doorlopende tekst.
 const MAX_KOP = 120;
 
@@ -71,11 +81,55 @@ export function structureerParlementairStuk(
   tekst: string,
   subtype: WetsgeschiedenisSubtype | null
 ): ParlementaireUnit[] {
+  const { units } = structureerSegment(tekst, subtype, beginToestand(subtype));
+  return units.length > 0
+    ? units
+    : [{ deel: "overig", type: "tekst", label: null, tekst }];
+}
+
+function beginToestand(subtype: WetsgeschiedenisSubtype | null): ParlementaireToestand {
+  const isAmendement = subtype === "aangenomen_amendement";
+  return {
+    deel: isAmendement ? "amendement_wijziging" : "overig",
+    huidigArtikel: null,
+    voortzetting: null,
+  };
+}
+
+/**
+ * Structureert extractiesegmenten (PDF-pagina's, een DOCX-blok of tabbladen)
+ * met behoud van de toestand tussen segmenten. Een vervolgpagina erft dus het
+ * laatst herkende deel en artikel totdat een nieuwe kop een grens opent, maar
+ * blijft een apart segment met het eigen paginanummer.
+ */
+export function structureerParlementaireSegmenten(
+  segmenten: TekstSegment[],
+  subtype: WetsgeschiedenisSubtype | null
+): GestructureerdTekstSegment[] {
+  let toestand = beginToestand(subtype);
+  return segmenten.map((segment) => {
+    const resultaat = structureerSegment(segment.tekst, subtype, toestand);
+    toestand = resultaat.toestand;
+    return {
+      pagina: segment.pagina,
+      paragraaf: segment.paragraaf,
+      units: alsStructuurUnits(resultaat.units),
+    };
+  });
+}
+
+function structureerSegment(
+  tekst: string,
+  subtype: WetsgeschiedenisSubtype | null,
+  begin: ParlementaireToestand
+): { units: ParlementaireUnit[]; toestand: ParlementaireToestand } {
   const isAmendement = subtype === "aangenomen_amendement";
   const units: ParlementaireUnit[] = [];
-  let deel: ParlementairDeel = isAmendement ? "amendement_wijziging" : "overig";
-  let huidig: ParlementaireUnit | null = null;
-  let huidigArtikel: string | null = null;
+  let deel = begin.deel;
+  let huidigArtikel = begin.huidigArtikel;
+  let huidig: ParlementaireUnit | null = begin.voortzetting
+    ? { ...begin.voortzetting, tekst: "" }
+    : null;
 
   const sluit = () => {
     if (huidig && huidig.tekst.trim() !== "") units.push(huidig);
@@ -150,9 +204,17 @@ export function structureerParlementairStuk(
   }
   sluit();
 
-  return units.length > 0
-    ? units
-    : [{ deel: "overig", type: "tekst", label: null, tekst }];
+  const laatste = units.at(-1) ?? null;
+  return {
+    units,
+    toestand: {
+      deel,
+      huidigArtikel,
+      voortzetting: laatste
+        ? { deel: laatste.deel, type: laatste.type, label: laatste.label }
+        : begin.voortzetting,
+    },
+  };
 }
 
 function normaliseerLabel(s: string): string {

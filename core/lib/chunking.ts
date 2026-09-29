@@ -39,6 +39,17 @@ export interface StructuurUnit {
   tekst: string;
 }
 
+/**
+ * Een extractiesegment waarvan de structuur al domeinspecifiek is bepaald.
+ * De bronlocatie blijft op segmentniveau staan, zodat een PDF-chunk nooit een
+ * paginagrens overschrijdt en de bestaande bronverwijzing intact blijft.
+ */
+export interface GestructureerdTekstSegment {
+  pagina: number | null;
+  paragraaf: string | null;
+  units: StructuurUnit[];
+}
+
 // Verwerk geëxtraheerde tekst in chunks voor RAG-opslag.
 //
 // Strategie — drie niveaus van splitsing, in afnemende kwaliteit:
@@ -105,9 +116,30 @@ export function maakChunksUitSegmenten(
   chunkGrootte = 800,
   overlap = 100
 ): ChunkMetLocatie[] {
+  return maakChunksUitGestructureerdeSegmenten(
+    segmenten.map((seg) => ({
+      pagina: seg.pagina,
+      paragraaf: seg.paragraaf,
+      units: splitsInStructuurUnits(seg.tekst),
+    })),
+    chunkGrootte,
+    overlap
+  );
+}
+
+/**
+ * Chunkt vooraf bepaalde structuur-units zonder opnieuw generieke koppen te
+ * detecteren. Dit is nodig voor domeinstructuur (zoals wetsgeschiedenis) die
+ * rijkere labels draagt dan de algemene artikel-/paragraafherkenning.
+ */
+export function maakChunksUitGestructureerdeSegmenten(
+  segmenten: GestructureerdTekstSegment[],
+  chunkGrootte = 800,
+  overlap = 100
+): ChunkMetLocatie[] {
   const result: ChunkMetLocatie[] = [];
   for (const seg of segmenten) {
-    for (const unit of splitsInStructuurUnits(seg.tekst)) {
+    for (const unit of seg.units) {
       for (const tekst of chunkUnit(unit, chunkGrootte, overlap)) {
         result.push({
           tekst,
