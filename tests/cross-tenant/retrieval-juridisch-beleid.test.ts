@@ -171,6 +171,47 @@ test("R3-P3 — dichte poort gedraagt zich BYTE-IDENTIEK aan geen intentie, ook 
   assert.equal(dicht.extra.selectie?.juridisch, undefined);
 });
 
+test("R3-P4 — historische peildatum: de poort opent UITSLUITEND op een (zwak) juridisch anker", async () => {
+  const kandidaten = [bron("wet", "pw-1"), bron("mvt", "mvt-1"), bron("fonds", "f-1")];
+  const zonder = await selecteer(kandidaten, undefined, { max: 3 });
+  // Negatief: een datum of een vergadering maakt een vraag niet juridisch.
+  for (const vraag of ["Welke afspraak gold op 1 januari 2022?", "Wat gold er in de vorige vergadering?"]) {
+    const intentie = bepaalJuridischeVraagintentie(vraag);
+    assert.equal(bepaalJuridischBeleid(intentie), null, vraag);
+    assert.deepEqual(juridischeAntwoordgrens(intentie, []), [], `${vraag}: geen melding`);
+    const r = await selecteer(kandidaten, intentie, { max: 3 });
+    assert.equal(JSON.stringify(r), JSON.stringify(zonder), `${vraag}: selectie byte-identiek`);
+  }
+  const datumZonderAnker = bepaalJuridischeVraagintentie("Welke afspraak gold op 1 januari 2022?");
+  assert.equal(datumZonderAnker.intentie, "historische_peildatum", "fixture: R-2 ziet een peildatum");
+  assert.equal(datumZonderAnker.vertrouwen, "zeker", "fixture: zeker alleen is dus niet genoeg");
+  // Constructief: zeker zonder anker opent de poort voor peildatum niet, voor geldend recht wel.
+  assert.equal(bepaalJuridischBeleid({ intentie: "historische_peildatum", vertrouwen: "zeker", signalen: ["peildatum", "datum"] }), null);
+  assert.notEqual(bepaalJuridischBeleid({ intentie: "geldend_recht", vertrouwen: "zeker", signalen: ["normvraag"] }), null);
+
+  // Positief: met anker volgen melding én uitsluiting.
+  for (const [vraag, poort] of [
+    ["Wat gold op 1 januari 2022 volgens de Pensioenwet?", "juridisch_anker"],
+    ["Wat bepaalde artikel 150d Pensioenwet in 2021?", "juridisch_anker"],
+  ] as const) {
+    const intentie = bepaalJuridischeVraagintentie(vraag);
+    assert.deepEqual(bepaalJuridischBeleid(intentie), { beleid: "historische_peildatum", poort }, vraag);
+    const r = await selecteer(kandidaten, intentie, { max: 3 });
+    assert.ok(!r.chunks.some((c) => c.documenttype === "wetgeving"), `${vraag}: actuele wet uitgesloten`);
+    assert.equal(redenVan(r, "pw-1"), "juridisch_uitgesloten");
+    assert.deepEqual(juridischeAntwoordgrens(intentie, r.chunks), ["historische_wetsversie_niet_beschikbaar"], vraag);
+  }
+  // Zwak anker zonder fondscontext volstaat ook (constructief, geen sterk anker).
+  assert.deepEqual(
+    bepaalJuridischBeleid({ intentie: "historische_peildatum", vertrouwen: "zeker", signalen: ["zwak_anker", "peildatum", "datum"] }),
+    { beleid: "historische_peildatum", poort: "zwak_anker_zonder_fondscontext" }
+  );
+  assert.equal(
+    bepaalJuridischBeleid({ intentie: "historische_peildatum", vertrouwen: "zeker", signalen: ["zwak_anker", "peildatum", "datum", "fondscontext"] }),
+    null
+  );
+});
+
 // ── (S) PURE SELECTIE ───────────────────────────────────────────────────────
 
 test("R3-S1 — wet + MvT, normatieve vraag: de wet gaat vóór, de MvT verdringt haar niet uit het budget", async () => {

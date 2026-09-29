@@ -14,7 +14,10 @@
 //  de vraag aantoonbaar juridisch is:
 //    • signaal `juridisch_anker`, of
 //    • signaal `zwak_anker` zónder `fondscontext`, of
-//    • vertrouwen `zeker`.
+//    • vertrouwen `zeker` — maar NIET bij `historische_peildatum`: daar geeft
+//      R-2 `zeker` al op een losse datum ("Welke afspraak gold op 1 januari
+//      2022?"). Een peildatum vereist dus altijd een (zwak) juridisch anker.
+//  Dezelfde poort stuurt de selectie én de antwoordgrens.
 //  Anders is het beleid `null` en gedraagt de selectie zich exact als bij
 //  `onbekend`: dezelfde volgorde, dezelfde diagnostiek, geen extra sleutel.
 //
@@ -89,11 +92,16 @@ export function bepaalJuridischBeleid(
 ): JuridischBeleidsbesluit | null {
   if (!intentie || !BELEIDEN.has(intentie.intentie)) return null;
   const signalen = new Set(intentie.signalen ?? []);
+  // Voor een historische peildatum telt vertrouwen `zeker` NIET: R-2 geeft dat
+  // ook op een datum alleen ("Welke afspraak gold op 1 januari 2022?"), en dan
+  // zou een fondsvraag de melding over historische wetsversies krijgen en de
+  // actuele wet uit de selectie verliezen. Daar is een juridisch anker vereist.
+  const zekerTelt = intentie.intentie !== "historische_peildatum";
   const poort: JuridischePoort | null = signalen.has("juridisch_anker")
     ? "juridisch_anker"
     : signalen.has("zwak_anker") && !signalen.has("fondscontext")
       ? "zwak_anker_zonder_fondscontext"
-      : intentie.vertrouwen === "zeker"
+      : zekerTelt && intentie.vertrouwen === "zeker"
         ? "vertrouwen_zeker"
         : null;
   if (!poort) return null;
