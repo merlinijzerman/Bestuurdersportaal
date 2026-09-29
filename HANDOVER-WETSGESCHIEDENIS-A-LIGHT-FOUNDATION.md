@@ -8,6 +8,7 @@
 | **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md` en `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md` (in deze branch, aparte documentatiecommit). De tijdelijke agentinstructie blijft bewust buiten de PR: die bevat release-specifieke uitvoeringsafspraken. |
 | **Status** | Foundation, I-1 en R-1 staan op Preview. R-1 is via PR #489 gemerged als `580304f`; alle post-mergechecks en beide vaste Preview-deployments zijn groen. Niets geïmporteerd en Productie niet gewijzigd. |
 | **R-2 (#491)** | Branch `codex/491-juridische-vraagintentie` vanaf `origin/preview` @ `e71a049`, één PR naar `preview`. Observe-only juridische vraagintentie; geen migratie, geen gedragswijziging. Zie §2a. |
+| **R-3 (#492)** | Branch `codex/492-juridische-routing` vanaf `origin/preview` @ `bdb92b1` (incl. R-2, PR #494), één PR naar `preview`. Centraal juridisch bronbeleid in de selectie + juridische antwoordgrens; geen migratie, geen RPC-, RLS- of grantwijziging. Zie §2b. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -102,6 +103,58 @@ niet als historisch antwoord gepresenteerd).
 in `app/api/chat/route.ts`; bereken niet opnieuw. Werk dan tegelijk de negatieve
 observe-only-test `R2-A3` in `tests/cross-tenant/juridische-vraagintentie-route.test.ts`
 bewust bij, want die telt precies één declaratie plus vier auditregels.
+
+### 2b. R-3 — actuele wet vóór wetsgeschiedenis (#492)
+
+**As-built.** Eén pure, providerneutrale module `core/lib/retrieval/juridisch-beleid.ts`,
+aangeroepen vanuit de centrale selectie (`selectie.ts` → `weegEnSelecteer`). Er is
+geen route-specifieke kopie: de chatroute geeft alleen de al bepaalde
+`juridischeIntentie` door.
+
+| Onderdeel | Vorm |
+|---|---|
+| Doorgifte | `SelectiegrenzenPerQuery.juridischeIntentie` (orkestratie) → `selecteerEnVerrijk(…, { juridischeIntentie })`. De route zet haar alleen op de **bibliotheeksporen** (`grenzenBibliotheek` voor het ongescopete primaire spoor en de grenzen van het aanvullende spoor). Een bewust gekozen document (`primair_portaal`) of SharePoint-bron blijft ongemoeid, net als bij de actualiteitsfilter. |
+| Rol van een kandidaat | `documenttype` + `wetsgeschiedenis_subtype` via de bestaande `juridischeDuiding()` (`wetsgeschiedenis.ts`). Beide velden staan op het selectiemoment al op `Bronresultaat.weergave`: `verrijkDocumentmetadata()` draait op het orkestratiepad in de adapterhook `verrijkKandidaten()` (fase 3, vóór poort en selectie, #426 D-6). **Subtype is dus beschikbaar zonder migratie of denormalisatie.** Een aangenomen amendement heeft de rol wetsgeschiedenis. Een adapter zonder documenttype (SharePoint, web) heeft geen juridische rol en houdt het bestaande gedrag. |
+| Poort (review punt 1 + PR-review #496) | Eén gedeelde functie `bepaalJuridischBeleid()` stuurt zowel de selectie als de antwoordgrens/inline-melding. Poortregel per intentie: **`historische_peildatum`** opent UITSLUITEND bij `juridisch_anker` of bij `zwak_anker` zonder `fondscontext` (vertrouwen `zeker` alleen is niet genoeg, want R-2 geeft `zeker` al op een losse datum); **`geldend_recht`, `bedoeling_totstandkoming`, `geldend_recht_en_wetsgeschiedenis`** openen bij `juridisch_anker`, `zwak_anker` zonder `fondscontext`, óf vertrouwen `zeker`. Anders `null` = exact het gedrag van `onbekend` (geen melding, selectie byte-identiek). Voorbeelden poort dicht: "Welke afspraak gold op 1 januari 2022?" (peildatum/zeker, geen anker), "Wat gold er in de vorige vergadering?", "Welke afspraak gold vorig jaar?", "Welke termijn geldt voor een waardeoverdracht?". Poort open: "Wat gold op 1 januari 2022 volgens de Pensioenwet?", "Wat bepaalde artikel 150d Pensioenwet in 2021?" → uitsluiting actuele wet + melding. |
+| Volgorde in de selectie | zwak-generiekfilter → bronsoortweging → regime-demotie → **juridisch beleid** → constraints/dedup/budget. De door het regime gedemoveerde bronnen (PW↔Wvb) zijn voor het juridisch beleid **vast**: zij houden hun plek onderaan, dus het beleid kan de regimeweging niet omzeilen. |
+
+Beleid per intentie (alleen de plekken die juridische kandidaten al innamen worden
+opnieuw gevuld; fonds- en niet-juridische generieke bronnen houden hun relatieve
+volgorde):
+
+| Intentie | Beleid |
+|---|---|
+| `geldend_recht` | Wetgeving vult de juridische plekken; wetsgeschiedenis gaat naar de staart. Is er géén wetspassage, dan verandert de volgorde niet en meldt de antwoordgrens `geen_actuele_normbasis`. Een niet-juridische bron zakt nooit. |
+| `bedoeling_totstandkoming` | Beste wetspassage en beste wetsgeschiedenis **aaneen** op de eerste juridische plek (wet eerst); de rest in oorspronkelijke volgorde. Een niet-juridische bron zakt hoogstens één plek. |
+| `geldend_recht_en_wetsgeschiedenis` | Idem kop (representatie voor beide rollen, wet eerst); daarna overige wetgeving vóór overige wetsgeschiedenis. |
+| `historische_peildatum` | Actuele wetgeving wordt **uitgesloten** (ook een regime-gedemoveerde); wetsgeschiedenis blijft. Antwoordgrens `historische_wetsversie_niet_beschikbaar`, altijd (ook zonder treffers). |
+| `onbekend` / poort dicht | Byte-identiek aan vóór R-3: dezelfde volgorde, dezelfde `selectie`-diagnostiek, geen nieuwe sleutels. |
+
+**Antwoordgrens.** `juridischeAntwoordgrens(intentie, geselecteerd)` (zelfde poort)
+levert gesloten typen die als bestaande inline-meldingen (`InlineMeldingType` +
+vaste teksten in `vraagtype.ts`, `juridischeInlineMelding()`) in zowel de pre-stream-
+als de finale meldingen van de chatroute komen, en daarmee in
+`retrieval_meta.inline_meldingen`. De toon-systeemprompt en de sha256-pin in
+`generatie-kern.sanity.ts` zijn **ongewijzigd**; de R-1-promptregel en -labels
+blijven de modelinstructie ("wetsgeschiedenis is geen norm").
+
+**Diagnostiek (migratievrij).** Alleen als een beleid is toegepast:
+`selectie.juridisch = { beleid, poort, kandidaten: {wetgeving, wetsgeschiedenis},
+geselecteerd: {…}, gedemoveerd, uitgesloten }` (gesloten enums en tellingen),
+`selectie.afgevallen_telling.juridisch_gedemoveerd|juridisch_uitgesloten`, en per
+kandidaat in `selectie_kandidaten[].reden` de waarden `juridisch_gedemoveerd`
+(valt alleen door het beleid af; contrafeitelijke selectie zonder beleid) of
+`juridisch_uitgesloten`. `selectie` staat al op basisniveau in `META_BASIS` en in
+`c_basis` van `meta_projectie()`, die het object als geheel doorlaat; geen
+migratie. Zoals voor alle selectiediagnostiek beschrijft `selectie` het eerste
+spoor.
+
+**Census.** De nieuwe module vergroot de importgraaf van het antwoordpad
+verklaarbaar van 171 naar 172 bestanden (`retrieval-contextbronnen.expected.json`,
+alleen `bereikte_bestanden`); lezingen, tabelclassificatie en retrievalingangen
+zijn ongewijzigd. `R2-A3` is bewust bijgewerkt: naast declaratie + vier
+auditwaarden zijn precies drie doorgiftes aan de centrale juridische laag
+toegestaan; elk ander gebruik (routefilter, promptblok, bronkaart) blijft rood.
 
 ## 3. Migratie en deployvolgorde
 
@@ -198,6 +251,19 @@ zie §3b. Productie, Microsoft en SharePoint zijn voor I-1 niet geraakt.
 | `generatie-kern.sanity.ts` | groen; sha256-pin van de systeemprompt niet gekanteld |
 | overige: tsc, `npm run sanity`, `npm run test:unit`, eslint, volledige §15-suite, `npm run build` | zie de PR-beschrijving |
 
+### 4c. R-3 — tests (29-09-2026, lokaal)
+
+| Test | Resultaat |
+|---|---|
+| `tests/cross-tenant/retrieval-juridisch-beleid.test.ts` (nieuw) | 17/17: poort positief/negatief (P1–P3, incl. byte-identiteit bij dichte poort; P4 peildatum alleen met (zwak) anker: twee negatieve vragen zonder melding en byte-identieke selectie, twee positieve met melding + uitsluiting); pure selectie wet + MvT, alleen MvT, wet + amendement, bedoeling, beide rollen, gemengde PW/Wvb, historische peildatum, fondsdocumenten, onbekende intentie (S1–S9); negatieve controle (N1); contract via `voerVolledigeRetrievalUit` met een niet-Supabase-stubadapter, routedoorgifte en migratievrije diagnostiek (C1–C3) |
+| Mutatie: juridische weging geneutraliseerd | 8 van 17 rood |
+| Mutatie: poort altijd open | 5 van 17 rood |
+| Mutatie: peildatumverscherping weg (`zeker` telt weer) | P4 rood |
+| `juridische-vraagintentie-route.test.ts` | 7/7 na de bewuste R2-A3-bijwerking |
+| `retrieval-census.test.ts` | 11/11 na registerbijwerking 171 → 172 |
+| retrieval-identiteit / evidence-contract / productiepaden / contract / adaptergroepen / toelatingspoort / golden-gevoeligheid / g12 / t2-4-census | 14 / 39 / 16 / 23 / 26 / 43 / 21 / 15 / 14, alle groen |
+| overige: tsc, `npm run sanity`, `npm run test:unit`, volledige §15-suite, karakterisering, eslint, `npm run build` | zie de PR-beschrijving |
+
 ## 5. Bewuste afwijkingen en open punten
 
 - **A-1 — regime via `wettelijk_regime`, niet via `toepassingsgebied`.** De instructie noemt `toepassingsgebied` voor PW/Wvb/beide. In de code is dat een inert vrije-tekstveld. Het echte, gecontroleerde en al gedenormaliseerde regimefacet is `wettelijk_regime` (T4). Dat stond nog niet in het curatieformulier en is nu toegevoegd: optioneel voor gewone generieke documenten, verplicht (`pw|wvb|beide`) voor juridische typen. Gevolg: bij `REGIME_WEGING` aan kan een gecureerd regime het bestaande demotiegedrag voeden. Dat is bestaand retrievalgedrag op data; er is geen codewijziging.
@@ -221,7 +287,7 @@ zie §3b. Productie, Microsoft en SharePoint zijn voor I-1 niet geraakt.
 | `scripts/cross-tenant-ci.sh` | Gedeeld bestand; de release heeft checks toegevoegd | Rebase was conflictvrij; de wetsgeschiedenischeck staat na T6 en de Microsoft-checks zijn behouden. Volledige suite groen. |
 | `supabase/schema.sql` | Gedeelde documentatie | Alleen het `documenten`-blok; kans op een tekstueel conflict is klein. |
 | Migratievolgorde | Onze datum 2026-09-23, naast `2026_09_23_434_adapterstand_fonds.sql` | Geen objectoverlap (alleen `documenten`-CHECKs en -kolommen). Bij een rebase de volgorde controleren. |
-| Importgraaf antwoordpad (census) | R-1 voegt de bestaande pure juridische-duidingsmodule toe | Register bewust van 170 naar 171 bereikte bestanden; lezingen, tabelclassificatie en retrievalingangen ongewijzigd. R-2 voegt geen module toe (classifier in `vraagtype.ts`): register ongewijzigd. |
+| Importgraaf antwoordpad (census) | R-1 voegt de bestaande pure juridische-duidingsmodule toe | Register bewust van 170 naar 171 bereikte bestanden; lezingen, tabelclassificatie en retrievalingangen ongewijzigd. R-2 voegt geen module toe (classifier in `vraagtype.ts`): register ongewijzigd. R-3 voegt de pure module `retrieval/juridisch-beleid.ts` toe: 171 → 172, verder ongewijzigd. |
 | `document_chunks` / `fn_chunk_denorm` | Niet gewijzigd | R-1 haalt de aanvullende metadata na selectie in één batch uit `documenten`; geen migratie nodig. |
 
 R-1 raakt gericht `app/api/chat/route.ts`, `core/lib/rag.ts` en `core/lib/retrieval/*` om
@@ -237,7 +303,7 @@ geen overlap met Microsoft-, SharePoint-, OAuth-, tenant- of tokencode.
 | I-2 | Actuele PW/Wvb opnemen (BWB-id in de titel/URL); max. één actieve versie per wet via `curatieVervangen`; Wtp-Staatsblad-pdf's herclassificeren | curatiehandeling (data), eventueel een DB-check "één actieve wetgeving per regime + titel-BWB" | DB-check + Preview-controle |
 | R-1 | **Afgerond en op Preview via PR #489:** documenttype, subtype, dossiernummer, normgewicht en rechtsregime lopen door naar prompt, bronkaart en audit; na-selectie batchverrijking, dus geen migratie/denormalisatie | `rag.ts`, retrievalcontract/citatie/meta, assistant-source, bronkaart | identiteit 14/14, prompt-/bronlijst-sanities groen; censusregister verklaarbaar +1 bestand en 11/11 groen; post-mergechecks en beide deploys groen |
 | R-2 | **In PR (#491):** observe-only juridische vraagintentie op de effectieve vraag, vastgelegd onder `retrieval_meta.invoer.juridische_intentie`; zie §2a | `core/lib/vraagtype.ts`, `core/lib/rag.ts` (type), `app/api/chat/route.ts` | `vraagtype.test.ts` 109/109 + pariteitspin; `juridische-vraagintentie-route.test.ts` 7/7; census ongewijzigd |
-| R-3 | **Open (#492):** ranking/routing: actuele wet vóór wetsgeschiedenis bij normatieve vragen; wetsgeschiedenis alleen aanvullend. Sluit aan op `juridischeIntentie` in de chatroute (niet opnieuw berekenen) en past `R2-A3` bewust aan | `core/lib/rag.ts`, `core/lib/retrieval/selectie.ts`, `app/api/chat/route.ts` | retrievalregressies + nieuwe evalcases |
+| R-3 | **In PR (#492):** centraal juridisch bronbeleid met poort in de selectie (actuele wet vóór wetsgeschiedenis; beide rollen bij bedoeling; actuele wet uitgesloten bij historische peildatum) + juridische antwoordgrens via inline-meldingen; zie §2b | `core/lib/retrieval/juridisch-beleid.ts` (nieuw), `selectie.ts`, `orkestratie.ts`, `core/lib/rag.ts` (typen/commentaar), `core/lib/vraagtype.ts` (meldingen), `app/api/chat/route.ts` | `retrieval-juridisch-beleid.test.ts` 16/16 + mutaties; census 172; retrievalregressies groen |
 | A-1 | **Afgerond binnen R-1:** prompt schrijft voor dat de normatieve conclusie eerst uit geldend recht komt en wetsgeschiedenis alleen uitleg/achtergrond geeft; ook een aangenomen amendement is geen zelfstandige actuele norm | `generatie-kern.ts` | `generatie-kern.sanity.ts` |
 | V-1 | Afzonderlijke vergelijkingscall: juridische metadata en rol meenemen in vergelijking/audit; expliciet gekozen historische documenten niet door een impliciet `actueel`-filter verwijderen; norm en toelichting nooit als gelijkwaardig bindend presenteren | `app/api/vergelijk/route.ts`, `core/lib/vergelijk-productie.ts`, `core/lib/vergelijk-kern.ts` | `retrieval-productiepaden.test.ts`, `retrieval-evidence-contract.test.ts`, vergelijkingsgoldens |
 | B-1 | **Bronweergave afgerond binnen R-1:** bronkaarten tonen geldend recht versus wetsgeschiedenis/geen norm, plus dossier en regime. Alleen het type-/subtypefilter in de bibliotheek staat nog open. | `AntwoordWeergave.tsx`, `assistant-source.ts`; later `GeneriekeBibliotheekClient.tsx` | bronlijst-/assistant-source-sanities groen; filtertest volgt |

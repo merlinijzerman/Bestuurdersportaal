@@ -35,15 +35,30 @@ export interface SelectieBron {
   bibliotheek: string;
   normgewicht: string | null;
   wettelijkRegime: string | null;
+  /**
+   * R-3 (#492) — juridisch BRONBELEID-gegeven, providerneutraal: welke soort
+   * bron dit is (`wetgeving`/`wetsgeschiedenis`/…) en, bij wetsgeschiedenis, het
+   * subtype. Optioneel: een adapter zonder documenttype heeft geen juridische
+   * rol en houdt het bestaande gedrag.
+   */
+  documenttype?: string | null;
+  wetsgeschiedenisSubtype?: string | null;
 }
 import { weegBronsoort, constraintsVoorProfiel } from "../weeg-bronsoort";
-import { weegRegime } from "../weeg-regime";
+import { weegRegime, isExternKaderVoorFonds } from "../weeg-regime";
 import {
   selecteerMetConstraintsMetTrace,
   selecteerChunksMetTrace,
   type RepresentatieConstraints,
 } from "../rag-select";
 import { isStandaardZichtbaarInRag } from "../generiek-curatie";
+import type { JuridischeVraagintentieResultaat } from "../vraagtype";
+import {
+  bepaalJuridischBeleid,
+  herordenJuridisch,
+  juridischeRolVan,
+  type JuridischBeleidsbesluit,
+} from "./juridisch-beleid";
 
 // Verplaatst uit rag.ts: de enige aanroeper was weegEnSelecteer hieronder.
 function filterZwakkeGeneriek(
@@ -63,7 +78,10 @@ export type SelectieAfvalReden =
   | "zwak_generiek"
   | "quotum"
   | "dedup"
-  | "budget";
+  | "budget"
+  // R-3 (#492) — alleen mogelijk als een juridisch beleid is toegepast.
+  | "juridisch_gedemoveerd"
+  | "juridisch_uitgesloten";
 
 /** Selectie-diagnostiek voor retrieval_meta (T3). `selectie` is basis-niveau
  *  (telemetrie, geen identiteit); `selectie_kandidaten` draagt bronidentiteit. */
@@ -76,13 +94,42 @@ function isGeneriek(c: SelectieBron): boolean {
   return c.bibliotheek === "generiek";
 }
 
+type JuridischeSelectiediagnostiek = NonNullable<NonNullable<RetrievalMeta["selectie"]>["juridisch"]>;
+
+/** R-3 — gesloten, inhoudsvrije telemetrie over het toegepaste juridisch beleid. */
+function juridischeDiagnostiek(
+  besluit: JuridischBeleidsbesluit,
+  kandidaten: SelectieBron[],
+  gekozen: Set<SelectieBron>,
+  herordening: { uitgesloten: SelectieBron[]; gedemoveerd: Set<SelectieBron> }
+): JuridischeSelectiediagnostiek {
+  const perRol = (lijst: SelectieBron[]) => {
+    const t = { wetgeving: 0, wetsgeschiedenis: 0 };
+    for (const c of lijst) {
+      const rol = juridischeRolVan(c.documenttype, c.wetsgeschiedenisSubtype);
+      if (rol === "geldend_recht") t.wetgeving++;
+      else if (rol === "wetsgeschiedenis") t.wetsgeschiedenis++;
+    }
+    return t;
+  };
+  return {
+    beleid: besluit.beleid,
+    poort: besluit.poort,
+    kandidaten: perRol(kandidaten),
+    geselecteerd: perRol(kandidaten.filter((c) => gekozen.has(c))),
+    gedemoveerd: herordening.gedemoveerd.size,
+    uitgesloten: herordening.uitgesloten.length,
+  };
+}
+
 function weegEnSelecteer(
   gerangschikt: SelectieBron[],
   filters: RetrievalFilters | undefined,
   maxResults: number,
   maxPerDoc: number,
   constraintsAan: boolean,
-  regimeAan: boolean
+  regimeAan: boolean,
+  juridisch: JuridischBeleidsbesluit | null = null
 ): { chunks: SelectieBron[]; diagnostiek: SelectieDiagnostiek } {
   const profiel = filters?.bronsoortprofiel;
   const libVan = (c: SelectieBron) => c.bibliotheek;
@@ -103,9 +150,24 @@ function weegEnSelecteer(
   // REGIME_WEGING uit óf een leeg/cross-cutting fondsregime is dit gedrag-neutraal.
   const regimeDemoveert =
     regimeAan && (filters?.primairRegime === "pw" || filters?.primairRegime === "wvb");
-  const gewogen = regimeDemoveert
+  const regimeGewogen = regimeDemoveert
     ? weegRegime(bronGewogen, (c) => c.wettelijkRegime, filters?.primairRegime)
     : bronGewogen;
+
+  // R-3 (#492) — juridisch bronbeleid: ná de bronsoort- én de regimeweging. Een
+  // door het regime gedemoveerde bron (PW↔Wvb) is voor dit beleid VAST en houdt
+  // zijn plek onderaan; het beleid kan de regimeweging dus niet omzeilen.
+  // Zonder beleid (`null`, ook bij een dichte poort) is dit exact de oude stap.
+  const herordening = juridisch
+    ? herordenJuridisch(
+        regimeGewogen,
+        (c) => juridischeRolVan(c.documenttype, c.wetsgeschiedenisSubtype),
+        juridisch.beleid,
+        (c) => regimeDemoveert && isExternKaderVoorFonds(c.wettelijkRegime, filters?.primairRegime)
+      )
+    : null;
+  const gewogen = herordening ? herordening.volgorde : regimeGewogen;
+  const uitgeslotenSet = new Set(herordening?.uitgesloten ?? []);
 
   // representatie-constraints → dedup → budget-afkap. De effectieve constraints
   // worden ALTIJD gelogd, ook bij flag-uit (alle minima 0 = huidig gedrag).
@@ -131,14 +193,31 @@ function weegEnSelecteer(
     zonderWegingSet = new Set(cf.gekozen);
   }
 
+  // R-3 — contrafeitelijke selectie ZONDER alleen het juridisch beleid (wél met
+  // bronsoort- en regimeweging). Valt een kandidaat enkel door dat beleid af,
+  // dan is de reden `juridisch_gedemoveerd` en niet "weging" of "budget".
+  let zonderJuridischSet: Set<SelectieBron> | null = null;
+  if (herordening) {
+    const cf = constraintsAan
+      ? selecteerMetConstraintsMetTrace(regimeGewogen, constraints, libVan)
+      : selecteerChunksMetTrace(regimeGewogen, maxResults, maxPerDoc);
+    zonderJuridischSet = new Set(cf.gekozen);
+  }
+
   // Kandidatenset vóór selectie = de volledige input van deze stap (incl. de
   // zwak_generiek-drops), zodat "opgehaald maar afgevallen" zichtbaar is.
-  const telling: Record<SelectieAfvalReden, number> = {
+  // De vijf bestaande sleutels staan er altijd; de twee juridische ALLEEN als
+  // een beleid is toegepast — anders blijft de diagnostiek byte-identiek.
+  const telling: Partial<Record<SelectieAfvalReden, number>> & Record<
+    "weging" | "zwak_generiek" | "quotum" | "dedup" | "budget",
+    number
+  > = {
     weging: 0,
     zwak_generiek: 0,
     quotum: 0,
     dedup: 0,
     budget: 0,
+    ...(herordening ? { juridisch_gedemoveerd: 0, juridisch_uitgesloten: 0 } : {}),
   };
   const perBib = { fonds: 0, generiek: 0 };
 
@@ -153,11 +232,18 @@ function weegEnSelecteer(
     let reden: SelectieAfvalReden;
     if (!zichtbaarSet.has(c)) {
       reden = "zwak_generiek";
+    } else if (uitgeslotenSet.has(c)) {
+      reden = "juridisch_uitgesloten";
     } else {
       const r = redenVanGewogen.get(c) ?? "budget";
-      reden = r === "budget" && zonderWegingSet?.has(c) ? "weging" : r;
+      reden =
+        r === "budget" && zonderJuridischSet?.has(c)
+          ? "juridisch_gedemoveerd"
+          : r === "budget" && zonderWegingSet?.has(c)
+            ? "weging"
+            : r;
     }
-    telling[reden]++;
+    telling[reden] = (telling[reden] ?? 0) + 1;
     return { document_id: c.document_id, bibliotheek, rang, status: "afgevallen" as const, reden };
   });
 
@@ -170,6 +256,9 @@ function weegEnSelecteer(
         constraints,
         geselecteerd_per_bibliotheek: perBib,
         afgevallen_telling: telling,
+        ...(juridisch && herordening
+          ? { juridisch: juridischeDiagnostiek(juridisch, gerangschikt, gekozenSet, herordening) }
+          : {}),
       },
       selectie_kandidaten: kandidaten,
     },
@@ -212,6 +301,12 @@ export async function selecteerEnVerrijk(
     representatieConstraints: boolean;
     regimeWeging: boolean;
     relevantieDrempel: boolean;
+    /**
+     * R-3 (#492) — de R-2-intentie van de beurt. De POORT zit hier, centraal
+     * (`bepaalJuridischBeleid`); ontbreekt de intentie of blijft de poort dicht,
+     * dan is de selectie exact die van vóór R-3.
+     */
+    juridischeIntentie?: JuridischeVraagintentieResultaat | null;
   }
 ): Promise<{ chunks: SelectieBron[]; extra: Partial<RetrievalMeta> }> {
   const extra: Partial<RetrievalMeta> = {};
@@ -230,7 +325,8 @@ export async function selecteerEnVerrijk(
     maxResults,
     maxPerDoc,
     opties.representatieConstraints,
-    opties.regimeWeging
+    opties.regimeWeging,
+    bepaalJuridischBeleid(opties.juridischeIntentie)
   );
   let geselecteerd = sel.chunks;
   extra.selectie = sel.diagnostiek.selectie;

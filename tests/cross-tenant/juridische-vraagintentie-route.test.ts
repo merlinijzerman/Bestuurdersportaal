@@ -7,8 +7,9 @@
 //  Drie lagen:
 //   (A) BRON-INSPECTIE op app/api/chat/route.ts — de classifier draait exact
 //       één keer, op de EFFECTIEVE vraag, ná de contextresolver, en de uitkomst
-//       wordt uitsluitend als auditmetadata gebruikt (negatieve observe-only-
-//       test: geen selectie-, ranking-, prompt- of bronkaartgebruik).
+//       wordt uitsluitend als auditmetadata en (sinds R-3, #492) als doorgifte
+//       aan de centrale juridische retrievallaag gebruikt — geen eigen route-
+//       filter, ranking, promptblok of bronkaart.
 //   (B) FLOW — een via de (gestubde) contextresolver opgeloste vervolgvraag
 //       krijgt dezelfde intentie als de direct gestelde vraag.
 //   (C) AUDIT — `invoer.juridische_intentie` belandt inhoudsarm in het spoor
@@ -62,27 +63,43 @@ test("R2-A2 — de classificatie draait ná de contextresolver en vóór elk aud
   assert.ok(iEersteLog > iIntentie, "intentie vóór de eerste governance-logregel");
 });
 
-test("R2-A3 — OBSERVE-ONLY: de intentie wordt uitsluitend als auditmetadata gebruikt", () => {
-  // Negatieve test: `juridischeIntentie` mag nergens anders voorkomen dan in de
-  // eigen declaratie en als waarde van `juridische_intentie` in de vier
-  // governance-logregels (antwoord, vergelijking, vergelijkingsverduidelijking,
-  // bronintentie-verduidelijking). Elk ander gebruik — filter, ranking,
-  // selectie, promptblok, bronkaart, antwoordtekst — maakt deze test rood.
+test("R2-A3 — de intentie wordt alleen als audit én via het centrale retrievalcontract gebruikt (R-3)", () => {
+  // R-2 was observe-only: declaratie + vier auditwaarden. R-3 (#492) voegt
+  // BEWUST precies drie gebruiksplekken toe, alle drie een doorgifte aan de
+  // CENTRALE juridische laag (core/lib/retrieval/juridisch-beleid.ts, met poort):
+  //   1. de grenzen van het ongescopete primaire bibliotheekspoor;
+  //   2. de grenzen van het aanvullende bibliotheekspoor;
+  //   3. de centrale antwoordgrens (bestaande inline-meldingen).
+  // Elk ander gebruik — een eigen filter/ranking in de route, een promptblok,
+  // bronkaart of antwoordtekst — maakt deze test nog steeds rood.
   const gebruik = aantal(ROUTE, "juridischeIntentie");
   const alsAuditwaarde = aantal(ROUTE, "juridische_intentie: juridischeIntentie,");
   assert.equal(alsAuditwaarde, 4, "vastgelegd in alle vier de governance-logregels");
-  assert.equal(gebruik, 1 + alsAuditwaarde, "geen ander gebruik dan declaratie + audit");
+  const naarContract =
+    aantal(ROUTE, "const grenzenBibliotheek = { ...grenzenPrimair, juridischeIntentie };") +
+    aantal(ROUTE, "relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,\n            juridischeIntentie,\n          },") +
+    aantal(ROUTE, "juridischeAntwoordgrens(\n      juridischeIntentie,");
+  assert.equal(naarContract, 3, "exact drie doorgiftes aan de centrale juridische laag");
+  assert.equal(
+    gebruik,
+    1 + alsAuditwaarde + naarContract,
+    "geen ander gebruik dan declaratie + audit + centrale doorgifte"
+  );
   assert.equal(
     aantal(ROUTE, 'supabase.rpc("schrijf_ai_interactie"'),
     alsAuditwaarde,
     "elke governance-logregel draagt de intentie"
   );
+  // Mutatiecontrole: een promptgebruik zou de telling doen kantelen.
+  const gemuteerd = ROUTE + "\nconst promptblok = `Intentie: ${juridischeIntentie.intentie}`;";
+  assert.notEqual(aantal(gemuteerd, "juridischeIntentie"), 1 + alsAuditwaarde + naarContract);
 });
 
-test("R2-A4 — OBSERVE-ONLY: geen retrieval-, prompt- of bronkaartmodule kent de classifier", () => {
-  // Alleen de chatroute roept de classifier aan; de retrievalkern kent hooguit
-  // het TYPE (RetrievalMeta.invoer). Selectie, ranking, promptopbouw en
-  // bronweergave kunnen er daardoor niet op sturen.
+test("R2-A4 — geen retrieval-, prompt- of bronkaartmodule roept de classifier zelf aan", () => {
+  // Alleen de chatroute roept de classifier aan (één keer per beurt). Sinds R-3
+  // kent de retrievallaag het TYPE en past zij de poort toe op de DOORGEGEVEN
+  // uitkomst, maar berekent haar nooit opnieuw; promptopbouw en bronweergave
+  // kennen haar niet.
   const nietAanroepen = [
     ["core", "lib", "rag.ts"],
     ["core", "lib", "generatie-kern.ts"],

@@ -555,10 +555,11 @@ export interface DocumentChunk {
     // review-verval-regel in handhaafFondsdiscipline (defense-in-depth náást de
     // T10-RPC-gate). Alleen de T10-RPC en de fallback-selects leveren dit.
     volgende_review?: string | null;
-    // Tranche 2B — soort stuk en bestandsformaat, UITSLUITEND voor de weergave
-    // (de documentlijst bij antwoordmodus `bronoverzicht`). Geen enkel retrieval-,
-    // rangschik- of filterpad leest deze velden. Gevuld door
-    // verrijkDocumentmetadata() ná retrieval; zie daar waarom niet via de select.
+    // Tranche 2B — soort stuk en bestandsformaat, oorspronkelijk UITSLUITEND voor
+    // de weergave. Sinds R-3 (#492) leest de centrale selectie `documenttype` +
+    // `wetsgeschiedenis_subtype` als juridisch bronbeleid (retrieval/juridisch-
+    // beleid.ts); geen filter- of RPC-pad leest ze. Gevuld door
+    // verrijkDocumentmetadata(); zie daar waarom niet via de select.
     documenttype?: string | null;
     wetsgeschiedenis_subtype?: string | null;
     dossiernummer?: string | null;
@@ -999,6 +1000,27 @@ export interface RetrievalMeta {
       quotum: number;
       dedup: number;
       budget: number;
+      // R-3 (#492) — uitsluitend aanwezig als een juridisch beleid is toegepast;
+      // anders blijft dit object byte-identiek aan vóór R-3.
+      juridisch_gedemoveerd?: number;
+      juridisch_uitgesloten?: number;
+    };
+    // R-3 (#492) — welk juridisch bronbeleid de selectie van DIT spoor stuurde.
+    // Alleen gezet als de poort openging (anders ontbreekt de sleutel en is het
+    // gedrag dat van `onbekend`). Gesloten enums en tellingen: geen vraagtekst,
+    // geen documentidentiteit. Subsleutel van het bestaande basisobject
+    // `selectie`, dat `meta_projectie()` als geheel doorlaat — migratievrij.
+    juridisch?: {
+      beleid:
+        | "geldend_recht"
+        | "bedoeling_totstandkoming"
+        | "geldend_recht_en_wetsgeschiedenis"
+        | "historische_peildatum";
+      poort: "juridisch_anker" | "zwak_anker_zonder_fondscontext" | "vertrouwen_zeker";
+      kandidaten: { wetgeving: number; wetsgeschiedenis: number };
+      geselecteerd: { wetgeving: number; wetsgeschiedenis: number };
+      gedemoveerd: number;
+      uitgesloten: number;
     };
   };
   // De kandidatenset vóór selectie: per kandidaat de bron-identiteit + rang en of
@@ -1009,7 +1031,14 @@ export interface RetrievalMeta {
     bibliotheek: string;
     rang: number | null;
     status: "geselecteerd" | "afgevallen";
-    reden?: "weging" | "zwak_generiek" | "quotum" | "dedup" | "budget";
+    reden?:
+      | "weging"
+      | "zwak_generiek"
+      | "quotum"
+      | "dedup"
+      | "budget"
+      | "juridisch_gedemoveerd"
+      | "juridisch_uitgesloten";
   }[];
   // P2 Deel B — "een document doorgronden": de parameters van de samengestelde
   // instructie volledig in het auditspoor (B6 / criterium 13). De zichtbare
@@ -2478,9 +2507,11 @@ export async function verrijkNotulenChunks(
 //  het eigen fonds komt niet terug en het veld blijft leeg — nooit een lek,
 //  nooit een gebroken kaart.
 //
-//  HARDE GRENS: deze velden zijn PURE DOORGEEFWAARDEN. Ze mogen niet worden
-//  gelezen door retrieval, ranking, filtering of promptopbouw. De functie draait
-//  ná handhaafFondsdiscipline en ná naVerwerking, en `maakContext()` bouwt de
+//  GRENS: deze velden zijn doorgeefwaarden voor weergave, prompt-/bronduiding
+//  (R-1) en — sinds R-3 (#492) — de juridische rol in de CENTRALE selectie
+//  (retrieval/juridisch-beleid.ts). Op het orkestratiepad draait deze functie in
+//  de adapterhook `verrijkKandidaten()`, dus vóór de toelatingspoort en vóór de
+//  selectie. Filtering en de zoek-RPC's lezen ze niet. `maakContext()` bouwt de
 //  modelcontext uit expliciet benoemde velden — het bronnen-array gaat nergens
 //  door JSON.stringify.
 // ============================================================================
