@@ -15,6 +15,7 @@
 import type { AdapterTellers, RetrievalFilters, RetrievalMeta, BronVerwijzing } from "../rag";
 import type { Actor, Taaktype } from "../ai-gateway/contract";
 import type { RetrievalModus } from "../vraagtype";
+import type { Artikelfocus } from "./artikelverwijzing";
 
 export type Bronsoort = "fonds" | "generiek" | "sharepoint" | "notulen" | "web";
 export type Retrievalstrategie = "gericht" | "volledig" | "vergelijk" | "bevroren";
@@ -122,6 +123,14 @@ export interface RetrievalQuery {
   maxContextTekens: number;
   /** Per-query hybride-stand; `undefined` = de fonds-/env-default. */
   hybrideAan?: boolean;
+  /**
+   * #500 — ALLEEN door de orkestratie gezet, achter de juridische poort
+   * (`bepaalArtikelfocus`), op sporen die het juridisch beleid dragen. Een
+   * adapter MAG hiermee exact gelabelde artikelpassages als extra kandidaten
+   * aanleveren, binnen zijn eigen filters; een adapter die het niet kent,
+   * negeert het. Ontbreekt het, dan is de query exact die van vóór #500.
+   */
+  artikelfocus?: Artikelfocus;
 }
 
 /** Twee gescheiden bewijzen met gescheiden tijdstippen — zie ontwerp §4.1. */
@@ -223,7 +232,14 @@ export interface Bronresultaat {
    * adapters heeft vastgesteld; die binding bestaat vandaag niet.
    */
   equivalentieClaim?: string;
-  locator: { pagina?: number | null; paragraaf?: string | null; mappad?: string; chunkIndex?: number };
+  locator: {
+    pagina?: number | null;
+    paragraaf?: string | null;
+    mappad?: string;
+    chunkIndex?: number;
+    /** #500 — structuurlabel, alleen als de adapter het voor een artikelvraag las. */
+    structuurLabel?: string | null;
+  };
   /** Geneutraliseerd en begrensd. */
   passage: string;
   status: {
