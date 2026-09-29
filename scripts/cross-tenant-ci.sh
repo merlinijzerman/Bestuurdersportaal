@@ -47,6 +47,9 @@ SQL_T6C="supabase/checks/2026_07_09_t6_generiek_readonly.sql"
 # Wetsgeschiedenis A-light foundation — juridische documenttypen alleen generiek,
 # wetsgeschiedenis altijd informatief, subtype/dossiernummer-combinaties.
 SQL_WG="supabase/checks/2026_09_23_wetsgeschiedenis_foundation.sql"
+# #500 — gericht artikelspoor: nieuwe exacte artikelpassages komen alleen binnen via
+# de bestaande zoek_chunks (zelfde filters, onder RLS); buurartikelen raken 150d niet.
+SQL_ART500="supabase/checks/2026_09_29_500_artikelspoor.sql"
 # #499 — generieke metadatawijziging op ≥ 1.000 chunks: RPC met functie-eigen
 # statement_timeout, trigger alleen bij waardewijziging, atomisch bij time-out/
 # statusovergang, consistente chunkmetadata; negatieve controle met oude trigger.
@@ -347,6 +350,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T6C"
 echo
 echo "-- Wetsgeschiedenis A-light (juridische typen generiek-only, MvT/amendement informatief) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_WG"
+echo
+echo "-- #500 artikelspoor (toelating via bestaande zoek_chunks, onder RLS) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ART500"
 echo
 echo "-- #499 (generieke metadatawijziging op 1.000 chunks: budget, atomisch, consistent) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"

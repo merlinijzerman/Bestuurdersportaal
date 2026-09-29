@@ -43,6 +43,14 @@ export interface SelectieBron {
    */
   documenttype?: string | null;
   wetsgeschiedenisSubtype?: string | null;
+  /**
+   * #500 — het structuurlabel van de passage ("Artikelsgewijze toelichting —
+   * Artikel 150d"), alleen gezet als de adapter het bij een artikelvraag heeft
+   * opgehaald. Voedt uitsluitend de exacte-artikelboost.
+   */
+  structuurLabel?: string | null;
+  /** #500 — de kandidaat kwam binnen via het gerichte artikelspoor van de adapter. */
+  artikelspoor?: boolean;
 }
 import { weegBronsoort, constraintsVoorProfiel } from "../weeg-bronsoort";
 import { weegRegime, isExternKaderVoorFonds } from "../weeg-regime";
@@ -59,6 +67,7 @@ import {
   juridischeRolVan,
   type JuridischBeleidsbesluit,
 } from "./juridisch-beleid";
+import { boostArtikelpassages, type ArtikelBoost, type Artikelfocus } from "./artikelverwijzing";
 
 // Verplaatst uit rag.ts: de enige aanroeper was weegEnSelecteer hieronder.
 function filterZwakkeGeneriek(
@@ -101,7 +110,8 @@ function juridischeDiagnostiek(
   besluit: JuridischBeleidsbesluit,
   kandidaten: SelectieBron[],
   gekozen: Set<SelectieBron>,
-  herordening: { uitgesloten: SelectieBron[]; gedemoveerd: Set<SelectieBron> }
+  herordening: { uitgesloten: SelectieBron[]; gedemoveerd: Set<SelectieBron> },
+  artikel: { focus: Artikelfocus; boost: ArtikelBoost<SelectieBron> } | null
 ): JuridischeSelectiediagnostiek {
   const perRol = (lijst: SelectieBron[]) => {
     const t = { wetgeving: 0, wetsgeschiedenis: 0 };
@@ -119,6 +129,19 @@ function juridischeDiagnostiek(
     geselecteerd: perRol(kandidaten.filter((c) => gekozen.has(c))),
     gedemoveerd: herordening.gedemoveerd.size,
     uitgesloten: herordening.uitgesloten.length,
+    // #500 — alleen bij een artikelfocus; tellingen en een vlag, geen nummer of tekst.
+    ...(artikel
+      ? {
+          artikel: {
+            verwijzingen: artikel.focus.artikelen.length,
+            wet_genoemd: artikel.focus.wet !== null,
+            exact: artikel.boost.exact.length,
+            geboost: artikel.boost.geboost.length,
+            geboost_geselecteerd: artikel.boost.geboost.filter((c) => gekozen.has(c)).length,
+            via_artikelspoor: kandidaten.filter((c) => c.artikelspoor === true).length,
+          },
+        }
+      : {}),
   };
 }
 
@@ -129,7 +152,8 @@ function weegEnSelecteer(
   maxPerDoc: number,
   constraintsAan: boolean,
   regimeAan: boolean,
-  juridisch: JuridischBeleidsbesluit | null = null
+  juridisch: JuridischBeleidsbesluit | null = null,
+  artikelfocus: Artikelfocus | null = null
 ): { chunks: SelectieBron[]; diagnostiek: SelectieDiagnostiek } {
   const profiel = filters?.bronsoortprofiel;
   const libVan = (c: SelectieBron) => c.bibliotheek;
@@ -158,12 +182,37 @@ function weegEnSelecteer(
   // door het regime gedemoveerde bron (PW↔Wvb) is voor dit beleid VAST en houdt
   // zijn plek onderaan; het beleid kan de regimeweging dus niet omzeilen.
   // Zonder beleid (`null`, ook bij een dichte poort) is dit exact de oude stap.
+  const vastDoorRegime = (c: SelectieBron) =>
+    regimeDemoveert && isExternKaderVoorFonds(c.wettelijkRegime, filters?.primairRegime);
+  // #500 — exacte artikelpassage: bij een expliciet artikel (poort in
+  // `bepaalArtikelfocus`) gaat per document de exact gelabelde juridische
+  // passage vooraan, VÓÓR het juridisch beleid. Dat beleid bepaalt daarna de
+  // rollen: bij een normvraag blijft wetsgeschiedenis achter de wet; bij een
+  // bedoelingsvraag landt de exacte toelichting in de kop. Regime-gedemoveerde
+  // bronnen blijven vast. Zonder focus of exacte kandidaat: dezelfde array.
+  const artikelBoost =
+    juridisch && artikelfocus
+      ? boostArtikelpassages(
+          regimeGewogen,
+          artikelfocus,
+          (c) => ({
+            documentId: c.document_id,
+            documenttype: c.documenttype,
+            wetsgeschiedenisSubtype: c.wetsgeschiedenisSubtype,
+            structuurLabel: c.structuurLabel,
+            tekst: c.tekst,
+            titel: c.titel,
+            wettelijkRegime: c.wettelijkRegime,
+          }),
+          vastDoorRegime
+        )
+      : null;
   const herordening = juridisch
     ? herordenJuridisch(
-        regimeGewogen,
+        artikelBoost ? artikelBoost.volgorde : regimeGewogen,
         (c) => juridischeRolVan(c.documenttype, c.wetsgeschiedenisSubtype),
         juridisch.beleid,
-        (c) => regimeDemoveert && isExternKaderVoorFonds(c.wettelijkRegime, filters?.primairRegime)
+        vastDoorRegime
       )
     : null;
   const gewogen = herordening ? herordening.volgorde : regimeGewogen;
@@ -257,7 +306,15 @@ function weegEnSelecteer(
         geselecteerd_per_bibliotheek: perBib,
         afgevallen_telling: telling,
         ...(juridisch && herordening
-          ? { juridisch: juridischeDiagnostiek(juridisch, gerangschikt, gekozenSet, herordening) }
+          ? {
+              juridisch: juridischeDiagnostiek(
+                juridisch,
+                gerangschikt,
+                gekozenSet,
+                herordening,
+                artikelfocus && artikelBoost ? { focus: artikelfocus, boost: artikelBoost } : null
+              ),
+            }
           : {}),
       },
       selectie_kandidaten: kandidaten,
@@ -307,6 +364,11 @@ export async function selecteerEnVerrijk(
      * dan is de selectie exact die van vóór R-3.
      */
     juridischeIntentie?: JuridischeVraagintentieResultaat | null;
+    /**
+     * #500 — de artikelfocus van dit spoor (`bepaalArtikelfocus`, dezelfde poort).
+     * Ontbreekt zij, dan is de selectie exact die van vóór #500.
+     */
+    artikelfocus?: Artikelfocus | null;
   }
 ): Promise<{ chunks: SelectieBron[]; extra: Partial<RetrievalMeta> }> {
   const extra: Partial<RetrievalMeta> = {};
@@ -326,7 +388,8 @@ export async function selecteerEnVerrijk(
     maxPerDoc,
     opties.representatieConstraints,
     opties.regimeWeging,
-    bepaalJuridischBeleid(opties.juridischeIntentie)
+    bepaalJuridischBeleid(opties.juridischeIntentie),
+    opties.artikelfocus ?? null
   );
   let geselecteerd = sel.chunks;
   extra.selectie = sel.diagnostiek.selectie;

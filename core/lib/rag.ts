@@ -68,6 +68,7 @@ function bouwMeta(methode: RetrievalMeta["methode"], opgehaald: number, geselect
 import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
 import { bouwCitaties } from "./retrieval/citatie";
 import type { Bronresultaat } from "./retrieval/contract";
+import { artikelFrasequery, artikelmatch, type Artikelfocus } from "./retrieval/artikelverwijzing";
 export type { SelectieAfvalReden, SelectieDiagnostiek } from "./retrieval/selectie";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
@@ -526,6 +527,14 @@ export interface DocumentChunk {
   // een fragment kwam en of een arm dood was.
   fts_rang?: number | null;
   vec_rang?: number | null;
+  /**
+   * #500 — adapterprivaat, alleen gezet door `vulAanMetArtikelkandidaten` bij een
+   * vraag met een expliciet artikel: het structuurlabel van een exact passende
+   * passage en of zij via het gerichte artikelspoor binnenkwam. De zoek-RPC's
+   * leveren het label niet; op alle andere paden blijven beide velden weg.
+   */
+  structuur_label?: string | null;
+  artikelspoor?: boolean;
   documenten: {
     titel: string;
     bron: string;
@@ -1021,6 +1030,16 @@ export interface RetrievalMeta {
       geselecteerd: { wetgeving: number; wetsgeschiedenis: number };
       gedemoveerd: number;
       uitgesloten: number;
+      // #500 — alleen bij een expliciet artikel achter dezelfde poort. Tellingen
+      // en een vlag; het artikelnummer zelf en de vraagtekst komen er niet in.
+      artikel?: {
+        verwijzingen: number;
+        wet_genoemd: boolean;
+        exact: number;
+        geboost: number;
+        geboost_geselecteerd: number;
+        via_artikelspoor: number;
+      };
     };
   };
   // De kandidatenset vóór selectie: per kandidaat de bron-identiteit + rang en of
@@ -1403,6 +1422,166 @@ export function maakHybrideRpc(
     }
     return Array.isArray(data) ? (data as ZoekChunkRij[]).map(rijNaarChunk) : [];
   };
+}
+
+// ── #500 — Gericht artikelspoor (Supabase) ──────────────────────────────────
+// WAAR DE PASSAGE WEGVIEL. De exact gelabelde artikelsgewijze toelichting
+// (MvT Wtp p. 395, "Artikelsgewijze toelichting — Artikel 150d") kwam niet in
+// de KANDIDATENSET van `zoek_chunks_hybride`: de strikte FTS-arm eist alle
+// inhoudswoorden van de vraag in één chunk ('bedoel' & 'wetgever' & 'artikel'
+// & '150d' & 'pensioenwet'; de artikelpassage bevat 'bedoel'/'wetgever' niet),
+// en de vectorarm (top-`p_kandidaten` = 40 over alle chunks, 2.738 uit
+// hetzelfde document) is niet gevoelig voor een artikelnummer. Daarna kapt
+// `p_limit` (= kandidatenpool, 30) de fusie af. Een boost in de selectie kan
+// een kandidaat die nooit binnenkwam niet redden — dus dit spoor.
+//
+// ONTWERP (geen migratie, geen RPC-wijziging):
+//   1. Een smalle opzoeking onder RLS (anon-client) naar passages van een
+//      JURIDISCH document (documenttype wetgeving/wetsgeschiedenis, via de
+//      documentrij zelf, niet de denormalisatie) waarvan het structuurlabel of
+//      de tekstbegin EXACT het artikel noemt (regex met woordgrens, zie
+//      `artikelOpzoekfilter`). Het pure predicaat `artikelmatch` controleert
+//      daarna nog eens.
+//   2. TOELATING van nieuwe passages uitsluitend via de BESTAANDE `zoek_chunks`
+//      met hetzelfde filterblok als elk ander spoor (`rpcFilterParams` +
+//      `p_fonds_id` + documentscope) en een frasequery op het artikel. Wat die
+//      RPC niet teruggeeft (ander fonds, niet gepubliceerd, gearchiveerd,
+//      buiten modus/peildatum, verlopen review, andere bronsoort, buiten
+//      scope), komt er niet in. Daarna nog de app-guard
+//      `handhaafFondsdiscipline`. Normgewicht en regime worden daarna, net als
+//      voor elke kandidaat, centraal in de selectie gewogen.
+//   3. Samenvoegen binnen `maxKandidaten`: nieuwe exacte passages vervangen de
+//      zwakste niet-exacte kandidaten aan de staart, zodat de orkestratie ze
+//      niet weer afkapt. Bestaande kandidaten die exact passen krijgen hun
+//      label mee, zodat de centrale selectie ze kan boosten.
+// Fail-open: faalt de opzoeking of de toelating, dan blijft de kandidatenset
+// ongewijzigd (een afbreking gaat wél door). Rerank en drempel zijn al gedaan;
+// een exacte structuurtreffer omzeilt die bewust — het artikelnummer in de
+// vraag is sterker bewijs dan een relevantiescore.
+// Grenzen: hooguit `ARTIKEL_OPZOEK_MAX` aanwijzingen en `ARTIKEL_TOELATING_MAX`
+// fraseresultaten binnen de aangewezen documenten.
+export const ARTIKEL_OPZOEK_MAX = 50;
+export const ARTIKEL_TOELATING_MAX = 200;
+const JURIDISCHE_DOCUMENTTYPEN = ["wetgeving", "wetsgeschiedenis"] as const;
+
+interface ArtikelAanwijzingRij {
+  id: string;
+  document_id: string;
+  tekst: string;
+  structuur_label: string | null;
+}
+
+/**
+ * PostgREST-`or` op het label of de tekstbegin, EXACT in de database: `imatch`
+ * (POSIX `~*`) met een woordgrens vóór "artikel" en ná het nummer. Een
+ * prefix-`ilike` ("artikel 15*") zou ook 150, 150a–z, 151–159 en 1500 treffen;
+ * omdat alle chunks van één structuur-unit hetzelfde label dragen, konden dan
+ * tientallen niet-exacte chunks de exacte passage uit de `limit` drukken vóórdat
+ * `artikelmatch()` filtert (reviewpunt PR #501). `artikelmatch()` blijft de
+ * tweede grens. Nummers zijn al beperkt tot [0-9a-z]; de patronen staan tussen
+ * aanhalingstekens vanwege `(`, `)`, `|` en `,`, en bevatten bewust geen
+ * backslash (`[.]` in plaats van `\.`) zodat PostgREST niets hoeft te ontsnappen.
+ */
+export function artikelOpzoekfilter(focus: Pick<Artikelfocus, "artikelen">): string {
+  return focus.artikelen
+    .flatMap((n) => [
+      `structuur_label.imatch."(^|[^a-z])artikel +${n}([^0-9a-z]|$)"`,
+      `tekst.imatch."^(artikel|art[.]?) +${n}([^0-9a-z]|$)"`,
+    ])
+    .join(",");
+}
+
+export async function vulAanMetArtikelkandidaten(
+  bestaand: DocumentChunk[],
+  opdracht: {
+    focus: Artikelfocus;
+    fondsId: string | null;
+    scope?: string[] | null;
+    filters?: RetrievalFilters;
+    maxKandidaten: number;
+    signal?: AbortSignal;
+    supabase?: { from: (tabel: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any };
+  }
+): Promise<DocumentChunk[]> {
+  const fondsFilter = opdracht.fondsId && opdracht.fondsId.length > 0 ? opdracht.fondsId : null;
+  const scope = opdracht.scope && opdracht.scope.length > 0 ? opdracht.scope : null;
+  try {
+    const supabase = opdracht.supabase ?? (await createServerSupabase());
+    let q = supabase
+      .from("document_chunks")
+      .select("id, document_id, tekst, structuur_label, documenten!inner(documenttype)")
+      .in("documenten.documenttype", [...JURIDISCHE_DOCUMENTTYPEN])
+      .or(artikelOpzoekfilter(opdracht.focus));
+    if (scope) q = q.in("document_id", scope);
+    q = q.order("document_id", { ascending: true }).order("chunk_index", { ascending: true }).limit(ARTIKEL_OPZOEK_MAX);
+    const { data, error } = await metSignaal(q, opdracht.signal);
+    bewaakNaIO(opdracht.signal, error);
+    if (error || !Array.isArray(data)) {
+      if (error) console.error("[rag] artikelspoor: opzoeking mislukt — kandidaten ongewijzigd:", error);
+      return bestaand;
+    }
+    const exact = new Map<string, ArtikelAanwijzingRij>();
+    for (const r of data as ArtikelAanwijzingRij[]) {
+      if (artikelmatch(opdracht.focus, { structuurLabel: r.structuur_label, tekst: r.tekst })) exact.set(r.id, r);
+    }
+    if (exact.size === 0) return bestaand;
+
+    for (const c of bestaand) {
+      const r = exact.get(c.id);
+      if (r) c.structuur_label = r.structuur_label;
+    }
+    const bekend = new Set(bestaand.map((c) => c.id));
+    const nieuw = [...exact.values()].filter((r) => !bekend.has(r.id));
+    if (nieuw.length === 0) return bestaand;
+
+    // Toelating: DEZELFDE RPC en hetzelfde filterblok als het hoofdspoor.
+    const { data: rijen, error: rpcFout } = await metSignaal(
+      supabase.rpc("zoek_chunks", {
+        p_query: artikelFrasequery(opdracht.focus),
+        p_limit: ARTIKEL_TOELATING_MAX,
+        p_document_ids: [...new Set(nieuw.map((r) => r.document_id))].sort(),
+        ...rpcFilterParams(opdracht.filters),
+        p_fonds_id: fondsFilter,
+      }),
+      opdracht.signal
+    );
+    bewaakNaIO(opdracht.signal, rpcFout);
+    if (rpcFout || !Array.isArray(rijen)) {
+      if (rpcFout) console.error("[rag] artikelspoor: toelating mislukt — kandidaten ongewijzigd:", rpcFout);
+      return bestaand;
+    }
+    const nieuwPerId = new Map(nieuw.map((r) => [r.id, r]));
+    const gerangschikt = (rijen as ZoekChunkRij[]).map(rijNaarChunk).filter((c) => nieuwPerId.has(c.id));
+    const bewaakt = handhaafFondsdiscipline(
+      gerangschikt,
+      fondsFilter,
+      effectievePeildatum(opdracht.filters),
+      opdracht.filters?.modus
+    ).chunks;
+    if (bewaakt.length === 0) return bestaand;
+    for (const c of bewaakt) {
+      c.structuur_label = nieuwPerId.get(c.id)?.structuur_label ?? null;
+      c.artikelspoor = true;
+    }
+
+    // Binnen de kandidatenpool blijven: de zwakste NIET-exacte kandidaten
+    // (van achteren) maken plaats. Exacte kandidaten worden nooit verdrongen.
+    const toegevoegd = bewaakt.slice(0, Math.max(opdracht.maxKandidaten, 0));
+    let teVeel = bestaand.length + toegevoegd.length - opdracht.maxKandidaten;
+    const behouden = [...bestaand];
+    for (let i = behouden.length - 1; i >= 0 && teVeel > 0; i--) {
+      if (!exact.has(behouden[i].id)) {
+        behouden.splice(i, 1);
+        teVeel--;
+      }
+    }
+    return [...behouden, ...toegevoegd];
+  } catch (e) {
+    if (isAfbreking(e)) throw e;
+    bewaakNaIO(opdracht.signal, e);
+    console.error("[rag] artikelspoor mislukt — kandidaten ongewijzigd:", e);
+    return bestaand;
+  }
 }
 
 export interface HybrideDeps {
@@ -2051,7 +2230,13 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       : d.documentdatum
       ? { soort: "status-datum" as const, waarde: d.documentdatum, gecontroleerdOp: null }
       : { soort: "onbekend" as const, waarde: null, gecontroleerdOp: null },
-    locator: { pagina: chunk.pagina, paragraaf: chunk.paragraaf, chunkIndex: chunk.chunk_index },
+    locator: {
+      pagina: chunk.pagina,
+      paragraaf: chunk.paragraaf,
+      chunkIndex: chunk.chunk_index,
+      // #500 — alleen aanwezig als het artikelspoor het label ophaalde.
+      ...(chunk.structuur_label !== undefined ? { structuurLabel: chunk.structuur_label } : {}),
+    },
     passage: chunk.tekst,
     status: {
       documentstatus: d.documentstatus ?? null,
@@ -2059,7 +2244,13 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       geldigTot: d.geldig_tot ?? null,
       actueel: (d.documentstatus ?? null) === "van_kracht",
     },
-    rang: { positie, score: chunk.rang ?? null, fts: chunk.fts_rang ?? null, vec: chunk.vec_rang ?? null },
+    rang: {
+      positie,
+      score: chunk.rang ?? null,
+      fts: chunk.fts_rang ?? null,
+      vec: chunk.vec_rang ?? null,
+      ...(chunk.artikelspoor ? { poging: "artikelspoor" } : {}),
+    },
     curatie: { normgewicht: d.normgewicht ?? null, wettelijkRegime: d.wettelijk_regime ?? null },
     weergave: {
       bronorganisatie: d.bronorganisatie ?? null,

@@ -267,6 +267,7 @@
           "chunkAlsBronresultaat",
           "verrijkDocumentmetadata",
           "verrijkNotulenChunks",
+          "vulAanMetArtikelkandidaten",
           "zoekRelevanteChunksMetMeta"
         ],
         "parent-context": [
