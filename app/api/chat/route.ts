@@ -91,7 +91,7 @@ import {
   type RequirementRij,
   type BewijsRij,
 } from "@/core/lib/module-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, isOpsteltaak, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, isOpsteltaak, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, bepaalJuridischeVraagintentie, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
 import { getPortaalContext } from "@/core/lib/portaalcontext";
 import { bouwPortaalstandBlok } from "@/core/lib/portaalstand-blok";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
@@ -1308,6 +1308,15 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         ? vraagContext.effectieveVraag
         : vraag;
 
+    // Wetsgeschiedenis A-light R-2 (#491) — juridische vraagintentie, OBSERVE-ONLY.
+    // Exact één keer per beurt, op de EFFECTIEVE vraag (ná de contextresolver),
+    // zodat een opgeloste vervolgvraag dezelfde intentie krijgt als de direct
+    // gestelde vraag. Stuurt in deze tranche niets: geen filter, ranking,
+    // selectie, promptblok, bronkaart of antwoordtekst. Wordt uitsluitend
+    // inhoudsarm vastgelegd onder `retrieval_meta.invoer.juridische_intentie`.
+    // R-3 (#492) sluit voor routing/ranking aan op deze ene variabele.
+    const juridischeIntentie = bepaalJuridischeVraagintentie(effectieveVraag);
+
     // M3 — een letterlijk genoemd document mag alleen automatisch scope worden
     // als precies één actief/geïndexeerd/toegankelijk document onder RLS past.
     // Bij meerdere kandidaten vragen we gericht te kiezen; nooit gokken.
@@ -2503,9 +2512,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 // Plateau 1 — een contextresolver-call kan vóór deze vroege return
                 // hebben gedraaid; leg de telemetrie vast zodat hij niet stil buiten
                 // het auditspoor valt.
-                ...(vraagContext
-                  ? { invoer: { context: contextTelemetrie(vraagContext, contextModus) } }
-                  : {}),
+                invoer: {
+                  ...(vraagContext
+                    ? { context: contextTelemetrie(vraagContext, contextModus) }
+                    : {}),
+                  // R-2 (#491) — observe-only, inhoudsarm.
+                  juridische_intentie: juridischeIntentie,
+                },
               },
               p_retrieval_meta_inhoud:
                 vraagContext && vraagContext.kandidaatVraag.trim() !== vraag.trim()
@@ -2562,6 +2575,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 ...(vraagContext
                   ? { context: contextTelemetrie(vraagContext, contextModus) }
                   : {}),
+                // R-2 (#491) — observe-only, inhoudsarm.
+                juridische_intentie: juridischeIntentie,
               },
             },
             p_retrieval_meta_inhoud:
@@ -2642,6 +2657,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 ...(vraagContext
                   ? { context: contextTelemetrie(vraagContext, contextModus) }
                   : {}),
+                // R-2 (#491) — observe-only, inhoudsarm.
+                juridische_intentie: juridischeIntentie,
               },
             },
             // Deze tak kent geen retrieval; alleen de eventuele resolver-kandidaatvraag
@@ -4895,6 +4912,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               vraagContext.kandidaatVraag.trim() !== vraag.trim()
                 ? { context_kandidaat_vraag: vraagContext.kandidaatVraag }
                 : {}),
+              // Wetsgeschiedenis A-light R-2 (#491) — juridische vraagintentie
+              // van de effectieve vraag. Gesloten enums, geen vraagtekst;
+              // observe-only (stuurt niets). Basisniveau via `invoer`, migratievrij.
+              juridische_intentie: juridischeIntentie,
             },
             ...(contextGeneutraliseerd > 0
               ? { context_geneutraliseerd: contextGeneutraliseerd }

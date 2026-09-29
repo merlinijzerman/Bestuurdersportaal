@@ -13,7 +13,7 @@ import { isAfbreking, bewaakNaIO } from "./retrieval/afbreken";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
-import type { RetrievalModus } from "./vraagtype";
+import type { RetrievalModus, JuridischeVraagintentieResultaat } from "./vraagtype";
 import {
   weegBronsoort,
   constraintsVoorProfiel,
@@ -1108,6 +1108,13 @@ export interface RetrievalMeta {
     // providercall). Bewust onder `invoer` zodat het migratievrij op basisniveau
     // blijft (geen wijziging aan de SQL-projecties).
     geen_generatiecall?: boolean;
+    // Wetsgeschiedenis A-light R-2 (#491) — juridische vraagintentie van de
+    // EFFECTIEVE vraag: gesloten enums (intentie, vertrouwen, signaalcategorieën),
+    // geen vraagtekst. Observe-only: stuurt niets. Bewust onder `invoer` (basis,
+    // niet genoemd in SUB_NIVEAUS.invoer) zodat het migratievrij door
+    // `meta_projectie()` op beide leesniveaus zichtbaar blijft — net als
+    // `geen_generatiecall`. R-3 (#492) mag hierop aansluiten.
+    juridische_intentie?: JuridischeVraagintentieResultaat;
   };
   // H-10 (review 2026-07-30) — hoeveel bronlabel-achtige patronen zijn
   // geneutraliseerd in de chunktekst vóórdat die de prompt in ging. >0 betekent

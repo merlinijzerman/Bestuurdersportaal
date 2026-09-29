@@ -1159,3 +1159,254 @@ export function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
     ? (ruw as Antwoordmodus)
     : null;
 }
+
+// ============================================================================
+// Wetsgeschiedenis A-light R-2 (#491) — JURIDISCHE VRAAGINTENTIE, observe-only
+// ----------------------------------------------------------------------------
+// Herkent of een vraag gaat over geldend recht, over de bedoeling/totstand-
+// koming van een wetsbepaling (wetsgeschiedenis), over beide, of over een
+// historische peildatum. Pure, deterministische NL-heuristiek met vaste
+// patronen, géén modelcall — net als bepaalBronIntent hierboven.
+//
+// OBSERVE-ONLY. In deze tranche stuurt de uitkomst NIETS: geen filter, ranking,
+// selectie, promptblok, bronkaart of antwoordtekst. De chatroute berekent de
+// intentie exact één keer per beurt op de EFFECTIEVE vraag en legt haar
+// inhoudsarm vast onder `retrieval_meta.invoer.juridische_intentie` (gesloten
+// enums, geen vraagtekst). Routing/ranking volgt pas in R-3 (#492).
+//
+// Kernkeuzes (navolgbaar, elk patroon is een expliciete keuze):
+//   • Een STERK juridisch anker (wet-/regelgevingsnaam, wetgever, wettelijk,
+//     een parlementair stuk) maakt de vraag juridisch, ook met fondscontext.
+//   • Een ZWAK anker ("artikel 5", "de wet") telt alleen zonder fonds-/
+//     document-/procedurecontext: "artikel 5 van ons reglement" is geen wet.
+//   • Losse woorden als "toelichten", "geldt" of "vergelijk" maken een vraag
+//     nooit zelfstandig juridisch. "Toelichting" telt alleen als parlementair
+//     stuk (memorie/nota van toelichting) of als toelichting bij een wet(sartikel).
+//   • Een historische peildatum ("wat gold op 1 januari 2022?") is apart
+//     herkenbaar. De actuele wet wordt hier niet als historisch antwoord
+//     gepresenteerd; dat is uitdrukkelijk later werk.
+//   • De onzekere fallback is `onbekend` — nooit stil een juridische intentie.
+// ============================================================================
+
+/** De juridische intentie van een vraag (R-2, #491). */
+export type JuridischeVraagintentie =
+  | "geldend_recht"
+  | "bedoeling_totstandkoming"
+  | "geldend_recht_en_wetsgeschiedenis"
+  | "historische_peildatum"
+  | "onbekend";
+
+export const JURIDISCHE_VRAAGINTENTIES: readonly JuridischeVraagintentie[] = [
+  "geldend_recht",
+  "bedoeling_totstandkoming",
+  "geldend_recht_en_wetsgeschiedenis",
+  "historische_peildatum",
+  "onbekend",
+];
+
+/**
+ * Gesloten signaalcategorieën die de uitkomst uitleggen. Bewust categorieën en
+ * géén gematchte tekst: ze mogen inhoudsarm in het auditspoor.
+ */
+export type JuridischSignaal =
+  | "juridisch_anker"
+  | "zwak_anker"
+  | "wetsgeschiedenisbron"
+  | "bedoeling"
+  | "normvraag"
+  | "normonderwerp"
+  | "peildatum"
+  | "datum"
+  | "fondscontext";
+
+export interface JuridischeVraagintentieResultaat {
+  intentie: JuridischeVraagintentie;
+  vertrouwen: Vertrouwen;
+  /** Welke signaalcategorieën vuurden, in vaste volgorde. */
+  signalen: JuridischSignaal[];
+}
+
+// STERK anker: expliciete wet- en regelgeving of de wetgever zelf.
+const JURIDISCH_ANKER_STERK: RegExp[] = [
+  /\bwet(ten)?\b/,
+  /\bwettelijk/,
+  /\bwetgev/, // wetgever, wetgeving
+  /\bwets(artikel|bepaling|tekst|wijziging|historie)/,
+  /pensioenwet/,
+  /\bwvb\b/,
+  /wet verplichte beroepspensioenregeling/,
+  /\bwtp\b/,
+  /wet toekomst pensioenen/,
+  /\bregelgeving\b/,
+  /\bamvb\b/,
+  /algemene maatregel van bestuur/,
+  /besluit toekomst pensioenen/,
+  /\bstaatsblad\b/,
+  /\bstb\.? ?\d{4}/,
+  /\bgeldend(e)? recht\b/,
+];
+
+// ZWAK anker: een artikelverwijzing kan evengoed een reglement of statuten
+// betreffen. Telt alleen zonder fonds-/document-/procedurecontext.
+const JURIDISCH_ANKER_ZWAK: RegExp[] = [
+  /\bartikel(en)? \d/,
+  /\bart\. ?\d/,
+];
+
+// Parlementaire stukken = wetsgeschiedenis. Zelfstandig juridisch én een
+// bedoelingssignaal. "toelichten"/"de toelichting" alléén telt hier NIET.
+const WETSGESCHIEDENIS_BRON: RegExp[] = [
+  /\bmemorie(s)? van (toelichting|antwoord)/,
+  /\bnadere memorie/,
+  /\bmvt\b/,
+  /\bmva\b/,
+  /\bnota('s|s)? van (toelichting|wijziging)/,
+  /\bnota('s|s)? naar aanleiding van het (nader )?verslag/,
+  /\bamendement(en)?\b/,
+  /\bkamerstuk(ken)?\b/,
+  /\bwetsvoorstel(len)?\b/,
+  /\bwetsgeschiedenis\b/,
+  /\bparlementaire (geschiedenis|behandeling|stukken)/,
+  /\btoelichting (bij|op) (de |het )?(wet|artikel|wetsartikel|pensioenwet|wvb|wtp|bepaling)/,
+];
+
+// Bedoeling/totstandkoming. Telt alleen samen met een juridisch anker (anders
+// is "waarom heeft het bestuur dit zo geformuleerd?" ook een treffer).
+const BEDOELING_PATRONEN: RegExp[] = [
+  /\bbedoeling\b/,
+  /\bbeoogd/,
+  /\bbeoogde\b/,
+  /\bratio\b/,
+  /\btotstandkoming\b/,
+  /\btot stand (gekomen|gebracht|kwam|komen)\b/,
+  /\bachtergrond\b/,
+  /\bwetgever\b[^?.!]*\b(gekozen|koos|kiest|bedoeld|bedoelde|beoogt|beoogde|voor ogen|wilde|gewild|vormgegeven|geformuleerd|ingevoerd|opgenomen)\b/,
+  /\bwaarom\b[^?.!]*\bwetgever\b/,
+  /\bwaarom\b[^?.!]*\b(geformuleerd|vormgegeven|ingevoerd|opgenomen|gekozen|geschrapt|gewijzigd|aangepast)\b/,
+];
+
+// Normvraag: vraagvormen naar wat nu geldt of is voorgeschreven. Een kaal
+// "geldt" telt niet — alleen "wat/welke … geldt/gelden".
+const NORMVRAAG_PATRONEN: RegExp[] = [
+  /\bwat (bepaalt|bepalen|regelt|regelen|vereist|vereisen)\b/,
+  /\bwat (zegt|zeggen|staat (er )?in) (de |het )?(wet|artikel|wetsartikel|pensioenwet|wvb|wtp|regelgeving|wettekst|bepaling)/,
+  /\b(wat|welke?)\b[^?.!]*\bgeld(t|en)\b/,
+  /\bgeldend(e)? recht\b/,
+  /\bis (het|dat|dit) (wettelijk )?(verplicht|toegestaan|verboden)\b/,
+  /\b(mag|mogen|moet|moeten) (een |het |de )?(pensioen)?(fonds|fondsen|bestuur|werkgever|deelnemer)/,
+  /\bschrijft\b[^?.!]*\bvoor\b/,
+  /\bwettelijke (termijn|eis|eisen|plicht|verplichting|norm|grens)/,
+];
+
+// Normonderwerp: maakt een ankerloze normvraag ("Welke termijn geldt voor …?")
+// voorzichtig juridisch. Zonder zo'n onderwerp blijft een ankerloze normvraag
+// `onbekend`.
+const NORMONDERWERP_PATRONEN: RegExp[] = [
+  /\btermijn(en)?\b/,
+  /\bverplichting(en)?\b/,
+  /\bplicht(en)?\b/,
+  /\beis(en)?\b/,
+  /\bvoorwaarde(n)?\b/,
+  /\bsanctie(s)?\b/,
+  /\bboete(s)?\b/,
+];
+
+// Historische peildatum — sterke signalen (verleden tijd van geldigheid).
+const PEILDATUM_STERK: RegExp[] = [
+  /\bgold(en)?\b/,
+  /\bluidde(n)?\b/,
+  /\b(was|waren) (toen |destijds )?van kracht\b/,
+  /\bvan kracht (was|waren)\b/,
+  /\bdestijds geldende?\b/,
+  /\btoen geldende?\b/,
+  /\b(oude|vorige|eerdere|vroegere|toenmalige) (wet|wettekst|pensioenwet|redactie)\b/,
+];
+
+// Zwakke peildatumsignalen: alleen met juridisch anker ÉN een expliciete datum.
+const PEILDATUM_ZWAK: RegExp[] = [/\b(bepaalde|bepaalden|regelde|regelden)\b/];
+
+const MAANDEN =
+  "januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december";
+const DATUM_PATRONEN: RegExp[] = [
+  new RegExp(`\\b\\d{1,2} (${MAANDEN}) (19|20)\\d{2}\\b`),
+  /\b\d{1,2}[-/]\d{1,2}[-/](19|20)\d{2}\b/,
+  /\b(in|per|op|voor|vanaf|tot) (19|20)\d{2}\b/,
+];
+
+// Fonds-/document-/procedurecontext: onderdrukt ZWAKKE ankers en ankerloze
+// norm-/peildatumvragen. Hergebruikt de fonds- en persoonlijke ankers van
+// bepaalBronIntent en voegt fondsstukken en procedures toe.
+const FONDSCONTEXT_PATRONEN: RegExp[] = [
+  ...FONDS_INTENT_PATRONEN,
+  ...PERSOONLIJK_INTENT_PATRONEN,
+  /reglement/,
+  /\bstatuten\b/,
+  /\bdocument(en)?\b/,
+  /\bstuk(ken)?\b/,
+  /\bprocedure/,
+  /beleid/,
+  /\babtn\b/,
+  /jaarverslag/,
+  /crisisplan/,
+  /beleggingsplan/,
+  /\bnotitie/,
+];
+
+/**
+ * Bepaal de juridische vraagintentie (R-2, #491), puur uit de (effectieve) vraag.
+ *
+ *   historische peildatum                  → "historische_peildatum"
+ *   bedoeling/wetsgeschiedenis + normvraag → "geldend_recht_en_wetsgeschiedenis" (zeker)
+ *   bedoeling/wetsgeschiedenis             → "bedoeling_totstandkoming"          (zeker)
+ *   juridisch anker + normvraag            → "geldend_recht"                     (zeker)
+ *   juridisch anker zonder normvraag       → "geldend_recht"                     (onzeker)
+ *   ankerloze normvraag met normonderwerp  → "geldend_recht"                     (onzeker)
+ *   anders                                 → "onbekend"                          (onzeker)
+ *
+ * Deterministisch; geen modelcall; geen I/O. Stuurt in R-2 niets aan.
+ */
+export function bepaalJuridischeVraagintentie(
+  vraag: string
+): JuridischeVraagintentieResultaat {
+  const g = normaliseer(vraag).replace(/\s+/g, " ");
+  const raakt = (lijst: RegExp[]) => lijst.some((p) => p.test(g));
+
+  const bron = raakt(WETSGESCHIEDENIS_BRON);
+  const sterk = raakt(JURIDISCH_ANKER_STERK) || bron;
+  const zwak = raakt(JURIDISCH_ANKER_ZWAK);
+  const fonds = raakt(FONDSCONTEXT_PATRONEN);
+  const juridisch = sterk || (zwak && !fonds);
+  const bedoelingWoord = raakt(BEDOELING_PATRONEN);
+  const bedoeling = bron || (bedoelingWoord && juridisch);
+  const norm = raakt(NORMVRAAG_PATRONEN);
+  const normonderwerp = raakt(NORMONDERWERP_PATRONEN);
+  const datum = raakt(DATUM_PATRONEN);
+  const peilSterk = raakt(PEILDATUM_STERK);
+  const peil =
+    (peilSterk && (sterk || !fonds)) ||
+    (!bron && juridisch && datum && raakt(PEILDATUM_ZWAK));
+
+  const signalen: JuridischSignaal[] = [];
+  if (sterk) signalen.push("juridisch_anker");
+  if (zwak) signalen.push("zwak_anker");
+  if (bron) signalen.push("wetsgeschiedenisbron");
+  if (bedoelingWoord && juridisch) signalen.push("bedoeling");
+  if (norm) signalen.push("normvraag");
+  if (normonderwerp) signalen.push("normonderwerp");
+  if (peilSterk || peil) signalen.push("peildatum");
+  if (datum) signalen.push("datum");
+  if (fonds) signalen.push("fondscontext");
+
+  const uit = (intentie: JuridischeVraagintentie, vertrouwen: Vertrouwen) => ({
+    intentie,
+    vertrouwen,
+    signalen,
+  });
+
+  if (peil) return uit("historische_peildatum", juridisch || datum ? "zeker" : "onzeker");
+  if (bedoeling && norm) return uit("geldend_recht_en_wetsgeschiedenis", "zeker");
+  if (bedoeling) return uit("bedoeling_totstandkoming", "zeker");
+  if (juridisch) return uit("geldend_recht", norm ? "zeker" : "onzeker");
+  if (norm && normonderwerp && !fonds) return uit("geldend_recht", "onzeker");
+  return uit("onbekend", "onzeker");
+}
