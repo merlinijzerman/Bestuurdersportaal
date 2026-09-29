@@ -203,7 +203,7 @@ Continuatiechunks van een lange artikeltoelichting (zelfde label, zonder de
 frase in tekst of contextprefix) worden niet via het spoor toegelaten; bij
 parent-retrieval haalt de structuur-unit ze alsnog mee.
 
-**Tests.** `tests/cross-tenant/retrieval-artikelpassage.test.ts` 20/20
+**Tests.** `tests/cross-tenant/retrieval-artikelpassage.test.ts` 21/21
 (herkenning, poort, match met buurartikelen 150/150c/150e/1500/15,
 bedoeling/norm/gecombineerd, regime/andere wet, fondsdocumenten, byte-identiteit,
 adapter met nep-client, eind-tot-eind orkestratie + Supabase-adapter met de
