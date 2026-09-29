@@ -38,7 +38,8 @@
       "core/lib/profielsturing.ts::profiel_expertises",
       "core/lib/profielsturing.ts::profiel_focusgebieden",
       "core/lib/profielsturing.ts::profiel_gremia",
-      "core/lib/profielsturing.ts::profielen"
+      "core/lib/profielsturing.ts::profielen",
+      "core/lib/vergelijk-productie.ts::documenten"
     ],
     "configuratie": [
       "app/api/chat/route.ts::profielen",
@@ -57,6 +58,7 @@
       "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_integratie_profielen",
       "core/lib/profiel.ts::profielen",
       "core/lib/vergelijk-productie.ts::concepts",
+      "core/lib/vergelijk-productie.ts::documenten",
       "core/lib/vergelijk-rollout.ts::fonds_feature_flags",
       "core/lib/web-whitelist-data.ts::bron_whitelist"
     ],
@@ -291,7 +293,8 @@
     },
     "core/lib/vergelijk-productie.ts": {
       "tabellen": [
-        "concepts"
+        "concepts",
+        "documenten"
       ]
     },
     "core/lib/vergelijk-rollout.ts": {

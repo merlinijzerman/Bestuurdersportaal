@@ -23,10 +23,17 @@ import { bewaakNaIO, isAfbreking } from "./retrieval/afbreken";
 import type { Bronresultaat, RetrievalAdapter, RetrievalContext, RetrievalUitkomst } from "./retrieval/contract";
 import { maakDocumentIdentiteit } from "./retrieval/identiteit";
 import { leesSemantischeEvidence, type SemantischeEvidenceWaarde } from "./retrieval/supabase-evidence";
+import {
+  fondsModelcontextRij,
+  generiekModelcontextRij,
+  leesModelcontext,
+  MODELCONTEXT_GEEN_GELDIGHEID,
+} from "./retrieval/modelcontext-reader";
 import type { EvidenceAudit, EvidenceItem } from "./retrieval/evidence-contract";
 import { bouwBronfragment } from "./bronfragment";
 import { selecteerGebruikteEvidence } from "./vergelijk-audit-core";
 import { citaatOpdracht, maakVergelijkSpoor } from "./retrieval/productiepaden-core";
+import { bouwVergelijkWaardePrompt, juridischeAuditprojectie } from "./vergelijk-kern";
 import type {
   ConceptLite,
   LLMVergelijkUitkomst,
@@ -34,8 +41,15 @@ import type {
   PersisteerInvoer,
   SemanticUnitLite,
   VergelijkDeps,
+  VergelijkDocumentprofiel,
 } from "./vergelijk-kern";
-import type { Dimensie, VergelijkBron, VergelijkRetrievalMeta, VergelijkRetrievalPoging } from "./vergelijk-types";
+import type {
+  Dimensie,
+  VergelijkBron,
+  VergelijkJuridischeDuiding,
+  VergelijkRetrievalMeta,
+  VergelijkRetrievalPoging,
+} from "./vergelijk-types";
 
 /** #311: beide modelcalls lopen door de AI-gateway (fondsconfiguratie + poort + audit). */
 type GatewayDeps = { gateway: AiGateway; ctx: GatewayContext };
@@ -69,6 +83,12 @@ interface VergelijkRetrieval {
   hybrideAan: boolean;
   vlaggen: RetrievalOpties;
   audit: VergelijkAuditVerzamelaar;
+  /**
+   * V-1 — opaque-identiteitsnamespace per gekozen document (`generiek` of
+   * `fonds:<id>`). Gezet door productieDeps uit de servergelezen documentrij;
+   * zonder deze resolver geldt het oude fondsnamespace-gedrag.
+   */
+  namespaceVoor?: (documentId: string) => Promise<string>;
 }
 
 interface GeregistreerdePoging {
@@ -232,7 +252,15 @@ async function haalPassages(
   maxResultaten = MAX_PASSAGES_PER_ZIJDE
 ): Promise<PassageLite[]> {
   const vraag = dimensie.zoekvraag ?? `${dimensie.label} (${dimensie.key})`;
-  const auditDocumentId = maakDocumentIdentiteit(`fonds:${retrieval.context.fondsId}`, documentId);
+  // V-1 — een generiek document (wetgeving/wetsgeschiedenis staat uitsluitend in
+  // de generieke bibliotheek) draagt de namespace `generiek`, net als in de
+  // retrievalkern en de DEFINER-check van fn_schrijf_vergelijking. Met de oude
+  // vaste fondsnamespace weigerde de schrijf-RPC elke vergelijking met een
+  // generiek document (`vergelijking_vreemde_retrievalpoging`).
+  const namespace = retrieval.namespaceVoor
+    ? await retrieval.namespaceVoor(documentId)
+    : `fonds:${retrieval.context.fondsId}`;
+  const auditDocumentId = maakDocumentIdentiteit(namespace, documentId);
   try {
     const uitkomst = await voerVolledigeRetrievalUit(
       { ...retrieval.context, scope: { ...retrieval.context.scope, documentIds: [documentId] } },
@@ -249,7 +277,7 @@ async function haalPassages(
           }),
         ],
       },
-      citaatOpdracht([maakDocumentIdentiteit(`fonds:${retrieval.context.fondsId}`, documentId)])
+      citaatOpdracht([auditDocumentId])
     );
     retrieval.audit.registreer(auditDocumentId, dimensie, uitkomst);
     return uitkomst.geselecteerd.map((b) => ({
@@ -385,18 +413,22 @@ const CMP_TOOL: Extract<NeutraleTool, { soort: "functie" }> = {
   },
 };
 
-function nummerPassages(passages: PassageLite[]): string {
-  if (passages.length === 0) return "(geen passages gevonden)";
-  return passages.map((p, i) => `[${i + 1}${p.page != null ? `, p.${p.page}` : ""}] ${p.tekst}`).join("\n\n");
-}
-
 async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
   dimensie: Dimensie;
   passagesBron: PassageLite[];
   passagesDoel: PassageLite[];
+  juridisch?: VergelijkJuridischeDuiding;
   signal?: AbortSignal;
 }): Promise<LLMVergelijkUitkomst> {
   const { dimensie, passagesBron, passagesDoel } = input;
+  // V-1 — de opdracht (incl. eventuele juridische rolregels) wordt puur en
+  // servergeschreven opgebouwd in vergelijk-kern; bronpassages blijven data.
+  const opdracht = bouwVergelijkWaardePrompt({
+    dimensie,
+    passagesBron,
+    passagesDoel,
+    juridisch: input.juridisch,
+  });
   const leeg: LLMVergelijkUitkomst = {
     bron_value: null, bron_evidence: null, bron_page: null,
     doel_value: null, doel_evidence: null, doel_page: null, gelijk: false,
@@ -413,18 +445,12 @@ async function vergelijkWaardeLLM(gw: GatewayDeps, input: {
       // De verplichte functietool en de strikte prompt begrenzen de uitvoer;
       // laat de provider daarom zijn standaardtemperatuur gebruiken.
       signal: input.signal,
-      systeem:
-        "Je vergelijkt één specifieke dimensie tussen twee versies van een pensioenfonds-" +
-        "document. Neem bewijszinnen LETTERLIJK over. Bind een waarde alleen als de tekst " +
-        "die ondubbelzinnig ondersteunt; bij twijfel of afwezigheid: null. Geen parafrase, verzin niets.",
+      systeem: opdracht.systeem,
       tools: [CMP_TOOL],
       berichten: [
         {
           role: "user",
-          content:
-            `Dimensie: ${dimensie.label} (${dimensie.key})\n\n` +
-            `DOCUMENT A (bron):\n${nummerPassages(passagesBron)}\n\n` +
-            `DOCUMENT B (doel):\n${nummerPassages(passagesDoel)}`,
+          content: opdracht.gebruiker,
         },
       ],
     });
@@ -493,8 +519,121 @@ async function leesSemanticUnits(retrieval: VergelijkRetrieval, supabase: Supaba
   }));
 }
 
+// ── V-1: documentprofielen van de twee gekozen documenten ────────────────────
+// Per gekozen document één gebonden read via de typed modelcontextgrens (#368):
+// scope (eigen fonds of échte generieke bron), private selector = precies dit
+// document, cap 1, cancellation. De rij levert geen citeerbaar bewijs, alleen
+// de metadata die de servergeschreven juridische rol en de opaque
+// auditnamespace bepaalt.
+//
+// LEVENSCYCLUS BEWUST NIET VAN TOEPASSING. De toelating tot de vergelijking is
+// al gebeurd door de expliciete, RLS-gecontroleerde documentkeuze (beleid
+// `vergelijkbare_versies`; zie de route en maakVergelijkSpoor). Hier bepaalt de
+// status alleen de getoonde rol: een bewust gekozen historische of inactieve
+// voorganger mag daardoor niet alsnog wegvallen of `onbekend` worden. Er is dus
+// geen actualiteits-, status- of peildatumfilter. Een weigering (scope/fout)
+// degradeert naar `null` (neutrale rol `onbekend`); een afbreking niet.
+interface DocumentprofielRij {
+  id: string;
+  fonds_id: string | null;
+  bibliotheek: string | null;
+  titel: string | null;
+  documenttype: string | null;
+  wetsgeschiedenis_subtype: string | null;
+  dossiernummer: string | null;
+  normgewicht: string | null;
+  wettelijk_regime: string | null;
+  documentdatum: string | null;
+  status: string | null;
+  bronstatus: string | null;
+  geldig_tot: string | null;
+}
+
+interface Documentprofielen {
+  profielen: Record<string, VergelijkDocumentprofiel | null>;
+  namespaces: Map<string, string>;
+}
+
+async function leesDocumentprofiel(
+  supabase: SupabaseClient,
+  context: RetrievalContext,
+  documentId: string
+): Promise<DocumentprofielRij | null> {
+  try {
+    const rijen = await leesModelcontext<DocumentprofielRij>({
+      context,
+      soort: "documentlabels",
+      scope: { fondsId: context.fondsId, privateRefs: [documentId] },
+      maxItems: 1,
+      levenscyclusbeleid: "vergelijkbare_versies",
+      lees: async (signal) => {
+        const { data, error } = await supabase
+          .from("documenten")
+          .select(
+            "id, fonds_id, bibliotheek, titel, documenttype, wetsgeschiedenis_subtype, dossiernummer, " +
+              "normgewicht, wettelijk_regime, documentdatum, status, bronstatus, geldig_tot"
+          )
+          .eq("id", documentId)
+          .limit(2)
+          .abortSignal(signal);
+        return {
+          data: ((data ?? []) as unknown as DocumentprofielRij[]).map((rij) =>
+            rij.fonds_id === null && rij.bibliotheek === "generiek"
+              ? generiekModelcontextRij(rij, rij.id, MODELCONTEXT_GEEN_GELDIGHEID)
+              : fondsModelcontextRij(rij, context.fondsId, rij.id, MODELCONTEXT_GEEN_GELDIGHEID)
+          ),
+          error,
+        };
+      },
+    });
+    return rijen[0] ?? null;
+  } catch (e) {
+    if (isAfbreking(e) || context.signal?.aborted) throw e;
+    console.error(`[vergelijk] documentprofiel niet leesbaar (doc ${documentId}):`, (e as Error).message);
+    return null;
+  }
+}
+
+async function leesDocumentprofielen(
+  supabase: SupabaseClient,
+  context: RetrievalContext,
+  documentIds: readonly string[]
+): Promise<Documentprofielen> {
+  const profielen: Record<string, VergelijkDocumentprofiel | null> = {};
+  const namespaces = new Map<string, string>();
+  const rijen = await Promise.all(documentIds.map((id) => leesDocumentprofiel(supabase, context, id)));
+  documentIds.forEach((id, index) => {
+    const d = rijen[index];
+    // App-guard náást RLS en de modelcontextgrens (T4-patroon).
+    const generiek = d !== null && d.fonds_id === null && d.bibliotheek === "generiek";
+    if (!d || d.id !== id || (!generiek && d.fonds_id !== context.fondsId)) {
+      profielen[id] = null;
+      return;
+    }
+    namespaces.set(id, generiek ? "generiek" : `fonds:${context.fondsId}`);
+    profielen[id] = {
+      titel: d.titel ?? null,
+      documenttype: d.documenttype ?? null,
+      wetsgeschiedenis_subtype: d.wetsgeschiedenis_subtype ?? null,
+      dossiernummer: d.dossiernummer ?? null,
+      normgewicht: d.normgewicht ?? null,
+      wettelijk_regime: d.wettelijk_regime ?? null,
+      documentdatum: d.documentdatum ?? null,
+      status: d.status ?? null,
+      bronstatus: d.bronstatus ?? null,
+      geldig_tot: d.geldig_tot ?? null,
+    };
+  });
+  return { profielen, namespaces };
+}
+
 // ── Persisteren via de DEFINER-RPC ───────────────────────────────────────────
-async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer, signal?: AbortSignal): Promise<string | null> {
+async function persisteer(
+  supabase: SupabaseClient,
+  inv: PersisteerInvoer,
+  signal?: AbortSignal,
+  documentIdentiteit: (documentId: string) => string | null = () => null
+): Promise<string | null> {
   bewaakNaIO(signal);
   const p_findings = inv.findings.map((f) => ({
     finding_key: f.finding_key,
@@ -541,7 +680,11 @@ async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer, signa
     p_comparator_version: inv.comparatorVersion,
     p_findings,
     p_correlation_id: inv.retrievalMeta?.correlation_id ?? null,
-    p_retrieval_meta: inv.retrievalMeta ?? {},
+    // V-1: de juridische duiding reist mee in het bestaande retrieval_meta-
+    // object; de RPC projecteert en valideert haar allowlist-gebaseerd.
+    p_retrieval_meta: inv.juridisch
+      ? { ...(inv.retrievalMeta ?? {}), juridische_duiding: juridischeAuditprojectie(inv.juridisch, documentIdentiteit) }
+      : inv.retrievalMeta ?? {},
     p_bronnen,
   });
   if (signal) query = query.abortSignal(signal);
@@ -565,6 +708,26 @@ export function productieDeps(ctx: {
   const { supabase } = ctx;
   const gw: GatewayDeps = { gateway: ctx.gateway, ctx: ctx.gatewayCtx };
   const audit = ctx.retrieval.audit;
+  // V-1 — één gememoïseerde metadata-read voor precies de twee gekozen
+  // documenten (de serverscope). Voedt de juridische rol én de juiste opaque
+  // auditnamespace; retrieval en persistentie wachten op dezelfde uitkomst.
+  const gekozen = ctx.retrieval.context.scope?.documentIds ?? [];
+  let profielBelofte: Promise<Documentprofielen> | null = null;
+  let profielUitkomst: Documentprofielen | null = null;
+  const profielen = () => {
+    profielBelofte ??= leesDocumentprofielen(supabase, ctx.retrieval.context, gekozen)
+      .then((u) => (profielUitkomst = u));
+    return profielBelofte;
+  };
+  const retrieval: VergelijkRetrieval = {
+    ...ctx.retrieval,
+    namespaceVoor: async (documentId) =>
+      (await profielen()).namespaces.get(documentId) ?? `fonds:${ctx.fondsId}`,
+  };
+  const documentIdentiteit = (documentId: string): string | null => {
+    const namespace = profielUitkomst?.namespaces.get(documentId);
+    return namespace ? maakDocumentIdentiteit(namespace, documentId) : null;
+  };
   return {
     leesConcepten: () => leesConcepten(supabase, ctx.retrieval.context.signal),
     // Gemotiveerde uitzondering: semantic_units zijn reeds geëxtraheerde,
@@ -573,10 +736,16 @@ export function productieDeps(ctx: {
     // request-cancellation gelezen. T2-4 kan dit evidencepad typed opnemen.
     leesSemanticUnits: (documentId) => leesSemanticUnits(ctx.retrieval, supabase, documentId),
     bepaalExtraDimensies: ({ bronDocumentId, doelDocumentId, catalogus }) =>
-      haalExtraDimensies(gw, ctx.retrieval, bronDocumentId, doelDocumentId, catalogus),
-    retrieveerPassages: (documentId, dimensie) => haalPassages(ctx.retrieval, documentId, dimensie),
+      haalExtraDimensies(gw, retrieval, bronDocumentId, doelDocumentId, catalogus),
+    retrieveerPassages: (documentId, dimensie) => haalPassages(retrieval, documentId, dimensie),
     vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(gw, { ...input, signal: ctx.retrieval.context.signal }),
-    persisteer: (inv) => persisteer(supabase, inv, ctx.retrieval.context.signal),
+    persisteer: (inv) => persisteer(supabase, inv, ctx.retrieval.context.signal, documentIdentiteit),
+    // V-1 — alleen de expliciet gekozen documenten; een id buiten de serverscope
+    // krijgt nooit een profiel.
+    leesDocumentprofielen: async (documentIds) => {
+      const { profielen: alle } = await profielen();
+      return Object.fromEntries(documentIds.map((id) => [id, alle[id] ?? null]));
+    },
     retrievalAudit: () => audit.snapshot(),
     markeerGebruikteEvidence: (refs) => audit.markeerGebruikteEvidence(refs),
     deterministischVertrouwd: deterministischVertrouwd(),

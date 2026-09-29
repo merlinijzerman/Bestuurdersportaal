@@ -95,6 +95,59 @@ export interface VergelijkRetrievalMeta {
   evidence?: EvidenceAudit[];
 }
 
+// ── V-1 (wetsgeschiedenis A-light) — juridische rol per zijde ───────────────
+// Server-afgeleid uit de documentmetadata (nooit uit documenttekst of model-
+// uitvoer). Alleen aanwezig als minstens één zijde juridisch is of haar rol niet
+// kon worden vastgesteld; twee niet-juridische documenten houden exact het
+// bestaande, symmetrische resultaat.
+
+/**
+ * - `geldend_recht`             — wetgeving, gepubliceerd en niet verlopen;
+ * - `wetgeving_niet_geldend`    — wetgeving die vervangen/ingetrokken/verlopen is
+ *                                 (expliciet gekozen historische versie);
+ * - `wetgeving_status_onbekend` — wetgeving zonder vaststelbare geldigheid;
+ * - `wetsgeschiedenis`          — toelichting, nooit zelfstandig bindend;
+ * - `niet_juridisch`            — geen wetgeving of wetsgeschiedenis;
+ * - `onbekend`                  — metadata niet leesbaar: geen normstatus.
+ */
+export type VergelijkJuridischeRol =
+  | "geldend_recht"
+  | "wetgeving_niet_geldend"
+  | "wetgeving_status_onbekend"
+  | "wetsgeschiedenis"
+  | "niet_juridisch"
+  | "onbekend";
+
+export type VergelijkJuridischeVerhouding =
+  | "norm_tegenover_toelichting"
+  | "norm_tegenover_norm"
+  | "toelichting_tegenover_toelichting"
+  | "juridisch_tegenover_overig"
+  | "onbepaald";
+
+export interface VergelijkZijdeRol {
+  rol: VergelijkJuridischeRol;
+  /** true = actuele norm; false = uitdrukkelijk géén norm; null = niet vastgesteld. */
+  norm_dragend: boolean | null;
+  /** Zichtbare, servergeschreven kop (hergebruikt de R-1-labels). */
+  label: string;
+  titel: string | null;
+  documenttype: string | null;
+  wetsgeschiedenis_subtype: string | null;
+  dossiernummer: string | null;
+  normgewicht: string | null;
+  wettelijk_regime: string | null;
+  documentdatum: string | null;
+}
+
+export interface VergelijkJuridischeDuiding {
+  verhouding: VergelijkJuridischeVerhouding;
+  bron: VergelijkZijdeRol;
+  doel: VergelijkZijdeRol;
+  /** Servergeschreven duiding die vóór de bevindingen wordt getoond. */
+  toelichting: string;
+}
+
 export interface VergelijkResultaat {
   comparison_run_id: string | null; // null wanneer (nog) niet gepersisteerd
   mode: VergelijkMode;
@@ -108,4 +161,6 @@ export interface VergelijkResultaat {
   bronnen?: VergelijkBron[];
   /** Correlation + inhoudsvrije toelatings-/uitvoeringstelemetrie. */
   retrieval_meta?: VergelijkRetrievalMeta;
+  /** V-1 — additief; ontbreekt bij twee niet-juridische documenten. */
+  juridische_duiding?: VergelijkJuridischeDuiding;
 }

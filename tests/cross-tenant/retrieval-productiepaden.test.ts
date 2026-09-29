@@ -434,3 +434,70 @@ test("vergelijk_waarde — Opus-verzoek bevat geen niet-standaard samplingparame
   assert.doesNotMatch(waardeCall, /\btemperature\s*:/, "Opus 4.7+ geeft HTTP 400 bij temperature != 1");
   assert.doesNotMatch(waardeCall, /\btopP\s*:/, "Opus 4.7+ geeft HTTP 400 bij top_p != 1");
 });
+
+// ── #493 V-1 — juridische rollen in de documentvergelijking ─────────────────
+test("V-1 — rolregels worden centraal en servergeschreven opgebouwd; geen inline systeemprompt meer", () => {
+  const service = lees("core/lib/vergelijk-productie.ts");
+  const begin = service.indexOf("async function vergelijkWaardeLLM");
+  const einde = service.indexOf("// ── Semantic units", begin);
+  const blok = service.slice(begin, einde);
+  assert.match(blok, /bouwVergelijkWaardePrompt\(/);
+  assert.match(blok, /systeem:\s*opdracht\.systeem/);
+  assert.match(blok, /content:\s*opdracht\.gebruiker/);
+  assert.doesNotMatch(blok, /Je vergelijkt één specifieke dimensie/, "één bron van waarheid voor de opdracht");
+});
+
+test("V-1 — documentprofielen: per gekozen document via de modelcontextgrens, zonder impliciet actualiteitsfilter", () => {
+  const service = lees("core/lib/vergelijk-productie.ts");
+  const begin = service.indexOf("async function leesDocumentprofiel(");
+  const einde = service.indexOf("async function leesDocumentprofielen(", begin);
+  const blok = service.slice(begin, einde);
+  assert.match(blok, /leesModelcontext<DocumentprofielRij>\(/);
+  assert.match(blok, /privateRefs: \[documentId\]/);
+  assert.match(blok, /maxItems: 1/);
+  assert.match(blok, /\.from\("documenten"\)[\s\S]*\.eq\("id", documentId\)/);
+  // Uitsluitend de id-binding; geen status-, actief-, peildatum- of actualiteitsfilter.
+  assert.equal((blok.match(/\.eq\(/g) ?? []).length, 1);
+  for (const filter of [/\.neq\(/, /\.not\(/, /\.lte?\(/, /\.gte?\(/, /\.is\(/, /actueel/]) {
+    assert.doesNotMatch(blok, filter, `onverwacht filter ${filter} op de documentprofielen`);
+  }
+  // Toelating is al gebeurd door de expliciete keuze; de status bepaalt hier alleen de rol.
+  assert.match(blok, /MODELCONTEXT_GEEN_GELDIGHEID/);
+  // De serverscope, niet de body, bepaalt welke documenten worden gelezen.
+  assert.match(service, /const gekozen = ctx\.retrieval\.context\.scope\?\.documentIds \?\? \[\]/);
+  assert.match(service, /d\.fonds_id === null && d\.bibliotheek === "generiek"/, "app-guard naast RLS");
+});
+
+test("V-1 — generieke documenten krijgen de namespace `generiek` in het vergelijkingsauditspoor", () => {
+  const service = lees("core/lib/vergelijk-productie.ts");
+  assert.match(service, /retrieval\.namespaceVoor\s*\?\s*await retrieval\.namespaceVoor\(documentId\)/);
+  assert.match(service, /citaatOpdracht\(\[auditDocumentId\]\)/);
+  assert.doesNotMatch(
+    service,
+    /maakDocumentIdentiteit\(`fonds:\$\{retrieval\.context\.fondsId\}`, documentId\)/,
+    "een vaste fondsnamespace laat fn_schrijf_vergelijking elke generieke vergelijking weigeren"
+  );
+});
+
+test("V-1 audit — juridische duiding wordt allowlist-geprojecteerd en aan de documentrij gebonden", () => {
+  const migratie = lees("supabase/migrations/2026_09_29_493_vergelijk_juridische_rollen.sql");
+  assert.match(migratie, /v_jur := p_retrieval_meta->'juridische_duiding'/);
+  for (const veld of ["documenttype", "wetsgeschiedenis_subtype", "dossiernummer", "normgewicht", "wettelijk_regime"]) {
+    assert.match(migratie, new RegExp(`\\(z->>'${veld}'\\) is not distinct from d\\.${veld}`));
+    assert.match(migratie, new RegExp(`'${veld}', z->'${veld}'`));
+  }
+  assert.match(migratie, /\(z->>'documentdatum'\) is not distinct from d\.documentdatum::text/);
+  assert.match(migratie, /when 'wetsgeschiedenis' then z->>'rol' = 'wetsgeschiedenis'/);
+  assert.doesNotMatch(migratie, /'titel', z->/, "geen titel in het inhoudsvrije spoor");
+  assert.match(migratie, /vergelijking_vreemde_juridische_duiding/);
+  // Het #369-deel (citation-binding, actueel) blijft ongewijzigd aanwezig.
+  assert.match(migratie, /bestuurdersportaal:citation:v1/);
+  assert.match(migratie, /'actueel', b->'actueel'/);
+
+  const service = lees("core/lib/vergelijk-productie.ts");
+  assert.match(service, /juridische_duiding: juridischeAuditprojectie\(inv\.juridisch, documentIdentiteit\)/);
+  const chat = lees("app/api/chat/route.ts");
+  assert.match(chat, /\.\.\.juridischeBronAuditvelden\(b\.verwijzing\)/);
+  const ci = lees("scripts/cross-tenant-ci.sh");
+  assert.match(ci, /-f "\$SQL_V1JUR"/, "de DB-check moet in de gate draaien");
+});
