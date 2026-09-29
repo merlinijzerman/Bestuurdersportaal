@@ -2,7 +2,7 @@
 
 | Veld | Waarde |
 |---|---|
-| **Status** | In uitvoering — foundation, structuur-ingest en R-1 bronduiding gerealiseerd; bronimport, routing/ranking, vergelijking en evaluatie nog open |
+| **Status** | In uitvoering — foundation, structuur-ingest en R-1 bronduiding gerealiseerd; R-2 juridische vraagintentie (observe-only, #491) in PR naar `preview`; bronimport, routing/ranking (R-3, #492), vergelijking en evaluatie nog open |
 | **Prioriteit** | P2 — pilotvoorbereiding |
 | **Impactklasse** | AI/retrieval + beperkte data- en UI-impact |
 | **Omvang** | Indicatie: 5–8 engineeringdagen + 1–2 dagen broncuratie |
