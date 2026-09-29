@@ -535,6 +535,13 @@ create table if not exists public.notulen_segmenten (
 -- goedkoop kan filteren vóór retrieval. E SLAAT alleen op (de hybride zoek-RPC
 -- blijft ongewijzigd); G filtert. Sync via DB-triggers (fn_chunk_denorm):
 -- BEFORE INSERT op document_chunks + AFTER UPDATE op documenten. Geen re-embed.
+-- #499 (migratie 2026_09_30_499_generieke_metadatawijziging_timeout, authoritatief):
+-- de AFTER UPDATE-trigger vuurt alleen bij een werkelijke waardewijziging (WHEN
+-- … IS DISTINCT FROM) en herschrijft alleen afwijkende chunks — elke chunk-UPDATE
+-- kost een nieuw HNSW-element. Generieke curatie loopt via de RPC
+-- fn_platform_generiek_document_bijwerken (service_role; statement_timeout 120s
+-- op de functie, door PostgREST gehesen; wijziging + chunk-denorm +
+-- document_metadata_log atomisch in één transactie).
 create table if not exists public.document_chunks (
   id            uuid primary key default uuid_generate_v4(),
   document_id   uuid references public.documenten(id) on delete cascade,

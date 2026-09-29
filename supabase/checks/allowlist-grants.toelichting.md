@@ -415,3 +415,22 @@ tekst falen hard. `meta_bronniveau()` roept haar aan, waardoor dezelfde grants
 nodig zijn als bij de bestaande auditprojecties: `authenticated` en
 `service_role` mogen uitvoeren, `anon` niet. De basisprojectie roept haar bewust
 niet aan, zodat lokale bronidentiteiten alleen voor bronauditors zichtbaar zijn.
+
+## #499 — `public.fn_platform_generiek_document_bijwerken(…)`
+
+Nieuwe `plpgsql`-functie, bewust **SECURITY INVOKER**: zij draait met de rechten
+van de aanroeper en omzeilt zelf geen RLS. De enige aanroeper is de platform-
+client achter `withPlatform` (service_role); daarom alleen `service_role`
+EXECUTE en uitdrukkelijk niets voor `anon` en `authenticated` (Supabase
+default-ACL, H-18). Een tenantgebruiker kan hiermee dus geen generieke bron
+wijzigen, ook niet via de API.
+
+Waarom een RPC en geen tabel-PATCH: de functie draagt `statement_timeout = 120s`
+op haar definitie. PostgREST hijst die functie-instelling naar `SET LOCAL`
+vóór het statement start; een gewone PATCH erft de 8 s van `authenticator`.
+Een curatiewijziging op een document met ~1.000 chunks werkt via de denorm-
+trigger alle chunks bij (elk een nieuw HNSW-element) en brak in productie op
+die 8 s af. Daarnaast schrijft de functie de `document_metadata_log`-regels in
+dezelfde transactie: geen auditregel zonder wijziging en geen wijziging zonder
+auditregel. Gemeten in `supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql`
+(M0 rechten en budget, M6 weigering onder `authenticated`/`anon`).
