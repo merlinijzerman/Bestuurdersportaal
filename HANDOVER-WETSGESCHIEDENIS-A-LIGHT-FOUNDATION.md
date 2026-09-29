@@ -6,7 +6,7 @@
 | **Worktree** | `…/MVP bestuurdersportaal/mvp-wetsgeschiedenis-structure-ingest` |
 | **Basis** | `origin/preview` @ `861f45d` (29-09-2026), inclusief de gemergde foundation en I-1. |
 | **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md` en `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md` (in deze branch, aparte documentatiecommit). De tijdelijke agentinstructie blijft bewust buiten de PR: die bevat release-specifieke uitvoeringsafspraken. |
-| **Status** | Foundation en I-1 staan op Preview. R-1 is lokaal gebouwd en getest: juridische metadata loopt door naar prompt, bronkaarten en audit en wetsgeschiedenis krijgt een zichtbare niet-normatieve duiding. Nog niet gemerged of gedeployd. Niets geïmporteerd en Productie niet gewijzigd. |
+| **Status** | Foundation, I-1 en R-1 staan op Preview. R-1 is via PR #489 gemerged als `580304f`; alle post-mergechecks en beide vaste Preview-deployments zijn groen. Niets geïmporteerd en Productie niet gewijzigd. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -179,7 +179,7 @@ geen overlap met Microsoft-, SharePoint-, OAuth-, tenant- of tokencode.
 | R-0 | **Afgerond:** Preview-database, merge/deploy en metadata-UI-smoke volgens §3 zijn groen | — | Preview-preflight, W1–W10, R1 en V3 groen; visuele metadata-smoke 29-09-2026 groen |
 | I-1 | **Afgerond en op Preview:** `structureerParlementairStuk` / `alsStructuurUnits` zijn aangesloten op de actuele worker, centrale chunkbouw en herindexering voor `documenttype='wetsgeschiedenis'` | chunking/chunk-bouw/chunk-ingest, worker, reindex en generiek pad | MvT/amendement/fallback/meerdere pagina's groen; census 11/11 |
 | I-2 | Actuele PW/Wvb opnemen (BWB-id in de titel/URL); max. één actieve versie per wet via `curatieVervangen`; Wtp-Staatsblad-pdf's herclassificeren | curatiehandeling (data), eventueel een DB-check "één actieve wetgeving per regime + titel-BWB" | DB-check + Preview-controle |
-| R-1 | **Gebouwd, PR volgt:** documenttype, subtype, dossiernummer, normgewicht en rechtsregime lopen door naar prompt, bronkaart en audit; na-selectie batchverrijking, dus geen migratie/denormalisatie | `rag.ts`, retrievalcontract/citatie/meta, assistant-source, bronkaart | identiteit 14/14, prompt-/bronlijst-sanities groen; censusregister verklaarbaar +1 bestand en 11/11 groen |
+| R-1 | **Afgerond en op Preview via PR #489:** documenttype, subtype, dossiernummer, normgewicht en rechtsregime lopen door naar prompt, bronkaart en audit; na-selectie batchverrijking, dus geen migratie/denormalisatie | `rag.ts`, retrievalcontract/citatie/meta, assistant-source, bronkaart | identiteit 14/14, prompt-/bronlijst-sanities groen; censusregister verklaarbaar +1 bestand en 11/11 groen; post-mergechecks en beide deploys groen |
 | R-2 | Intentherkenning geldend recht vs. bedoeling/totstandkoming | `core/lib/vraagtype.ts` (of router) | `vraagtype.test.ts` (pariteitspin bijwerken) |
 | R-3 | Ranking/routing: actuele wet vóór wetsgeschiedenis bij normatieve vragen; wetsgeschiedenis alleen aanvullend | `core/lib/rag.ts`, `core/lib/retrieval/selectie.ts` | retrievalregressies + nieuwe evalcases |
 | A-1 | **Afgerond binnen R-1:** prompt schrijft voor dat de normatieve conclusie eerst uit geldend recht komt en wetsgeschiedenis alleen uitleg/achtergrond geeft; ook een aangenomen amendement is geen zelfstandige actuele norm | `generatie-kern.ts` | `generatie-kern.sanity.ts` |
@@ -190,4 +190,4 @@ geen overlap met Microsoft-, SharePoint-, OAuth-, tenant- of tokencode.
 
 ## 8. Bevestiging
 
-De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. Foundation en I-1 draaien op de vaste Preview-hosts. R-1 is lokaal gebouwd en getest, zonder migratie. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd. Door de defecte Preview-antivirusscanner blijft de eerste echte bronimport een gecontroleerde Productiestap na de reguliere promotie. R-2/R-3, de afzonderlijke vergelijkingscall V-1, de bibliotheekfilter, webclassificatie en evaluatie blijven open.
+De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. Foundation, I-1 en R-1 draaien op de vaste Preview-hosts; R-1 vergde geen migratie. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd. Door de defecte Preview-antivirusscanner blijft de eerste echte bronimport een gecontroleerde Productiestap na de reguliere promotie. R-2/R-3, de afzonderlijke vergelijkingscall V-1, de bibliotheekfilter, webclassificatie en evaluatie blijven open.
