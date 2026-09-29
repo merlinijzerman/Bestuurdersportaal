@@ -4195,8 +4195,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // bestaande inline-meldingen (geen wijziging van de toon-systeemprompt).
     // Centraal bepaald uit dezelfde R-2-intentie (met dezelfde poort als de
     // selectie) en de uiteindelijk geselecteerde bronnen over alle sporen:
-    // historische peildatum → historische wetsversies ontbreken; wetsgeschiedenis
-    // zonder actuele wetspassage → de actuele normbasis ontbreekt.
+    // historische peildatum → historische wetsversies ontbreken; geen actuele
+    // wetspassage bij wetsgeschiedenis of bij een zekere normvraag (ook bij nul
+    // juridische bronnen) → de actuele normbasis ontbreekt.
     const juridischeMeldingen: InlineMelding[] = juridischeAntwoordgrens(
       juridischeIntentie,
       chunks.map((c) => ({

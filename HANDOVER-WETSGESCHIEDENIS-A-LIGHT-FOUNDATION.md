@@ -124,7 +124,7 @@ volgorde):
 
 | Intentie | Beleid |
 |---|---|
-| `geldend_recht` | Wetgeving vult de juridische plekken; wetsgeschiedenis gaat naar de staart. Is er géén wetspassage, dan verandert de volgorde niet en meldt de antwoordgrens `geen_actuele_normbasis`. Een niet-juridische bron zakt nooit. |
+| `geldend_recht` | Wetgeving vult de juridische plekken; wetsgeschiedenis gaat naar de staart. Is er géén wetspassage, dan verandert de volgorde niet en meldt de antwoordgrens `geen_actuele_normbasis` (bij wetsgeschiedenis, of bij een zekere normvraag ook zonder juridische bronnen — hotfix 29-09). Een niet-juridische bron zakt nooit. |
 | `bedoeling_totstandkoming` | Beste wetspassage en beste wetsgeschiedenis **aaneen** op de eerste juridische plek (wet eerst); de rest in oorspronkelijke volgorde. Een niet-juridische bron zakt hoogstens één plek. |
 | `geldend_recht_en_wetsgeschiedenis` | Idem kop (representatie voor beide rollen, wet eerst); daarna overige wetgeving vóór overige wetsgeschiedenis. |
 | `historische_peildatum` | Actuele wetgeving wordt **uitgesloten** (ook een regime-gedemoveerde); wetsgeschiedenis blijft. Antwoordgrens `historische_wetsversie_niet_beschikbaar`, altijd (ook zonder treffers). |
@@ -137,6 +137,23 @@ als de finale meldingen van de chatroute komen, en daarmee in
 `retrieval_meta.inline_meldingen`. De toon-systeemprompt en de sha256-pin in
 `generatie-kern.sanity.ts` zijn **ongewijzigd**; de R-1-promptregel en -labels
 blijven de modelinstructie ("wetsgeschiedenis is geen norm").
+
+**Hotfix normbasis (29-09-2026, na de Preview-smoke).** De smoke toonde een
+acceptatiegat: "Wat bepaalt artikel 150d Pensioenwet?" gaf vóór de bronimport
+alleen "Geen relevante fondsdocumenten gevonden", omdat `geen_actuele_normbasis`
+alleen volgde als er wél wetsgeschiedenis maar géén actuele wet was geselecteerd.
+Nu geldt: zonder geselecteerde actuele wetspassage meldt de grens
+`geen_actuele_normbasis` wanneer (a) er wetsgeschiedenis is geselecteerd, óf
+(b) de intentie **zeker normatief** is (`geldend_recht` /
+`geldend_recht_en_wetsgeschiedenis` met vertrouwen `zeker`) — ook bij nul
+juridische bronnen. De eis `zeker` in tak (b) voorkomt ruis bij een onzekere
+juridische vraag met fondscontext ("de Wtp-transitie voor ons fonds").
+Bedoelings-, peildatum- en niet-juridische vragen zijn ongewijzigd; de selectie
+zelf verandert niet. De meldingstekst verwijst niet langer naar "de
+geraadpleegde wetsgeschiedenis", zodat zij ook zonder bronnen klopt. Test
+R3-S2b (nul bronnen, alleen fondsbronnen, onzekere en niet-juridische
+negatieven); R3-S2 (alleen wetsgeschiedenis) blijft groen; terugzetten naar de
+oude conditie maakt R3-S2b rood.
 
 **Diagnostiek (migratievrij).** Alleen als een beleid is toegepast:
 `selectie.juridisch = { beleid, poort, kandidaten: {wetgeving, wetsgeschiedenis},

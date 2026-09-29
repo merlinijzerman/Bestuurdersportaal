@@ -246,6 +246,34 @@ test("R3-S2 — alleen MvT, normatieve vraag: geen verzonnen norm, wel de meldin
   assert.match(melding.tekst, /geen geldende norm/);
 });
 
+test("R3-S2b — nul juridische bronnen: een zekere normvraag meldt de ontbrekende normbasis; fonds- en onzekere vragen niet (Preview-smoke 29-09)", async () => {
+  // Het acceptatiegat uit de Preview-smoke: vóór de bronimport gaf de normvraag
+  // alleen "Geen relevante fondsdocumenten gevonden".
+  assert.equal(NORMVRAAG.vertrouwen, "zeker", "fixture: artikelvraag is zeker normatief");
+  assert.deepEqual(juridischeAntwoordgrens(NORMVRAAG, []), ["geen_actuele_normbasis"], "nul bronnen");
+  const alleenFonds = await selecteer([bron("fonds", "f-1"), bron("fonds", "f-2")], NORMVRAAG, { max: 2 });
+  assert.deepEqual(juridischeAntwoordgrens(NORMVRAAG, alleenFonds.chunks), ["geen_actuele_normbasis"], "alleen fondsbronnen");
+  assert.deepEqual(juridischeAntwoordgrens(BEIDE, []), ["geen_actuele_normbasis"], "geldend recht én wetsgeschiedenis");
+  // Een bedoelingsvraag zonder bronnen houdt het bestaande gedrag.
+  assert.deepEqual(juridischeAntwoordgrens(BEDOELING, []), []);
+  // Onzeker juridisch (anker, geen normvraag) met fondscontext: geen ruis.
+  const onzeker = bepaalJuridischeVraagintentie("Kun je iets vertellen over de Wtp-transitie voor ons fonds?");
+  assert.equal(onzeker.vertrouwen, "onzeker", "fixture");
+  assert.deepEqual(juridischeAntwoordgrens(onzeker, []), []);
+  // Niet-juridische vragen blijven ongewijzigd.
+  for (const vraag of [
+    "Welke termijn geldt voor de indexatiebesluiten van ons fonds?",
+    "Kun je dit toelichten?",
+    "Vergelijk het beleggingsplan met het crisisplan.",
+  ]) {
+    assert.deepEqual(juridischeAntwoordgrens(bepaalJuridischeVraagintentie(vraag), []), [], vraag);
+  }
+  // De tekst klopt ook zonder geraadpleegde wetsgeschiedenis.
+  const tekst = juridischeInlineMelding("geen_actuele_normbasis").tekst;
+  assert.doesNotMatch(tekst, /De geraadpleegde wetsgeschiedenis/);
+  assert.match(tekst, /geen geldende norm/);
+});
+
 test("R3-S3 — wet + aangenomen amendement: bij een normvraag nooit de norm; bij een bedoelingsvraag samen geselecteerd", async () => {
   const kandidaten = [bron("amendement", "am-1"), bron("fonds", "f-1"), bron("fonds", "f-2"), bron("wet", "pw-1")];
   const norm = await selecteer(kandidaten, NORMVRAAG, { max: 2 });
