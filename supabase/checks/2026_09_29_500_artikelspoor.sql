@@ -23,6 +23,8 @@
 --        dezelfde passage, en de passage in fonds B, komen er niet door —
 --        ook niet als de app hun document-id meegeeft.
 --   A5 — modus 'actueel' en de review-vervalgate gelden ook op dit spoor.
+--   A6 — de opzoeking is exact in de database (regex met woordgrens, zoals
+--        `artikelOpzoekfilter`): "artikel 150" treft 150c/150d niet.
 --
 -- Self-seeding in één transactie met ROLLBACK — laat geen data achter.
 -- Uitvoeren:  psql "$DB" -f dit-bestand
@@ -131,15 +133,35 @@ begin
     from public.document_chunks c
     join public.documenten d on d.id = c.document_id
    where d.documenttype in ('wetgeving','wetsgeschiedenis')
-     and (c.structuur_label ilike '%artikel 150d%' or c.tekst ilike 'artikel 150d%'
-          or c.tekst ilike 'art. 150d%' or c.tekst ilike 'art 150d%');
+     and (c.structuur_label ~* '(^|[^a-z])artikel +150d([^0-9a-z]|$)'
+          or c.tekst ~* '^(artikel|art[.]?) +150d([^0-9a-z]|$)');
   if not ('05000000-0000-0000-0000-00000000c395'::uuid = any(v_ids)) then
     raise exception 'SEED FAALT A1: fondsgebruiker A ziet de gepubliceerde MvT-passage niet.';
   end if;
   if '05000000-0000-0000-0000-00000000c0b1'::uuid = any(v_ids) then
     raise exception 'LEK A1: de opzoeking toont een fondsdocument (fonds B).';
   end if;
-  raise notice 'OK A1: opzoeking vindt de MvT-passage, geen fondsdocument.';
+  if '05000000-0000-0000-0000-00000000c394'::uuid = any(v_ids) then
+    raise exception 'LEK A1: de exacte opzoeking op 150d vindt de 150c-passage.';
+  end if;
+  if not ('05000000-0000-0000-0000-00000000c396'::uuid = any(v_ids)) then
+    raise exception 'FAAL A1: de vervolgpassage met hetzelfde 150d-label ontbreekt in de opzoeking.';
+  end if;
+  raise notice 'OK A1: exacte opzoeking vindt de 150d-passages, geen 150c en geen fondsdocument.';
+
+  -- A6 — de opzoeking is EXACT in de database (reviewpunt PR #501): een
+  -- prefix op "artikel 150" mag 150c/150d niet treffen, zodat buurlabels de
+  -- exacte passage niet uit de limiet van de app kunnen drukken.
+  select coalesce(array_agg(c.id), array[]::uuid[]) into v_ids
+    from public.document_chunks c
+    join public.documenten d on d.id = c.document_id
+   where d.documenttype in ('wetgeving','wetsgeschiedenis')
+     and (c.structuur_label ~* '(^|[^a-z])artikel +150([^0-9a-z]|$)'
+          or c.tekst ~* '^(artikel|art[.]?) +150([^0-9a-z]|$)');
+  if cardinality(v_ids) <> 0 then
+    raise exception 'LEK A6: opzoeking op artikel 150 treft % buurpassage(s) (150c/150d).', cardinality(v_ids);
+  end if;
+  raise notice 'OK A6: opzoeking op artikel 150 treft 150c/150d niet.';
 
   -- A2/A4/A5 — toelating via zoek_chunks, alle documenten meegegeven.
   select coalesce(array_agg(id), array[]::uuid[]) into v_ids

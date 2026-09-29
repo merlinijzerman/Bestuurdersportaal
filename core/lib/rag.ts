@@ -1439,8 +1439,9 @@ export function maakHybrideRpc(
 //   1. Een smalle opzoeking onder RLS (anon-client) naar passages van een
 //      JURIDISCH document (documenttype wetgeving/wetsgeschiedenis, via de
 //      documentrij zelf, niet de denormalisatie) waarvan het structuurlabel of
-//      de tekstbegin het artikel noemt. Dat is alleen een AANWIJZING; het pure
-//      predicaat `artikelmatch` beslist wat exact is.
+//      de tekstbegin EXACT het artikel noemt (regex met woordgrens, zie
+//      `artikelOpzoekfilter`). Het pure predicaat `artikelmatch` controleert
+//      daarna nog eens.
 //   2. TOELATING van nieuwe passages uitsluitend via de BESTAANDE `zoek_chunks`
 //      met hetzelfde filterblok als elk ander spoor (`rpcFilterParams` +
 //      `p_fonds_id` + documentscope) en een frasequery op het artikel. Wat die
@@ -1470,14 +1471,22 @@ interface ArtikelAanwijzingRij {
   structuur_label: string | null;
 }
 
-/** PostgREST-`or` op het label of de tekstbegin; nummers zijn al [0-9a-z]. */
+/**
+ * PostgREST-`or` op het label of de tekstbegin, EXACT in de database: `imatch`
+ * (POSIX `~*`) met een woordgrens vóór "artikel" en ná het nummer. Een
+ * prefix-`ilike` ("artikel 15*") zou ook 150, 150a–z, 151–159 en 1500 treffen;
+ * omdat alle chunks van één structuur-unit hetzelfde label dragen, konden dan
+ * tientallen niet-exacte chunks de exacte passage uit de `limit` drukken vóórdat
+ * `artikelmatch()` filtert (reviewpunt PR #501). `artikelmatch()` blijft de
+ * tweede grens. Nummers zijn al beperkt tot [0-9a-z]; de patronen staan tussen
+ * aanhalingstekens vanwege `(`, `)`, `|` en `,`, en bevatten bewust geen
+ * backslash (`[.]` in plaats van `\.`) zodat PostgREST niets hoeft te ontsnappen.
+ */
 export function artikelOpzoekfilter(focus: Pick<Artikelfocus, "artikelen">): string {
   return focus.artikelen
     .flatMap((n) => [
-      `structuur_label.ilike."*artikel ${n}*"`,
-      `tekst.ilike."artikel ${n}*"`,
-      `tekst.ilike."art. ${n}*"`,
-      `tekst.ilike."art ${n}*"`,
+      `structuur_label.imatch."(^|[^a-z])artikel +${n}([^0-9a-z]|$)"`,
+      `tekst.imatch."^(artikel|art[.]?) +${n}([^0-9a-z]|$)"`,
     ])
     .join(",");
 }

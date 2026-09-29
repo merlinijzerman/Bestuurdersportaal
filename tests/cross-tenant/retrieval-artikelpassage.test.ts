@@ -547,6 +547,136 @@ test("#500-A3 — kandidatenpool: nieuwe exacte passages vervangen de zwakste ni
   assert.equal(uit.at(-1)?.id, "c-p395");
 });
 
+/**
+ * Een nep-PostgREST die de opzoeking ÉCHT uitvoert: het `or`-filter van
+ * `artikelOpzoekfilter` (ilike én imatch), `in document_id`, de ordening op
+ * (document_id, chunk_index) en de `limit`. Zo is zichtbaar of de exacte
+ * passage de limiet haalt — iets wat een vooraf gefilterde nep niet toont.
+ */
+interface Tabelrij {
+  id: string;
+  document_id: string;
+  chunk_index: number;
+  tekst: string;
+  structuur_label: string | null;
+}
+function splitsOr(filter: string): string[] {
+  const delen: string[] = [];
+  let huidig = "";
+  let inAanhaling = false;
+  for (const teken of filter) {
+    if (teken === '"') inAanhaling = !inAanhaling;
+    if (teken === "," && !inAanhaling) {
+      delen.push(huidig);
+      huidig = "";
+    } else huidig += teken;
+  }
+  if (huidig) delen.push(huidig);
+  return delen;
+}
+function orPredicaat(filter: string): (r: Tabelrij) => boolean {
+  const termen = splitsOr(filter).map((deel) => {
+    const m = deel.match(/^([a-z_]+)\.(ilike|imatch)\.(?:"(.*)"|(.*))$/);
+    assert.ok(m, `onbekend filterdeel: ${deel}`);
+    const [, kolom, op, gequote, kaal] = m;
+    const waarde = gequote ?? kaal;
+    const re =
+      op === "imatch"
+        ? new RegExp(waarde, "i")
+        : new RegExp(`^${waarde.split("*").map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`, "is");
+    return (r: Tabelrij) => re.test(String((r as unknown as Record<string, unknown>)[kolom] ?? ""));
+  });
+  return (r) => termen.some((t) => t(r));
+}
+function postgrestNep(tabel: Tabelrij[], rpcIds: (ids: string[]) => string[]) {
+  let or: (r: Tabelrij) => boolean = () => true;
+  let scope: string[] | null = null;
+  let limiet = Infinity;
+  const builder: Record<string, unknown> = {};
+  builder.select = () => builder;
+  builder.order = () => builder;
+  builder.abortSignal = () => builder;
+  builder.in = (k: string, v: string[]) => {
+    if (k === "document_id") scope = v;
+    return builder;
+  };
+  builder.or = (f: string) => {
+    or = orPredicaat(f);
+    return builder;
+  };
+  builder.limit = (n: number) => {
+    limiet = n;
+    return builder;
+  };
+  builder.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
+    const data = tabel
+      .filter((r) => (!scope || scope.includes(r.document_id)) && or(r))
+      .sort((a, b) => a.document_id.localeCompare(b.document_id) || a.chunk_index - b.chunk_index)
+      .slice(0, limiet);
+    return Promise.resolve({ data, error: null }).then(res, rej);
+  };
+  return {
+    from: () => builder,
+    rpc: (_fn: string, args: Record<string, unknown>) => {
+      const r: Record<string, unknown> = {};
+      r.abortSignal = () => r;
+      const docs = args.p_document_ids as string[];
+      r.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+        Promise.resolve({
+          data: tabel
+            .filter((t) => docs.includes(t.document_id) && rpcIds([t.id]).length > 0)
+            .map((t) => rpcRij(t.id, t.document_id, t.tekst)),
+          error: null,
+        }).then(res, rej);
+      return r;
+    },
+  };
+}
+
+test("#500-A4 — de opzoeking is exact in de database: >50 buurlabels vóór de passage drukken haar niet uit de limiet", async () => {
+  const buren15 = ["150", "150a", "150b", "150c", "150d", "150e", "151", "152", "153", "159", "1500", "15a"];
+  const buren1 = ["10", "100", "11", "1a", "12", "19", "1000"];
+  const tabel: Tabelrij[] = [];
+  // 60 niet-exacte chunks (steeds dezelfde unit-labels) in chunk_index vóór de exacte passages.
+  for (let i = 0; i < 60; i++) {
+    const n = buren15[i % buren15.length];
+    tabel.push({ id: `b15-${i}`, document_id: MVT_DOC, chunk_index: i,
+      tekst: i % 3 === 0 ? `Artikel ${n} Pensioenwet\nkop` : "vervolgtekst", structuur_label: `Artikelsgewijze toelichting — Artikel ${n}` });
+  }
+  for (let i = 0; i < 60; i++) {
+    const n = buren1[i % buren1.length];
+    tabel.push({ id: `b1-${i}`, document_id: MVT_DOC, chunk_index: 100 + i,
+      tekst: i % 3 === 0 ? `Art. ${n} Pensioenwet\nkop` : "vervolgtekst", structuur_label: `Artikelsgewijze toelichting — Artikel ${n}` });
+  }
+  tabel.push({ id: "exact-15", document_id: MVT_DOC, chunk_index: 500,
+    tekst: "Artikel 15 Pensioenwet (Informatie)\nToelichting.", structuur_label: "Artikelsgewijze toelichting — Artikel 15" });
+  tabel.push({ id: "exact-1", document_id: MVT_DOC, chunk_index: 600,
+    tekst: "Artikel 1 Pensioenwet (Begripsbepalingen)\nToelichting.", structuur_label: "Artikelsgewijze toelichting — Artikel 1" });
+  const client = postgrestNep(tabel, (ids) => ids);
+
+  for (const [nummer, id] of [["15", "exact-15"], ["1", "exact-1"]] as const) {
+    const uit = await vulAanMetArtikelkandidaten([], {
+      focus: { artikelen: [nummer], wet: "pw" },
+      fondsId: FONDS,
+      filters: FILTERS,
+      maxKandidaten: 30,
+      supabase: client,
+    });
+    assert.deepEqual(uit.map((c) => c.id), [id], `artikel ${nummer} vindt precies zijn eigen passage`);
+  }
+  // En de filterstring zelf: geen prefix-ilike meer, wel een woordgrens na het nummer.
+  const f = artikelOpzoekfilter({ artikelen: ["15"] });
+  assert.ok(!/ilike/.test(f), f);
+  const label = orPredicaat(f);
+  const rij = (structuur_label: string, tekst = "x"): Tabelrij => ({ id: "r", document_id: "d", chunk_index: 0, tekst, structuur_label });
+  assert.equal(label(rij("Artikelsgewijze toelichting — Artikel 15")), true);
+  assert.equal(label(rij("Artikelsgewijze toelichting — Artikel 15, onderdeel A")), true);
+  for (const buur of buren15) assert.equal(label(rij(`Artikelsgewijze toelichting — Artikel ${buur}`)), false, buur);
+  assert.equal(label(rij("§3", "Art. 15 Pensioenwet")), true);
+  assert.equal(label(rij("§3", "Art 150 Pensioenwet")), false);
+  assert.equal(label(rij("§3", "Zoals artikel 15 bepaalt")), false);
+});
+
 // ── (E) EIND-TOT-EIND: orkestratie + Supabase-adapter ──────────────────────
 
 const CTX: RetrievalContext = {
