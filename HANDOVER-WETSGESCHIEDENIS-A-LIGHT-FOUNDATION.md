@@ -6,7 +6,7 @@
 | **Worktree** | `…/MVP bestuurdersportaal/mvp-wetsgeschiedenis-foundation` |
 | **Basis** | `origin/preview` @ `5b0f581` (28-09-2026), inclusief de afgeronde Microsoft-release. Rebase op 28-09-2026 was conflictvrij. |
 | **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md` en `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md` (in deze branch, aparte documentatiecommit). De tijdelijke agentinstructie blijft bewust buiten de PR: die bevat release-specifieke uitvoeringsafspraken. |
-| **Status** | Preview-database gemigreerd en structureel gecontroleerd; PR nog **niet gemerged of naar de vaste Preview-hosts gedeployd**. Niets geïmporteerd en Productie niet gewijzigd. |
+| **Status** | Preview-database gemigreerd en structureel gecontroleerd; PR gemerged en naar de vaste Preview-hosts gedeployd. De metadata-UI-smoke op `beheer.preview.bestuurdersportaal.com` is groen. Niets geïmporteerd en Productie niet gewijzigd. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -55,7 +55,7 @@ git diff --name-only 5b0f581
 
 ## 3. Migratie en deployvolgorde
 
-De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afgerond. Stappen 1–3 zijn op 28-09-2026 uitgevoerd; stap 4 en verder staan nog open.
+De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afgerond. Stappen 1–4 zijn uitgevoerd; stap 5 blijft de harde Preview-begrenzing en stap 6 is nog niet uitgevoerd.
 
 1. Vlak voor uitrol controleren dat `origin/preview` nog op de geteste basis staat of alleen verwachte aanvullingen bevat. De rebase op `5b0f581` gaf geen conflict of objectoverlap met `documenten_documenttype_check` of `fn_chunk_denorm`.
 2. **Preview-DB (`portal_preview`)**: eerst de controlequery uit de migratie (moet 0 zijn), dan de migratie `2026_09_23_wetsgeschiedenis_a_light_foundation.sql`.
@@ -78,6 +78,28 @@ Rollback: eerst juridische documenten herclassificeren of verwijderen via de cur
 | Gedrags- en securitychecks | W1–W10 groen; R1 structurele gates groen; V3 grants-gate groen |
 | Supabase Advisors | Gedraaid. Bestaande projectbrede meldingen blijven staan; deze migratie voegt geen tabel, functie, policy of grant toe en introduceerde geen nieuwe objectmelding. |
 | Bewuste begrenzing | Geen documentupload, vervanging of import; geen Storage-mutatie; Productie niet geraakt |
+
+### 3b. Preview metadata-UI-smoke — 29-09-2026
+
+Uitgevoerd op `beheer.preview.bestuurdersportaal.com` met een actieve
+platformidentiteit en live AAL2. De Preview-markering en alle 15 toegekende
+capabilities waren zichtbaar. De generieke bibliotheek was leeg; er is geen
+document geüpload, vervangen, geïmporteerd of opgeslagen.
+
+- `Wetgeving (actuele geconsolideerde tekst)` en `Wetsgeschiedenis` zijn als
+  documenttype beschikbaar.
+- Wetsgeschiedenis toont alle zes subtypen, inclusief `Memorie van antwoord` en
+  `Nota van toelichting (AMvB)`.
+- `Nota van toelichting (AMvB)` maakt uitsluitend voor dat subtype het
+  dossiernummer optioneel; terugschakelen naar `Memorie van antwoord` maakt het
+  dossiernummer weer verplicht.
+- Wetsgeschiedenis forceert en vergrendelt normgewicht `Informatief` en toont
+  `Publicatiestatus` met `Gepubliceerd (actieve, informatieve bron)`.
+- Wetgeving toont afzonderlijk `Geldigheidsstatus` met `Van kracht (actuele
+  norm)` en laat een bindend normgewicht kiezen.
+- Het formulier is geannuleerd zonder serveractie; de bibliotheek bleef leeg.
+
+De upload-, scan- en ingestketen is bewust niet getest, conform §3.
 
 ## 4. Uitgevoerde tests (lokaal, 23 en 28-09-2026)
 
@@ -142,7 +164,7 @@ Geen inhoudelijke overlap met `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/
 
 | # | Stap | Verwachte bestanden | Tests |
 |---|---|---|---|
-| R-0 | Preview-rollout volgens §3; databasehelft afgerond, merge/deploy en metadata-UI-smoke nog open | — | Preview-preflight, W1–W10, R1 en V3 groen; visuele metadata-smoke volgt na deploy |
+| R-0 | **Afgerond:** Preview-database, merge/deploy en metadata-UI-smoke volgens §3 zijn groen | — | Preview-preflight, W1–W10, R1 en V3 groen; visuele metadata-smoke 29-09-2026 groen |
 | I-1 | Import en structuur (werkticket PR 2): `structureerParlementairStuk` → `alsStructuurUnits` aansluiten op de ingest voor `documenttype='wetsgeschiedenis'` | `core/lib/chunk-bouw.ts` of `chunk-ingest.ts`, `platform/lib/generiek-pipeline.ts` | chunk-bouw-sanity met MvT/amendement-fixture; census regenereren als de antwoordgraaf verandert |
 | I-2 | Actuele PW/Wvb opnemen (BWB-id in de titel/URL); max. één actieve versie per wet via `curatieVervangen`; Wtp-Staatsblad-pdf's herclassificeren | curatiehandeling (data), eventueel een DB-check "één actieve wetgeving per regime + titel-BWB" | DB-check + Preview-controle |
 | R-1 | Retrievalmetadata: subtype, dossiernummer en documenttype in het retrieval-/auditcontract; eventueel `fn_chunk_denorm` uitbreiden | nieuwe migratie (denorm), `core/lib/retrieval/contract.ts`, `selectie.ts`, meta-projectie (TS-allowlist én migratie) | `retrieval-contract.test.ts`, census, W10 aanpassen |
@@ -156,4 +178,4 @@ Geen inhoudelijke overlap met `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/
 
 ## 8. Bevestiging
 
-De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. De PR is nog niet gemerged en de vaste Preview-hosts draaien de nieuwe code nog niet. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd.
+De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. De PR is gemerged, de vaste Preview-hosts draaien de nieuwe code en de metadata-UI-smoke is groen. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd.
