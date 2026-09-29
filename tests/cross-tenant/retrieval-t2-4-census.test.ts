@@ -293,7 +293,8 @@ test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en
         "inhoudsschrijf staat buiten de samengestelde requestdeadline"
       );
       assert.equal(
-        heeftVoorouderMethodeAanroep(node, "abortSignal", "contextSignal"), true,
+        heeftVoorouderMethodeAanroep(node, "abortSignal", "contextSignal") ||
+          heeftVoorouderMethodeAanroep(node, "abortSignal", "postGeneratieSignal"), true,
         "inhoudsschrijf draagt het samengestelde requestsignaal niet tot in provider-I/O"
       );
     }
@@ -302,6 +303,11 @@ test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en
   bezoek(route);
   assert.equal(toelichtingCalls, 1);
   assert.equal(duurzameWrites, 5);
+  assert.match(
+    route.text,
+    /generatieGrendel\.bewaak\(\);\s*const postGeneratieSignal = generatieGrendel\.signal;/,
+    "de post-generatiealias moet aantoonbaar het samengestelde generatie-/requestsignaal zijn"
+  );
 });
 
 test("#368 promptboundary — profieldata en vaste control-plane gebruiken gescheiden routevelden", () => {
