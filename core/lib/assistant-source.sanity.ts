@@ -46,6 +46,26 @@ test("documentbron mapt naar kind 'document' met behoud van velden", () => {
   assert.equal(s.extern_url, null); // ontbrekend → genormaliseerd naar null
 });
 
+test("juridische retrievalmetadata blijft in de audit-source behouden", () => {
+  const s = documentBronNaarSource({
+    document_id: "mvt-1",
+    titel: "Memorie van toelichting — Kamerstukken II 2021/22, 36 067, nr. 3",
+    bron: "Overheid",
+    pagina: 14,
+    paragraaf: "Artikelsgewijze toelichting — Artikel 150d",
+    fragment: "De regering beoogt…",
+    heeft_origineel: true,
+    documenttype: "wetsgeschiedenis",
+    wetsgeschiedenis_subtype: "memorie_van_toelichting",
+    dossiernummer: "36067",
+    wettelijk_regime: "pw",
+  });
+  assert.equal(s.documenttype, "wetsgeschiedenis");
+  assert.equal(s.wetsgeschiedenis_subtype, "memorie_van_toelichting");
+  assert.equal(s.dossiernummer, "36067");
+  assert.equal(s.wettelijk_regime, "pw");
+});
+
 // ── webbron ─────────────────────────────────────────────────
 test("webbron met veilige URL leidt domein af", () => {
   const w = webBronNaarSource({ url: "https://www.dnb.nl/pensioen", titel: "DNB" });

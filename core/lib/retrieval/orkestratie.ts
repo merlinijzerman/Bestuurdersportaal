@@ -20,6 +20,7 @@ import { effectievePeildatum } from "../rag";
 import type { AdapterMeta, AdapterTellers, RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
+import type { JuridischeVraagintentieResultaat } from "../vraagtype";
 import { bouwCitaties } from "./citatie";
 import {
   verifieerToelatingPerGroep,
@@ -72,6 +73,13 @@ export interface SelectiegrenzenPerQuery {
   representatieConstraints: boolean;
   regimeWeging: boolean;
   relevantieDrempel: boolean;
+  /**
+   * R-3 (#492) — de juridische vraagintentie van de beurt (R-2), één keer in de
+   * route bepaald. De selectie past het centrale juridisch bronbeleid toe
+   * (poort in `juridisch-beleid.ts`). Ontbreekt dit veld, dan is de selectie
+   * exact die van vóór R-3.
+   */
+  juridischeIntentie?: JuridischeVraagintentieResultaat | null;
 }
 
 export interface Spoor {
@@ -166,6 +174,11 @@ function alsAuditBron(b: Bronresultaat): AuditBron {
     documentstatus: b.status.documentstatus ?? null,
     bronstatus: b.status.bronstatus ?? null,
     documentdatum: b.weergave?.documentdatum ?? null,
+    documenttype: b.weergave?.documenttype ?? null,
+    wetsgeschiedenisSubtype: b.weergave?.wetsgeschiedenisSubtype ?? null,
+    dossiernummer: b.weergave?.dossiernummer ?? null,
+    normgewicht: b.curatie?.normgewicht ?? null,
+    wettelijkRegime: b.curatie?.wettelijkRegime ?? null,
     score: b.rang.score ?? null,
     fts: b.rang.fts ?? null,
     vec: b.rang.vec ?? null,
@@ -185,6 +198,10 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
     bibliotheek: b.documentIdentiteit.bibliotheek ?? "fonds",
     normgewicht: b.curatie?.normgewicht ?? null,
     wettelijkRegime: b.curatie?.wettelijkRegime ?? null,
+    // R-3 (#492) — juridische rol voor het centrale bronbeleid. Komt uit de
+    // weergavemetadata die de adapter al in fase 3 (vóór de poort) verrijkte.
+    documenttype: b.weergave?.documenttype ?? null,
+    wetsgeschiedenisSubtype: b.weergave?.wetsgeschiedenisSubtype ?? null,
   };
 }
 
@@ -517,6 +534,7 @@ export async function voerRetrievalUit(
           representatieConstraints: g.representatieConstraints,
           regimeWeging: g.regimeWeging,
           relevantieDrempel: g.relevantieDrempel,
+          ...(g.juridischeIntentie ? { juridischeIntentie: g.juridischeIntentie } : {}),
         }
       );
       geselecteerdPerSpoor.push(

@@ -13,7 +13,7 @@ import { isAfbreking, bewaakNaIO } from "./retrieval/afbreken";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
-import type { RetrievalModus } from "./vraagtype";
+import type { RetrievalModus, JuridischeVraagintentieResultaat } from "./vraagtype";
 import {
   weegBronsoort,
   constraintsVoorProfiel,
@@ -51,6 +51,11 @@ function alsAuditBron(c: DocumentChunk): AuditBron {
     documentstatus: c.documenten.documentstatus ?? null,
     bronstatus: c.documenten.bronstatus ?? null,
     documentdatum: c.documenten.documentdatum ?? null,
+    documenttype: c.documenten.documenttype ?? null,
+    wetsgeschiedenisSubtype: c.documenten.wetsgeschiedenis_subtype ?? null,
+    dossiernummer: c.documenten.dossiernummer ?? null,
+    normgewicht: c.documenten.normgewicht ?? null,
+    wettelijkRegime: c.documenten.wettelijk_regime ?? null,
     score: c.rang ?? null,
     fts: c.fts_rang ?? null,
     vec: c.vec_rang ?? null,
@@ -550,11 +555,14 @@ export interface DocumentChunk {
     // review-verval-regel in handhaafFondsdiscipline (defense-in-depth náást de
     // T10-RPC-gate). Alleen de T10-RPC en de fallback-selects leveren dit.
     volgende_review?: string | null;
-    // Tranche 2B — soort stuk en bestandsformaat, UITSLUITEND voor de weergave
-    // (de documentlijst bij antwoordmodus `bronoverzicht`). Geen enkel retrieval-,
-    // rangschik- of filterpad leest deze velden. Gevuld door
-    // verrijkDocumentmetadata() ná retrieval; zie daar waarom niet via de select.
+    // Tranche 2B — soort stuk en bestandsformaat, oorspronkelijk UITSLUITEND voor
+    // de weergave. Sinds R-3 (#492) leest de centrale selectie `documenttype` +
+    // `wetsgeschiedenis_subtype` als juridisch bronbeleid (retrieval/juridisch-
+    // beleid.ts); geen filter- of RPC-pad leest ze. Gevuld door
+    // verrijkDocumentmetadata(); zie daar waarom niet via de select.
     documenttype?: string | null;
+    wetsgeschiedenis_subtype?: string | null;
+    dossiernummer?: string | null;
     bestandstype?: string | null;
     /** Adapterprivate ingrediënt voor R1-versiebewijs; niet publiek gemaakt. */
     bestand_hash?: string | null;
@@ -713,6 +721,11 @@ export interface RetrievalMeta {
     documentstatus: string | null;
     bronstatus: string | null;
     documentdatum: string | null;
+    documenttype?: string;
+    wetsgeschiedenis_subtype?: string;
+    dossiernummer?: string;
+    normgewicht?: string;
+    wettelijk_regime?: string;
     document_identiteit?: string;
     passage_identiteit?: string;
     citation_id?: string;
@@ -987,6 +1000,27 @@ export interface RetrievalMeta {
       quotum: number;
       dedup: number;
       budget: number;
+      // R-3 (#492) — uitsluitend aanwezig als een juridisch beleid is toegepast;
+      // anders blijft dit object byte-identiek aan vóór R-3.
+      juridisch_gedemoveerd?: number;
+      juridisch_uitgesloten?: number;
+    };
+    // R-3 (#492) — welk juridisch bronbeleid de selectie van DIT spoor stuurde.
+    // Alleen gezet als de poort openging (anders ontbreekt de sleutel en is het
+    // gedrag dat van `onbekend`). Gesloten enums en tellingen: geen vraagtekst,
+    // geen documentidentiteit. Subsleutel van het bestaande basisobject
+    // `selectie`, dat `meta_projectie()` als geheel doorlaat — migratievrij.
+    juridisch?: {
+      beleid:
+        | "geldend_recht"
+        | "bedoeling_totstandkoming"
+        | "geldend_recht_en_wetsgeschiedenis"
+        | "historische_peildatum";
+      poort: "juridisch_anker" | "zwak_anker_zonder_fondscontext" | "vertrouwen_zeker";
+      kandidaten: { wetgeving: number; wetsgeschiedenis: number };
+      geselecteerd: { wetgeving: number; wetsgeschiedenis: number };
+      gedemoveerd: number;
+      uitgesloten: number;
     };
   };
   // De kandidatenset vóór selectie: per kandidaat de bron-identiteit + rang en of
@@ -997,7 +1031,14 @@ export interface RetrievalMeta {
     bibliotheek: string;
     rang: number | null;
     status: "geselecteerd" | "afgevallen";
-    reden?: "weging" | "zwak_generiek" | "quotum" | "dedup" | "budget";
+    reden?:
+      | "weging"
+      | "zwak_generiek"
+      | "quotum"
+      | "dedup"
+      | "budget"
+      | "juridisch_gedemoveerd"
+      | "juridisch_uitgesloten";
   }[];
   // P2 Deel B — "een document doorgronden": de parameters van de samengestelde
   // instructie volledig in het auditspoor (B6 / criterium 13). De zichtbare
@@ -1096,6 +1137,13 @@ export interface RetrievalMeta {
     // providercall). Bewust onder `invoer` zodat het migratievrij op basisniveau
     // blijft (geen wijziging aan de SQL-projecties).
     geen_generatiecall?: boolean;
+    // Wetsgeschiedenis A-light R-2 (#491) — juridische vraagintentie van de
+    // EFFECTIEVE vraag: gesloten enums (intentie, vertrouwen, signaalcategorieën),
+    // geen vraagtekst. Observe-only: stuurt niets. Bewust onder `invoer` (basis,
+    // niet genoemd in SUB_NIVEAUS.invoer) zodat het migratievrij door
+    // `meta_projectie()` op beide leesniveaus zichtbaar blijft — net als
+    // `geen_generatiecall`. R-3 (#492) mag hierop aansluiten.
+    juridische_intentie?: JuridischeVraagintentieResultaat;
   };
   // H-10 (review 2026-07-30) — hoeveel bronlabel-achtige patronen zijn
   // geneutraliseerd in de chunktekst vóórdat die de prompt in ging. >0 betekent
@@ -1207,6 +1255,9 @@ export interface BronVerwijzing {
   // teruggaf. Een ontbrekende waarde mag nooit een lege chip of gebroken kaart
   // opleveren — de weergave laat het element dan simpelweg weg.
   documenttype?: string | null;
+  wetsgeschiedenis_subtype?: string | null;
+  dossiernummer?: string | null;
+  wettelijk_regime?: string | null;
   bestandstype?: string | null;
   // Increment G — bronkaartvelden (status/bronstatus/datum/bronsoort + generiek-
   // metadata). Optioneel: de fallback-cascade levert ze niet.
@@ -2016,6 +2067,8 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       opslagPad: d.opslag_pad ?? null,
       externUrl: d.extern_url ?? null,
       documenttype: d.documenttype ?? null,
+      wetsgeschiedenisSubtype: d.wetsgeschiedenis_subtype ?? null,
+      dossiernummer: d.dossiernummer ?? null,
       bestandstype: d.bestandstype ?? null,
       notulen: chunk.notulen
         ? {
@@ -2454,9 +2507,11 @@ export async function verrijkNotulenChunks(
 //  het eigen fonds komt niet terug en het veld blijft leeg — nooit een lek,
 //  nooit een gebroken kaart.
 //
-//  HARDE GRENS: deze velden zijn PURE DOORGEEFWAARDEN. Ze mogen niet worden
-//  gelezen door retrieval, ranking, filtering of promptopbouw. De functie draait
-//  ná handhaafFondsdiscipline en ná naVerwerking, en `maakContext()` bouwt de
+//  GRENS: deze velden zijn doorgeefwaarden voor weergave, prompt-/bronduiding
+//  (R-1) en — sinds R-3 (#492) — de juridische rol in de CENTRALE selectie
+//  (retrieval/juridisch-beleid.ts). Op het orkestratiepad draait deze functie in
+//  de adapterhook `verrijkKandidaten()`, dus vóór de toelatingspoort en vóór de
+//  selectie. Filtering en de zoek-RPC's lezen ze niet. `maakContext()` bouwt de
 //  modelcontext uit expliciet benoemde velden — het bronnen-array gaat nergens
 //  door JSON.stringify.
 // ============================================================================
@@ -2466,12 +2521,15 @@ interface DocumentmetadataRij {
   fonds_id: string | null;
   bibliotheek: string | null;
   documenttype: string | null;
+  wetsgeschiedenis_subtype: string | null;
+  dossiernummer: string | null;
   bestandstype: string | null;
   documentdatum: string | null;
   geldig_tot: string | null;
   normgewicht: string | null;
   bronorganisatie: string | null;
   extern_url: string | null;
+  wettelijk_regime: string | null;
 }
 
 export async function verrijkDocumentmetadata(
@@ -2486,7 +2544,7 @@ export async function verrijkDocumentmetadata(
   const { data, error } = await metSignaal(supabase
     .from("documenten")
     .select(
-      "id, fonds_id, bibliotheek, documenttype, bestandstype, documentdatum, geldig_tot, normgewicht, bronorganisatie, extern_url"
+      "id, fonds_id, bibliotheek, documenttype, wetsgeschiedenis_subtype, dossiernummer, bestandstype, documentdatum, geldig_tot, normgewicht, bronorganisatie, extern_url, wettelijk_regime"
     )
     .in("id", ids), signal);
 
@@ -2516,6 +2574,8 @@ export async function verrijkDocumentmetadata(
       continue;
     }
     c.documenten.documenttype = d.documenttype ?? null;
+    c.documenten.wetsgeschiedenis_subtype = d.wetsgeschiedenis_subtype ?? null;
+    c.documenten.dossiernummer = d.dossiernummer ?? null;
     c.documenten.bestandstype = d.bestandstype ?? null;
     // De overige velden alleen AANVULLEN. De RPC's leveren ze op het
     // gerangschikte pad al; overschrijven zou daar niets toevoegen en een
@@ -2529,6 +2589,7 @@ export async function verrijkDocumentmetadata(
     doc.normgewicht ??= d.normgewicht ?? null;
     doc.bronorganisatie ??= d.bronorganisatie ?? null;
     doc.extern_url ??= d.extern_url ?? null;
+    doc.wettelijk_regime ??= d.wettelijk_regime ?? null;
   }
   return chunks;
 }

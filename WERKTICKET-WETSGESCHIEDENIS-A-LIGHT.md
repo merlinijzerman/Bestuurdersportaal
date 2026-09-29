@@ -2,7 +2,7 @@
 
 | Veld | Waarde |
 |---|---|
-| **Status** | Gepland — niet gestart |
+| **Status** | In uitvoering — foundation, structuur-ingest, R-1 bronduiding en R-2 juridische vraagintentie (#491) gerealiseerd; R-3 routing/ranking (#492: actuele wet vóór wetsgeschiedenis, peildatumgrens) in PR naar `preview`; bronimport, vergelijking en evaluatie nog open |
 | **Prioriteit** | P2 — pilotvoorbereiding |
 | **Impactklasse** | AI/retrieval + beperkte data- en UI-impact |
 | **Omvang** | Indicatie: 5–8 engineeringdagen + 1–2 dagen broncuratie |
@@ -108,6 +108,9 @@ De bronweergave maakt het onderscheid expliciet, bijvoorbeeld:
 - Pas hetzelfde onderscheid toe in de afzonderlijke documentvergelijking. Expliciet gekozen
   historische documenten blijven vergelijkbaar, maar de vergelijking presenteert wetgeving
   en wetsgeschiedenis nooit als twee gelijkwaardige bindende normen.
+  *Status V-1 (#493): gebouwd in PR naar `preview`, nog niet gemerged. Juridische rol per
+  zijde, servergeschreven kop/opdracht, bron- en auditmetadata; één kleine migratie op de
+  vergelijkingsauditprojectie. Zie `HANDOVER-WETSGESCHIEDENIS-A-LIGHT-FOUNDATION.md` §6a.*
 - Voeg documenttype, subtype, dossiernummer, versie/datum, normgewicht en rechtsregime toe
   aan de bestaande retrieval- en auditmetadata. Gebruik de documenttitel voor de volledige
   officiële bronverwijzing.

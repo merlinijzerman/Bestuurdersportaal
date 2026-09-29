@@ -121,13 +121,15 @@ test("F4-context — elke bereikte lezing is geclassificeerd", () => {
 });
 
 test("F4-context — de klassenverdeling per lezing is hard gepind", () => {
+  // #493 V-1: +1 lezing (`vergelijk-productie.ts::documenten`, modelcontext +
+  // configuratie) — de juridische rol per gekozen document; bewust geen evidence.
   const k = lezingenPerKlasse() as Record<string, string[]>;
-  assert.equal(lezingen().length, 53, "het aantal lezingen op het antwoordpad is gewijzigd");
+  assert.equal(lezingen().length, 54, "het aantal lezingen op het antwoordpad is gewijzigd");
   assert.equal(k.evidence.length, 8, `evidence: ${k.evidence.join(", ")}`);
-  assert.equal(k.modelcontext.length, 26, `modelcontext: ${k.modelcontext.join(", ")}`);
-  assert.equal(k.configuratie.length, 18, `configuratie: ${k.configuratie.join(", ")}`);
+  assert.equal(k.modelcontext.length, 27, `modelcontext: ${k.modelcontext.join(", ")}`);
+  assert.equal(k.configuratie.length, 19, `configuratie: ${k.configuratie.join(", ")}`);
   assert.equal(k.audit.length, 3, `audit: ${k.audit.join(", ")}`);
-  assert.equal(Object.keys(LEZINGKLASSE).length, 53, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
+  assert.equal(Object.keys(LEZINGKLASSE).length, 54, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
 });
 
 test("F4-context — één tabel kan meerdere hoedanigheden hebben", () => {

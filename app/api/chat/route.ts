@@ -18,6 +18,7 @@ import { rondAfStrikt } from "@/core/lib/ai-actie-afronding";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { voerVolledigeRetrievalUit, foutcategorieVoor, type Spoor } from "@/core/lib/retrieval/orkestratie";
 import { bouwBronstatusDto } from "@/core/lib/retrieval/bronstatus-dto";
+import { juridischeAntwoordgrens } from "@/core/lib/retrieval/juridisch-beleid";
 import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, bewaakNaIO, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
@@ -91,7 +92,7 @@ import {
   type RequirementRij,
   type BewijsRij,
 } from "@/core/lib/module-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, isOpsteltaak, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, isOpsteltaak, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, bepaalJuridischeVraagintentie, juridischeInlineMelding, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
 import { getPortaalContext } from "@/core/lib/portaalcontext";
 import { bouwPortaalstandBlok } from "@/core/lib/portaalstand-blok";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
@@ -121,6 +122,7 @@ import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
 import { vergelijkmodusVoorFondsAan } from "@/core/lib/vergelijk-rollout";
 import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
 import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/vergelijk-productie";
+import { juridischeBronAuditvelden } from "@/core/lib/vergelijk-kern";
 // AQL-2 / spike 1 — de answer-generation-kern (toon-systeemprompt, per-modus
 // instructiesets, system-prompt-builders, model-/budgetconstanten) is verplaatst
 // naar lib/generatie-kern.ts zodat zowel deze streaming-route als het AI Quality
@@ -360,6 +362,9 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
       // Tranche 2B — doorgeefvelden voor de documentlijst; gevuld door
       // verrijkDocumentmetadata() vóór deze aanroep.
       documenttype: c.documenten.documenttype ?? null,
+      wetsgeschiedenis_subtype: c.documenten.wetsgeschiedenis_subtype ?? null,
+      dossiernummer: c.documenten.dossiernummer ?? null,
+      wettelijk_regime: c.documenten.wettelijk_regime ?? null,
       bestandstype: c.documenten.bestandstype ?? null,
       // Óók de bestaande bronkaartvelden. Ze stonden hier niet, waardoor dit pad
       // als enige geen status, datum of normgewicht toonde — en het filter
@@ -1304,6 +1309,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       contextModus === "enforce" && vraagContext
         ? vraagContext.effectieveVraag
         : vraag;
+
+    // Wetsgeschiedenis A-light R-2 (#491) — juridische vraagintentie.
+    // Exact één keer per beurt, op de EFFECTIEVE vraag (ná de contextresolver),
+    // zodat een opgeloste vervolgvraag dezelfde intentie krijgt als de direct
+    // gestelde vraag. Inhoudsarm vastgelegd onder
+    // `retrieval_meta.invoer.juridische_intentie`.
+    // R-3 (#492): deze ene variabele gaat ongewijzigd naar het CENTRALE
+    // retrievalcontract (grenzen van de bibliotheeksporen) en naar de centrale
+    // antwoordgrens. Poort en beleid zitten in core/lib/retrieval/juridisch-
+    // beleid.ts; geen filter, promptblok of bronkaart leest haar hier.
+    const juridischeIntentie = bepaalJuridischeVraagintentie(effectieveVraag);
 
     // M3 — een letterlijk genoemd document mag alleen automatisch scope worden
     // als precies één actief/geïndexeerd/toegankelijk document onder RLS past.
@@ -2493,6 +2509,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                   documentstatus: b.status.documentstatus ?? null,
                   bronstatus: b.status.bronstatus ?? null,
                   documentdatum: b.versie.waarde,
+                  // V-1 — dossier, normgewicht en rechtsregime van juridische
+                  // bronnen herleidbaar op bronniveau; niet-juridisch ongewijzigd.
+                  ...juridischeBronAuditvelden(b.verwijzing),
                 })),
                 ...(resultaat.retrieval_meta?.toelating
                   ? { toelating: resultaat.retrieval_meta.toelating }
@@ -2500,9 +2519,13 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 // Plateau 1 — een contextresolver-call kan vóór deze vroege return
                 // hebben gedraaid; leg de telemetrie vast zodat hij niet stil buiten
                 // het auditspoor valt.
-                ...(vraagContext
-                  ? { invoer: { context: contextTelemetrie(vraagContext, contextModus) } }
-                  : {}),
+                invoer: {
+                  ...(vraagContext
+                    ? { context: contextTelemetrie(vraagContext, contextModus) }
+                    : {}),
+                  // R-2 (#491) — observe-only, inhoudsarm.
+                  juridische_intentie: juridischeIntentie,
+                },
               },
               p_retrieval_meta_inhoud:
                 vraagContext && vraagContext.kandidaatVraag.trim() !== vraag.trim()
@@ -2559,6 +2582,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 ...(vraagContext
                   ? { context: contextTelemetrie(vraagContext, contextModus) }
                   : {}),
+                // R-2 (#491) — observe-only, inhoudsarm.
+                juridische_intentie: juridischeIntentie,
               },
             },
             p_retrieval_meta_inhoud:
@@ -2639,6 +2664,8 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                 ...(vraagContext
                   ? { context: contextTelemetrie(vraagContext, contextModus) }
                   : {}),
+                // R-2 (#491) — observe-only, inhoudsarm.
+                juridische_intentie: juridischeIntentie,
               },
             },
             // Deze tak kent geen retrieval; alleen de eventuele resolver-kandidaatvraag
@@ -3304,6 +3331,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         regimeWeging: geresolveerdeVlaggen.regimeWeging,
         relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
       };
+      // R-3 (#492) — het centrale juridisch bronbeleid geldt voor de BIBLIOTHEEK-
+      // sporen (ongescopet primair en aanvullend). Een bewust gekozen document of
+      // SharePoint-bron blijft, net als voor de actualiteitsfilter, ongemoeid.
+      // De poort en het beleid zitten centraal in de selectie; de route geeft
+      // alleen de ene, al bepaalde R-2-intentie door.
+      const grenzenBibliotheek = { ...grenzenPrimair, juridischeIntentie };
       const maakQuery = (
         naam: string,
         documentScope: string[] | undefined,
@@ -3346,7 +3379,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       if (sporen.length === 0) {
         sporen.push({
           query: maakQuery("primair", undefined, CHUNK_BUDGET, retrievalFilters),
-          grenzen: grenzenPrimair,
+          grenzen: grenzenBibliotheek,
           primair: true,
         });
       }
@@ -3358,6 +3391,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             representatieConstraints: geresolveerdeVlaggen.representatieConstraints,
             regimeWeging: geresolveerdeVlaggen.regimeWeging,
             relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,
+            juridischeIntentie,
           },
           primair: false,
         });
@@ -4157,14 +4191,32 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       return [vervangen, ...zonder];
     };
 
-    const inlineMeldingenPre = metNietVastgesteldeMelding(
-      bepaalInlineMeldingen({
-        bronModus: bronModusRetrieval,
-        antwoordmodus,
-        aantalBronnen: bronnen.length,
-        scopeActief,
-      })
-    );
+    // Wetsgeschiedenis A-light R-3 (#492) — de juridische ANTWOORDGRENS via de
+    // bestaande inline-meldingen (geen wijziging van de toon-systeemprompt).
+    // Centraal bepaald uit dezelfde R-2-intentie (met dezelfde poort als de
+    // selectie) en de uiteindelijk geselecteerde bronnen over alle sporen:
+    // historische peildatum → historische wetsversies ontbreken; geen actuele
+    // wetspassage bij wetsgeschiedenis of bij een zekere normvraag (ook bij nul
+    // juridische bronnen) → de actuele normbasis ontbreekt.
+    const juridischeMeldingen: InlineMelding[] = juridischeAntwoordgrens(
+      juridischeIntentie,
+      chunks.map((c) => ({
+        documenttype: c.documenten.documenttype,
+        wetsgeschiedenisSubtype: c.documenten.wetsgeschiedenis_subtype,
+      }))
+    ).map(juridischeInlineMelding);
+
+    const inlineMeldingenPre = [
+      ...metNietVastgesteldeMelding(
+        bepaalInlineMeldingen({
+          bronModus: bronModusRetrieval,
+          antwoordmodus,
+          aantalBronnen: bronnen.length,
+          scopeActief,
+        })
+      ),
+      ...juridischeMeldingen,
+    ];
 
     // ── Scenario A (besluit 0072) — beslis of live web-retrieval mag draaien ──
     // Deterministische gating (FR-1/FR-4/FR-9): env-vlag aan + ≥1 actieve
@@ -4716,15 +4768,18 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           const algemeneKennisMarkers = (
             zichtbaarAntwoord.match(/\[(?:Algemene kennis|Volgens wetgeving)\]/gi) || []
           ).length;
-          const inlineMeldingenFinaal = metNietVastgesteldeMelding(
-            bepaalInlineMeldingen({
-              bronModus: bronModusRetrieval,
-              antwoordmodus,
-              aantalBronnen: bronnen.length,
-              scopeActief,
-              algemeneKennisMarkers,
-            })
-          );
+          const inlineMeldingenFinaal = [
+            ...metNietVastgesteldeMelding(
+              bepaalInlineMeldingen({
+                bronModus: bronModusRetrieval,
+                antwoordmodus,
+                aantalBronnen: bronnen.length,
+                scopeActief,
+                algemeneKennisMarkers,
+              })
+            ),
+            ...juridischeMeldingen,
+          ];
 
           // Afkap-signaal: raakt het antwoord het max_tokens-plafond, dan tonen we
           // dat expliciet i.p.v. het stil af te kappen (relevant sinds de Opus-
@@ -4892,6 +4947,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               vraagContext.kandidaatVraag.trim() !== vraag.trim()
                 ? { context_kandidaat_vraag: vraagContext.kandidaatVraag }
                 : {}),
+              // Wetsgeschiedenis A-light R-2 (#491) — juridische vraagintentie
+              // van de effectieve vraag. Gesloten enums, geen vraagtekst;
+              // observe-only (stuurt niets). Basisniveau via `invoer`, migratievrij.
+              juridische_intentie: juridischeIntentie,
             },
             ...(contextGeneutraliseerd > 0
               ? { context_geneutraliseerd: contextGeneutraliseerd }

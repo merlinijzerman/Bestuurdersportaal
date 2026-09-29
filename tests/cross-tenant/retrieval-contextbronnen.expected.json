@@ -1,6 +1,6 @@
 {
   "_doc": "#322/#348 F4-T1 — bevroren register van het ANTWOORDPAD: elke tabel die vanaf app/api/chat/route.ts TRANSITIEF over core/lib bereikbaar is, per bestand, plus de classificatie PER LEZING (bestand::tabel → een of meer van evidence / modelcontext / configuratie / audit, besluit 0213 R5). Een bereikte lezing zonder klasse maakt de gate rood. Padresolutie volgt de tsconfig-alias en echte relatieve paden, inclusief ../ en indexbestanden. Regenereren: node tests/karakterisering/retrieval-census.mjs --schrijf.",
-  "bereikte_bestanden": 170,
+  "bereikte_bestanden": 172,
   "lezingen_per_klasse": {
     "evidence": [
       "core/lib/rag.ts::document_chunks",
@@ -38,7 +38,8 @@
       "core/lib/profielsturing.ts::profiel_expertises",
       "core/lib/profielsturing.ts::profiel_focusgebieden",
       "core/lib/profielsturing.ts::profiel_gremia",
-      "core/lib/profielsturing.ts::profielen"
+      "core/lib/profielsturing.ts::profielen",
+      "core/lib/vergelijk-productie.ts::documenten"
     ],
     "configuratie": [
       "app/api/chat/route.ts::profielen",
@@ -57,6 +58,7 @@
       "core/lib/microsoft-sharepoint-ai-gate.ts::fonds_integratie_profielen",
       "core/lib/profiel.ts::profielen",
       "core/lib/vergelijk-productie.ts::concepts",
+      "core/lib/vergelijk-productie.ts::documenten",
       "core/lib/vergelijk-rollout.ts::fonds_feature_flags",
       "core/lib/web-whitelist-data.ts::bron_whitelist"
     ],
@@ -291,7 +293,8 @@
     },
     "core/lib/vergelijk-productie.ts": {
       "tabellen": [
-        "concepts"
+        "concepts",
+        "documenten"
       ]
     },
     "core/lib/vergelijk-rollout.ts": {

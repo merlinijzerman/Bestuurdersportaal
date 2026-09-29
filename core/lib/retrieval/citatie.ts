@@ -20,6 +20,7 @@ import { neutraliseerBrontekst, maakBronSentinel } from "../bron-afbakening";
 import { notulenBronLabel } from "../notulen";
 import { bouwBronfragment } from "../bronfragment";
 import { statuslabelVoorBron } from "../documentstatus-label";
+import { juridischeDuiding } from "../wetsgeschiedenis";
 import type { BronVerwijzing } from "../rag";
 import type { Bronresultaat, CitaatOpdracht } from "./contract";
 import { maakCitationId } from "./identiteit";
@@ -86,6 +87,15 @@ export function bouwCitaties(
       bron.documentIdentiteit.bibliotheek === "generiek"
         ? ` [generiek/extern kader${w.bronorganisatie ? ` — ${w.bronorganisatie}` : ""}]`
         : "";
+    // Wetsgeschiedenis A-light R-1 — deze app-geschreven kop maakt vóór de
+    // documenttekst zichtbaar of een juridische bron de actuele norm of alleen
+    // toelichting is. De tekst blijft binnen het onbetrouwbare bronblok; de
+    // bijbehorende gedragsregel staat daarom afzonderlijk in de systeemprompt.
+    const juridischeRol = juridischeDuiding(
+      w.documenttype,
+      w.wetsgeschiedenisSubtype
+    );
+    const juridischeRolLabel = juridischeRol ? ` [${juridischeRol.label}]` : "";
 
     // R1.6 — is de treffer uitgebreid tot zijn structuur-unit, dan is DAT de
     // brontekst; bronlabel, locatie en fragment blijven op de treffer.
@@ -108,7 +118,7 @@ export function bouwCitaties(
           : " [aanvullend uit de bibliotheek]"
         : "";
 
-    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${statusLabel}${herkomstLabel}${locatie ? ` (${locatie})` : ""}`;
+    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${juridischeRolLabel}${statusLabel}${herkomstLabel}${locatie ? ` (${locatie})` : ""}`;
     // H-10: elke bron in een eigen, met een onvoorspelbare sentinel afgebakend
     // blok. Alles tussen de openings- en sluittag is DATA, nooit instructie.
     const blok = `<bron s="${sentinel}" nr="${nr}">\n${kop}:\n${brontekst}\n</bron s="${sentinel}">`;
@@ -151,6 +161,13 @@ export function bouwCitaties(
       normgewicht: bron.curatie?.normgewicht ?? null,
       extern_url: w.externUrl ?? null,
       documenttype: w.documenttype ?? null,
+      ...(w.wetsgeschiedenisSubtype
+        ? { wetsgeschiedenis_subtype: w.wetsgeschiedenisSubtype }
+        : {}),
+      ...(w.dossiernummer ? { dossiernummer: w.dossiernummer } : {}),
+      ...(bron.curatie?.wettelijkRegime
+        ? { wettelijk_regime: bron.curatie.wettelijkRegime }
+        : {}),
       bestandstype: w.bestandstype ?? null,
     } as BronVerwijzing);
   }

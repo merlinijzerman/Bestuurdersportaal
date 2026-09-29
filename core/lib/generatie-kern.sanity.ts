@@ -26,6 +26,7 @@ import {
   SP_REFLECTIE_CONCEPT_REGELS,
   SP_REFLECTIE_TEGENPERSPECTIEF,
   SP_DOCUMENTEN_REGELS,
+  SP_BRON_VERTROUWEN,
   SP_BUREAU_BRONLOOS_REGELS,
   VERVOLGVRAGEN_INSTRUCTIE,
   VERVOLGVRAGEN_MARKER,
@@ -131,6 +132,14 @@ test("toon-/instructieblokken byte-identiek aan gepinde snapshot", () => {
   assert.equal(sha(SP_REFLECTIE_REGELS), PIN.SP_REFLECTIE_REGELS);
   assert.equal(sha(SP_REFLECTIE_CONCEPT_REGELS), PIN.SP_REFLECTIE_CONCEPT_REGELS);
   assert.equal(sha(SP_REFLECTIE_TEGENPERSPECTIEF), PIN.SP_REFLECTIE_TEGENPERSPECTIEF);
+});
+
+test("R-1: systeemprompt maakt wetsgeschiedenis nooit zelfstandig normatief", () => {
+  const regels = SP_BRON_VERTROUWEN.toLowerCase();
+  assert.ok(regels.includes("[geldend recht]"));
+  assert.ok(regels.includes("wetsgeschiedenis uitsluitend"));
+  assert.ok(regels.includes("nooit zelfstandig een verplichting, verbod, bevoegdheid of wettelijke termijn"));
+  assert.ok(regels.includes("aangenomen amendement"));
 });
 
 test("plateau B: de reflectieprompt stuurt niet en diagnosticeert niet", () => {
