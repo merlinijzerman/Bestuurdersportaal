@@ -173,6 +173,13 @@ export const LEZINGKLASSE = {
   "core/lib/retrieval/supabase-parent.ts::document_chunks": { klassen: ["evidence"], doel: "begrensde siblingverrijking achter de adapterhook" },
 
   // ── configuratie, autorisatie en bronbeleid — GEEN contextlaag ────────────
+  // #493 V-1 — één gebonden read op precies de twee expliciet gekozen documenten
+  // (serverscope): documenttype/subtype/dossier/normgewicht/regime/datum/status
+  // bepalen de servergeschreven juridische rol in de vergelijkopdracht
+  // (modelcontext); fonds_id/bibliotheek bepalen de opaque auditnamespace en de
+  // app-guard naast RLS (configuratie). Geen citeerbaar bewijs: de passages
+  // blijven via de retrievalkern lopen.
+  "core/lib/vergelijk-productie.ts::documenten": { klassen: ["modelcontext", "configuratie"], doel: "juridische rol (R-1-metadata) en auditnamespace van de twee gekozen documenten; geen evidence, geen actualiteitsfilter" },
   "core/lib/vergelijk-productie.ts::concepts": { klassen: ["configuratie"], doel: "begrippencatalogus (id/key/label/type/status) die semantic_units interpreteert; geen documentgebonden bewijs" },
   "core/lib/capabilities.ts::profielen": { klassen: ["configuratie"], doel: "rol voor de capability-check" },
   "core/lib/fonds-sessie.ts::profielen": { klassen: ["configuratie"], doel: "fonds_id en rol voor de tenantbepaling" },

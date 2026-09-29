@@ -18,10 +18,13 @@
 
 import type {
   Finding,
+  VergelijkJuridischeDuiding,
   VergelijkMethode,
   VergelijkResultaat,
+  VergelijkZijdeRol,
   VerschilTypeRuw,
 } from "@/core/lib/vergelijk-types";
+import { formatteerDossiernummer, WETTELIJK_REGIME_LABEL, isWettelijkRegime } from "@/core/lib/wetsgeschiedenis";
 
 const VERSCHIL_LABEL: Record<VerschilTypeRuw, string> = {
   gelijk: "Gelijk",
@@ -44,11 +47,13 @@ const METHODE_LABEL: Record<VergelijkMethode, string> = {
 
 function Zijde({
   titel,
+  rol,
   value,
   evidence,
   page,
 }: {
   titel: string;
+  rol?: VergelijkZijdeRol;
   value: string | null;
   evidence: string | null;
   page: number | null;
@@ -56,6 +61,7 @@ function Zijde({
   return (
     <div className="flex-1 min-w-0">
       <div className="text-xs font-medium uppercase tracking-wide text-muted">{titel}</div>
+      {rol && <div className="mt-0.5 text-xs text-muted">{rol.label}</div>}
       <div className="mt-1 text-sm font-semibold text-ink break-words">
         {value ?? <span className="font-normal italic text-muted">niet aangetroffen</span>}
       </div>
@@ -72,10 +78,12 @@ function Zijde({
 function FindingKaart({
   finding,
   label,
+  juridisch,
   onReageer,
 }: {
   finding: Finding;
   label: string;
+  juridisch?: VergelijkJuridischeDuiding;
   onReageer?: (finding: Finding) => void;
 }) {
   return (
@@ -92,9 +100,9 @@ function FindingKaart({
         </span>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
-        <Zijde titel="Bron" value={finding.bron.value} evidence={finding.bron.evidence} page={finding.bron.page} />
+        <Zijde titel="Bron" rol={juridisch?.bron} value={finding.bron.value} evidence={finding.bron.evidence} page={finding.bron.page} />
         <div className="hidden w-px self-stretch bg-line sm:block" aria-hidden />
-        <Zijde titel="Doel" value={finding.doel.value} evidence={finding.doel.evidence} page={finding.doel.page} />
+        <Zijde titel="Doel" rol={juridisch?.doel} value={finding.doel.value} evidence={finding.doel.evidence} page={finding.doel.page} />
       </div>
       {onReageer && (
         // T10-hook: de bestuurder reageert per finding (oordeel volgt in T10). T5
@@ -109,6 +117,37 @@ function FindingKaart({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// V-1 — servergeschreven juridische kop per document, vóór de bevindingen. De
+// component leidt zelf niets af: rol, label en duiding komen kant-en-klaar uit
+// de service (geen vergelijk- of juridische logica in de UI).
+function metaRegel(z: VergelijkZijdeRol): string {
+  const delen: string[] = [];
+  if (z.dossiernummer) delen.push(`Kamerstuk ${formatteerDossiernummer(z.dossiernummer)}`);
+  if (z.documentdatum) delen.push(z.documentdatum);
+  if (z.wettelijk_regime && isWettelijkRegime(z.wettelijk_regime)) delen.push(WETTELIJK_REGIME_LABEL[z.wettelijk_regime]);
+  if (z.normgewicht) delen.push(`normgewicht: ${z.normgewicht}`);
+  return delen.join(" · ");
+}
+
+function JuridischeKop({ duiding }: { duiding: VergelijkJuridischeDuiding }) {
+  const zijden = [["Bron", duiding.bron], ["Doel", duiding.doel]] as const;
+  return (
+    <div className="mb-3 rounded-lg border border-line bg-card p-3" data-testid="vergelijk-juridische-kop">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+        {zijden.map(([naam, z]) => (
+          <div key={naam} className="flex-1 min-w-0">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted">{naam}</div>
+            <div className="mt-1 text-sm font-semibold text-ink break-words">{z.label}</div>
+            {z.titel && <div className="mt-0.5 text-xs text-muted break-words">{z.titel}</div>}
+            {metaRegel(z) && <div className="mt-0.5 text-xs text-muted">{metaRegel(z)}</div>}
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 border-t border-line pt-2 text-xs leading-snug text-ink">{duiding.toelichting}</p>
     </div>
   );
 }
@@ -133,6 +172,8 @@ export default function VergelijkResultaatWeergave({
         </span>
       </div>
 
+      {resultaat.juridische_duiding && <JuridischeKop duiding={resultaat.juridische_duiding} />}
+
       {findings.length === 0 ? (
         <p className="text-sm text-muted">
           Geen vergelijkbare waarden aangetroffen op de onderzochte dimensies.
@@ -140,7 +181,13 @@ export default function VergelijkResultaatWeergave({
       ) : (
         <div className="flex flex-col gap-2">
           {findings.map((f) => (
-            <FindingKaart key={f.finding_key} finding={f} label={labelVoor(f.dimensie)} onReageer={onReageer} />
+            <FindingKaart
+              key={f.finding_key}
+              finding={f}
+              label={labelVoor(f.dimensie)}
+              juridisch={resultaat.juridische_duiding}
+              onReageer={onReageer}
+            />
           ))}
         </div>
       )}

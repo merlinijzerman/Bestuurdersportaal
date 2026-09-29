@@ -196,18 +196,20 @@ test("#368 census — queryparser telt code, geen commentaar of stringinhoud", (
   assert.equal(telFysiekeQueries(bron, "document_chunks"), 1);
 });
 
-test("#368 — alle 26 modelcontextlezingen blijven apart van evidence", () => {
-  assert.equal(context.lezingen_per_klasse.modelcontext.length, 26);
+test("#368 — alle 27 modelcontextlezingen blijven apart van evidence", () => {
+  // #493 V-1: +1 — `vergelijk-productie.ts::documenten` (juridische rol per
+  // gekozen document), via leesModelcontext en bewust géén evidence.
+  assert.equal(context.lezingen_per_klasse.modelcontext.length, 27);
   assert.match(lees("app/api/chat/route.ts"), /combineerModelcontext/);
   assert.match(lees("app/api/chat/route.ts"), /modelcontext_audit/);
 });
 
-test("#368 modelcontextboundary — alle 26 lezingen lopen uitvoerend door de typed grens", () => {
+test("#368 modelcontextboundary — alle 27 lezingen lopen uitvoerend door de typed grens", () => {
   const entries = context.lezingen_per_klasse.modelcontext.map((lezing) => {
     const [bestand, tabel] = lezing.split("::");
     return { bestand, tabel };
   });
-  assert.equal(entries.length, 26);
+  assert.equal(entries.length, 27);
   const perBestand = new Map<string, Map<string, { begrensd: number; buiten: number }>>();
   for (const { bestand } of entries) {
     if (!perBestand.has(bestand)) perBestand.set(bestand, analyseerModelcontextQueries(lees(bestand)));

@@ -134,6 +134,9 @@ SQL_REFLECTIE="supabase/checks/2026_08_05_b_reflectie_flow.sql"
 # T5 — comparison_results + fn_schrijf_vergelijking: RLS-isolatie, schrijfpad
 # alleen via de functie, fonds server-side uit auth.uid(), tenant-guard (42501).
 SQL_T5VGL="supabase/checks/2026_08_13_t5_vergelijking.sql"
+# #493 V-1 — juridische rol per zijde in comparison_run: bytegelijk zonder
+# duiding, opaque en metadata-gebonden mét duiding, MvT nooit als geldend recht.
+SQL_V1JUR="supabase/checks/2026_09_29_493_vergelijk_juridische_rollen.sql"
 # ── T3 en T4 (21-08) — de twee FUNDAMENTELE negatieve suites, en ze hadden een
 #    eigen faalpatroon: ze stonden in `scripts/rls-cross-tenant-test.sh`, een
 #    TWEEDE script dat in geen enkele workflow draait. CI roept uitsluitend dit
@@ -404,6 +407,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_REFLECTIE"
 echo
 echo "-- T5 vergelijking (comparison_results RLS + schrijfpad-only via functie + tenant-guard) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T5VGL"
+echo
+echo "-- #493 V-1 juridische rollen in het vergelijkingsauditspoor (opaque, metadata-gebonden, geen verzonnen normstatus) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_V1JUR"
 echo
 echo "-- A rollen/capabilities + governance_log-schrijfpad (fonds en naam server-side) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ROLCAP"

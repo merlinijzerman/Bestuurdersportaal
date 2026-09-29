@@ -122,6 +122,7 @@ import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
 import { vergelijkmodusVoorFondsAan } from "@/core/lib/vergelijk-rollout";
 import { voerVergelijkingBinnenDeadline } from "@/core/lib/vergelijk-deadline";
 import { productieDeps, VergelijkAuditVerzamelaar, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/vergelijk-productie";
+import { juridischeBronAuditvelden } from "@/core/lib/vergelijk-kern";
 // AQL-2 / spike 1 — de answer-generation-kern (toon-systeemprompt, per-modus
 // instructiesets, system-prompt-builders, model-/budgetconstanten) is verplaatst
 // naar lib/generatie-kern.ts zodat zowel deze streaming-route als het AI Quality
@@ -2508,6 +2509,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
                   documentstatus: b.status.documentstatus ?? null,
                   bronstatus: b.status.bronstatus ?? null,
                   documentdatum: b.versie.waarde,
+                  // V-1 — dossier, normgewicht en rechtsregime van juridische
+                  // bronnen herleidbaar op bronniveau; niet-juridisch ongewijzigd.
+                  ...juridischeBronAuditvelden(b.verwijzing),
                 })),
                 ...(resultaat.retrieval_meta?.toelating
                   ? { toelating: resultaat.retrieval_meta.toelating }

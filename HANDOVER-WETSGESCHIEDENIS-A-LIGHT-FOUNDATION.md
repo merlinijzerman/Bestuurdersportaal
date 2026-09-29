@@ -294,6 +294,120 @@ R-1 raakt gericht `app/api/chat/route.ts`, `core/lib/rag.ts` en `core/lib/retrie
 metadata te projecteren. Selectie, ranking en RPC's blijven inhoudelijk gelijk. Er is
 geen overlap met Microsoft-, SharePoint-, OAuth-, tenant- of tokencode.
 
+## 6a. V-1 — juridische rollen in de documentvergelijking (#493)
+
+| Veld | Waarde |
+|---|---|
+| **Branch** | `codex/493-vergelijk-juridische-rollen` (worktree `mvp-493-vergelijk-rollen`), basis `origin/preview` @ `0361e0a` (na R-2 en R-3 gerebased) |
+| **Status** | PR naar `preview` open, **niet gemerged**. Eén migratie (hieronder gemotiveerd); nog niet op `portal_preview` toegepast. Geen import, geen Productie. |
+
+**Wat.** Per gekozen document leest de vergelijking server-side de R-1-metadata
+(documenttype, subtype, dossiernummer, normgewicht, `wettelijk_regime`,
+documentdatum, status/bronstatus/geldig_tot en de titel als officiële verwijzing).
+Daaruit leidt de pure `vergelijk-kern.ts` een getypeerde rol per zijde af
+(`VergelijkJuridischeRol`): `geldend_recht` · `wetgeving_niet_geldend` (bewust
+gekozen historische/verlopen versie) · `wetgeving_status_onbekend` ·
+`wetsgeschiedenis` · `niet_juridisch` · `onbekend` (metadata niet leesbaar).
+Labels hergebruiken `juridischeDuiding()` en `juridischeDocumentstatusLabel()` uit
+R-1; er zijn geen concurrerende labels bijgekomen. Het paar krijgt een
+`verhouding` (`norm_tegenover_toelichting`, `norm_tegenover_norm`,
+`toelichting_tegenover_toelichting`, `juridisch_tegenover_overig`, `onbepaald`) en
+een servergeschreven toelichtingszin.
+
+**Waar het landt.**
+
+- *Opdracht:* alleen bij een asymmetrisch of onbepaald paar krijgt de
+  Opus-systeeminstructie servergeschreven rolregels (gesloten labels, geen titel of
+  documenttekst). Documentinhoud kan ze niet wijzigen; de passages blijven data in
+  het gebruikersbericht. Wet↔wet en niet-juridisch↔niet-juridisch houden de
+  byte-identieke opdracht (sha256-pin). De promptversie krijgt dan het achtervoegsel
+  `+jur-v1` in de bestaande `comparison_run.prompt_version`.
+- *Kop/uitvoer:* additief veld `juridische_duiding` op `VergelijkResultaat` (HTTP en
+  chat-SSE); `VergelijkResultaatWeergave` toont vóór de bevindingen per zijde het
+  label (bv. `Geldend recht` tegenover `Memorie van toelichting — wetsgeschiedenis,
+  geen norm`), titel, dossier, datum, regime en normgewicht, plus de
+  toelichtingszin. Een aangenomen amendement wordt expliciet verklarend en geen
+  zelfstandige actuele norm genoemd. Bij twee niet-juridische documenten ontbreekt
+  het veld: de respons is bytegelijk.
+- *Bronnen:* de bronverwijzingen dragen al sinds R-1 documenttype, subtype, dossier,
+  normgewicht en regime (verrijking in de adapter); ongewijzigd.
+- *Audit/persistentie:* zie hieronder.
+
+**Hergebruikte opslagvelden.**
+
+| Spoor | Veld | Gebruik |
+|---|---|---|
+| `comparison_run` | `prompt_version` (bestaand) | `+jur-v1` wanneer de rolregels meesturen |
+| `comparison_run` | `retrieval_meta` jsonb (bestaand, #369) | nieuwe sleutel `juridische_duiding = {verhouding, zijden[]}` met per zijde opaque `document_id`, rol, documenttype, subtype, dossier, normgewicht, regime en datum; geen titel, geen database-id |
+| `governance_log` (chatvergelijking) | `retrieval_meta.bronversie_audit[]` (bestaand, bronniveau, via `meta_bronniveau` al volledig leesbaar) | per juridische bron documenttype/subtype/dossier/normgewicht/regime; niet-juridische bronnen ongewijzigd. Er is geen nieuwe topsleutel, dus `audit-meta.ts` en `meta_projectie` blijven ongewijzigd |
+| `governance_log_inhoud.bronnen` | bestaand | draagt de R-1-verwijzingen al |
+
+**Bewezen opslagkloof, daarom één migratie.** `fn_schrijf_vergelijking` (#369)
+projecteert `p_retrieval_meta` en `p_bronnen` allowlist-gebaseerd; elke extra
+sleutel verdwijnt stil. `/api/vergelijk` schrijft géén `governance_log`, dus
+zonder wijziging is de juridische rol voor die route nergens duurzaam
+herleidbaar. `2026_09_29_493_vergelijk_juridische_rollen.sql` vervangt uitsluitend
+die functie (zelfde signatuur en ACL, grants idempotent herbevestigd, geen nieuw
+object, de allowlist blijft ongewijzigd) en voegt validatie plus projectie van de
+optionele sleutel toe. Een zijde met een rol anders dan `onbekend` moet via de
+opaque identiteit aan een zichtbaar document binden, exact diens R-1-metadata
+dragen en een rol hebben die bij het documenttype past. Een aanroeper kan dus
+geen normstatus verzinnen. Zonder de sleutel is het spoor bytegelijk aan #369. De
+migratie is **terugwaarts compatibel**: code vóór de migratie is veilig, want de
+oude projectie laat de sleutel weg. Voorkeursvolgorde blijft: eerst de migratie op
+`portal_preview`, daarna mergen. Rollback:
+`supabase/rollbacks/2026_09_29_493_vergelijk_juridische_rollen_ROLLBACK.sql`.
+
+**A-10 — gevonden defect, meegenomen.** `vergelijk-productie.ts` vormde de opaque
+auditidentiteit van elke retrievalpoging met een vaste `fonds:<id>`-namespace. De
+DEFINER-check verwacht voor een generiek document `generiek`. Daardoor weigerde
+`fn_schrijf_vergelijking` elke vergelijking met een generiek document
+(`vergelijking_vreemde_retrievalpoging`), en wetgeving en wetsgeschiedenis staan
+uitsluitend generiek. De namespace komt nu uit de servergelezen documentrij. Voor
+fondsdocumenten verandert er niets; DB-check J7 pint dit.
+
+**Documentprofielread.** Per gekozen document is er één read via `leesModelcontext`
+(`documentlabels`, private selector = dat document, cap 1, cancellation). De
+levenscyclus is bewust niet van toepassing: de toelating gebeurde al door de
+expliciete, RLS-gecontroleerde keuze (`vergelijkbare_versies`). Een historische of
+inactieve voorganger valt daardoor niet weg en wordt niet `onbekend`. Bij een fout
+volgt de neutrale rol `onbekend`; bij een afbreking stopt de vergelijking. Het
+censusregister is bewust met één lezing bijgewerkt
+(`vergelijk-productie.ts::documenten`, modelcontext + configuratie, geen evidence):
+53→54 lezingen en 26→27 modelcontextlezingen. De importgraaf verandert door V-1 niet (172 bestanden
+na R-3, dat `juridisch-beleid.ts` toevoegde); het F4-register is ongewijzigd.
+Na de rebase is het register opnieuw uit de census berekend en exact gelijk.
+
+**Samenloop met R-3.** Het juridisch selectiebeleid van R-3 (`juridischeIntentie`
+in de spoorgrenzen) geldt alleen voor bibliotheeksporen van de chat. Het
+vergelijkspoor (`maakVergelijkSpoor`) en `vergelijk-productie.ts` krijgen het nooit;
+in de vergelijktak van de chatroute staat de intentie uitsluitend als auditwaarde.
+Een expliciet gekozen historisch document kan dus niet door het
+actualiteits- of peildatumbeleid van R-3 wegvallen. De contracttest
+`V-1 × R-3` in `retrieval-productiepaden.test.ts` pint dit.
+
+**Tests (lokaal, 29-09-2026).** tsc exit 0; `npm run test:unit` groen: sanity
+"Alle resterende sanity-suites groen." en Vitest 151/151. Nieuwe sanity
+`vergelijk-juridisch.sanity.ts` 17/17: wet↔MvT, wet↔amendement, wet↔wet,
+niet-juridisch↔niet-juridisch (bytegelijk), ontbrekende metadata, historische
+voorganger, opdrachtpin, injectie, negatieve controle en auditcontract. App-laag
+1104/1104, waaronder `retrieval-productiepaden` (+4 V-1-contracttests),
+`retrieval-evidence-contract` en beide censussuites. De volledige
+`bash scripts/cross-tenant-ci.sh` op een eigen wegwerpstack (project
+`mvp493-v1`, poorten 54621/54622) gaf **GROEN** (app- plus DB-laag, incl. V3 en
+de nieuwe check J1–J7). Negatieve DB-controle: tegen de #369-definitie is J2 rood.
+De migratie is tweemaal idempotent toegepast. eslint, `lint:quality:check`,
+`lint:colors`, mapindeling en `npm run build` zijn groen. De karakterisering
+draaide lokaal niet, omdat de seedgrendel poort 54321 pint en die poort bewust
+vrij bleef voor de parallelle R-2-sessie. Die uitkomst komt uit de PR-CI.
+
+**Open punten.** (1) Migratie op `portal_preview` toepassen en daar R1-gates plus
+V3 draaien. (2) De `440-*`-drift-artefacten zijn niet geregenereerd; zoals bij
+eerdere migraties gebeurt dat bij de volgende inventarisatie. De functie-md5 van de
+8-argumentvariant wijzigt. (3) Een release-regel in `HANDOVER.md` volgt na de merge,
+zoals bij R-1. (4) De dimensiebepaling (Haiku) blijft ongewijzigd; valt buiten
+scope.
+
 ## 7. Volgende fasen
 
 | # | Stap | Verwachte bestanden | Tests |
@@ -305,7 +419,7 @@ geen overlap met Microsoft-, SharePoint-, OAuth-, tenant- of tokencode.
 | R-2 | **In PR (#491):** observe-only juridische vraagintentie op de effectieve vraag, vastgelegd onder `retrieval_meta.invoer.juridische_intentie`; zie §2a | `core/lib/vraagtype.ts`, `core/lib/rag.ts` (type), `app/api/chat/route.ts` | `vraagtype.test.ts` 109/109 + pariteitspin; `juridische-vraagintentie-route.test.ts` 7/7; census ongewijzigd |
 | R-3 | **In PR (#492):** centraal juridisch bronbeleid met poort in de selectie (actuele wet vóór wetsgeschiedenis; beide rollen bij bedoeling; actuele wet uitgesloten bij historische peildatum) + juridische antwoordgrens via inline-meldingen; zie §2b | `core/lib/retrieval/juridisch-beleid.ts` (nieuw), `selectie.ts`, `orkestratie.ts`, `core/lib/rag.ts` (typen/commentaar), `core/lib/vraagtype.ts` (meldingen), `app/api/chat/route.ts` | `retrieval-juridisch-beleid.test.ts` 16/16 + mutaties; census 172; retrievalregressies groen |
 | A-1 | **Afgerond binnen R-1:** prompt schrijft voor dat de normatieve conclusie eerst uit geldend recht komt en wetsgeschiedenis alleen uitleg/achtergrond geeft; ook een aangenomen amendement is geen zelfstandige actuele norm | `generatie-kern.ts` | `generatie-kern.sanity.ts` |
-| V-1 | Afzonderlijke vergelijkingscall: juridische metadata en rol meenemen in vergelijking/audit; expliciet gekozen historische documenten niet door een impliciet `actueel`-filter verwijderen; norm en toelichting nooit als gelijkwaardig bindend presenteren | `app/api/vergelijk/route.ts`, `core/lib/vergelijk-productie.ts`, `core/lib/vergelijk-kern.ts` | `retrieval-productiepaden.test.ts`, `retrieval-evidence-contract.test.ts`, vergelijkingsgoldens |
+| V-1 | **Gebouwd, PR naar `preview` open (#493), nog niet gemerged:** juridische rol per zijde in opdracht, kop, bronnen en audit; generieke auditnamespace hersteld; expliciet gekozen historische documenten blijven vergelijkbaar. Zie §6a | `vergelijk-kern.ts`, `vergelijk-productie.ts`, `vergelijk-types.ts`, `VergelijkResultaatWeergave.tsx`, chatroute (bronversie-audit), migratie `2026_09_29_493_…` | `vergelijk-juridisch.sanity.ts` 17/17, `retrieval-productiepaden.test.ts` +4, DB-check J1–J7; goldens ongewijzigd |
 | B-1 | **Bronweergave afgerond binnen R-1:** bronkaarten tonen geldend recht versus wetsgeschiedenis/geen norm, plus dossier en regime. Alleen het type-/subtypefilter in de bibliotheek staat nog open. | `AntwoordWeergave.tsx`, `assistant-source.ts`; later `GeneriekeBibliotheekClient.tsx` | bronlijst-/assistant-source-sanities groen; filtertest volgt |
 | W-1 | Live web: `officielebekendmakingen.nl` `kst-*` niet bindend via de whitelist | `core/lib/web-whitelist.ts`, `web-retrieval.ts` | `web-whitelist.sanity.ts`, `web-retrieval.test.ts` |
 | E-1 | Evaluatieset (werkticket PR 4) + Preview-pilot met bron- en antwoordcontrole | `evals/…` | evalrun op Preview |
