@@ -360,6 +360,9 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
       // Tranche 2B — doorgeefvelden voor de documentlijst; gevuld door
       // verrijkDocumentmetadata() vóór deze aanroep.
       documenttype: c.documenten.documenttype ?? null,
+      wetsgeschiedenis_subtype: c.documenten.wetsgeschiedenis_subtype ?? null,
+      dossiernummer: c.documenten.dossiernummer ?? null,
+      wettelijk_regime: c.documenten.wettelijk_regime ?? null,
       bestandstype: c.documenten.bestandstype ?? null,
       // Óók de bestaande bronkaartvelden. Ze stonden hier niet, waardoor dit pad
       // als enige geen status, datum of normgewicht toonde — en het filter

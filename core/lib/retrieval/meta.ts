@@ -24,6 +24,11 @@ export interface AuditBron {
   documentstatus?: string | null;
   bronstatus?: string | null;
   documentdatum?: string | null;
+  documenttype?: string | null;
+  wetsgeschiedenisSubtype?: string | null;
+  dossiernummer?: string | null;
+  normgewicht?: string | null;
+  wettelijkRegime?: string | null;
   score?: number | null;
   fts?: number | null;
   vec?: number | null;
@@ -65,6 +70,13 @@ export function bouwMeta(
         documentstatus: c.documentstatus ?? null,
         bronstatus: c.bronstatus ?? null,
         documentdatum: c.documentdatum ?? null,
+        ...(c.documenttype ? { documenttype: c.documenttype } : {}),
+        ...(c.wetsgeschiedenisSubtype
+          ? { wetsgeschiedenis_subtype: c.wetsgeschiedenisSubtype }
+          : {}),
+        ...(c.dossiernummer ? { dossiernummer: c.dossiernummer } : {}),
+        ...(c.normgewicht ? { normgewicht: c.normgewicht } : {}),
+        ...(c.wettelijkRegime ? { wettelijk_regime: c.wettelijkRegime } : {}),
         ...(c.documentIdentiteit ? { document_identiteit: c.documentIdentiteit } : {}),
         ...(c.passageIdentiteit ? { passage_identiteit: c.passageIdentiteit } : {}),
         ...(citationId ? { citation_id: citationId } : {}),

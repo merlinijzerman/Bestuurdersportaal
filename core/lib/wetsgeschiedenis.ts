@@ -262,7 +262,7 @@ export function valideerJuridischeMetadata(invoer: JuridischeInvoer): Juridische
   return { fouten, wetsgeschiedenis_subtype: subtype, dossiernummer, normgewichtAfgedwongen };
 }
 
-// ── Duiding (voor latere bronweergave; nu alleen in de curatie-UI) ───────────
+// ── Duiding (curatie, retrieval, antwoordprompt en bronweergave) ─────────────
 export type JuridischeRol = "geldend_recht" | "wetsgeschiedenis";
 
 export interface JuridischeDuiding {

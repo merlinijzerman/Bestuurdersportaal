@@ -256,6 +256,10 @@ export interface Bronresultaat {
     opslagPad?: string | null;
     externUrl?: string | null;
     documenttype?: string | null;
+    /** Alleen bij documenttype `wetsgeschiedenis`; bepaalt de zichtbare juridische rol. */
+    wetsgeschiedenisSubtype?: string | null;
+    /** Genormaliseerd Kamerstukdossier; de volledige verwijzing blijft in de titel. */
+    dossiernummer?: string | null;
     bestandstype?: string | null;
     /** Notulensegment: levert een eigen bronvermelding. */
     notulen?: { vergaderingTitel: string; agendapuntVolgnummer: number | null; agendapuntTitel: string | null } | null;

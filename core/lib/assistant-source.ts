@@ -53,6 +53,10 @@ export interface AssistantSourceDocument {
   bronstatus?: string | null;
   documentdatum?: string | null;
   geldig_tot?: string | null;
+  documenttype?: string | null;
+  wetsgeschiedenis_subtype?: string | null;
+  dossiernummer?: string | null;
+  wettelijk_regime?: string | null;
 }
 
 /** Webbron — alleen geldig met een veilige http(s)-URL (Scenario A). */
@@ -117,6 +121,10 @@ export interface DocumentBronInput {
   bronstatus?: string | null;
   documentdatum?: string | null;
   geldig_tot?: string | null;
+  documenttype?: string | null;
+  wetsgeschiedenis_subtype?: string | null;
+  dossiernummer?: string | null;
+  wettelijk_regime?: string | null;
 }
 
 export function documentBronNaarSource(b: DocumentBronInput): AssistantSourceDocument {
@@ -137,6 +145,12 @@ export function documentBronNaarSource(b: DocumentBronInput): AssistantSourceDoc
     bronstatus: b.bronstatus ?? null,
     documentdatum: b.documentdatum ?? null,
     geldig_tot: b.geldig_tot ?? null,
+    ...(b.documenttype ? { documenttype: b.documenttype } : {}),
+    ...(b.wetsgeschiedenis_subtype
+      ? { wetsgeschiedenis_subtype: b.wetsgeschiedenis_subtype }
+      : {}),
+    ...(b.dossiernummer ? { dossiernummer: b.dossiernummer } : {}),
+    ...(b.wettelijk_regime ? { wettelijk_regime: b.wettelijk_regime } : {}),
   };
 }
 

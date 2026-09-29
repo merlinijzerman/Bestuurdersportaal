@@ -20,6 +20,11 @@
 
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL, type Documenttype } from "./document-metadata";
 import { ACTUELE_BRON_STATUSSEN } from "./document-status-transities";
+import {
+  JURIDISCHE_DOCUMENTTYPEN,
+  JURIDISCH_DOCUMENTTYPE_LABEL,
+  isJuridischDocumenttype,
+} from "./wetsgeschiedenis";
 
 /** Structurele invoer: elke `Bron`/`BronVerwijzing` voldoet hieraan. */
 export interface DocumentbronInvoer {
@@ -33,6 +38,9 @@ export interface DocumentbronInvoer {
   documentstatus?: string | null;
   documentdatum?: string | null;
   documenttype?: string | null;
+  wetsgeschiedenis_subtype?: string | null;
+  dossiernummer?: string | null;
+  wettelijk_regime?: string | null;
   bestandstype?: string | null;
   // Voor het actualiteitsoordeel: een stuk kan `van_kracht` zijn en tóch niet
   // actueel, doordat de bron historisch is of de geldigheid is verlopen. Zelfde
@@ -78,13 +86,13 @@ const ONBEKEND_TYPE_SLEUTEL = "onbekend";
 
 /** Groepsvolgorde: de canonieke constante, met de restgroep altijd achteraan. */
 const TYPE_VOLGORDE = new Map<string, number>(
-  DOCUMENTTYPEN.map((t, i) => [t as string, i])
+  [...DOCUMENTTYPEN, ...JURIDISCHE_DOCUMENTTYPEN].map((t, i) => [t as string, i])
 );
 
 function groepsRang(sleutel: string): number {
   const canoniek = TYPE_VOLGORDE.get(sleutel);
   if (canoniek !== undefined) return canoniek;
-  // De restgroep staat áltijd onderaan — óók onder een waarde die buiten de elf
+  // De restgroep staat áltijd onderaan — óók onder een waarde die buiten de
   // toegestane valt (kan alleen na een schemawijziging). Zonder dit onderscheid
   // zouden beide dezelfde rang krijgen en zou de alfabetische tiebreak
   // "onbekend" vóór bijvoorbeeld "verzonnen" zetten.
@@ -95,9 +103,10 @@ function groepsRang(sleutel: string): number {
 
 function labelVoor(sleutel: string): string {
   if (sleutel === ONBEKEND_TYPE_SLEUTEL) return ONBEKEND_TYPE_LABEL;
+  if (isJuridischDocumenttype(sleutel)) return JURIDISCH_DOCUMENTTYPE_LABEL[sleutel];
   return (
     (DOCUMENTTYPE_LABEL as Record<string, string>)[sleutel] ??
-    // Een waarde buiten de elf toegestane (kan alleen na een schemawijziging):
+    // Een waarde buiten de toegestane set (kan alleen na een schemawijziging):
     // toon hem letterlijk in plaats van hem te verstoppen.
     sleutel
   );
@@ -251,5 +260,6 @@ export function documentIdsVan(groepen: readonly Documentgroep[]): string[] {
 export function documenttypeLabel(regel: DocumentbronInvoer): string | null {
   const t = regel.documenttype;
   if (!t) return null;
+  if (isJuridischDocumenttype(t)) return JURIDISCH_DOCUMENTTYPE_LABEL[t];
   return (DOCUMENTTYPE_LABEL as Record<Documenttype, string>)[t as Documenttype] ?? t;
 }

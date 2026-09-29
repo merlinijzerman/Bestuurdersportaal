@@ -7,6 +7,7 @@ import {
   maakVolledigeVersieHash,
 } from "../../core/lib/retrieval/identiteit";
 import { bouwCitaties } from "../../core/lib/retrieval/citatie";
+import { bouwMeta } from "../../core/lib/retrieval/meta";
 import { splitsRetrievalMeta } from "../../core/lib/audit-meta";
 import { bepaalBronset, leesBevrorenBronbindingen, leesLokaleDocumentRefs } from "../../core/lib/bronset";
 import { bewijsUitVersierij } from "../../core/lib/retrieval/supabase-versie";
@@ -90,6 +91,87 @@ test("#367 — citation-id blijft gelijk bij hernoemen/verplaatsen en wijzigt bi
   const gewijzigdeVersie = bron({ versie: { ...eerste.versie, waarde: maakVolledigeVersieHash(DOC_REF, "r2", "a".repeat(64)) } });
   assert.notEqual(id1, bouwCitaties([gewijzigdeVersie], opdracht).bronnen[0].citation_id);
   assert.equal(id1, maakCitationId(eerste.documentIdentiteit.id, eerste.passageIdentiteit.id, eerste.versie.soort, eerste.versie.waarde!));
+});
+
+test("R-1 — citaatkop, bronkaart en audit onderscheiden geldend recht van wetsgeschiedenis", () => {
+  const mvt = bron({
+    bronsoort: "generiek",
+    documentIdentiteit: {
+      id: maakDocumentIdentiteit("generiek", DOC_REF),
+      bibliotheek: "generiek",
+      bron: "Overheid",
+      fondsId: null,
+    },
+    titel: "Memorie van toelichting — Kamerstukken II 2021/22, 36 067, nr. 3",
+    curatie: { normgewicht: "informatief", wettelijkRegime: "pw" },
+    weergave: {
+      documenttype: "wetsgeschiedenis",
+      wetsgeschiedenisSubtype: "memorie_van_toelichting",
+      dossiernummer: "36067",
+      documentdatum: "2022-03-30",
+      externUrl: "https://zoek.officielebekendmakingen.nl/kst-36067-3.html",
+    },
+  });
+  const uit = bouwCitaties([mvt], {
+    primaireDocumentIds: new Set<string>(),
+    peildatum: "2026-09-29",
+    hoofddocumentLabel: "",
+    sentinel: "S",
+    maxContextTekens: 20_000,
+  });
+  assert.match(uit.contextTekst, /Memorie van toelichting — wetsgeschiedenis, geen norm/);
+  assert.equal(uit.bronnen[0].wetsgeschiedenis_subtype, "memorie_van_toelichting");
+  assert.equal(uit.bronnen[0].dossiernummer, "36067");
+  assert.equal(uit.bronnen[0].wettelijk_regime, "pw");
+
+  const wet = bron({
+    bronsoort: "generiek",
+    documentIdentiteit: {
+      id: maakDocumentIdentiteit("generiek", "22222222-2222-4222-8222-222222222222"),
+      bibliotheek: "generiek",
+      bron: "Overheid",
+      fondsId: null,
+    },
+    titel: "Pensioenwet — BWBR0020809",
+    curatie: { normgewicht: "bindend", wettelijkRegime: "pw" },
+    weergave: { documenttype: "wetgeving" },
+  });
+  assert.match(
+    bouwCitaties([wet], {
+      primaireDocumentIds: new Set<string>(),
+      peildatum: "2026-09-29",
+      hoofddocumentLabel: "",
+      sentinel: "S",
+      maxContextTekens: 20_000,
+    }).contextTekst,
+    /\[Geldend recht\]/
+  );
+
+  const meta = bouwMeta("fts_dutch_ranked", 1, [{
+    ref: mvt.ref,
+    documentId: mvt.documentIdentiteit.id,
+    bron: "Overheid",
+    bibliotheek: "generiek",
+    documenttype: mvt.weergave?.documenttype,
+    wetsgeschiedenisSubtype: mvt.weergave?.wetsgeschiedenisSubtype,
+    dossiernummer: mvt.weergave?.dossiernummer,
+    normgewicht: mvt.curatie?.normgewicht,
+    wettelijkRegime: mvt.curatie?.wettelijkRegime,
+  }]);
+  assert.deepEqual(meta.bronversie_audit?.[0], {
+    document_id: mvt.documentIdentiteit.id,
+    bron: "Overheid",
+    bibliotheek: "generiek",
+    fonds_id: null,
+    documentstatus: null,
+    bronstatus: null,
+    documentdatum: null,
+    documenttype: "wetsgeschiedenis",
+    wetsgeschiedenis_subtype: "memorie_van_toelichting",
+    dossiernummer: "36067",
+    normgewicht: "informatief",
+    wettelijk_regime: "pw",
+  });
 });
 
 test("#367 — Supabase-versiebewijs degradeert expliciet en faalt cross-tenant/corrupt dicht", () => {
