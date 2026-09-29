@@ -509,7 +509,11 @@ export type InlineMeldingType =
   // 30-07-2026 — de actualiteitsfilter nam ALLE treffers weg: er zijn wél
   // fondsstukken over dit onderwerp, maar ze zijn niet vastgesteld. Vervangt
   // 'geen_fondstreffer', want die melding leidt hier tot de omgekeerde conclusie.
-  | "niet_vastgestelde_stukken";
+  | "niet_vastgestelde_stukken"
+  // Wetsgeschiedenis A-light R-3 (#492) — de juridische antwoordgrens. Bepaald
+  // door `juridischeAntwoordgrens()` (core/lib/retrieval/juridisch-beleid.ts).
+  | "historische_wetsversie_niet_beschikbaar"
+  | "geen_actuele_normbasis";
 
 export interface InlineMelding {
   type: InlineMeldingType;
@@ -540,7 +544,21 @@ const INLINE_MELDING_TEKST: Record<InlineMeldingType, string> = {
   // alleen gebruikt als er (onverwacht) geen aantal bekend is.
   niet_vastgestelde_stukken:
     "Er zijn wel fondsstukken over dit onderwerp, maar die zijn nog niet vastgesteld en gelden daarom niet als actuele bron.",
+  historische_wetsversie_niet_beschikbaar:
+    "Historische wetsversies zijn in het portaal niet beschikbaar. Wat op een eerdere datum gold, kan hieruit niet worden vastgesteld; de actuele wettekst geeft alleen weer wat nu geldt.",
+  geen_actuele_normbasis:
+    "Er is geen passage uit de actuele wettekst gevonden. De geraadpleegde wetsgeschiedenis licht de wet toe, maar is zelf geen geldende norm; een wettelijke plicht, verbod, bevoegdheid of termijn volgt er niet zelfstandig uit.",
 };
+
+/**
+ * R-3 (#492) — de juridische antwoordgrens als bestaande inline-melding. Vaste
+ * teksten, geen schijnzekerheid; het type komt uit `juridischeAntwoordgrens()`.
+ */
+export function juridischeInlineMelding(
+  type: "historische_wetsversie_niet_beschikbaar" | "geen_actuele_normbasis"
+): InlineMelding {
+  return { type, tekst: INLINE_MELDING_TEKST[type] };
+}
 
 /**
  * Melding bij nul actuele treffers TERWIJL er niet-vastgestelde fondsstukken over
@@ -1168,11 +1186,12 @@ export function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
 // historische peildatum. Pure, deterministische NL-heuristiek met vaste
 // patronen, géén modelcall — net als bepaalBronIntent hierboven.
 //
-// OBSERVE-ONLY. In deze tranche stuurt de uitkomst NIETS: geen filter, ranking,
-// selectie, promptblok, bronkaart of antwoordtekst. De chatroute berekent de
-// intentie exact één keer per beurt op de EFFECTIEVE vraag en legt haar
-// inhoudsarm vast onder `retrieval_meta.invoer.juridische_intentie` (gesloten
-// enums, geen vraagtekst). Routing/ranking volgt pas in R-3 (#492).
+// De chatroute berekent de intentie exact één keer per beurt op de EFFECTIEVE
+// vraag en legt haar inhoudsarm vast onder `retrieval_meta.invoer.juridische_
+// intentie` (gesloten enums, geen vraagtekst). Sinds R-3 (#492) stuurt zij via
+// het centrale retrievalcontract het juridisch bronbeleid in de selectie en de
+// juridische antwoordgrens (core/lib/retrieval/juridisch-beleid.ts, mét poort);
+// geen filter, promptblok of bronkaart leest haar.
 //
 // Kernkeuzes (navolgbaar, elk patroon is een expliciete keuze):
 //   • Een STERK juridisch anker (wet-/regelgevingsnaam, wetgever, wettelijk,
@@ -1183,8 +1202,8 @@ export function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
 //     nooit zelfstandig juridisch. "Toelichting" telt alleen als parlementair
 //     stuk (memorie/nota van toelichting) of als toelichting bij een wet(sartikel).
 //   • Een historische peildatum ("wat gold op 1 januari 2022?") is apart
-//     herkenbaar. De actuele wet wordt hier niet als historisch antwoord
-//     gepresenteerd; dat is uitdrukkelijk later werk.
+//     herkenbaar. R-3 sluit dan de actuele wet uit de bibliotheekselectie en
+//     meldt dat historische wetsversies niet beschikbaar zijn.
 //   • De onzekere fallback is `onbekend` — nooit stil een juridische intentie.
 // ============================================================================
 
@@ -1363,7 +1382,8 @@ const FONDSCONTEXT_PATRONEN: RegExp[] = [
  *   ankerloze normvraag met normonderwerp  → "geldend_recht"                     (onzeker)
  *   anders                                 → "onbekend"                          (onzeker)
  *
- * Deterministisch; geen modelcall; geen I/O. Stuurt in R-2 niets aan.
+ * Deterministisch; geen modelcall; geen I/O. Zelf stuurt zij niets: het
+ * juridisch bronbeleid (R-3) past de poort toe in retrieval/juridisch-beleid.ts.
  */
 export function bepaalJuridischeVraagintentie(
   vraag: string
