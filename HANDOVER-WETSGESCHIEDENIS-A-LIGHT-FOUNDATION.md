@@ -298,7 +298,7 @@ geen overlap met Microsoft-, SharePoint-, OAuth-, tenant- of tokencode.
 
 | Veld | Waarde |
 |---|---|
-| **Branch** | `codex/493-vergelijk-juridische-rollen` (worktree `mvp-493-vergelijk-rollen`), basis `origin/preview` @ `e71a049` |
+| **Branch** | `codex/493-vergelijk-juridische-rollen` (worktree `mvp-493-vergelijk-rollen`), basis `origin/preview` @ `0361e0a` (na R-2 en R-3 gerebased) |
 | **Status** | PR naar `preview` open, **niet gemerged**. Eén migratie (hieronder gemotiveerd); nog niet op `portal_preview` toegepast. Geen import, geen Productie. |
 
 **Wat.** Per gekozen document leest de vergelijking server-side de R-1-metadata
@@ -374,8 +374,17 @@ inactieve voorganger valt daardoor niet weg en wordt niet `onbekend`. Bij een fo
 volgt de neutrale rol `onbekend`; bij een afbreking stopt de vergelijking. Het
 censusregister is bewust met één lezing bijgewerkt
 (`vergelijk-productie.ts::documenten`, modelcontext + configuratie, geen evidence):
-53→54 lezingen en 26→27 modelcontextlezingen. De importgraaf bleef 171 bestanden en
-het F4-register is ongewijzigd.
+53→54 lezingen en 26→27 modelcontextlezingen. De importgraaf verandert door V-1 niet (172 bestanden
+na R-3, dat `juridisch-beleid.ts` toevoegde); het F4-register is ongewijzigd.
+Na de rebase is het register opnieuw uit de census berekend en exact gelijk.
+
+**Samenloop met R-3.** Het juridisch selectiebeleid van R-3 (`juridischeIntentie`
+in de spoorgrenzen) geldt alleen voor bibliotheeksporen van de chat. Het
+vergelijkspoor (`maakVergelijkSpoor`) en `vergelijk-productie.ts` krijgen het nooit;
+in de vergelijktak van de chatroute staat de intentie uitsluitend als auditwaarde.
+Een expliciet gekozen historisch document kan dus niet door het
+actualiteits- of peildatumbeleid van R-3 wegvallen. De contracttest
+`V-1 × R-3` in `retrieval-productiepaden.test.ts` pint dit.
 
 **Tests (lokaal, 29-09-2026).** tsc exit 0; `npm run test:unit` groen: sanity
 "Alle resterende sanity-suites groen." en Vitest 151/151. Nieuwe sanity

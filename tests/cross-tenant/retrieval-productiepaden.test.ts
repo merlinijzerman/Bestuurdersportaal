@@ -501,3 +501,28 @@ test("V-1 audit — juridische duiding wordt allowlist-geprojecteerd en aan de d
   const ci = lees("scripts/cross-tenant-ci.sh");
   assert.match(ci, /-f "\$SQL_V1JUR"/, "de DB-check moet in de gate draaien");
 });
+
+test("V-1 × R-3 — het vergelijkpad krijgt nooit het juridisch selectiebeleid (geen actualiteits-/peildatumfilter)", () => {
+  // R-3 kan actuele wetgeving uitsluiten of wetsgeschiedenis demoveren zodra
+  // `juridischeIntentie` in de spoorgrenzen staat. Een expliciet gekozen
+  // (historisch) document moet in de vergelijking juist behouden blijven.
+  const spoor = maakVergelijkSpoor({ vraag: "termijn", documentId: UUID_A, hybrideAan: false, vlaggen: {} });
+  assert.equal("juridischeIntentie" in spoor.grenzen, false);
+  assert.equal(spoor.query.filters, undefined);
+
+  const service = lees("core/lib/vergelijk-productie.ts");
+  assert.doesNotMatch(service, /juridischeIntentie|bepaalJuridischeVraagintentie/);
+  const route = lees("app/api/vergelijk/route.ts");
+  assert.doesNotMatch(route, /juridischeIntentie|bepaalJuridischeVraagintentie/);
+
+  const chat = lees("app/api/chat/route.ts");
+  const begin = chat.indexOf("if (vergelijkIntent.isVergelijk) {");
+  const einde = chat.indexOf('stuurStream({ type: "vergelijking", resultaat })', begin);
+  assert.ok(begin >= 0 && einde > begin, "vergelijktak in de chatroute niet gevonden");
+  const tak = chat.slice(begin, einde);
+  // Alleen als inhoudsarme auditwaarde (`juridische_intentie`), nooit als retrievalgrens.
+  const alle = (tak.match(/juridischeIntentie/g) ?? []).length;
+  const alsAudit = (tak.match(/juridische_intentie: juridischeIntentie\b/g) ?? []).length;
+  assert.equal(alle, alsAudit, "juridischeIntentie mag in de vergelijktak alleen als auditwaarde voorkomen");
+  assert.doesNotMatch(tak, /grenzenBibliotheek|juridischeIntentie:/);
+});
