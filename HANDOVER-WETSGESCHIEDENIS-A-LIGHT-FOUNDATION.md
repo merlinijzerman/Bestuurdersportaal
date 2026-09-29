@@ -1,12 +1,12 @@
-# Handover — wetsgeschiedenis A-light, foundation (na rebase op de Microsoft-release)
+# Handover — wetsgeschiedenis A-light (foundation + I-1 structuur-ingest)
 
 | Veld | Waarde |
 |---|---|
-| **Branch** | `codex/wetsgeschiedenis-a-light-foundation` |
-| **Worktree** | `…/MVP bestuurdersportaal/mvp-wetsgeschiedenis-foundation` |
-| **Basis** | `origin/preview` @ `5b0f581` (28-09-2026), inclusief de afgeronde Microsoft-release. Rebase op 28-09-2026 was conflictvrij. |
+| **Branch** | `codex/wetsgeschiedenis-structure-ingest` |
+| **Worktree** | `…/MVP bestuurdersportaal/mvp-wetsgeschiedenis-structure-ingest` |
+| **Basis** | `origin/preview` @ `f67e01d` (29-09-2026), inclusief de gemergde foundation en de actuele Microsoft-wijzigingen. |
 | **Functionele bron** | `WERKTICKET-WETSGESCHIEDENIS-A-LIGHT.md` en `BRONINVENTARIS-WETGEVING-EN-WETSGESCHIEDENIS-A-LIGHT.md` (in deze branch, aparte documentatiecommit). De tijdelijke agentinstructie blijft bewust buiten de PR: die bevat release-specifieke uitvoeringsafspraken. |
-| **Status** | Preview-database gemigreerd en structureel gecontroleerd; PR nog **niet gemerged of naar de vaste Preview-hosts gedeployd**. Niets geïmporteerd en Productie niet gewijzigd. |
+| **Status** | Foundation staat op Preview en de metadata-UI-smoke is groen. I-1 (parlementaire structuur in ingest en herindexering) is op de vervolgbranch gebouwd en getest, maar nog niet gemerged of gedeployd. Niets geïmporteerd en Productie niet gewijzigd. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -40,22 +40,21 @@ Niet toegevoegd, zoals de opdracht vraagt: publicatiekenmerk, behandelingsstatus
 | `supabase/schema.sql` | Documentatie van de nieuwe kolommen en CHECKs. |
 | `core/lib/wetsgeschiedenis.ts` (nieuw) | Pure domeinlogica: typen, subtypen, labels, dossiernormalisatie en -weergave, combinatievalidatie, duiding geldend recht vs. wetsgeschiedenis. |
 | `core/lib/generiek-curatie-juridisch.ts` (nieuw) | `valideerGeneriekeCuratie`: wrapper om het ongewijzigde `valideerCuratie`. Zie afwijking A-2. |
-| `core/lib/wetsgeschiedenis-structuur.ts` (nieuw) | Pure, conservatieve structurering: algemeen deel, artikelsgewijze toelichting (artikel/onderdeel), amendement-wijziging/-toelichting. Levert `StructuurUnit` op. **Niet aangesloten** op de ingest. |
-| `core/lib/wetsgeschiedenis.sanity.ts`, `core/lib/wetsgeschiedenis-structuur.sanity.ts` (nieuw) | 34 + 12 sanity-tests, met synthetische fixtures. |
+| `core/lib/wetsgeschiedenis-structuur.ts` (nieuw, I-1 uitgebreid) | Pure, conservatieve structurering: algemeen deel, artikelsgewijze toelichting (artikel/onderdeel), amendement-wijziging/-toelichting. Levert `StructuurUnit` op en bewaart bij PDF's de deel-/artikelcontext over paginagrenzen. |
+| `core/lib/wetsgeschiedenis.sanity.ts`, `core/lib/wetsgeschiedenis-structuur.sanity.ts` (nieuw) | 34 + 13 sanity-tests, met synthetische fixtures en een meerpagina-vervolg. |
+| `core/lib/chunking.ts`, `core/lib/chunk-bouw.ts`, `core/lib/chunk-ingest.ts` (I-1) | Alleen bij `documenttype='wetsgeschiedenis'` en een geldig subtype wordt de parlementaire parser gebruikt. Voor onherkende opmaak blijft de generieke structuurdetectie de fallback. Vooraf bepaalde units worden zonder tweede interpretatie gechunkt. |
+| `platform/lib/ingest-orchestrator.ts` (I-1) | De actuele asynchrone worker leest documenttype en subtype mee en geeft die aan de centrale chunkbouw. Paginanummers en bestaande bronlocaties blijven behouden. |
+| `core/lib/reindex.ts`, generieke herindexeeractie en `platform/lib/generiek-pipeline.ts` (I-1) | Herindexering gebruikt dezelfde juridische structurering. Het oudere synchrone generieke pad accepteert dezelfde metadata voor gedragspariteit. |
 | `app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts` | Leest de 4 velden in, valideert via de wrapper en neemt ze op in de bewerk-diff (auditspoor). `documenttype`/`wettelijk_regime` zijn `rag_impact`; subtype en dossier niet. |
 | `app/(platform)/platform/(beveiligd)/generieke-bibliotheek/_components/GeneriekeBibliotheekClient.tsx` | Velden Documenttype, Wettelijk regime en, bij wetsgeschiedenis, Soort stuk + Dossiernummer. Vooraf een melding met de vereisten. Normgewicht staat vast op Informatief bij wetsgeschiedenis. Type-/dossier-/regimeregel in de lijst. Een historisch fondstype op een bestaand generiek document blijft behouden. Statuslabels onderscheiden een actuele norm van een gepubliceerde informatieve bron. |
 | `app/(platform)/platform/(beveiligd)/generieke-bibliotheek/page.tsx` | Leest de 4 kolommen mee in. |
 | `tests/karakterisering/__snapshots__/w4.documents-upload.get.bestuurder.json` | Bestaand GET-contract aangevuld met de twee nieuwe nullable kolommen. De eerste GitHub-run maakte dit verschil zichtbaar; overige responsvelden bleven gelijk. |
 
-Wat niet gewijzigd is: `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/lib/retrieval/*`, `core/lib/generiek-curatie.ts`, `core/lib/chunking.ts`, `core/lib/chunk-*`, `fn_chunk_denorm` en de triggers, alle RPC's, en alle Microsoft-, SharePoint-, OAuth-, tenant- en tokencode. Controle:
-
-```bash
-git diff --name-only 5b0f581
-```
+Wat in I-1 niet gewijzigd is: `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/lib/retrieval/*`, `core/lib/generiek-curatie.ts`, `fn_chunk_denorm` en de triggers, alle RPC's, en alle Microsoft-, SharePoint-, OAuth-, tenant- en tokencode. De retrieval-census bleef 11/11 groen.
 
 ## 3. Migratie en deployvolgorde
 
-De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afgerond. Stappen 1–3 zijn op 28-09-2026 uitgevoerd; stap 4 en verder staan nog open.
+De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afgerond. Stappen 1–4 zijn uitgevoerd; stap 5 blijft de harde Preview-begrenzing en stap 6 is nog niet uitgevoerd.
 
 1. Vlak voor uitrol controleren dat `origin/preview` nog op de geteste basis staat of alleen verwachte aanvullingen bevat. De rebase op `5b0f581` gaf geen conflict of objectoverlap met `documenten_documenttype_check` of `fn_chunk_denorm`.
 2. **Preview-DB (`portal_preview`)**: eerst de controlequery uit de migratie (moet 0 zijn), dan de migratie `2026_09_23_wetsgeschiedenis_a_light_foundation.sql`.
@@ -79,14 +78,38 @@ Rollback: eerst juridische documenten herclassificeren of verwijderen via de cur
 | Supabase Advisors | Gedraaid. Bestaande projectbrede meldingen blijven staan; deze migratie voegt geen tabel, functie, policy of grant toe en introduceerde geen nieuwe objectmelding. |
 | Bewuste begrenzing | Geen documentupload, vervanging of import; geen Storage-mutatie; Productie niet geraakt |
 
-## 4. Uitgevoerde tests (lokaal, 23 en 28-09-2026)
+### 3b. Preview metadata-UI-smoke — 29-09-2026
+
+Uitgevoerd op `beheer.preview.bestuurdersportaal.com` met een actieve
+platformidentiteit en live AAL2. De Preview-markering en alle 15 toegekende
+capabilities waren zichtbaar. De generieke bibliotheek was leeg; er is geen
+document geüpload, vervangen, geïmporteerd of opgeslagen.
+
+- `Wetgeving (actuele geconsolideerde tekst)` en `Wetsgeschiedenis` zijn als
+  documenttype beschikbaar.
+- Wetsgeschiedenis toont alle zes subtypen, inclusief `Memorie van antwoord` en
+  `Nota van toelichting (AMvB)`.
+- `Nota van toelichting (AMvB)` maakt uitsluitend voor dat subtype het
+  dossiernummer optioneel; terugschakelen naar `Memorie van antwoord` maakt het
+  dossiernummer weer verplicht.
+- Wetsgeschiedenis forceert en vergrendelt normgewicht `Informatief` en toont
+  `Publicatiestatus` met `Gepubliceerd (actieve, informatieve bron)`.
+- Wetgeving toont afzonderlijk `Geldigheidsstatus` met `Van kracht (actuele
+  norm)` en laat een bindend normgewicht kiezen.
+- Het formulier is geannuleerd zonder serveractie; de bibliotheek bleef leeg.
+
+De upload-, scan- en ingestketen is bewust niet getest, conform §3.
+
+## 4. Uitgevoerde tests (lokaal, 23, 28 en 29-09-2026)
 
 | Test | Resultaat |
 |---|---|
 | `tsc --noEmit --skipLibCheck` | exit 0 |
 | `npm run sanity` (alle suites, incl. 2 nieuwe) | groen: "Alle resterende sanity-suites groen." |
 | `core/lib/wetsgeschiedenis.sanity.ts` | 34/34, inclusief de statuslabelregressie |
-| `core/lib/wetsgeschiedenis-structuur.sanity.ts` | 12/12 |
+| `core/lib/wetsgeschiedenis-structuur.sanity.ts` | 13/13; inclusief contextbehoud over PDF-paginagrenzen |
+| `core/lib/chunk-bouw.sanity.ts` | 7/7; inclusief MvT, aangenomen amendement en generieke fallback |
+| `npm run test:unit` | groen; Vitest 8 suites en 151/151 tests |
 | `core/lib/generiek-curatie.sanity.ts` (regressie) | 10/10 |
 | `tests/cross-tenant/retrieval-census.test.ts` | 11/11 (zie afwijking A-2) |
 | `bash scripts/cross-tenant-ci.sh` volledig, lokale ephemere Supabase (CLI 2.114.0), migraties uit de repo | GROEN (exit 0), zie §4a |
@@ -95,7 +118,10 @@ Rollback: eerst juridische documenten herclassificeren of verwijderen via de cur
 | `scripts/check-migratie-mapindeling.sh` | OK |
 | Negatieve controle, idempotentie, rollback | groen, zie §4a |
 
-Niet uitgevoerd: een live smoke tegen Preview, Productie, Microsoft of SharePoint (bewust). Ook geen visuele browsercontrole van de curatie-UI, omdat het platformpad een platform-identiteit met MFA vereist. In de Preview-ronde wordt bewust geen document geüpload of geïmporteerd; zie §3. De visuele controle beperkt zich daar tot de metadata-UI.
+Voor I-1 is bewust geen live upload- of ingestsmoke uitgevoerd: de
+Preview-antivirusscanner werkt niet en valt buiten scope. De testbasis is daarom
+synthetisch en lokaal. De metadata-UI-smoke van de foundation is wel uitgevoerd;
+zie §3b. Productie, Microsoft en SharePoint zijn voor I-1 niet geraakt.
 
 ### 4a. Volledige suite, negatieve controle en idempotentie
 
@@ -142,8 +168,8 @@ Geen inhoudelijke overlap met `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/
 
 | # | Stap | Verwachte bestanden | Tests |
 |---|---|---|---|
-| R-0 | Preview-rollout volgens §3; databasehelft afgerond, merge/deploy en metadata-UI-smoke nog open | — | Preview-preflight, W1–W10, R1 en V3 groen; visuele metadata-smoke volgt na deploy |
-| I-1 | Import en structuur (werkticket PR 2): `structureerParlementairStuk` → `alsStructuurUnits` aansluiten op de ingest voor `documenttype='wetsgeschiedenis'` | `core/lib/chunk-bouw.ts` of `chunk-ingest.ts`, `platform/lib/generiek-pipeline.ts` | chunk-bouw-sanity met MvT/amendement-fixture; census regenereren als de antwoordgraaf verandert |
+| R-0 | **Afgerond:** Preview-database, merge/deploy en metadata-UI-smoke volgens §3 zijn groen | — | Preview-preflight, W1–W10, R1 en V3 groen; visuele metadata-smoke 29-09-2026 groen |
+| I-1 | **Afgerond op de vervolgbranch, PR volgt:** `structureerParlementairStuk` / `alsStructuurUnits` zijn aangesloten op de actuele worker, centrale chunkbouw en herindexering voor `documenttype='wetsgeschiedenis'` | chunking/chunk-bouw/chunk-ingest, worker, reindex en generiek pad | MvT/amendement/fallback/meerdere pagina's groen; census 11/11, geen regeneratie nodig |
 | I-2 | Actuele PW/Wvb opnemen (BWB-id in de titel/URL); max. één actieve versie per wet via `curatieVervangen`; Wtp-Staatsblad-pdf's herclassificeren | curatiehandeling (data), eventueel een DB-check "één actieve wetgeving per regime + titel-BWB" | DB-check + Preview-controle |
 | R-1 | Retrievalmetadata: subtype, dossiernummer en documenttype in het retrieval-/auditcontract; eventueel `fn_chunk_denorm` uitbreiden | nieuwe migratie (denorm), `core/lib/retrieval/contract.ts`, `selectie.ts`, meta-projectie (TS-allowlist én migratie) | `retrieval-contract.test.ts`, census, W10 aanpassen |
 | R-2 | Intentherkenning geldend recht vs. bedoeling/totstandkoming | `core/lib/vraagtype.ts` (of router) | `vraagtype.test.ts` (pariteitspin bijwerken) |
@@ -156,4 +182,4 @@ Geen inhoudelijke overlap met `app/api/chat/route.ts`, `core/lib/rag.ts`, `core/
 
 ## 8. Bevestiging
 
-De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. De PR is nog niet gemerged en de vaste Preview-hosts draaien de nieuwe code nog niet. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd.
+De foundationmigratie is uitsluitend op de Preview-database toegepast en structureel groen bevonden. De foundation draait op de vaste Preview-hosts en de metadata-UI-smoke is groen. I-1 is op de vervolgbranch gebouwd en getest, maar nog niet gemerged of gedeployd. Er is geen document geüpload, vervangen of geïmporteerd; Productie is niet gewijzigd.

@@ -113,6 +113,8 @@ export interface BouwChunksOpties {
   documentId: string;
   titel: string;
   segmenten: TekstSegment[];
+  documenttype?: string | null;
+  wetsgeschiedenisSubtype?: string | null;
   // AI-BEGRENZING (besluit 0180). Verplicht: elke prefix- en embeddingcall in
   // dit pad loopt hierlangs. Geen optioneel veld met stille default — dat zou
   // een ongemeten providercall mogelijk maken.
@@ -364,6 +366,8 @@ export async function bouwChunkRecords(
     documentId,
     titel,
     segmenten,
+    documenttype = null,
+    wetsgeschiedenisSubtype = null,
     poort,
     gateway,
     metPrefix = true,
@@ -375,6 +379,8 @@ export async function bouwChunkRecords(
   const records = bouwChunkRecordsZonderVerrijking({
     documentId,
     segmenten,
+    documenttype,
+    wetsgeschiedenisSubtype,
     indexeringVersie,
   });
   const chunkingMs = Date.now() - tChunk;
