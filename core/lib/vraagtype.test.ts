@@ -36,6 +36,9 @@ import {
   isOpsteltaak,
   retrievalModusVoorVraag,
   meldingNietVastgesteldeStukken,
+  bepaalJuridischeVraagintentie,
+  JURIDISCHE_VRAAGINTENTIES,
+  type JuridischeVraagintentie,
 } from "./vraagtype";
 
 console.log("vraagtype sanity-tests:");
@@ -782,4 +785,114 @@ test("isOpsteltaak blijft uit bij vragen ÓVER een stuk of zonder documentsoort"
   ]) {
     assert.equal(isOpsteltaak(v), false, v);
   }
+});
+
+// ── Wetsgeschiedenis A-light R-2 (#491) — juridische vraagintentie ──────────
+//  Pure, deterministische NL-heuristiek; observe-only in de route. De eerste
+//  zeven vragen per groep zijn de minimale voorbeelden uit het issue.
+
+const JURIDISCHE_GEVALLEN: Array<[string, JuridischeVraagintentie, "zeker" | "onzeker"]> = [
+  // geldend recht
+  ["Wat bepaalt artikel 150d Pensioenwet?", "geldend_recht", "zeker"],
+  ["Welke termijn geldt voor het indienen van bezwaar?", "geldend_recht", "onzeker"],
+  ["Welke termijnen gelden volgens de Pensioenwet voor de communicatie?", "geldend_recht", "zeker"],
+  ["Is het wettelijk verplicht om een verantwoordingsorgaan te hebben?", "geldend_recht", "zeker"],
+  ["Wat regelt de Wvb over waardeoverdracht?", "geldend_recht", "zeker"],
+  ["Wat zeggen de artikelen 10 en 11 van de Pensioenwet over informatie?", "geldend_recht", "zeker"],
+  ["Kun je artikel 150d Pensioenwet toelichten?", "geldend_recht", "onzeker"],
+  // bedoeling / totstandkoming
+  ["Waarom heeft de wetgever artikel 150d zo vormgegeven?", "bedoeling_totstandkoming", "zeker"],
+  ["Wat zegt de memorie van toelichting over het invaarbesluit?", "bedoeling_totstandkoming", "zeker"],
+  ["Wat staat er in de memories van toelichting en de amendementen over invaren?", "bedoeling_totstandkoming", "zeker"],
+  ["Welke aangenomen amendementen gaan over het transitieplan?", "bedoeling_totstandkoming", "zeker"],
+  ["Hoe is artikel 150d Pensioenwet tot stand gekomen?", "bedoeling_totstandkoming", "zeker"],
+  ["Wat was de bedoeling van de wetgever met het transitie-ftk?", "bedoeling_totstandkoming", "zeker"],
+  ["Waarom is artikel 10 Pensioenwet zo geformuleerd?", "bedoeling_totstandkoming", "zeker"],
+  ["Wat staat in de nota naar aanleiding van het verslag over het bezwaarrecht?", "bedoeling_totstandkoming", "zeker"],
+  // beide
+  ["Wat geldt nu en waarom heeft de wetgever daarvoor gekozen?", "geldend_recht_en_wetsgeschiedenis", "zeker"],
+  ["Wat bepaalt artikel 150d en wat zegt de memorie van toelichting daarover?", "geldend_recht_en_wetsgeschiedenis", "zeker"],
+  // historische peildatum
+  ["Wat gold op 1 januari 2022?", "historische_peildatum", "zeker"],
+  ["Welke tekst van artikel 150d gold per 1 juli 2023?", "historische_peildatum", "zeker"],
+  ["Wat bepaalde de Pensioenwet op 1 januari 2020?", "historische_peildatum", "zeker"],
+  ["Hoe luidde artikel 150d vóór de Wtp?", "historische_peildatum", "zeker"],
+  ["Welke regels golden toen?", "historische_peildatum", "onzeker"],
+  // onbekend (zonder juridische context)
+  ["Kun je dit toelichten?", "onbekend", "onzeker"],
+  ["Wat is de dekkingsgraad?", "onbekend", "onzeker"],
+];
+
+for (const [vraag, intentie, vertrouwen] of JURIDISCHE_GEVALLEN) {
+  test(`R-2 juridische intentie: "${vraag}" → ${intentie} (${vertrouwen})`, () => {
+    const r = bepaalJuridischeVraagintentie(vraag);
+    assert.equal(r.intentie, intentie, `${vraag} → ${JSON.stringify(r)}`);
+    assert.equal(r.vertrouwen, vertrouwen, `${vraag} → ${JSON.stringify(r)}`);
+  });
+}
+
+// Negatieven: fonds-, procedure- en documentvergelijkingsvragen worden niet door
+// "toelichten", "geldt" of "vergelijk" automatisch juridisch.
+const NIET_JURIDISCH = [
+  "Kun je de toelichting bij agendapunt 3 samenvatten?",
+  "Kun je het verschil tussen deze twee documenten toelichten?",
+  "Kun je het besluit over de premie toelichten?",
+  "Welke regels gelden voor onze bestuursvergadering?",
+  "Welke termijn geldt voor het indienen van stukken voor de vergadering?",
+  "Welke procedure geldt voor een besluit over de premie?",
+  "Wat geldt er voor de dekkingsgraad in ons herstelplan?",
+  "Vergelijk het beleggingsplan 2024 met dat van 2025",
+  "Vergelijk de twee versies van het crisisplan",
+  "Vergelijk artikel 3 van beide documenten",
+  "Hoe verloopt de procedure voor het vaststellen van het jaarverslag?",
+  "Wat bepaalt artikel 5 van ons reglement?",
+  "Waarom heeft het bestuur dit voorstel zo geformuleerd?",
+  "Wat gold in 2022 voor onze premie?",
+];
+test("R-2 negatieven: fonds-/procedure-/vergelijkingsvragen blijven onbekend", () => {
+  for (const vraag of NIET_JURIDISCH) {
+    const r = bepaalJuridischeVraagintentie(vraag);
+    assert.equal(r.intentie, "onbekend", `${vraag} → ${JSON.stringify(r)}`);
+  }
+});
+
+test("R-2 deterministisch, robuust voor hoofdletters/accenten/witruimte", () => {
+  const a = bepaalJuridischeVraagintentie("Wat bepaalt artikel 150d Pensioenwet?");
+  assert.deepEqual(bepaalJuridischeVraagintentie("Wat bepaalt artikel 150d Pensioenwet?"), a);
+  assert.deepEqual(bepaalJuridischeVraagintentie("WAT  BEPAALT ARTIKEL 150D PENSIOENWET?"), a);
+  assert.equal(
+    bepaalJuridischeVraagintentie("Hoe luidde artikel 150d vóór de Wtp?").intentie,
+    bepaalJuridischeVraagintentie("Hoe luidde artikel 150d voor de Wtp?").intentie
+  );
+});
+
+test("R-2 uitlegbaar en inhoudsarm: alleen gesloten enums, nooit vraagtekst", () => {
+  const vraag = "Wat zegt de memorie van toelichting over artikel 150d Pensioenwet?";
+  const r = bepaalJuridischeVraagintentie(vraag);
+  assert.deepEqual(Object.keys(r).sort(), ["intentie", "signalen", "vertrouwen"]);
+  assert.ok(JURIDISCHE_VRAAGINTENTIES.includes(r.intentie));
+  assert.ok(r.signalen.includes("wetsgeschiedenisbron"));
+  const toegestaan = new Set([
+    "juridisch_anker", "zwak_anker", "wetsgeschiedenisbron", "bedoeling", "normvraag",
+    "normonderwerp", "peildatum", "datum", "fondscontext",
+  ]);
+  for (const s of r.signalen) assert.ok(toegestaan.has(s), s);
+  const json = JSON.stringify(r).toLowerCase();
+  for (const woord of ["memorie", "150d", "pensioenwet"]) assert.ok(!json.includes(woord), woord);
+});
+
+test("R-2 historische peildatum is apart van geldend recht herkenbaar", () => {
+  assert.equal(bepaalJuridischeVraagintentie("Wat bepaalt de Pensioenwet?").intentie, "geldend_recht");
+  assert.equal(
+    bepaalJuridischeVraagintentie("Wat bepaalde de Pensioenwet op 1 januari 2020?").intentie,
+    "historische_peildatum"
+  );
+});
+
+test("R-2 raakt de bestaande classificatie niet (bronintentie/antwoordmodus ongewijzigd)", () => {
+  // De nieuwe classifier is additief: dezelfde vraag levert voor de bestaande
+  // heuristieken exact dezelfde uitkomst als vóór R-2.
+  assert.deepEqual(bepaalBronIntent("Wat bepaalt artikel 150d Pensioenwet?"), { intent: "algemeen", vertrouwen: "zeker" });
+  assert.deepEqual(bepaalBronIntent("Kun je dit toelichten?"), { intent: "fonds", vertrouwen: "onzeker" });
+  assert.equal(bepaalVraagtype("Wat zegt de memorie van toelichting over het invaarbesluit?"), "specifiek");
 });

@@ -14,9 +14,12 @@ const expected = {
     count: 11,
     titlesSha256: "c85247d32a02d517ed663b7ce47bd2b11e077115d19036f78ce34035b3ed888f",
   },
+  // Wetsgeschiedenis A-light R-2 (#491) — +29 additieve cases voor de
+  // juridische vraagintentie (alle titels met prefix "R-2 "). De 80 bestaande
+  // titels zijn ongewijzigd: hun gesorteerde sha256 is nog steeds 048ae929…cd0.
   "core/lib/vraagtype.test.ts": {
-    count: 80,
-    titlesSha256: "048ae9292f3d9a2389737d225981fd9fcf92002069931d64d54eabd1a1c33cd0",
+    count: 109,
+    titlesSha256: "e766a378a65862afc4c76f066e49b14b8495115a515d7876d86d9628f2f5bfa4",
   },
   "core/lib/provider-fout.test.ts": {
     count: 5,
