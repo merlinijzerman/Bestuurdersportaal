@@ -9,6 +9,7 @@
 | **Status** | Foundation, I-1 en R-1 staan op Preview. R-1 is via PR #489 gemerged als `580304f`; alle post-mergechecks en beide vaste Preview-deployments zijn groen. Niets geïmporteerd en Productie niet gewijzigd. |
 | **R-2 (#491)** | Branch `codex/491-juridische-vraagintentie` vanaf `origin/preview` @ `e71a049`, één PR naar `preview`. Observe-only juridische vraagintentie; geen migratie, geen gedragswijziging. Zie §2a. |
 | **R-3 (#492)** | Branch `codex/492-juridische-routing` vanaf `origin/preview` @ `bdb92b1` (incl. R-2, PR #494), één PR naar `preview`. Centraal juridisch bronbeleid in de selectie + juridische antwoordgrens; geen migratie, geen RPC-, RLS- of grantwijziging. Zie §2b. |
+| **#500** | Branch `codex/500-artikelpassage-boost` vanaf `origin/preview` @ `7c6c8a8`, één PR naar `preview`. Exacte artikelpassage: gericht kandidatenspoor binnen de bestaande RPC-filters + deterministische boost vóór het R-3-beleid; geen migratie. Zie §2c. |
 
 ## 1. Bestaand model: hergebruik en minimale uitbreiding
 
@@ -172,6 +173,50 @@ alleen `bereikte_bestanden`); lezingen, tabelclassificatie en retrievalingangen
 zijn ongewijzigd. `R2-A3` is bewust bijgewerkt: naast declaratie + vier
 auditwaarden zijn precies drie doorgiftes aan de centrale juridische laag
 toegestaan; elk ander gebruik (routefilter, promptblok, bronkaart) blijft rood.
+
+### 2c. #500 — exacte artikelpassage in juridische retrieval
+
+**Faalplek (gemeten tegen code en een lokale PG17).** De passage
+"Artikelsgewijze toelichting — Artikel 150d" (MvT Wtp, p. 395) viel al vóór de
+selectie weg: zij kwam niet in de kandidatenset van `zoek_chunks_hybride`.
+`websearch_to_tsquery('dutch', …)` maakt van de bedoelingsvraag
+`'bedoel' & 'wetgever' & 'artikel' & '150d' & 'pensioenwet'`; de artikeltekst
+bevat 'bedoel'/'wetgever' niet (`@@` = false), en van de gecombineerde vraag een
+AND-keten van tien termen (ook false). De vectorarm neemt de top-40 over alle
+chunks (2.738 uit hetzelfde document) en is ongevoelig voor een artikelnummer;
+daarna kapt `p_limit` (kandidatenpool 30) de fusie af. Een boost alleen in de
+selectie had dus niets opgelost.
+
+**Oplossing (geen migratie, geen RPC-, RLS- of grantwijziging).**
+
+| Onderdeel | Vorm |
+|---|---|
+| Herkenning + poort | Nieuwe pure module `core/lib/retrieval/artikelverwijzing.ts`: `herkenArtikelnummers` ("artikel/art./artikelen 150d en 150e"), `herkenWet` (Pensioenwet → pw, Wvb → wvb), `bepaalArtikelfocus`. Poort = R-3-beleid van toepassing **én** signaal `juridisch_anker` of `zwak_anker` zonder `fondscontext`; vertrouwen `zeker` alleen telt niet. Nummers exact na normalisatie: 150 ≠ 150d ≠ 1500. |
+| Doorgifte | `orkestratie.ts` berekent de focus per spoor uit `zoekvraag` + `origineleVraag`, alleen op sporen met `grenzen.juridischeIntentie` (de bibliotheeksporen). Alleen dan krijgt de adapter `RetrievalQuery.artikelfocus` (optioneel contractveld); anders exact dezelfde query-referentie. |
+| Gericht kandidatenspoor (Supabase) | `rag.ts` `vulAanMetArtikelkandidaten`, aangeroepen in `supabase-adapter.ts` direct na de ranking. (1) Opzoeking onder RLS op `document_chunks` van documenten met `documenttype` wetgeving/wetsgeschiedenis (via `documenten!inner`, niet de denormalisatie), label `ilike '*artikel N*'` of tekstbegin; het pure predicaat `artikelmatch` beslist. (2) Nieuwe passages komen alleen binnen als de **bestaande** `zoek_chunks` ze teruggeeft met hetzelfde filterblok (`rpcFilterParams` + `p_fonds_id` + scope) en frasequery `"artikel N" OR "art N"`, gevolgd door `handhaafFondsdiscipline`. (3) Binnen `maxKandidaten`: nieuwe exacte passages vervangen de zwakste niet-exacte staart. Fail-open bij een fout (afbreking gaat door). |
+| Boost | `selectie.ts`: ná bronsoort- en regimeweging, vóór het R-3-beleid zet `boostArtikelpassages` per document de beste exacte **juridische** passage vooraan (kopregel wint van label; max 3). Fondsdocumenten en niet-juridische bronnen nooit; regime-gedemoveerde bronnen blijven vast; een tegengesteld regime of een wettekst waarvan de titel de genoemde wet niet noemt, wordt niet geboost. R-3 bepaalt daarna de rollen: normvraag → wet vóór toelichting (MvT nooit primaire normbron, normbasismelding intact); bedoeling/gecombineerd → exacte wet + exacte MvT aaneen in de kop. |
+| Contractvelden | `Bronresultaat.locator.structuurLabel` en `rang.poging = "artikelspoor"`, alleen gezet door het artikelspoor. `DocumentChunk.structuur_label`/`artikelspoor` adapterprivaat. |
+| Diagnostiek | `selectie.juridisch.artikel = { verwijzingen, wet_genoemd, exact, geboost, geboost_geselecteerd, via_artikelspoor }` — alleen bij een focus; tellingen en een vlag, geen nummer of tekst. Migratievrij (subsleutel van `selectie`). |
+| Census | Importgraaf 172 → 173 (de nieuwe pure module); register: `supabase-adapter.ts` importeert daarnaast `vulAanMetArtikelkandidaten` uit `rag.ts`. Lezingen (`rag.ts::document_chunks`/`documenten`, evidence) en RPC-ingangen ongewijzigd. |
+
+Continuatiechunks van een lange artikeltoelichting (zelfde label, zonder de
+frase in tekst of contextprefix) worden niet via het spoor toegelaten; bij
+parent-retrieval haalt de structuur-unit ze alsnog mee.
+
+**Tests.** `tests/cross-tenant/retrieval-artikelpassage.test.ts` 20/20
+(herkenning, poort, match met buurartikelen 150/150c/150e/1500/15,
+bedoeling/norm/gecombineerd, regime/andere wet, fondsdocumenten, byte-identiteit,
+adapter met nep-client, eind-tot-eind orkestratie + Supabase-adapter met de
+nagebootste pilotsituatie, negatieve controle). Mutaties: boost uit → 5 rood;
+nummergrens weg → H1 rood; poort altijd open → 3 rood; rol-eis weg → S5 rood.
+DB-check `supabase/checks/2026_09_29_500_artikelspoor.sql` (A1–A5, onder RLS)
+aangesloten in `cross-tenant-ci.sh`; zonder rol en fondsfilter → `LEK A4`.
+PostgREST-syntaxis van opzoeking en toelating lokaal tegen PostgREST + PG17
+bevestigd.
+
+**Controle bij de herhaalde productiepilot.** Zie de PR-beschrijving; kern:
+`retrieval_meta.selectie.juridisch.artikel` moet `exact ≥ 1` en
+`geboost_geselecteerd ≥ 1` tonen, en de bronkaart p. 395.
 
 ## 3. Migratie en deployvolgorde
 
