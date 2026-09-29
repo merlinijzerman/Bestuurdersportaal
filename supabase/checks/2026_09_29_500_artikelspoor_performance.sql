@@ -155,6 +155,13 @@ select c.document_id, c.chunk_index,
        'art500-perf'
   from art500_chunks c;
 
+-- Versiebewijs zoals op Productie (bestand_hash + indexering_versie), zodat de
+-- centrale toelatingspoort de passages in de eind-tot-eindketen niet weigert.
+update public.documenten set bestand_hash = encode(sha256(convert_to(id::text, 'UTF8')), 'hex')
+ where id in (select document_id from art500_plan);
+update public.document_chunks set indexering_versie = 'art500-perf-v1'
+ where embedding_model = 'art500-perf';
+
 analyze public.documenten;
 analyze public.document_chunks;
 analyze public.profielen;
