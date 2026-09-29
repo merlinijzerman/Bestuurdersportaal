@@ -95,6 +95,8 @@ interface IngestJob {
 interface DocumentRij {
   id: string;
   titel: string;
+  documenttype: string | null;
+  wetsgeschiedenis_subtype: string | null;
   agendapunt_id: string | null;
   actief: boolean;
   opslag_pad: string | null;
@@ -421,7 +423,7 @@ async function verwerkJob(
 
   const { data: doc, error } = await svc
     .from("documenten")
-    .select("id, titel, agendapunt_id, actief, opslag_pad, quarantaine_pad, bestand_hash, scan_resultaat, bibliotheek, bestandsnaam, bestandstype, verwerkingsstatus, opgeslagen_door, vervangt_na_scan_document_id, vervangt_na_scan_reden")
+    .select("id, titel, documenttype, wetsgeschiedenis_subtype, agendapunt_id, actief, opslag_pad, quarantaine_pad, bestand_hash, scan_resultaat, bibliotheek, bestandsnaam, bestandstype, verwerkingsstatus, opgeslagen_door, vervangt_na_scan_document_id, vervangt_na_scan_reden")
     .eq("id", job.document_id)
     .single();
   if (error || !doc) throw new Error(`document ${job.document_id} niet gevonden`);
@@ -905,6 +907,8 @@ async function extracteerEnChunk(
   const bareRecords = bouwChunkRecordsZonderVerrijking({
     documentId: doc.id,
     segmenten: extractie.segmenten,
+    documenttype: doc.documenttype,
+    wetsgeschiedenisSubtype: doc.wetsgeschiedenis_subtype,
   });
   if (overschrijdtChunkCap(bareRecords.length)) {
     return await markeerGeweigerd(svc, job, doc.id, "bestand_te_groot_voor_rag");

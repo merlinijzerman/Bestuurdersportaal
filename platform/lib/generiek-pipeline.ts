@@ -127,12 +127,23 @@ export async function verwerkGeneriekBestand(
     documentId: string;
     versieId?: string | null;
     titel: string;
+    documenttype?: string | null;
+    wetsgeschiedenisSubtype?: string | null;
     buffer: Buffer;
     bestandstype: Bestandstype;
     correlatieId: string;
   }
 ): Promise<PipelineResultaat> {
-  const { documentId, versieId, titel, buffer, bestandstype, correlatieId } = params;
+  const {
+    documentId,
+    versieId,
+    titel,
+    documenttype = null,
+    wetsgeschiedenisSubtype = null,
+    buffer,
+    bestandstype,
+    correlatieId,
+  } = params;
 
   // ── Scan (mock, WP3 uitgesteld) ──────────────────────────────────────────
   let t = new Date().toISOString();
@@ -267,6 +278,8 @@ export async function verwerkGeneriekBestand(
       documentId,
       titel,
       segmenten: extractie.segmenten,
+      documenttype,
+      wetsgeschiedenisSubtype,
       poort: { supabase: svc, label: "generiek-pipeline" },
       gateway,
       }));

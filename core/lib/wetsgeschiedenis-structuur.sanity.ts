@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import {
   alsStructuurUnits,
+  structureerParlementaireSegmenten,
   structureerParlementairStuk,
   type ParlementaireUnit,
 } from "./wetsgeschiedenis-structuur";
@@ -174,6 +175,44 @@ check("alsStructuurUnits: deel in het label, bestaande StructuurType-waarden", (
   for (const x of s) {
     assert.ok(["artikel", "paragraaf", "kop", "tekst"].includes(x.type), x.type);
   }
+});
+
+check("PDF-vervolgpagina behoudt artikelcontext en eigen paginanummer", () => {
+  const segmenten = structureerParlementaireSegmenten(
+    [
+      {
+        pagina: 12,
+        paragraaf: null,
+        tekst: [
+          "II. ARTIKELSGEWIJS",
+          "Artikel I, onderdeel A",
+          "Deze toelichting begint op de eerste pagina van het onderdeel.",
+        ].join("\n"),
+      },
+      {
+        pagina: 13,
+        paragraaf: null,
+        tekst: [
+          "De toelichting loopt op deze pagina door zonder herhaalde artikelkop.",
+          "Onderdeel B",
+          "Daarna begint het volgende onderdeel.",
+        ].join("\n"),
+      },
+    ],
+    "memorie_van_toelichting"
+  );
+
+  assert.equal(segmenten[0].pagina, 12);
+  assert.equal(segmenten[1].pagina, 13);
+  assert.equal(
+    segmenten[1].units[0].label,
+    "Artikelsgewijze toelichting — Artikel I, onderdeel A"
+  );
+  assert.match(segmenten[1].units[0].tekst, /loopt op deze pagina door/);
+  assert.equal(
+    segmenten[1].units[1].label,
+    "Artikelsgewijze toelichting — Artikel I, onderdeel B"
+  );
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);
