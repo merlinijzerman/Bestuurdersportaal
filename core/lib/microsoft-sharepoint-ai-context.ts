@@ -298,15 +298,23 @@ export async function maakProductieGekoppeldeSharePointAdapter(args: {
     throw new SharePointGraphError("bron_niet_toegankelijk");
   }
 
-  const [bronRij, token, live] = await Promise.all([
+  const [bronRij, live] = await Promise.all([
     vault.leesSharePointBron(args.fondsId),
-    sharepointAccessToken({ fondsId: args.fondsId, gebruikerId: args.gebruikerId }),
     sharepointDocumenten({
       fondsId: args.fondsId,
       gebruikerId: args.gebruikerId,
       correlationId: args.correlationId,
     }, args.signal),
   ]);
+  // `sharepointDocumenten` haalt zelf een delegated token op en bewaart daarna
+  // de versienummerde MSAL-cache. Een tweede tokenaanvraag in dezelfde
+  // Promise.all leest dezelfde cacheversie; één van beide verliest dan terecht
+  // de optimistic-lock en wordt als toestemming/token-fout geclassificeerd.
+  // Haal het downloadtoken daarom pas ná de live listing op.
+  const token = await sharepointAccessToken({
+    fondsId: args.fondsId,
+    gebruikerId: args.gebruikerId,
+  });
   if (!bronRij || bronRij.status !== "actief") {
     throw new SharePointGraphError("bron_niet_geconfigureerd");
   }
