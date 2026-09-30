@@ -47,9 +47,15 @@ SQL_T6C="supabase/checks/2026_07_09_t6_generiek_readonly.sql"
 # Wetsgeschiedenis A-light foundation — juridische documenttypen alleen generiek,
 # wetsgeschiedenis altijd informatief, subtype/dossiernummer-combinaties.
 SQL_WG="supabase/checks/2026_09_23_wetsgeschiedenis_foundation.sql"
-# #500 — gericht artikelspoor: nieuwe exacte artikelpassages komen alleen binnen via
-# de bestaande zoek_chunks (zelfde filters, onder RLS); buurartikelen raken 150d niet.
+# #500 — gericht artikelspoor: exacte opzoeking; buurartikelen raken 150d niet. Hotfix
+# productietime-out: de toelating loopt niet meer via zoek_chunks maar id-begrensd;
+# sectie M bewijst onder RLS nieuwe toelating == zoek_chunks == verwacht (gedeelde
+# matrix), met negatieve controle per regel.
 SQL_ART500="supabase/checks/2026_09_29_500_artikelspoor.sql"
+# #500 hotfix — performance-eis op een productie-achtige fixture (18.418 chunks,
+# vector(1024)+HNSW, GIN, drie fondsen): elke run < 1 s, p95 < 500 ms onder RLS;
+# negatieve controle: de oude zoek_chunks-toelating is aantoonbaar zwaarder.
+SQL_ART500_PERF="supabase/checks/2026_09_29_500_artikelspoor_performance.sql"
 # #499 — generieke metadatawijziging op ≥ 1.000 chunks: RPC met functie-eigen
 # statement_timeout, trigger alleen bij waardewijziging, atomisch bij time-out/
 # statusovergang, consistente chunkmetadata; negatieve controle met oude trigger.
@@ -351,8 +357,11 @@ echo
 echo "-- Wetsgeschiedenis A-light (juridische typen generiek-only, MvT/amendement informatief) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_WG"
 echo
-echo "-- #500 artikelspoor (toelating via bestaande zoek_chunks, onder RLS) --"
+echo "-- #500 artikelspoor (opzoeking + pariteit toelating ↔ zoek_chunks, onder RLS) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ART500"
+echo
+echo "-- #500 artikelspoor performance (18.418 chunks, p95 < 500 ms onder RLS) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ART500_PERF"
 echo
 echo "-- #499 (generieke metadatawijziging op 1.000 chunks: budget, atomisch, consistent) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"

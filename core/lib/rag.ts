@@ -69,6 +69,15 @@ import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
 import { bouwCitaties } from "./retrieval/citatie";
 import type { Bronresultaat } from "./retrieval/contract";
 import { artikelFrasequery, artikelmatch, type Artikelfocus } from "./retrieval/artikelverwijzing";
+import {
+  ARTIKEL_TOELATING_ID_MAX,
+  TOELATING_SELECT,
+  pasToelatingsfiltersToe,
+  toelatingsfilters,
+  voldoetAanZoekfilters,
+  type ToelatingsRij,
+  type Toelatingsparameters,
+} from "./retrieval/artikeltoelating";
 export type { SelectieAfvalReden, SelectieDiagnostiek } from "./retrieval/selectie";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
@@ -1435,19 +1444,27 @@ export function maakHybrideRpc(
 // `p_limit` (= kandidatenpool, 30) de fusie af. Een boost in de selectie kan
 // een kandidaat die nooit binnenkwam niet redden — dus dit spoor.
 //
-// ONTWERP (geen migratie, geen RPC-wijziging):
-//   1. Een smalle opzoeking onder RLS (anon-client) naar passages van een
-//      JURIDISCH document (documenttype wetgeving/wetsgeschiedenis, via de
-//      documentrij zelf, niet de denormalisatie) waarvan het structuurlabel of
-//      de tekstbegin EXACT het artikel noemt (regex met woordgrens, zie
-//      `artikelOpzoekfilter`). Het pure predicaat `artikelmatch` controleert
-//      daarna nog eens.
-//   2. TOELATING van nieuwe passages uitsluitend via de BESTAANDE `zoek_chunks`
-//      met hetzelfde filterblok als elk ander spoor (`rpcFilterParams` +
-//      `p_fonds_id` + documentscope) en een frasequery op het artikel. Wat die
-//      RPC niet teruggeeft (ander fonds, niet gepubliceerd, gearchiveerd,
-//      buiten modus/peildatum, verlopen review, andere bronsoort, buiten
-//      scope), komt er niet in. Daarna nog de app-guard
+// ONTWERP (geen migratie, geen RPC-wijziging, geen policywijziging):
+//   1. Opzoeking, begrensd. Eerst (onder RLS) de JURIDISCHE documenten:
+//      `documenten` met documenttype wetgeving/wetsgeschiedenis, `actief`,
+//      binnen de documentscope — een handvol rijen. Daarna alleen BINNEN die
+//      `document_id=in.(…)` de passages waarvan het structuurlabel of de
+//      tekstbegin EXACT het artikel noemt (regex met woordgrens, zie
+//      `artikelOpzoekfilter`). Zo loopt de opzoeking via `idx_chunks_document`
+//      in plaats van over alle chunks. Het pure predicaat `artikelmatch`
+//      controleert daarna nog eens.
+//   2. TOELATING van nieuwe passages zonder zoek-RPC: een id-begrensde
+//      opvraging onder RLS (`document_chunks?id=in.(…)`, ≤
+//      `ARTIKEL_TOELATING_ID_MAX`) met EXPLICIET dezelfde semantiek als
+//      `zoek_chunks` + `rpcFilterParams` + `p_fonds_id` + documentscope en
+//      dezelfde frasevoorwaarde. Filters en predicaat staan puur en getest in
+//      `retrieval/artikeltoelating.ts`; de pariteit met `zoek_chunks` bewijst
+//      `supabase/checks/2026_09_29_500_artikelspoor.sql` onder echte RLS.
+//      HOTFIX PRODUCTIETIME-OUT (#500): de eerdere toelating via
+//      `zoek_chunks(p_limit => 200, p_document_ids => …)` eindigde op
+//      Productie in 57014 (8 s): in het concrete plan werd het GIN-pad niet
+//      gekozen (RLS-policy + functievorm + niet-leakproof `@@`), dus een seq
+//      scan over alle chunks. Daarna nog de app-guard
 //      `handhaafFondsdiscipline`. Normgewicht en regime worden daarna, net als
 //      voor elke kandidaat, centraal in de selectie gewogen.
 //   3. Samenvoegen binnen `maxKandidaten`: nieuwe exacte passages vervangen de
@@ -1457,11 +1474,12 @@ export function maakHybrideRpc(
 // Fail-open: faalt de opzoeking of de toelating, dan blijft de kandidatenset
 // ongewijzigd (een afbreking gaat wél door). Rerank en drempel zijn al gedaan;
 // een exacte structuurtreffer omzeilt die bewust — het artikelnummer in de
-// vraag is sterker bewijs dan een relevantiescore.
-// Grenzen: hooguit `ARTIKEL_OPZOEK_MAX` aanwijzingen en `ARTIKEL_TOELATING_MAX`
-// fraseresultaten binnen de aangewezen documenten.
-export const ARTIKEL_OPZOEK_MAX = 50;
-export const ARTIKEL_TOELATING_MAX = 200;
+// vraag is sterker bewijs dan een relevantiescore. Een toegelaten passage
+// draagt daarom geen relevantiescore (`rang` = null).
+// Grenzen: hooguit `ARTIKEL_JURIDISCHE_DOCUMENTEN_MAX` juridische documenten,
+// `ARTIKEL_OPZOEK_MAX` aanwijzingen en evenveel toelatingsrijen.
+export const ARTIKEL_OPZOEK_MAX = ARTIKEL_TOELATING_ID_MAX;
+export const ARTIKEL_JURIDISCHE_DOCUMENTEN_MAX = 200;
 const JURIDISCHE_DOCUMENTTYPEN = ["wetgeving", "wetsgeschiedenis"] as const;
 
 interface ArtikelAanwijzingRij {
@@ -1491,6 +1509,40 @@ export function artikelOpzoekfilter(focus: Pick<Artikelfocus, "artikelen">): str
     .join(",");
 }
 
+/** Een toelatingsrij → het DocumentChunk-shape (zoals `rijNaarChunk`, zonder rang). */
+function toelatingsrijNaarChunk(r: ToelatingsRij): DocumentChunk {
+  const d = r.documenten!;
+  return {
+    id: r.id,
+    document_id: r.document_id,
+    tekst: r.tekst,
+    pagina: r.pagina,
+    paragraaf: r.paragraaf,
+    chunk_index: r.chunk_index,
+    rang: null,
+    fts_rang: null,
+    vec_rang: null,
+    documenten: {
+      titel: d.titel,
+      bron: d.bron,
+      bibliotheek: d.bibliotheek,
+      opslag_pad: d.opslag_pad,
+      fonds_id: d.fonds_id ?? null,
+      documentstatus: r.documentstatus ?? null,
+      bronstatus: r.bronstatus ?? null,
+      documentdatum: r.documentdatum ?? null,
+      geldig_vanaf: r.geldig_vanaf ?? null,
+      geldig_tot: r.geldig_tot ?? null,
+      procesinstantie_id: r.procesinstantie_id ?? null,
+      bronorganisatie: r.bronorganisatie ?? null,
+      normgewicht: r.normgewicht ?? null,
+      extern_url: r.extern_url ?? null,
+      volgende_review: d.volgende_review ?? null,
+      wettelijk_regime: r.wettelijk_regime ?? null,
+    },
+  };
+}
+
 export async function vulAanMetArtikelkandidaten(
   bestaand: DocumentChunk[],
   opdracht: {
@@ -1500,20 +1552,40 @@ export async function vulAanMetArtikelkandidaten(
     filters?: RetrievalFilters;
     maxKandidaten: number;
     signal?: AbortSignal;
-    supabase?: { from: (tabel: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any };
+    supabase?: { from: (tabel: string) => any };
   }
 ): Promise<DocumentChunk[]> {
   const fondsFilter = opdracht.fondsId && opdracht.fondsId.length > 0 ? opdracht.fondsId : null;
   const scope = opdracht.scope && opdracht.scope.length > 0 ? opdracht.scope : null;
   try {
     const supabase = opdracht.supabase ?? (await createServerSupabase());
-    let q = supabase
+
+    // 1a. De juridische documenten (onder RLS, klein).
+    let dq = supabase
+      .from("documenten")
+      .select("id")
+      .in("documenttype", [...JURIDISCHE_DOCUMENTTYPEN])
+      .eq("actief", true);
+    if (scope) dq = dq.in("id", scope);
+    dq = dq.order("id", { ascending: true }).limit(ARTIKEL_JURIDISCHE_DOCUMENTEN_MAX);
+    const { data: docs, error: docFout } = await metSignaal(dq, opdracht.signal);
+    bewaakNaIO(opdracht.signal, docFout);
+    if (docFout || !Array.isArray(docs)) {
+      if (docFout) console.error("[rag] artikelspoor: documentopzoeking mislukt — kandidaten ongewijzigd:", docFout);
+      return bestaand;
+    }
+    const juridisch = (docs as { id: string }[]).map((d) => d.id);
+    if (juridisch.length === 0) return bestaand;
+
+    // 1b. De exacte passages, alleen binnen die documenten.
+    const q = supabase
       .from("document_chunks")
-      .select("id, document_id, tekst, structuur_label, documenten!inner(documenttype)")
-      .in("documenten.documenttype", [...JURIDISCHE_DOCUMENTTYPEN])
-      .or(artikelOpzoekfilter(opdracht.focus));
-    if (scope) q = q.in("document_id", scope);
-    q = q.order("document_id", { ascending: true }).order("chunk_index", { ascending: true }).limit(ARTIKEL_OPZOEK_MAX);
+      .select("id, document_id, tekst, structuur_label")
+      .in("document_id", juridisch)
+      .or(artikelOpzoekfilter(opdracht.focus))
+      .order("document_id", { ascending: true })
+      .order("chunk_index", { ascending: true })
+      .limit(ARTIKEL_OPZOEK_MAX);
     const { data, error } = await metSignaal(q, opdracht.signal);
     bewaakNaIO(opdracht.signal, error);
     if (error || !Array.isArray(data)) {
@@ -1534,28 +1606,36 @@ export async function vulAanMetArtikelkandidaten(
     const nieuw = [...exact.values()].filter((r) => !bekend.has(r.id));
     if (nieuw.length === 0) return bestaand;
 
-    // Toelating: DEZELFDE RPC en hetzelfde filterblok als het hoofdspoor.
-    const { data: rijen, error: rpcFout } = await metSignaal(
-      supabase.rpc("zoek_chunks", {
-        p_query: artikelFrasequery(opdracht.focus),
-        p_limit: ARTIKEL_TOELATING_MAX,
-        p_document_ids: [...new Set(nieuw.map((r) => r.document_id))].sort(),
-        ...rpcFilterParams(opdracht.filters),
-        p_fonds_id: fondsFilter,
-      }),
-      opdracht.signal
-    );
-    bewaakNaIO(opdracht.signal, rpcFout);
-    if (rpcFout || !Array.isArray(rijen)) {
-      if (rpcFout) console.error("[rag] artikelspoor: toelating mislukt — kandidaten ongewijzigd:", rpcFout);
+    // 2. Toelating: id-begrensd, onder RLS, met de zoek_chunks-semantiek.
+    const parameters: Toelatingsparameters = {
+      ids: nieuw.slice(0, ARTIKEL_TOELATING_ID_MAX).map((r) => r.id),
+      frase: artikelFrasequery(opdracht.focus),
+      documentscope: scope,
+      filters: opdracht.filters,
+      fondsId: fondsFilter,
+      peildatum: effectievePeildatum(opdracht.filters),
+    };
+    const tq = pasToelatingsfiltersToe(
+      supabase.from("document_chunks").select(TOELATING_SELECT),
+      toelatingsfilters(parameters)
+    )
+      .order("document_id", { ascending: true })
+      .order("chunk_index", { ascending: true })
+      .limit(ARTIKEL_TOELATING_ID_MAX);
+    const { data: rijen, error: toelatingsFout } = await metSignaal(tq, opdracht.signal);
+    bewaakNaIO(opdracht.signal, toelatingsFout);
+    if (toelatingsFout || !Array.isArray(rijen)) {
+      if (toelatingsFout) console.error("[rag] artikelspoor: toelating mislukt — kandidaten ongewijzigd:", toelatingsFout);
       return bestaand;
     }
     const nieuwPerId = new Map(nieuw.map((r) => [r.id, r]));
-    const gerangschikt = (rijen as ZoekChunkRij[]).map(rijNaarChunk).filter((c) => nieuwPerId.has(c.id));
+    const toegelaten = (rijen as ToelatingsRij[])
+      .filter((r) => r.documenten && nieuwPerId.has(r.id) && voldoetAanZoekfilters(r, parameters))
+      .map(toelatingsrijNaarChunk);
     const bewaakt = handhaafFondsdiscipline(
-      gerangschikt,
+      toegelaten,
       fondsFilter,
-      effectievePeildatum(opdracht.filters),
+      parameters.peildatum,
       opdracht.filters?.modus
     ).chunks;
     if (bewaakt.length === 0) return bestaand;

@@ -1,0 +1,598 @@
+{
+  "toelichting": "#500 hotfix — gedeelde pariteitsmatrix voor de artikeltoelating. Gelezen door supabase/checks/2026_09_29_500_artikelspoor.sql (onder echte RLS: nieuwe toelating == zoek_chunks == verwacht) en door tests/cross-tenant/retrieval-artikeltoelating.test.ts (puur predicaat + PostgREST-filters). Elke rij is één document met één chunk (label 'Artikel 150d'); 'frase' = de tekst bevat de frase; 'aangewezen' = de chunk-id zit in de toelatingslijst. Sessie = fondsgebruiker A.",
+  "fonds_a": "05000000-1111-1111-1111-111111111111",
+  "fonds_b": "05000000-2222-2222-2222-222222222222",
+  "gebruiker_a": "05000000-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "procesinstantie": "05001000-0000-0000-0000-0000000000f1",
+  "frase": "\"artikel 150d\" OR \"art 150d\"",
+  "rijen": [
+    {
+      "sleutel": "g_ok",
+      "document_id": "05001000-0000-0000-0000-000000000001",
+      "chunk_id": "05001000-0000-0000-0001-000000000001",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "van_kracht",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_bronstatus_null",
+      "document_id": "05001000-0000-0000-0000-000000000002",
+      "chunk_id": "05001000-0000-0000-0001-000000000002",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "van_kracht",
+      "bronstatus": null,
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_review_toekomst",
+      "document_id": "05001000-0000-0000-0000-000000000003",
+      "chunk_id": "05001000-0000-0000-0001-000000000003",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "van_kracht",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": "2027-01-01",
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_concept",
+      "document_id": "05001000-0000-0000-0000-000000000004",
+      "chunk_id": "05001000-0000-0000-0001-000000000004",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "concept",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_gearchiveerd",
+      "document_id": "05001000-0000-0000-0000-000000000005",
+      "chunk_id": "05001000-0000-0000-0001-000000000005",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "gearchiveerd",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_review_verlopen",
+      "document_id": "05001000-0000-0000-0000-000000000006",
+      "chunk_id": "05001000-0000-0000-0001-000000000006",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "van_kracht",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": "2020-01-01",
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_inactief",
+      "document_id": "05001000-0000-0000-0000-000000000007",
+      "chunk_id": "05001000-0000-0000-0001-000000000007",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "van_kracht",
+      "bronstatus": "actief",
+      "actief": false,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_bronstatus_historisch",
+      "document_id": "05001000-0000-0000-0000-000000000008",
+      "chunk_id": "05001000-0000-0000-0001-000000000008",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "van_kracht",
+      "bronstatus": "historisch",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "g_geen_frase",
+      "document_id": "05001000-0000-0000-0000-000000000009",
+      "chunk_id": "05001000-0000-0000-0001-000000000009",
+      "fonds_id": null,
+      "bibliotheek": "generiek",
+      "status": "van_kracht",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": false,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_ok",
+      "document_id": "05001000-0000-0000-0000-000000000010",
+      "chunk_id": "05001000-0000-0000-0001-000000000010",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_van_kracht_bronstatus_null",
+      "document_id": "05001000-0000-0000-0000-000000000011",
+      "chunk_id": "05001000-0000-0000-0001-000000000011",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "van_kracht",
+      "bronstatus": null,
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_concept",
+      "document_id": "05001000-0000-0000-0000-000000000012",
+      "chunk_id": "05001000-0000-0000-0001-000000000012",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "concept",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_gearchiveerd",
+      "document_id": "05001000-0000-0000-0000-000000000013",
+      "chunk_id": "05001000-0000-0000-0001-000000000013",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "gearchiveerd",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_geldig_tot_verstreken",
+      "document_id": "05001000-0000-0000-0000-000000000014",
+      "chunk_id": "05001000-0000-0000-0001-000000000014",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": "2025-01-01",
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_geldig_vanaf_toekomst",
+      "document_id": "05001000-0000-0000-0000-000000000015",
+      "chunk_id": "05001000-0000-0000-0001-000000000015",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": "2027-01-01",
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_bronstatus_uitgesloten",
+      "document_id": "05001000-0000-0000-0000-000000000016",
+      "chunk_id": "05001000-0000-0000-0001-000000000016",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "uitgesloten",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_procesinstantie",
+      "document_id": "05001000-0000-0000-0000-000000000017",
+      "chunk_id": "05001000-0000-0000-0001-000000000017",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": "05001000-0000-0000-0000-0000000000f1",
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_inactief",
+      "document_id": "05001000-0000-0000-0000-000000000018",
+      "chunk_id": "05001000-0000-0000-0001-000000000018",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "actief",
+      "actief": false,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_status_null",
+      "document_id": "05001000-0000-0000-0000-000000000019",
+      "chunk_id": "05001000-0000-0000-0001-000000000019",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": null,
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    },
+    {
+      "sleutel": "f_niet_aangewezen",
+      "document_id": "05001000-0000-0000-0000-000000000020",
+      "chunk_id": "05001000-0000-0000-0001-000000000020",
+      "fonds_id": "05000000-1111-1111-1111-111111111111",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": false
+    },
+    {
+      "sleutel": "b_ander_fonds",
+      "document_id": "05001000-0000-0000-0000-000000000021",
+      "chunk_id": "05001000-0000-0000-0001-000000000021",
+      "fonds_id": "05000000-2222-2222-2222-222222222222",
+      "bibliotheek": "fonds",
+      "status": "vastgesteld",
+      "bronstatus": "actief",
+      "actief": true,
+      "geldig_vanaf": null,
+      "geldig_tot": null,
+      "volgende_review": null,
+      "procesinstantie_id": null,
+      "frase": true,
+      "aangewezen": true
+    }
+  ],
+  "scenarios": [
+    {
+      "naam": "actueel_fonds_a",
+      "uitleg": "modus actueel, peildatum 2026-09-29, fonds A, bronsoort fonds+generiek (het productiefilterblok)",
+      "parameters": {
+        "modus": "actueel",
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": [
+          "fonds",
+          "generiek"
+        ]
+      },
+      "toegelaten": [
+        "f_ok",
+        "f_procesinstantie",
+        "f_van_kracht_bronstatus_null",
+        "g_bronstatus_null",
+        "g_ok",
+        "g_review_toekomst"
+      ]
+    },
+    {
+      "naam": "alles_fonds_a",
+      "uitleg": "modus alles: niet-vastgestelde fondsstukken wel, generiek blijft published-only",
+      "parameters": {
+        "modus": null,
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_bronstatus_uitgesloten",
+        "f_concept",
+        "f_geldig_tot_verstreken",
+        "f_geldig_vanaf_toekomst",
+        "f_ok",
+        "f_procesinstantie",
+        "f_status_null",
+        "f_van_kracht_bronstatus_null",
+        "g_bronstatus_null",
+        "g_ok",
+        "g_review_toekomst"
+      ]
+    },
+    {
+      "naam": "bronstatus_en_documentstatus",
+      "uitleg": "p_bronstatus [actief] (NULL telt als actief) + p_documentstatus [vastgesteld, van_kracht]",
+      "parameters": {
+        "modus": null,
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": [
+          "actief"
+        ],
+        "documentstatus": [
+          "vastgesteld",
+          "van_kracht"
+        ],
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_geldig_tot_verstreken",
+        "f_geldig_vanaf_toekomst",
+        "f_ok",
+        "f_procesinstantie",
+        "f_van_kracht_bronstatus_null",
+        "g_bronstatus_null",
+        "g_ok",
+        "g_review_toekomst"
+      ]
+    },
+    {
+      "naam": "bronstatus_zonder_actief",
+      "uitleg": "p_bronstatus zonder actief: NULL telt dan niet mee",
+      "parameters": {
+        "modus": null,
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": [
+          "uitgesloten",
+          "historisch"
+        ],
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_bronstatus_uitgesloten"
+      ]
+    },
+    {
+      "naam": "procesinstantie",
+      "uitleg": "p_procesinstantie_ids: alleen het dossier",
+      "parameters": {
+        "modus": null,
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": [
+          "05001000-0000-0000-0000-0000000000f1"
+        ],
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_procesinstantie"
+      ]
+    },
+    {
+      "naam": "bronsoort_fonds",
+      "uitleg": "p_bronsoort [fonds]: generiek valt af",
+      "parameters": {
+        "modus": "actueel",
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": [
+          "fonds"
+        ]
+      },
+      "toegelaten": [
+        "f_ok",
+        "f_procesinstantie",
+        "f_van_kracht_bronstatus_null"
+      ]
+    },
+    {
+      "naam": "documentscope",
+      "uitleg": "p_document_ids: alleen binnen de scope",
+      "parameters": {
+        "modus": "actueel",
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": [
+          "05001000-0000-0000-0000-000000000001",
+          "05001000-0000-0000-0000-000000000010",
+          "05001000-0000-0000-0000-000000000012"
+        ],
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_ok",
+        "g_ok"
+      ]
+    },
+    {
+      "naam": "fonds_mismatch",
+      "uitleg": "p_fonds_id = fonds B terwijl de sessie fonds A is: alleen generiek",
+      "parameters": {
+        "modus": "actueel",
+        "peildatum": "2026-09-29",
+        "fonds_id": "05000000-2222-2222-2222-222222222222",
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "g_bronstatus_null",
+        "g_ok",
+        "g_review_toekomst"
+      ]
+    },
+    {
+      "naam": "zonder_fondsfilter",
+      "uitleg": "p_fonds_id null: RLS alleen (fonds B blijft onzichtbaar)",
+      "parameters": {
+        "modus": "actueel",
+        "peildatum": "2026-09-29",
+        "fonds_id": null,
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_ok",
+        "f_procesinstantie",
+        "f_van_kracht_bronstatus_null",
+        "g_bronstatus_null",
+        "g_ok",
+        "g_review_toekomst"
+      ]
+    },
+    {
+      "naam": "peildatum_2019",
+      "uitleg": "peildatum vóór de review- en geldigheidsgrenzen",
+      "parameters": {
+        "modus": "actueel",
+        "peildatum": "2019-06-01",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_geldig_tot_verstreken",
+        "f_ok",
+        "f_procesinstantie",
+        "f_van_kracht_bronstatus_null",
+        "g_bronstatus_null",
+        "g_ok",
+        "g_review_toekomst",
+        "g_review_verlopen"
+      ]
+    },
+    {
+      "naam": "peildatum_2028",
+      "uitleg": "peildatum na de review- en vanaf-grenzen",
+      "parameters": {
+        "modus": "actueel",
+        "peildatum": "2028-01-01",
+        "fonds_id": "05000000-1111-1111-1111-111111111111",
+        "documentscope": null,
+        "bronstatus": null,
+        "documentstatus": null,
+        "procesinstantie_ids": null,
+        "bronsoort": null
+      },
+      "toegelaten": [
+        "f_geldig_vanaf_toekomst",
+        "f_ok",
+        "f_procesinstantie",
+        "f_van_kracht_bronstatus_null",
+        "g_bronstatus_null",
+        "g_ok"
+      ]
+    }
+  ]
+}

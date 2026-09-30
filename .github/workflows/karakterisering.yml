@@ -373,6 +373,45 @@ jobs:
           echo "vergelijk-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
+      # #500 hotfix productietime-out: de VOLLEDIGE 150d-vraagketen eind-tot-eind
+      # (POST /api/chat → governance_log.retrieval_meta) tegen een productie-
+      # achtige fixture van 18.418 chunks. BEWUST de laatste pass: de fixture
+      # wordt gecommit en voegt generieke juridische documenten toe die voor
+      # elk fonds zichtbaar zijn — elke snapshotpass hierna zou omvallen.
+      # Eigen Next-proces (poort 3005) met HYBRID_SEARCH=on en de embeddingstub.
+      - name: "#500 artikelspoor — volledige vraagketen (laatste pass)"
+        env:
+          HYBRID_SEARCH: "on"
+          MISTRAL_API_KEY: "t1b-stub-sleutel-niet-echt"
+          WP4_E2E_EMBED_PROVIDER: "local"
+          WP4_E2E_EMBED_PROVIDER_URL: "http://127.0.0.1:8791"
+          APP_BASE_URL: "http://127.0.0.1:3005"
+        run: |
+          t0=$(date +%s)
+          node tests/karakterisering/seed.mjs
+          psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 \
+            -v art500_fonds_a=00000000-0000-4000-8000-000000000001 -v art500_behoud=1 \
+            -f supabase/checks/2026_09_29_500_artikelspoor_performance.sql
+          node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/art500-embed-stub.log" 2>&1 &
+          STUB=$!
+          HYBRID_SEARCH=on PORT=3005 npm run start &
+          SERVER=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3005/api/healthz/ping >/dev/null \
+              && curl -sf http://127.0.0.1:8791/_verzoeken >/dev/null && ok=1 && break
+            sleep 1
+          done
+          if [ "${ok:-0}" != "1" ]; then
+            echo "FOUT: next start of embeddingstub (#500) kwam niet op binnen 60s." >&2
+            kill "$SERVER" "$STUB" 2>/dev/null || true; exit 1
+          fi
+          code=0
+          node tests/karakterisering/artikelspoor-500-keten.mjs || code=1
+          kill "$SERVER" "$STUB" 2>/dev/null || true
+          wait "$SERVER" 2>/dev/null || true
+          echo "artikelspoor-500-pass: $(( $(date +%s) - t0 ))s"
+          exit $code
+
       - name: Supabase-stack stoppen
         if: always()
         run: supabase stop || true

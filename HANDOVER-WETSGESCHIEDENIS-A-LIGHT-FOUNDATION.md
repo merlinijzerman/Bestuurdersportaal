@@ -193,11 +193,11 @@ selectie had dus niets opgelost.
 |---|---|
 | Herkenning + poort | Nieuwe pure module `core/lib/retrieval/artikelverwijzing.ts`: `herkenArtikelnummers` ("artikel/art./artikelen 150d en 150e"), `herkenWet` (Pensioenwet → pw, Wvb → wvb), `bepaalArtikelfocus`. Poort = R-3-beleid van toepassing **én** signaal `juridisch_anker` of `zwak_anker` zonder `fondscontext`; vertrouwen `zeker` alleen telt niet. Nummers exact na normalisatie: 150 ≠ 150d ≠ 1500. |
 | Doorgifte | `orkestratie.ts` berekent de focus per spoor uit `zoekvraag` + `origineleVraag`, alleen op sporen met `grenzen.juridischeIntentie` (de bibliotheeksporen). Alleen dan krijgt de adapter `RetrievalQuery.artikelfocus` (optioneel contractveld); anders exact dezelfde query-referentie. |
-| Gericht kandidatenspoor (Supabase) | `rag.ts` `vulAanMetArtikelkandidaten`, aangeroepen in `supabase-adapter.ts` direct na de ranking. (1) Opzoeking onder RLS op `document_chunks` van documenten met `documenttype` wetgeving/wetsgeschiedenis (via `documenten!inner`, niet de denormalisatie), label of tekstbegin **exact in de database** via PostgREST `imatch` (`~*`) met woordgrens (`(^\|[^a-z])artikel +N([^0-9a-z]\|$)` resp. `^(artikel\|art[.]?) +N(…)`), zodat buurlabels (150, 150a–z, 1500 bij artikel 15) de passage niet uit de limiet van 50 drukken (reviewpunt PR #501); `artikelmatch` is de tweede grens. (2) Nieuwe passages komen alleen binnen als de **bestaande** `zoek_chunks` ze teruggeeft met hetzelfde filterblok (`rpcFilterParams` + `p_fonds_id` + scope) en frasequery `"artikel N" OR "art N"`, gevolgd door `handhaafFondsdiscipline`. (3) Binnen `maxKandidaten`: nieuwe exacte passages vervangen de zwakste niet-exacte staart. Fail-open bij een fout (afbreking gaat door). |
+| Gericht kandidatenspoor (Supabase) | `rag.ts` `vulAanMetArtikelkandidaten`, aangeroepen in `supabase-adapter.ts` direct na de ranking. (1) Opzoeking onder RLS, **begrensd** (hotfix, zie hieronder): eerst `documenten` met `documenttype` wetgeving/wetsgeschiedenis en `actief` (binnen de scope, ≤ 200), daarna `document_chunks` alleen binnen die `document_id`'s, label of tekstbegin **exact in de database** via PostgREST `imatch` (`~*`) met woordgrens (`(^\|[^a-z])artikel +N([^0-9a-z]\|$)` resp. `^(artikel\|art[.]?) +N(…)`), zodat buurlabels (150, 150a–z, 1500 bij artikel 15) de passage niet uit de limiet van 50 drukken (reviewpunt PR #501); `artikelmatch` is de tweede grens. (2) Toelating: een **id-begrensde** opvraging `document_chunks?id=in.(…)` onder RLS met expliciet de `zoek_chunks`-semantiek en dezelfde frasevoorwaarde `"artikel N" OR "art N"` (`retrieval/artikeltoelating.ts`), gevolgd door `handhaafFondsdiscipline`. (3) Binnen `maxKandidaten`: nieuwe exacte passages vervangen de zwakste niet-exacte staart. Fail-open bij een fout (afbreking gaat door). |
 | Boost | `selectie.ts`: ná bronsoort- en regimeweging, vóór het R-3-beleid zet `boostArtikelpassages` per document de beste exacte **juridische** passage vooraan (kopregel wint van label; max 3). Fondsdocumenten en niet-juridische bronnen nooit; regime-gedemoveerde bronnen blijven vast; een tegengesteld regime of een wettekst waarvan de titel de genoemde wet niet noemt, wordt niet geboost. R-3 bepaalt daarna de rollen: normvraag → wet vóór toelichting (MvT nooit primaire normbron, normbasismelding intact); bedoeling/gecombineerd → exacte wet + exacte MvT aaneen in de kop. |
 | Contractvelden | `Bronresultaat.locator.structuurLabel` en `rang.poging = "artikelspoor"`, alleen gezet door het artikelspoor. `DocumentChunk.structuur_label`/`artikelspoor` adapterprivaat. |
 | Diagnostiek | `selectie.juridisch.artikel = { verwijzingen, wet_genoemd, exact, geboost, geboost_geselecteerd, via_artikelspoor }` — alleen bij een focus; tellingen en een vlag, geen nummer of tekst. Migratievrij (subsleutel van `selectie`). |
-| Census | Importgraaf 172 → 173 (de nieuwe pure module); register: `supabase-adapter.ts` importeert daarnaast `vulAanMetArtikelkandidaten` uit `rag.ts`. Lezingen (`rag.ts::document_chunks`/`documenten`, evidence) en RPC-ingangen ongewijzigd. |
+| Census | Importgraaf 172 → 173 (de nieuwe pure module); register: `supabase-adapter.ts` importeert daarnaast `vulAanMetArtikelkandidaten` uit `rag.ts`. Lezingen (`rag.ts::document_chunks`/`documenten`, evidence) en RPC-ingangen ongewijzigd. Hotfix: 173 → 174 (`retrieval/artikeltoelating.ts`, puur, importeert de kern niet); register verder ongewijzigd. |
 
 Continuatiechunks van een lange artikeltoelichting (zelfde label, zonder de
 frase in tekst of contextprefix) worden niet via het spoor toegelaten; bij
@@ -213,6 +213,71 @@ Reviewronde: `#500-A4` (nep-PostgREST die `or`/`limit` echt uitvoert; >50 buurla
 aangesloten in `cross-tenant-ci.sh`; zonder rol en fondsfilter → `LEK A4`.
 PostgREST-syntaxis van opzoeking en toelating lokaal tegen PostgREST + PG17
 bevestigd.
+
+#### Hotfix productietime-out (29-09-2026)
+
+**Oorzaak.** Na release PR #503 eindigden de drie 150d-pilotvragen op
+Productie in `57014` (8 s `statement_timeout` van `authenticator`/
+`authenticated`) in `POST /rpc/zoek_chunks` — de toelatingsstap van dit spoor
+(`p_limit => 200`, `p_document_ids => …`). `zoek_chunks` is `LANGUAGE sql` met
+`SET search_path` en wordt dus nooit ingelijnd (generiek plan). In het
+**concrete** plan verhindert de combinatie van de RLS-policy, de functievorm
+(`cross join websearch_to_tsquery`) en het niet-leakproof `@@`-predicaat het
+GIN-pad: een seq scan over alle 18.418 chunks; de SELECT-policy evalueert
+`auth.uid()` per rij (plus de tweede permissive ALL-policy via OR) en
+`documenten` wordt in een nested loop per chunkrij opnieuw gescand. Gemeten als
+authenticated: 3,9 s warm / 46k buffers (als postgres 0,3 s); een herschrijving
+met direct `@@ websearch_to_tsquery($1)` bleef een seq scan (1,6 s). Het is dus
+geen eigenschap van GIN onder RLS in het algemeen, maar van dit plan.
+
+**Oplossing (geen time-out-, RLS-/policy- of migratiewijziging).** De opzoeking
+is begrensd tot de juridische documenten (`idx_chunks_document`); de toelating
+loopt niet meer via `zoek_chunks` maar via `document_chunks?id=in.(≤ 50)` onder
+RLS. `core/lib/retrieval/artikeltoelating.ts` spiegelt de laatste
+`zoek_chunks` (`2026_08_12_t4_regime_borging.sql` §7a) + `rpcFilterParams` +
+`p_fonds_id` + documentscope als (a) PostgREST-filters voor alles wat op één
+tabel staat en (b) een gezaghebbend predicaat met twaalf benoemde regels (ook
+fonds en generiek-review, die chunk- en documentkolom combineren);
+`handhaafFondsdiscipline` blijft de extra grens. Zonder `peildatum`-filter geldt
+de UTC-datum van de app i.p.v. `current_date` van de database (beide UTC op
+Supabase). Een toegelaten passage draagt geen relevantiescore (`rang` null).
+
+**Bewijs.** Pariteit onder echte RLS: `2026_09_29_500_artikelspoor.sql` sectie
+M — 21 matrixrijen × 11 scenario's uit
+`tests/cross-tenant/fixtures/500-artikeltoelating-matrix.json`: nieuwe toelating
+== `zoek_chunks` == verwacht, en elk van de 13 regels (incl. frase) weglaten
+maakt een scenario rood. Dezelfde matrix in
+`tests/cross-tenant/retrieval-artikeltoelating.test.ts` (predicaat,
+PostgREST-filterinterpreter, negatieve controles) en lokaal tegen echte
+PostgREST via supabase-js (11/11). Performance:
+`2026_09_29_500_artikelspoor_performance.sql` (18.418 chunks, vector(1024) +
+HNSW, GIN, drie fondsen; de queries letterlijk zoals PostgREST ze genereert):
+elke run < 1 s en p95 < 500 ms onder RLS, en de oude toelating ≥ 3× zwaarder
+(buffers en mediaan). Productie (read-only, 12 runs, als authenticated): het
+hele spoor mediaan 47 ms, p95/max 82 ms, 1.739 buffers; de oude toelating
+mediaan 500 ms, max 3,3 s (eerder 4,8 s), 46.279 buffers. MvT p.395 en de vier
+Pensioenwet-150d-chunks worden gevonden en toegelaten (9/9).
+
+**Volledige vraagketen (lokaal; Preview heeft geen juridische documenten).**
+`tests/karakterisering/artikelspoor-500-keten.mjs` stuurt de drie
+150d-pilotvragen en de reglementvraag als W1-bestuurder via `POST /api/chat`
+(`next start`, `HYBRID_SEARCH=on`, WP4-AI- en embeddingstub) tegen de
+performancefixture (aan het W1-fonds, gecommit) plus 31 concurrerende
+MvT-passages met alle vraagwoorden. Alle vier ronden af zonder fout;
+bedoeling: Pensioenwet 150d, dan MvT p.395 als eerste wetsgeschiedenis; norm:
+vier Pensioenwet-150d-passages vóór de MvT; gecombineerd: wet, dan MvT p.395;
+`artikel` = exact 9, geboost_geselecteerd 2, via_artikelspoor 9 (de exacte
+passages kwamen dus uitsluitend via het spoor binnen, zoals in de pilot);
+reglement zonder `selectie.juridisch.artikel`. Aangesloten als laatste pass van
+`.github/workflows/karakterisering.yml` (de fixture wordt daar gecommit en zou
+eerdere snapshotpasses verstoren); het draairecept staat in de scriptkop.
+
+**Open vervolgpunt (niet uitgevoerd, apart voorstel).** De SELECT-policies op
+`document_chunks`/`documenten` evalueren `auth.uid()` per rij. Het gangbare
+Supabase-patroon `(select auth.uid())` maakt daar één initplan van; dat is een
+RLS-wijziging met een eigen migratie, structurele gates (A–H) en V3-grants-gate,
+en valt bewust buiten deze hotfix. Het zou ook de andere zoek-RPC's
+(`zoek_chunks`, `zoek_chunks_hybride`) onder RLS goedkoper maken.
 
 **Controle bij de herhaalde productiepilot.** Zie de PR-beschrijving; kern:
 `retrieval_meta.selectie.juridisch.artikel` moet `exact ≥ 1` en
