@@ -60,6 +60,10 @@ SQL_ART500_PERF="supabase/checks/2026_09_29_500_artikelspoor_performance.sql"
 # statement_timeout, trigger alleen bij waardewijziging, atomisch bij time-out/
 # statusovergang, consistente chunkmetadata; negatieve controle met oude trigger.
 SQL_499="supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql"
+# #504 — datumvelden (documentdatum/geldig_vanaf/volgende_review) via de #499-RPC:
+# klein document én 1.000 chunks, chunk-denorm, audit met actor/reden, leegmaken,
+# ongeldige datum → rollback; negatieve controle zonder denorm-trigger.
+SQL_504="supabase/checks/2026_09_30_504_curatie_datumvelden.sql"
 # Increment T8 — config-/manifestlaag: cross-tenant + rolgate + append-only.
 SQL_T8C="supabase/checks/2026_07_09_t8_config_cross_tenant.sql"
 # Increment T10 — review-verval-gate op retrieval + generieke toestandsmachine.
@@ -365,6 +369,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ART500_PERF"
 echo
 echo "-- #499 (generieke metadatawijziging op 1.000 chunks: budget, atomisch, consistent) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"
+echo
+echo "-- #504 (curatie-datumvelden: klein + 1.000 chunks, denorm, audit, leegmaken) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_504"
 echo
 echo "-- T8 (config-/manifestlaag: cross-tenant + rolgate + append-only) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T8C"

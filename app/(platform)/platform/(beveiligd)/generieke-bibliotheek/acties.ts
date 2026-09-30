@@ -33,9 +33,13 @@ import { valideerUpload } from "@/core/lib/bestand-validatie";
 import { bepaalBestandstype } from "@/core/lib/document-extractie";
 import {
   valideerGeneriekeCuratie,
-  type JuridischeCuratieInvoer,
   type JuridischeCuratieGenormaliseerd,
 } from "@/core/lib/generiek-curatie-juridisch";
+import {
+  bouwCuratieDiff,
+  leesCuratieInvoer,
+  type CuratieLogRij,
+} from "@/platform/lib/generiek-curatie-diff";
 import {
   generiekGeldigheidsstatus,
   generiekTransitieRedenplicht,
@@ -63,24 +67,8 @@ export type CuratieResultaat =
   | { ok: true; documentId: string; bericht: string }
   | { ok: false; foutcode: string; melding: string; veldfouten?: Record<string, string> };
 
-// Retrieval-relevante velden: een wijziging hieraan werkt door in de RAG-laag
-// (denorm op de chunks / G-filtering), dus rag_impact=true in het auditspoor.
-// Increment T10: `volgende_review` is nu óók retrieval-relevant — een verstreken
-// review degradeert de bron als actuele bron (review-verval-gate in de RPC).
-const RAG_VELDEN = new Set([
-  "normgewicht",
-  "bronorganisatie",
-  "extern_url",
-  "bronstatus",
-  "geldig_tot",
-  "status",
-  "volgende_review",
-  // Wetsgeschiedenis A-light: documenttype en wettelijk_regime worden door
-  // fn_chunk_denorm naar de chunks gespiegeld. Subtype en dossiernummer (nog)
-  // niet — die blijven documentmetadata tot de post-release retrievalfase.
-  "documenttype",
-  "wettelijk_regime",
-]);
+// Retrieval-relevante velden, FormData-lezing en de diff staan sinds #504 in
+// platform/lib/generiek-curatie-diff.ts (pure kern, los testbaar).
 
 // Increment T10 (besluit 0053) — standaard reviewhorizon bij publicatie zonder
 // expliciete datum. Configureerbare governance-default (te valideren): 12 maanden.
@@ -89,38 +77,6 @@ function standaardVolgendeReview(): string {
   const d = new Date();
   d.setMonth(d.getMonth() + STANDAARD_REVIEW_MAANDEN);
   return d.toISOString().slice(0, 10);
-}
-
-// ── FormData → CuratieInvoer ────────────────────────────────────────────────
-function leesInvoer(fd: FormData): JuridischeCuratieInvoer {
-  const s = (k: string) => {
-    const v = fd.get(k);
-    return typeof v === "string" ? v : null;
-  };
-  return {
-    titel: s("titel"),
-    bron: s("bron"),
-    bronorganisatie: s("bronorganisatie"),
-    extern_url: s("extern_url"),
-    normgewicht: s("normgewicht"),
-    documentdatum: s("documentdatum"),
-    geldig_vanaf: s("geldig_vanaf"),
-    geldig_tot: s("geldig_tot"),
-    documentstatus: s("documentstatus"),
-    bronstatus: s("bronstatus"),
-    toepassingsgebied: s("toepassingsgebied"),
-    regelingstype: s("regelingstype"),
-    doelgroep: s("doelgroep"),
-    thema: s("thema"),
-    statusinterpretatie: s("statusinterpretatie"),
-    documenttype: s("documenttype"),
-    wetsgeschiedenis_subtype: s("wetsgeschiedenis_subtype"),
-    dossiernummer: s("dossiernummer"),
-    wettelijk_regime: s("wettelijk_regime"),
-    eigenaar: s("eigenaar"),
-    volgende_review: s("volgende_review"),
-    versie: s("versie"),
-  };
 }
 
 function platformMelding(foutcode: string): string {
@@ -139,13 +95,7 @@ function platformMelding(foutcode: string): string {
 }
 
 // ── Append-only metadata-spoor (DB-trigger zet de hash) ─────────────────────
-type LogRij = {
-  veld_naam: string;
-  oude_waarde: string | null;
-  nieuwe_waarde: string | null;
-  wijzig_type: "metadata" | "status" | "bronstatus" | "koppeling";
-  rag_impact: boolean;
-};
+type LogRij = CuratieLogRij;
 
 async function logMetadata(
   svc: SupabaseClient,
@@ -287,7 +237,7 @@ async function maakUitBuffer(
   }
 
   // 2) Metadata + bronhygiene.
-  const curatie = valideerGeneriekeCuratie(leesInvoer(fd));
+  const curatie = valideerGeneriekeCuratie(leesCuratieInvoer(fd));
   if (!curatie.ok) {
     return {
       ok: false,
@@ -503,7 +453,7 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
           };
         }
 
-        const curatie = valideerGeneriekeCuratie(leesInvoer(fd));
+        const curatie = valideerGeneriekeCuratie(leesCuratieInvoer(fd));
         if (!curatie.ok) {
           return {
             resultaat: { ok: false, foutcode: "validatie", melding: "Controleer de gemarkeerde velden.", veldfouten: curatie.fouten },
@@ -532,29 +482,7 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
         }
 
         // Diff t.o.v. de huidige waarden (alleen de bewerkbare §8.1-velden).
-        const velden: (keyof JuridischeCuratieGenormaliseerd & string)[] = [
-          "titel", "bron", "bronorganisatie", "extern_url", "normgewicht",
-          "documentdatum", "geldig_vanaf", "geldig_tot", "status", "bronstatus",
-          "toepassingsgebied", "regelingstype", "doelgroep", "thema", "statusinterpretatie",
-          "eigenaar", "volgende_review", "versie",
-          "documenttype", "wetsgeschiedenis_subtype", "dossiernummer", "wettelijk_regime",
-        ];
-        const update: Record<string, unknown> = {};
-        const logRijen: LogRij[] = [];
-        for (const veld of velden) {
-          const oud = (huidig as Record<string, unknown>)[veld] ?? null;
-          const nieuw = (meta as unknown as Record<string, unknown>)[veld] ?? null;
-          if ((oud ?? null) !== (nieuw ?? null)) {
-            update[veld] = nieuw;
-            logRijen.push({
-              veld_naam: veld,
-              oude_waarde: oud === null ? null : String(oud),
-              nieuwe_waarde: nieuw === null ? null : String(nieuw),
-              wijzig_type: veld === "status" ? "status" : veld === "bronstatus" ? "bronstatus" : "metadata",
-              rag_impact: RAG_VELDEN.has(veld),
-            });
-          }
-        }
+        const { update, logRijen } = bouwCuratieDiff(huidig as Record<string, unknown>, meta);
 
         if (Object.keys(update).length === 0) {
           return {
