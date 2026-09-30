@@ -26,6 +26,24 @@
 --   A6 — de opzoeking is exact in de database (regex met woordgrens, zoals
 --        `artikelOpzoekfilter`): "artikel 150" treft 150c/150d niet.
 --
+-- HOTFIX PRODUCTIETIME-OUT (#500, 29-09-2026). De app laat nieuwe passages
+-- niet meer toe via `zoek_chunks` (57014 op Productie), maar via een
+-- id-begrensde opvraging onder RLS met EXPLICIET dezelfde semantiek
+-- (core/lib/retrieval/artikeltoelating.ts). A1–A6 hierboven blijven de
+-- referentie voor wat `zoek_chunks` doet; M bewijst de pariteit:
+--   M1 — voor elke scenario uit de gedeelde matrix
+--        (tests/cross-tenant/fixtures/500-artikeltoelating-matrix.json, ook
+--        gelezen door de app-laagtest) geldt onder echte RLS:
+--        nieuwe toelating == zoek_chunks == verwacht. Dezelfde rijen
+--        toegelaten, en vooral dezelfde GEWEIGERD: ander fonds, concept/niet
+--        vastgesteld, gearchiveerd, actief=false, geldig_tot < peildatum,
+--        geldig_vanaf > peildatum, verlopen volgende_review, bronstatus niet
+--        actief, andere bronsoort, buiten documentscope, niet aangewezen,
+--        geen frase.
+--   M2 — negatieve controle: laat één toelatingsregel weg en ten minste één
+--        scenario wordt rood. Elke regel doet dus aantoonbaar werk.
+-- De performance-eis staat in 2026_09_29_500_artikelspoor_performance.sql.
+--
 -- Self-seeding in één transactie met ROLLBACK — laat geen data achter.
 -- Uitvoeren:  psql "$DB" -f dit-bestand
 -- ============================================================================
@@ -113,6 +131,34 @@ values
   ('05000000-0000-0000-0000-00000000c0b1', '05000000-0000-0000-0000-0000000000b1', 0, 1,
    E'Artikel 150d Pensioenwet (Transitieplan)\nInterne notitie van fonds B.',
    'artikel', 'Artikel 150d');
+
+-- ── M: pariteitsmatrix (gedeeld met de app-laagtest) ────────────────────────
+\set matrix500 `cat tests/cross-tenant/fixtures/500-artikeltoelating-matrix.json`
+select set_config('art500.matrix', :'matrix500', true);
+
+insert into public.procedures (id, fonds_id, template_code, titel)
+values ('05001000-0000-0000-0000-0000000000f1', '05000000-1111-1111-1111-111111111111',
+        'art500-test', 'Artikelspoor dossier');
+
+insert into public.documenten
+  (id, fonds_id, bibliotheek, bron, titel, status, bronstatus, actief,
+   geldig_vanaf, geldig_tot, volgende_review, procesinstantie_id)
+select r.document_id, r.fonds_id, r.bibliotheek,
+       case when r.bibliotheek = 'generiek' then 'Extern' else 'Intern' end,
+       'Matrix — ' || r.sleutel, r.status, r.bronstatus, r.actief,
+       r.geldig_vanaf, r.geldig_tot, r.volgende_review, r.procesinstantie_id
+  from jsonb_to_recordset(current_setting('art500.matrix')::jsonb -> 'rijen') as r(
+       sleutel text, document_id uuid, fonds_id uuid, bibliotheek text, status text,
+       bronstatus text, actief boolean, geldig_vanaf date, geldig_tot date,
+       volgende_review date, procesinstantie_id uuid);
+
+insert into public.document_chunks (id, document_id, chunk_index, pagina, tekst, structuur_type, structuur_label)
+select r.chunk_id, r.document_id, 0, 1,
+       case when r.frase then E'Artikel 150d Pensioenwet (Transitieplan)\nMatrixrij ' || r.sleutel
+            else 'Vervolgtekst zonder de verwijzing, matrixrij ' || r.sleutel end,
+       'artikel', 'Artikel 150d'
+  from jsonb_to_recordset(current_setting('art500.matrix')::jsonb -> 'rijen') as r(
+       sleutel text, document_id uuid, chunk_id uuid, frase boolean);
 
 -- ── Onder RLS, als fondsgebruiker A ─────────────────────────────────────────
 set local role authenticated;
@@ -211,6 +257,141 @@ begin
     raise exception 'FAAL A3: artikel 150c-frase selecteert niet precies de 150c-passage.';
   end if;
   raise notice 'OK A3: buurartikelen 150 en 150c raken 150d niet.';
+end $$;
+
+-- ── M1/M2 — pariteit: nieuwe toelating == zoek_chunks == verwacht ──────────
+do $$
+declare
+  m          jsonb := current_setting('art500.matrix')::jsonb;
+  v_frase    text  := m->>'frase';
+  v_regels   text[] := array['exacte_id','document_actief','niet_gearchiveerd','documentscope',
+                             'modus_actueel','bronstatus','documentstatus','procesinstantie',
+                             'bronsoort','fonds','generiek_gepubliceerd','generiek_review','frase'];
+  v_alle     uuid[];
+  v_ids      uuid[];
+  s          jsonb;
+  p          jsonb;
+  v_modus    text;
+  v_peil     date;
+  v_fonds    uuid;
+  v_scope    uuid[];
+  v_bronst   text[];
+  v_docst    text[];
+  v_proc     uuid[];
+  v_bronsrt  text[];
+  v_docs     uuid[];
+  v_ref      uuid[];
+  v_nieuw    uuid[];
+  v_verwacht uuid[];
+  v_zonder   uuid[];
+  v_regel    text;
+  v_rood     jsonb := '{}'::jsonb;
+  v_n        int := 0;
+begin
+  select array_agg((r->>'chunk_id')::uuid) into v_alle from jsonb_array_elements(m->'rijen') r;
+  select array_agg((r->>'chunk_id')::uuid) into v_ids
+    from jsonb_array_elements(m->'rijen') r where (r->>'aangewezen')::boolean;
+
+  -- Seedcontrole: fondsgebruiker A ziet precies de rijen van fonds A + generiek.
+  if (select count(*) from public.document_chunks where id = any(v_alle))
+     <> (select count(*) from jsonb_array_elements(m->'rijen') r where r->>'sleutel' not like 'b\_%') then
+    raise exception 'SEED FAALT M: RLS-zichtbaarheid van de matrix wijkt af.';
+  end if;
+
+  create temp table art500_vlaggen (id uuid, regels jsonb) on commit drop;
+  for s in select * from jsonb_array_elements(m->'scenarios') loop
+    p        := s->'parameters';
+    v_modus  := coalesce(p->>'modus', 'alles');
+    v_peil   := (p->>'peildatum')::date;
+    v_fonds  := (p->>'fonds_id')::uuid;
+    v_scope  := case when jsonb_typeof(p->'documentscope') = 'array'
+                     then array(select jsonb_array_elements_text(p->'documentscope'))::uuid[] end;
+    v_bronst := case when jsonb_typeof(p->'bronstatus') = 'array'
+                     then array(select jsonb_array_elements_text(p->'bronstatus')) end;
+    v_docst  := case when jsonb_typeof(p->'documentstatus') = 'array'
+                     then array(select jsonb_array_elements_text(p->'documentstatus')) end;
+    v_proc   := case when jsonb_typeof(p->'procesinstantie_ids') = 'array'
+                     then array(select jsonb_array_elements_text(p->'procesinstantie_ids'))::uuid[] end;
+    v_bronsrt := case when jsonb_typeof(p->'bronsoort') = 'array'
+                     then array(select jsonb_array_elements_text(p->'bronsoort')) end;
+    select coalesce(array_agg((r->>'chunk_id')::uuid order by (r->>'chunk_id')), '{}')
+      into v_verwacht
+      from jsonb_array_elements(m->'rijen') r
+     where r->>'sleutel' in (select jsonb_array_elements_text(s->'toegelaten'));
+
+    -- (1) Referentie: de OUDE toelating — zoek_chunks met de documenten van de
+    --     aangewezen passages (binnen de scope), gefilterd op de aangewezen id's.
+    select array_agg(distinct document_id) into v_docs
+      from public.document_chunks
+     where id = any(v_ids) and (v_scope is null or document_id = any(v_scope));
+    select coalesce(array_agg(z.id order by z.id), '{}') into v_ref
+      from public.zoek_chunks(
+             p_query => v_frase, p_limit => 200, p_document_ids => coalesce(v_docs, '{}'::uuid[]),
+             p_bronstatus => v_bronst, p_documentstatus => v_docst,
+             p_procesinstantie_ids => v_proc, p_modus => v_modus, p_peildatum => v_peil,
+             p_bronsoort => v_bronsrt, p_fonds_id => v_fonds) z
+     where z.id = any(v_ids);
+
+    -- (2) De NIEUWE toelating: dezelfde regels als TOELATINGSREGELS in
+    --     core/lib/retrieval/artikeltoelating.ts (+ de DB-zijdige frase), per
+    --     regel een vlag, onder RLS over de matrixrijen.
+    truncate art500_vlaggen;
+    insert into art500_vlaggen
+    select c.id, jsonb_build_object(
+      'exacte_id',            c.id = any(v_ids),
+      'document_actief',      d.actief is true,
+      'niet_gearchiveerd',    c.documentstatus is distinct from 'gearchiveerd',
+      'documentscope',        v_scope is null or c.document_id = any(v_scope),
+      'modus_actueel',        v_modus is distinct from 'actueel' or coalesce(
+                                c.documentstatus in ('vastgesteld','van_kracht')
+                                and coalesce(c.bronstatus,'actief') = 'actief'
+                                and (c.geldig_vanaf is null or c.geldig_vanaf <= v_peil)
+                                and (c.geldig_tot   is null or c.geldig_tot   >= v_peil), false),
+      'bronstatus',           v_bronst is null or coalesce(coalesce(c.bronstatus,'actief') = any(v_bronst), false),
+      'documentstatus',       v_docst is null or coalesce(c.documentstatus = any(v_docst), false),
+      'procesinstantie',      v_proc is null or coalesce(c.procesinstantie_id = any(v_proc), false),
+      'bronsoort',            v_bronsrt is null or coalesce(c.bibliotheek = any(v_bronsrt), false),
+      'fonds',                v_fonds is null or coalesce(d.fonds_id = v_fonds, false) or c.bibliotheek is not distinct from 'generiek',
+      'generiek_gepubliceerd', c.bibliotheek is distinct from 'generiek'
+                                or (c.documentstatus is not distinct from 'van_kracht' and coalesce(c.bronstatus,'actief') = 'actief'),
+      'generiek_review',      c.bibliotheek is distinct from 'generiek' or d.volgende_review is null or d.volgende_review >= v_peil,
+      'frase',                c.zoek_vector @@ websearch_to_tsquery('dutch', v_frase))
+      from public.document_chunks c
+      join public.documenten d on d.id = c.document_id
+     where c.id = any(v_alle);
+
+    select coalesce(array_agg(id order by id), '{}') into v_nieuw
+      from art500_vlaggen v
+     where not exists (select 1 from jsonb_each(v.regels) e where e.value <> 'true'::jsonb);
+
+    if v_ref is distinct from v_verwacht then
+      raise exception 'FAAL M1 [%]: zoek_chunks laat % toe, matrix verwacht %.', s->>'naam', v_ref, v_verwacht;
+    end if;
+    if v_nieuw is distinct from v_ref then
+      raise exception 'LEK M1 [%]: nieuwe toelating % ≠ zoek_chunks %.', s->>'naam', v_nieuw, v_ref;
+    end if;
+
+    -- M2: per weggelaten regel — wordt dit scenario rood?
+    foreach v_regel in array v_regels loop
+      select coalesce(array_agg(id order by id), '{}') into v_zonder
+        from art500_vlaggen v
+       where not exists (select 1 from jsonb_each(v.regels) e
+                          where e.key <> v_regel and e.value <> 'true'::jsonb);
+      if v_zonder is distinct from v_verwacht then
+        v_rood := jsonb_set(v_rood, array[v_regel], to_jsonb(s->>'naam'));
+      end if;
+    end loop;
+    v_n := v_n + 1;
+    raise notice 'OK M1 [%]: % toegelaten, nieuw == zoek_chunks == verwacht.', s->>'naam', cardinality(v_nieuw);
+  end loop;
+
+  foreach v_regel in array v_regels loop
+    if not (v_rood ? v_regel) then
+      raise exception 'FAAL M2: regel % weglaten maakt geen enkel scenario rood — de matrix dekt haar niet.', v_regel;
+    end if;
+  end loop;
+  raise notice 'OK M2: elk van de % regels weglaten maakt ten minste één van % scenario''s rood (%).',
+    cardinality(v_regels), v_n, v_rood;
 end $$;
 
 reset role;

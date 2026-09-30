@@ -17,8 +17,12 @@
 //                     1500 en 15 als negatieven.
 //   (S) SELECTIE    — boost + R-3: bedoeling, normvraag, gecombineerd, regime,
 //                     fondsdocumenten, byte-identiteit zonder focus.
-//   (A) ADAPTER     — het gerichte artikelspoor: toelating uitsluitend via
-//                     dezelfde RPC en filters, app-guard, kandidatenpool.
+//   (A) ADAPTER     — het gerichte artikelspoor: begrensde opzoeking (eerst de
+//                     juridische documenten), toelating id-begrensd met het
+//                     zoek_chunks-filterblok (hotfix productietime-out, geen
+//                     RPC meer), app-guard, kandidatenpool. De pariteit met
+//                     zoek_chunks zelf: retrieval-artikeltoelating.test.ts +
+//                     supabase/checks/2026_09_29_500_artikelspoor.sql.
 //   (E) EIND-TOT-EIND — orkestratie + Supabase-adapter met de nagebootste
 //                     pilotsituatie (exacte passage buiten de kandidatenset).
 //   (N) NEGATIEVE CONTROLE — boost of spoor uit ⇒ de acceptatie wordt rood.
@@ -41,7 +45,9 @@ import { selecteerEnVerrijk, type SelectieBron } from "../../core/lib/retrieval/
 import { juridischeAntwoordgrens } from "../../core/lib/retrieval/juridisch-beleid";
 import { voerVolledigeRetrievalUit } from "../../core/lib/retrieval/orkestratie";
 import { maakSupabaseAdapter, type Adaptervlaggen } from "../../core/lib/retrieval/supabase-adapter";
+import { toelatingsfilters } from "../../core/lib/retrieval/artikeltoelating";
 import {
+  ARTIKEL_OPZOEK_MAX,
   artikelOpzoekfilter,
   vulAanMetArtikelkandidaten,
   type DocumentChunk,
@@ -359,7 +365,14 @@ interface Nepaanroep {
   soort: string;
   args: unknown[];
 }
-function rpcRij(id: string, document_id: string, tekst: string, over: Record<string, unknown> = {}) {
+/**
+ * Een rij zoals de id-begrensde toelating (`TOELATING_SELECT`) haar teruggeeft.
+ * `over` mag chunkvelden én documentvelden bevatten (fonds_id, volgende_review,
+ * actief, titel); die laatste landen in de geneste `documenten`.
+ */
+function toelatingsRij(id: string, document_id: string, tekst: string, over: Record<string, unknown> = {}) {
+  const { fonds_id = null, volgende_review = null, actief = true, titel = "Kamerstukken II 2021/22, 36 067, nr. 3", ...chunkOver } = over;
+  const bibliotheek = (chunkOver.bibliotheek as string | undefined) ?? "generiek";
   return {
     id,
     document_id,
@@ -367,11 +380,6 @@ function rpcRij(id: string, document_id: string, tekst: string, over: Record<str
     pagina: 395,
     paragraaf: null,
     chunk_index: 1000,
-    titel: "Kamerstukken II 2021/22, 36 067, nr. 3",
-    bron: "upload",
-    bibliotheek: "generiek",
-    opslag_pad: null,
-    rang: 0.1,
     documentstatus: "van_kracht",
     bronstatus: "actief",
     documentdatum: "2022-03-25",
@@ -381,36 +389,60 @@ function rpcRij(id: string, document_id: string, tekst: string, over: Record<str
     bronorganisatie: null,
     normgewicht: "informatief",
     extern_url: null,
-    fonds_id: null,
-    volgende_review: null,
     wettelijk_regime: "beide",
-    ...over,
+    bibliotheek,
+    ...chunkOver,
+    documenten: { titel, bron: "upload", bibliotheek, opslag_pad: null, fonds_id, volgende_review, actief },
   };
 }
-function nepSupabase(opzoek: unknown[] | { fout: string }, rpc: (args: Record<string, unknown>) => unknown[]) {
-  const log: Nepaanroep[] = [];
-  const builder: Record<string, unknown> = {};
-  for (const m of ["select", "in", "or", "order", "limit", "eq"]) {
-    builder[m] = (...args: unknown[]) => {
-      log.push({ soort: m, args });
-      return builder;
-    };
-  }
-  builder.abortSignal = () => builder;
-  builder.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
-    Promise.resolve(Array.isArray(opzoek) ? { data: opzoek, error: null } : { data: null, error: { message: opzoek.fout } }).then(res, rej);
+/**
+ * Nep-Supabase die per `from()` een eigen builder geeft en elke aanroep
+ * vastlegt als `{ soort, args, tabel }`. Drie opvragingen:
+ *   documenten                       → de juridische documenten (opzoeking 1a),
+ *   document_chunks (zonder embed)   → de opzoeking (1b),
+ *   document_chunks (met documenten!inner) → de toelating; `toelating` krijgt de
+ *                                      id's uit `in("id", …)`.
+ * `rpc` bestaat alleen om te bewijzen dat het spoor hem NIET meer aanroept.
+ */
+function nepSupabase(
+  opzoek: unknown[] | { fout: string },
+  toelating: (ids: string[]) => unknown[],
+  opties: { documenten?: unknown[] | { fout: string }; toelatingsfout?: string } = {}
+) {
+  const log: (Nepaanroep & { tabel?: string })[] = [];
+  const antwoord = (v: unknown[] | { fout: string }) =>
+    Array.isArray(v) ? { data: v, error: null } : { data: null, error: { message: v.fout } };
   const client = {
     from(tabel: string) {
-      log.push({ soort: "from", args: [tabel] });
+      log.push({ soort: "from", args: [tabel], tabel });
+      let soort: "documenten" | "opzoeking" | "toelating" = tabel === "documenten" ? "documenten" : "opzoeking";
+      let ids: string[] = [];
+      const builder: Record<string, unknown> = {};
+      for (const m of ["select", "in", "or", "order", "limit", "eq", "textSearch"]) {
+        builder[m] = (...args: unknown[]) => {
+          log.push({ soort: m, args, tabel: soort });
+          if (m === "select" && String(args[0]).includes("documenten!inner")) soort = "toelating";
+          if (m === "in" && args[0] === "id" && soort === "toelating") ids = args[1] as string[];
+          return builder;
+        };
+      }
+      builder.abortSignal = () => builder;
+      builder.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
+        const uit =
+          soort === "documenten"
+            ? antwoord(opties.documenten ?? [{ id: MVT_DOC }, { id: PW_DOC }])
+            : soort === "opzoeking"
+              ? antwoord(opzoek)
+              : opties.toelatingsfout
+                ? antwoord({ fout: opties.toelatingsfout })
+                : antwoord(toelating(ids));
+        return Promise.resolve(uit).then(res, rej);
+      };
       return builder;
     },
     rpc(fn: string, args: Record<string, unknown>) {
       log.push({ soort: "rpc", args: [fn, args] });
-      const r: Record<string, unknown> = {};
-      r.abortSignal = () => r;
-      r.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
-        Promise.resolve({ data: rpc(args), error: null }).then(res, rej);
-      return r;
+      throw new Error(`#500 hotfix: het artikelspoor hoort geen RPC (${fn}) meer aan te roepen`);
     },
   };
   return { client, log };
@@ -449,11 +481,11 @@ const OPZOEK_P394 = {
 };
 const FILTERS: RetrievalFilters = { modus: "actueel", peildatum: "2026-09-29", bronsoort: ["fonds", "generiek"] };
 
-test("#500-A1 — toelating uitsluitend via dezelfde zoek-RPC met hetzelfde filterblok en een frasequery", async () => {
+test("#500-A1 — begrensde opzoeking + id-begrensde toelating met het zoek_chunks-filterblok, zonder RPC", async () => {
   const { client, log } = nepSupabase([OPZOEK_P395, OPZOEK_P396, OPZOEK_P394], () => [
-    rpcRij("c-p395", MVT_DOC, P395.tekst),
-    // Een andere frasetreffer (algemeen deel) hoort niet bij de exacte set.
-    rpcRij("c-p86", MVT_DOC, "In het transitieplan (artikel 150d) ..."),
+    toelatingsRij("c-p395", MVT_DOC, P395.tekst),
+    // Een rij die de toelating niet heeft aangewezen, hoort er nooit bij.
+    toelatingsRij("c-p86", MVT_DOC, "In het transitieplan (artikel 150d) ..."),
   ]);
   const bestaand = [chunk("c-0001", MVT_DOC, "p.365 artikel 16"), chunk("c-0002", MVT_DOC, "p.86")];
   const uit = await vulAanMetArtikelkandidaten(bestaand, {
@@ -464,75 +496,117 @@ test("#500-A1 — toelating uitsluitend via dezelfde zoek-RPC met hetzelfde filt
     maxKandidaten: 30,
     supabase: client,
   });
-  assert.deepEqual(uit.map((c) => c.id), ["c-0001", "c-0002", "c-p395"], "alleen de exacte, door de RPC toegelaten passage komt erbij");
+  // p.396 (label 150d, vervolg) is exact maar kwam niet terug uit de toelating.
+  assert.deepEqual(uit.map((c) => c.id), ["c-0001", "c-0002", "c-p395"], "alleen de exacte, toegelaten passage komt erbij");
   const toegevoegd = uit[2];
   assert.equal(toegevoegd.artikelspoor, true);
   assert.equal(toegevoegd.structuur_label, P395.structuurLabel);
+  assert.equal(toegevoegd.rang, null, "een exacte structuurtreffer draagt geen relevantiescore");
+  assert.equal(toegevoegd.documenten.bibliotheek, "generiek");
 
-  // De opzoeking: alleen juridische documenttypen, via de documentrij.
-  assert.deepEqual(log[0], { soort: "from", args: ["document_chunks"] });
-  assert.ok(log.some((l) => l.soort === "in" && l.args[0] === "documenten.documenttype" &&
+  // 1a — eerst de juridische documenten, via de documentrij zelf.
+  assert.deepEqual(log[0], { soort: "from", args: ["documenten"], tabel: "documenten" });
+  const docs = log.filter((l) => l.tabel === "documenten");
+  assert.ok(docs.some((l) => l.soort === "in" && l.args[0] === "documenttype" &&
     JSON.stringify(l.args[1]) === JSON.stringify(["wetgeving", "wetsgeschiedenis"])));
-  assert.ok(log.some((l) => l.soort === "or" && l.args[0] === artikelOpzoekfilter({ artikelen: ["150d"] })));
+  assert.ok(docs.some((l) => l.soort === "eq" && l.args[0] === "actief" && l.args[1] === true));
+  assert.ok(docs.some((l) => l.soort === "limit"), "ook de documentopzoeking is begrensd");
 
-  // De toelating: dezelfde RPC-parameters als het hoofdspoor.
-  const rpc = log.filter((l) => l.soort === "rpc");
-  assert.equal(rpc.length, 1);
-  assert.equal(rpc[0].args[0], "zoek_chunks");
-  assert.deepEqual(rpc[0].args[1], {
-    p_query: '"artikel 150d" OR "art 150d"',
-    p_limit: 200,
-    p_document_ids: [MVT_DOC],
-    p_modus: "actueel",
-    p_peildatum: "2026-09-29",
-    p_bronsoort: ["fonds", "generiek"],
-    p_fonds_id: FONDS,
+  // 1b — de opzoeking alleen binnen die documenten, met het exacte filter.
+  const opz = log.filter((l) => l.tabel === "opzoeking");
+  assert.ok(opz.some((l) => l.soort === "in" && l.args[0] === "document_id" &&
+    JSON.stringify(l.args[1]) === JSON.stringify([MVT_DOC, PW_DOC])));
+  assert.ok(opz.some((l) => l.soort === "or" && l.args[0] === artikelOpzoekfilter({ artikelen: ["150d"] })));
+  assert.ok(opz.some((l) => l.soort === "limit" && l.args[0] === ARTIKEL_OPZOEK_MAX));
+
+  // 2 — de toelating: id-begrensd, exact de filters van `toelatingsfilters`.
+  assert.equal(log.filter((l) => l.soort === "rpc").length, 0, "geen zoek_chunks meer");
+  const toel = log.filter((l) => l.tabel === "toelating" && ["in", "eq", "or", "textSearch"].includes(l.soort));
+  const verwacht = toelatingsfilters({
+    ids: ["c-p395", "c-p396"],
+    frase: '"artikel 150d" OR "art 150d"',
+    documentscope: null,
+    filters: FILTERS,
+    fondsId: FONDS,
+    peildatum: "2026-09-29",
   });
+  assert.deepEqual(
+    toel.map((l) => [l.soort, ...l.args]),
+    verwacht.map((f) =>
+      f.op === "in" ? ["in", f.kolom, f.waarden]
+      : f.op === "eq" ? ["eq", f.kolom, f.waarde]
+      : f.op === "or" ? ["or", f.expressie]
+      : ["textSearch", f.kolom, f.query, { config: f.config, type: f.type }])
+  );
+  assert.ok(log.some((l) => l.tabel === "toelating" && l.soort === "limit" && (l.args[0] as number) <= ARTIKEL_OPZOEK_MAX));
 });
 
-test("#500-A2 — negatief: wat de RPC niet teruggeeft, of wat de app-guard afwijst, komt er niet in", async () => {
+test("#500-A2 — negatief: wat de database niet teruggeeft, of wat predicaat of app-guard afwijst, komt er niet in", async () => {
   const focus: Artikelfocus = { artikelen: ["150d"], wet: null };
   const bestaand = [chunk("c-0001", MVT_DOC, "p.365")];
   const basis = { focus, fondsId: FONDS, filters: FILTERS, maxKandidaten: 30 };
 
-  // (1) RPC laat de passage niet toe (ander fonds / status / modus / scope).
+  // (1) De database laat de passage niet toe (ander fonds / status / modus / scope).
   const leeg = nepSupabase([OPZOEK_P395], () => []);
   assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: leeg.client })).map((c) => c.id), ["c-0001"]);
 
-  // (2) Een niet-gepubliceerde generieke passage die toch terugkomt: app-guard.
-  const concept = nepSupabase([OPZOEK_P395], () => [rpcRij("c-p395", MVT_DOC, P395.tekst, { documentstatus: "concept" })]);
+  // (2) Een niet-gepubliceerde generieke passage die toch terugkomt: predicaat + app-guard.
+  const concept = nepSupabase([OPZOEK_P395], () => [toelatingsRij("c-p395", MVT_DOC, P395.tekst, { documentstatus: "concept" })]);
   assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: concept.client })).map((c) => c.id), ["c-0001"]);
 
-  // (3) Een fondsdocument van een ANDER fonds: app-guard (cross-tenant).
+  // (3) Een fondsdocument van een ANDER fonds: predicaat + app-guard (cross-tenant).
   const vreemd = nepSupabase([OPZOEK_P395], () => [
-    rpcRij("c-p395", MVT_DOC, P395.tekst, { bibliotheek: "fonds", fonds_id: ANDER_FONDS }),
+    toelatingsRij("c-p395", MVT_DOC, P395.tekst, { bibliotheek: "fonds", fonds_id: ANDER_FONDS, documentstatus: "vastgesteld" }),
   ]);
   assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: vreemd.client })).map((c) => c.id), ["c-0001"]);
 
-  // (4) Verlopen review op een generieke bron: app-guard (T10).
-  const verlopen = nepSupabase([OPZOEK_P395], () => [rpcRij("c-p395", MVT_DOC, P395.tekst, { volgende_review: "2020-01-01" })]);
+  // (4) Verlopen review op een generieke bron: predicaat + app-guard (T10).
+  const verlopen = nepSupabase([OPZOEK_P395], () => [toelatingsRij("c-p395", MVT_DOC, P395.tekst, { volgende_review: "2020-01-01" })]);
   assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: verlopen.client })).map((c) => c.id), ["c-0001"]);
 
-  // (5) Alleen buurartikelen in de opzoeking: geen RPC-aanroep.
-  const buren = nepSupabase([OPZOEK_P394], () => [rpcRij("c-p394", MVT_DOC, OPZOEK_P394.tekst)]);
+  // (5) Alleen buurartikelen in de opzoeking: geen toelating.
+  const buren = nepSupabase([OPZOEK_P394], () => [toelatingsRij("c-p394", MVT_DOC, OPZOEK_P394.tekst)]);
   assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: buren.client })).map((c) => c.id), ["c-0001"]);
-  assert.equal(buren.log.filter((l) => l.soort === "rpc").length, 0);
+  assert.equal(buren.log.filter((l) => l.tabel === "toelating").length, 0);
 
   // (6) Opzoekfout: fail-open, kandidaten ongewijzigd.
   const fout = nepSupabase({ fout: "boom" }, () => []);
   assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: fout.client })).map((c) => c.id), ["c-0001"]);
 
-  // (7) Documentscope blijft de scope: de opzoeking filtert erop.
-  const scoped = nepSupabase([], () => []);
-  await vulAanMetArtikelkandidaten(bestaand, { ...basis, scope: [PW_DOC], supabase: scoped.client });
-  assert.ok(scoped.log.some((l) => l.soort === "in" && l.args[0] === "document_id" && JSON.stringify(l.args[1]) === JSON.stringify([PW_DOC])));
+  // (7) Documentscope blijft de scope: de documentopzoeking filtert erop, en de
+  //     toelating krijgt haar als `document_id=in.(…)`.
+  const scoped = nepSupabase([OPZOEK_P395], () => [], { documenten: [{ id: MVT_DOC }] });
+  await vulAanMetArtikelkandidaten(bestaand, { ...basis, scope: [MVT_DOC], supabase: scoped.client });
+  assert.ok(scoped.log.some((l) => l.tabel === "documenten" && l.soort === "in" && l.args[0] === "id" && JSON.stringify(l.args[1]) === JSON.stringify([MVT_DOC])));
+  assert.ok(scoped.log.some((l) => l.tabel === "toelating" && l.soort === "in" && l.args[0] === "document_id" && JSON.stringify(l.args[1]) === JSON.stringify([MVT_DOC])));
+
+  // (8) Buiten de scope teruggekomen (zou de DB-filter falen): het predicaat weigert.
+  const buiten = nepSupabase([OPZOEK_P395], () => [toelatingsRij("c-p395", MVT_DOC, P395.tekst)], { documenten: [{ id: MVT_DOC }] });
+  assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, scope: [PW_DOC], supabase: buiten.client })).map((c) => c.id), ["c-0001"]);
+
+  // (9) Inactief document of gearchiveerd: het predicaat weigert.
+  for (const over of [{ actief: false }, { documentstatus: "gearchiveerd" }]) {
+    const n = nepSupabase([OPZOEK_P395], () => [toelatingsRij("c-p395", MVT_DOC, P395.tekst, over)]);
+    assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: n.client })).map((c) => c.id), ["c-0001"], JSON.stringify(over));
+  }
+
+  // (10) Geen juridische documenten zichtbaar, of een fout daarin: fail-open, geen chunkopvraging.
+  for (const documenten of [[], { fout: "boom" }]) {
+    const n = nepSupabase([OPZOEK_P395], () => [toelatingsRij("c-p395", MVT_DOC, P395.tekst)], { documenten });
+    assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: n.client })).map((c) => c.id), ["c-0001"]);
+    assert.equal(n.log.filter((l) => l.tabel !== "documenten").length, 0);
+  }
+
+  // (11) Toelatingsfout: fail-open.
+  const tfout = nepSupabase([OPZOEK_P395], () => [], { toelatingsfout: "57014" });
+  assert.deepEqual((await vulAanMetArtikelkandidaten(bestaand, { ...basis, supabase: tfout.client })).map((c) => c.id), ["c-0001"]);
 });
 
 test("#500-A3 — kandidatenpool: nieuwe exacte passages vervangen de zwakste niet-exacte staart", async () => {
   const bestaand = Array.from({ length: 30 }, (_, i) => chunk(`c-${String(i + 1).padStart(4, "0")}`, MVT_DOC, `p${i}`));
   // Kandidaat 30 is zelf exact (label), en blijft staan.
   bestaand[29].id = "c-p396";
-  const { client } = nepSupabase([OPZOEK_P395, OPZOEK_P396], () => [rpcRij("c-p395", MVT_DOC, P395.tekst)]);
+  const { client } = nepSupabase([OPZOEK_P395, OPZOEK_P396], () => [toelatingsRij("c-p395", MVT_DOC, P395.tekst)]);
   const uit = await vulAanMetArtikelkandidaten(bestaand, {
     focus: { artikelen: ["150d"], wet: null },
     fondsId: FONDS,
@@ -588,47 +662,50 @@ function orPredicaat(filter: string): (r: Tabelrij) => boolean {
   });
   return (r) => termen.some((t) => t(r));
 }
-function postgrestNep(tabel: Tabelrij[], rpcIds: (ids: string[]) => string[]) {
-  let or: (r: Tabelrij) => boolean = () => true;
-  let scope: string[] | null = null;
-  let limiet = Infinity;
-  const builder: Record<string, unknown> = {};
-  builder.select = () => builder;
-  builder.order = () => builder;
-  builder.abortSignal = () => builder;
-  builder.in = (k: string, v: string[]) => {
-    if (k === "document_id") scope = v;
-    return builder;
-  };
-  builder.or = (f: string) => {
-    or = orPredicaat(f);
-    return builder;
-  };
-  builder.limit = (n: number) => {
-    limiet = n;
-    return builder;
-  };
-  builder.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
-    const data = tabel
-      .filter((r) => (!scope || scope.includes(r.document_id)) && or(r))
-      .sort((a, b) => a.document_id.localeCompare(b.document_id) || a.chunk_index - b.chunk_index)
-      .slice(0, limiet);
-    return Promise.resolve({ data, error: null }).then(res, rej);
-  };
+function postgrestNep(tabel: Tabelrij[], toegelaten: (ids: string[]) => string[]) {
   return {
-    from: () => builder,
-    rpc: (_fn: string, args: Record<string, unknown>) => {
-      const r: Record<string, unknown> = {};
-      r.abortSignal = () => r;
-      const docs = args.p_document_ids as string[];
-      r.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
-        Promise.resolve({
-          data: tabel
-            .filter((t) => docs.includes(t.document_id) && rpcIds([t.id]).length > 0)
-            .map((t) => rpcRij(t.id, t.document_id, t.tekst)),
-          error: null,
-        }).then(res, rej);
-      return r;
+    from: (naam: string) => {
+      let or: (r: Tabelrij) => boolean = () => true;
+      let scope: string[] | null = null;
+      let ids: string[] | null = null;
+      let toelating = false;
+      let limiet = Infinity;
+      const builder: Record<string, unknown> = {};
+      builder.select = (kolommen: string) => {
+        toelating = kolommen.includes("documenten!inner");
+        return builder;
+      };
+      builder.order = () => builder;
+      builder.eq = () => builder;
+      builder.textSearch = () => builder;
+      builder.abortSignal = () => builder;
+      builder.in = (k: string, v: string[]) => {
+        if (k === "document_id") scope = v;
+        if (k === "id") ids = v;
+        return builder;
+      };
+      builder.or = (f: string) => {
+        if (!toelating) or = orPredicaat(f);
+        return builder;
+      };
+      builder.limit = (n: number) => {
+        limiet = n;
+        return builder;
+      };
+      builder.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
+        if (naam === "documenten") return Promise.resolve({ data: [{ id: MVT_DOC }], error: null }).then(res, rej);
+        if (toelating) {
+          const ok = new Set(toegelaten(ids ?? []));
+          const data = tabel.filter((t) => ok.has(t.id)).map((t) => toelatingsRij(t.id, t.document_id, t.tekst));
+          return Promise.resolve({ data, error: null }).then(res, rej);
+        }
+        const data = tabel
+          .filter((r) => (!scope || scope.includes(r.document_id)) && or(r))
+          .sort((a, b) => a.document_id.localeCompare(b.document_id) || a.chunk_index - b.chunk_index)
+          .slice(0, limiet);
+        return Promise.resolve({ data, error: null }).then(res, rej);
+      };
+      return builder;
     },
   };
 }
@@ -726,7 +803,7 @@ function productiekandidaten(): DocumentChunk[] {
 
 function maakAdapter(opties: { artikelspoor: boolean; aanroepen: RetrievalQuery[] }) {
   const { client, log } = nepSupabase([OPZOEK_P395, OPZOEK_P396, OPZOEK_P394], () => [
-    rpcRij("c-p395", MVT_DOC, P395.tekst),
+    toelatingsRij("c-p395", MVT_DOC, P395.tekst),
   ]);
   const vaste = { soort: "hash" as const, gecontroleerdOp: "2026-09-29T10:00:00.000Z" };
   const retrieval = maakSupabaseAdapter({ parentRetrieval: false } as Adaptervlaggen, {}, {
@@ -782,7 +859,8 @@ test("#500-E1 — pilot nagebootst: de bedoelingsvraag selecteert de p.395-passa
     geboost_geselecteerd: 1,
     via_artikelspoor: 1,
   });
-  assert.equal(log.filter((l) => l.soort === "rpc").length, 1);
+  assert.equal(log.filter((l) => l.soort === "rpc").length, 0, "geen zoek-RPC in het artikelspoor");
+  assert.equal(log.filter((l) => l.soort === "from" && l.tabel === "document_chunks").length, 2, "één opzoeking, één toelating");
   assert.ok(!JSON.stringify(uit.meta.selectie).includes("150d"), "geen artikelnummer in de audit");
   assert.ok(!JSON.stringify(uit.meta).toLowerCase().includes("artikelsgewijze"), "geen structuurlabel in de audit");
 });
