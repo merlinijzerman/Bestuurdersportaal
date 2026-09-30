@@ -505,8 +505,14 @@ create table if not exists public.document_processing_jobs (
   claim_count   integer not null default 0 check (claim_count >= 0),
   worker_id     text,
   correlatie_id uuid,
-  aangemaakt    timestamptz not null default now()
+  aangemaakt    timestamptz not null default now(),
+  -- WP3 legacy-rescan (migratie 2026_09_30_legacy_scan_slot): slot 1..2, markeert
+  -- de job die de legacy-keten draagt; uq_dpj_legacy_slot_open serialiseert.
+  legacy_slot   smallint check (legacy_slot is null or legacy_slot between 1 and 2)
 );
+create unique index if not exists uq_dpj_legacy_slot_open
+  on public.document_processing_jobs (legacy_slot)
+  where legacy_slot is not null and status in ('wachtend', 'bezig');
 
 -- ── 3d. Notulensegmenten (Increment D, migratie 2026_06_20d, authoritatief) ──
 -- Half-automatische segmenten per agendapunt. Alleen bevestigd=true wordt

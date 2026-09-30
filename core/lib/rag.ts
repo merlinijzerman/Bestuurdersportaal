@@ -9,6 +9,7 @@ import {
 } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { isPoortGesloten } from "./ai-poort";
+import { handhaafScanbewijs, heeftSchoonScanbewijs, isMalwarescanAan } from "./document-scan-poort";
 import { isAfbreking, bewaakNaIO } from "./retrieval/afbreken";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
@@ -404,6 +405,38 @@ async function haalContextPrefixes(ids: string[], signal?: AbortSignal): Promise
   return map;
 }
 
+// WP3 — herleest per kandidaatdocument het scanbewijs (de zoek-RPC's leveren
+// het niet) en laat alleen chunks van documenten met een schoon, hash-gebonden
+// verdict door. Fail-closed: bij een leesfout vallen alle kandidaten af.
+export async function filterOpScanbewijs(
+  chunks: DocumentChunk[],
+  signal?: AbortSignal
+): Promise<DocumentChunk[]> {
+  const ids = [...new Set(chunks.map((c) => c.document_id))];
+  if (ids.length === 0) return chunks;
+  try {
+    const supabase = await createServerSupabase();
+    const { data, error } = await metSignaal(
+      supabase.from("documenten").select("id, bestand_hash, scan_resultaat").in("id", ids),
+      signal
+    );
+    if (error || !data) {
+      console.error("[rag] scanbewijs lezen mislukt — kandidaten fail-closed geweigerd:", error);
+      return [];
+    }
+    const schoon = new Set(
+      (data as { id: string; bestand_hash: string | null; scan_resultaat: Record<string, unknown> | null }[])
+        .filter((d) => heeftSchoonScanbewijs(d))
+        .map((d) => d.id)
+    );
+    return chunks.filter((c) => schoon.has(c.document_id));
+  } catch (e) {
+    if (isAfbreking(e)) throw e;
+    console.error("[rag] scanbewijs lezen mislukt — kandidaten fail-closed geweigerd:", e);
+    return [];
+  }
+}
+
 function verrijkTekst(prefix: string | null | undefined, tekst: string): string {
   return prefix ? `${prefix} ${tekst}` : tekst;
 }
@@ -434,7 +467,13 @@ async function naVerwerking(
   rerankToegestaan: boolean
 ): Promise<{ chunks: DocumentChunk[]; extra: Partial<RetrievalMeta> }> {
   const extra: Partial<RetrievalMeta> = {};
-  let kandidaten = bewaakteChunks;
+  // WP3 — vóór de reranker (Haiku) en de parentverrijking: kandidaten van een
+  // document zonder schoon hash-gebonden scanbewijs verlaten de database niet
+  // richting een model. De centrale toelatingspoort zou ze later ook weigeren,
+  // maar de rerank stuurt de tekst al eerder naar een provider.
+  let kandidaten = isMalwarescanAan()
+    ? await filterOpScanbewijs(bewaakteChunks, opties.signal)
+    : bewaakteChunks;
 
   // A — Haiku-reranker (alleen op de sterke paden: hybride + Dutch-FTS-ranked).
   let rerankScores: Record<string, number> | null = null;
@@ -584,6 +623,8 @@ export interface DocumentChunk {
     bestandstype?: string | null;
     /** Adapterprivate ingrediënt voor R1-versiebewijs; niet publiek gemaakt. */
     bestand_hash?: string | null;
+    /** WP3 — alleen gezet door selects die de scanleespoort (handhaafScanbewijs) voeden. */
+    scan_resultaat?: Record<string, unknown> | null;
   };
   // Increment D — aanwezig zodra de chunk uit een bevestigd notulensegment komt.
   // Gevuld door verrijkNotulenChunks() ná retrieval (de RPC's leveren dit niet);
@@ -1563,7 +1604,7 @@ export async function vulAanMetArtikelkandidaten(
     // 1a. De juridische documenten (onder RLS, klein).
     let dq = supabase
       .from("documenten")
-      .select("id")
+      .select("id, bestand_hash, scan_resultaat")
       .in("documenttype", [...JURIDISCHE_DOCUMENTTYPEN])
       .eq("actief", true);
     if (scope) dq = dq.in("id", scope);
@@ -1574,7 +1615,16 @@ export async function vulAanMetArtikelkandidaten(
       if (docFout) console.error("[rag] artikelspoor: documentopzoeking mislukt — kandidaten ongewijzigd:", docFout);
       return bestaand;
     }
-    const juridisch = (docs as { id: string }[]).map((d) => d.id);
+    // WP3 — een juridisch document zonder schoon scanbewijs levert geen
+    // artikelkandidaten (de toelatingspoort zou ze weigeren, en een onbekende
+    // versie zou de parentverrijking vóór die poort laten struikelen).
+    const wp3 = isMalwarescanAan();
+    const juridisch = (docs as { id: string; bestand_hash?: string | null; scan_resultaat?: Record<string, unknown> | null }[])
+      .filter((d) => !wp3 || heeftSchoonScanbewijs({
+        bestand_hash: d.bestand_hash ?? null,
+        scan_resultaat: d.scan_resultaat ?? null,
+      }))
+      .map((d) => d.id);
     if (juridisch.length === 0) return bestaand;
 
     // 1b. De exacte passages, alleen binnen die documenten.
@@ -2455,7 +2505,7 @@ export async function haalDocumentChunksMetDekking(
       .from("document_chunks")
       .select(
         `id, document_id, tekst, pagina, paragraaf, chunk_index,
-         documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review)`
+         documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review, bestand_hash, scan_resultaat)`
       )
       .in("document_id", documentIds)
       .eq("documenten.actief", true)
@@ -2465,7 +2515,7 @@ export async function haalDocumentChunksMetDekking(
     if (error || !data) {
       console.error("haalDocumentChunks pagina-fout:", error);
       const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
-      const bewaakt = handhaafFondsdiscipline(rijen, fondsFilter);
+      const bewaakt = bewaakDekking(rijen, fondsFilter);
       return {
         chunks: bewaakt.chunks,
         totaal_chunks: totaal,
@@ -2480,7 +2530,7 @@ export async function haalDocumentChunksMetDekking(
   }
 
   const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
-  const bewaakt = handhaafFondsdiscipline(rijen, fondsFilter);
+  const bewaakt = bewaakDekking(rijen, fondsFilter);
   const capBereikt = totaal !== null && totaal > VOLLEDIGE_DOCUMENT_CHUNK_CAP;
   const volledig =
     totaal !== null &&
@@ -2496,6 +2546,18 @@ export async function haalDocumentChunksMetDekking(
     afkapreden: capBereikt ? "chunk_cap" : null,
     fondsdiscipline_gedropt: bewaakt.gedropt,
   };
+}
+
+// Fondsdiscipline + WP3-scanleespoort voor het dekkingsbrede pad. Een door de
+// scanpoort geweigerde rij telt als gedropt, dus de dekking is dan nooit
+// "volledig" en de prompt krijgt de tekst niet.
+function bewaakDekking(
+  rijen: DocumentChunk[],
+  fondsFilter: string | null
+): { chunks: DocumentChunk[]; gedropt: number } {
+  const fonds = handhaafFondsdiscipline(rijen, fondsFilter);
+  const scan = handhaafScanbewijs(fonds.chunks, isMalwarescanAan());
+  return { chunks: scan.chunks, gedropt: fonds.gedropt + scan.gedropt };
 }
 
 /** Backwards-compatible wrapper voor bestaande aanroepers die alleen rijen nodig hebben. */
@@ -2573,7 +2635,7 @@ export function planReflectieKandidatenPagina(van: number): { van: number; tot: 
 }
 const REFLECTIE_SELECT = `id, document_id, tekst, pagina, paragraaf, chunk_index, indexering_versie,
   documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status,
-    bronstatus, documentdatum, geldig_tot, volgende_review, bestand_hash)`;
+    bronstatus, documentdatum, geldig_tot, volgende_review, bestand_hash, scan_resultaat)`;
 
 export interface BevrorenChunksResultaat {
   chunks: DocumentChunk[];
@@ -2660,7 +2722,12 @@ export async function haalBevrorenChunks(
       console.error("haalBevrorenChunks legacy-fout:", error);
       return bevrorenUitkomst([], false, "providerfout");
     }
-    const toegestaan = handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks;
+    // WP3: een chunk zonder schoon scanbewijs lost niet op ⇒ de atomaire
+    // eindpoort maakt de hele bevroren set leeg (ontbrekende_ref).
+    const toegestaan = handhaafScanbewijs(
+      handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks,
+      isMalwarescanAan()
+    ).chunks;
     gevonden.push(...selecteerBevrorenChunksOpRefs(toegestaan, legacyIds));
   }
 
@@ -2694,7 +2761,10 @@ export async function haalBevrorenChunks(
         return bevrorenUitkomst([], false, "providerfout");
       }
       onderzocht += data.length;
-      const toegestaan = handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks;
+      const toegestaan = handhaafScanbewijs(
+        handhaafFondsdiscipline(data as unknown as DocumentChunk[], fondsFilter).chunks,
+        isMalwarescanAan()
+      ).chunks;
       gevonden.push(...selecteerBevrorenChunksOpRefs(toegestaan, opaqueRefs, bronbindingen));
       const gevondenPassages = new Set(
         gevonden.map((chunk) => chunkAlsBronresultaat(chunk).passageIdentiteit.id)

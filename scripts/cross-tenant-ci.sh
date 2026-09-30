@@ -64,6 +64,11 @@ SQL_499="supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql"
 # klein document én 1.000 chunks, chunk-denorm, audit met actor/reden, leegmaken,
 # ongeldige datum → rollback; negatieve controle zonder denorm-trigger.
 SQL_504="supabase/checks/2026_09_30_504_curatie_datumvelden.sql"
+# WP3 legacy-scan (Refs #500) — selectie uitgesteld_wp3, technische fout behoudt
+# chunks, clean vóór wissen, herindex met denorm wetgeving/pw/datums + 150d en
+# complete embeddings, infected verwijdert chunks; negatieve controle zonder
+# insert-denormtrigger.
+SQL_LEGACY_SCAN="supabase/checks/2026_09_30_legacy_scan_wp3.sql"
 # Increment T8 — config-/manifestlaag: cross-tenant + rolgate + append-only.
 SQL_T8C="supabase/checks/2026_07_09_t8_config_cross_tenant.sql"
 # Increment T10 — review-verval-gate op retrieval + generieke toestandsmachine.
@@ -373,6 +378,15 @@ echo
 echo "-- #504 (curatie-datumvelden: klein + 1.000 chunks, denorm, audit, leegmaken) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_504"
 echo
+echo "-- WP3 legacy-scan (uitgesteld_wp3: scan vóór wissen, herindex met denorm, infected wist) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_LEGACY_SCAN"
+echo
+# Serialisatie (Refs #500): productiecode legacyReaper gelijktijdig tegen de echte
+# PostgREST; nooit meer dan LEGACY_SCAN_BATCH legacy-documenten in de keten, ook
+# ná een clean scan; negatieve controle zonder uq_dpj_legacy_slot_open.
+echo "-- WP3 legacy-scan serialisatie (overlappende reapers, API-laag) --"
+TEST_DATABASE_URL="$DB_URL" node --import tsx scripts/legacy-scan-overlap.mts
+echo
 echo "-- T8 (config-/manifestlaag: cross-tenant + rolgate + append-only) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T8C"
 echo
@@ -596,6 +610,7 @@ echo "  T8   semantische extractie: gate H op de schrijffunctie + hints         
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "  V3   grants-gate: feitelijke rechten op alle relaties/functies == allowlist (DB-laag)"
 echo "  BG   break-glass: directe GoTrue-refresh geeft nooit een volledige rol zonder venster (API-laag)"
+echo "  LS   legacy-scan: hooguit LEGACY_SCAN_BATCH documenten in de keten bij overlappende reapers (API-laag)"
 echo "  BBIND bewijsbinding: één-op-één + DB-validatie/audit + snapshotdekking       (DB-laag)"
 echo "  T2   voorbereiding-product: eigen schrijfrecht, overschrijven, notities intact (DB-laag)"
 echo "============================================================================"

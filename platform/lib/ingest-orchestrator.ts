@@ -49,6 +49,11 @@ import { CONTENT_TYPE_PER_BESTANDSTYPE } from "@/core/lib/document-extractie";
 import { leesScannerHealth, scanSignedUrl } from "@/platform/lib/malware-scan-client";
 import { signatureOordeel } from "@/core/lib/malware-scan-beleid";
 import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
+import {
+  leesLegacyScanBatch,
+  legacyReaper,
+  scanLegacyOrigineel,
+} from "@/platform/lib/legacy-scan";
 import { isProviderAuthenticatieFout } from "@/core/lib/provider-fout";
 import { bepaalDocumentIngestAiScope } from "@/core/lib/document-ingest-ai-scope";
 
@@ -316,82 +321,68 @@ async function ruimVerweesdeOriginelenOp(svc: SupabaseClient): Promise<number> {
 // geindexeerd=false, actief) maar nog geen OPEN job hebben. Eén job per document
 // draagt de hele resterende pipeline (extractie→embedding); de stap-waarde is de
 // beginfase (auditspoor). De partiële unieke index vangt concurrente dubbelen.
+// Legacy-scans (WP3) hebben een eigen, kleine begrenzing: zie legacyReaper.
 async function reaper(svc: SupabaseClient): Promise<number> {
   const { data: pipelineKandidaten, error } = await svc
     .from("documenten")
-    .select("id, fonds_id, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
+    .select("id, fonds_id, actief, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
     .in("verwerkingsstatus", NEEDS_WORK_STATUSSEN)
     .eq("geindexeerd", false)
     .eq("actief", true)
     .limit(REAPER_LIMIET);
-  if (error) return 0;
-
-  // WP3-compatibiliteit: vóór de quarantaine-introductie zijn originelen direct
-  // in de leesbucket beland. Zodra WP3 aan staat mogen die niet blijven steken:
-  // de reaper maakt gecontroleerd scan-jobs aan. Alleen de gangbare legacyvorm
-  // (hash of scanresultaat ontbreekt) wordt automatisch opgepakt; afwijkende
-  // bewijsconflicten vereisen een expliciete her-indexeeractie.
-  let legacyKandidaten: ReaperDocument[] = [];
-  if (process.env.WP3_MALWARESCAN_AAN === "true") {
-    const { data, error: legacyError } = await svc
-      .from("documenten")
-      .select("id, fonds_id, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
-      .eq("actief", true)
-      .not("opslag_pad", "is", null)
-      .or("bestand_hash.is.null,scan_resultaat.is.null")
-      .limit(REAPER_LIMIET);
-    if (legacyError) {
-      console.error("[ingest-worker] legacy-scanselectie mislukt:", legacyError.message);
-    } else {
-      legacyKandidaten = ((data ?? []) as ReaperDocument[]).filter((d) =>
-        !["geweigerd", "gequarantineerd", "mislukt"].includes(d.verwerkingsstatus ?? "") &&
-        moetLegacyOrigineelScannen(d)
-      );
-    }
-  }
-
-  const perId = new Map<string, ReaperDocument>();
-  for (const d of [
-    ...((pipelineKandidaten ?? []) as ReaperDocument[]),
-    ...legacyKandidaten,
-  ]) {
-    if (!perId.has(d.id)) perId.set(d.id, d);
-  }
-  const kandidaten = [...perId.values()].slice(0, REAPER_LIMIET);
-  if (kandidaten.length === 0) return 0;
-
-  const ids = kandidaten.map((d) => d.id as string);
-  const { data: openJobs } = await svc
-    .from("document_processing_jobs")
-    .select("document_id")
-    .in("document_id", ids)
-    .in("status", ["wachtend", "bezig"]);
-  const heeftJob = new Set((openJobs ?? []).map((j) => j.document_id as string));
+  const kandidaten = error ? [] : ((pipelineKandidaten ?? []) as (ReaperDocument & { actief: boolean })[]);
 
   let n = 0;
-  for (const d of kandidaten) {
-    if (heeftJob.has(d.id as string)) continue;
-    const stap = d.quarantaine_pad && !d.opslag_pad
-      ? "scan"
-      : moetLegacyOrigineelScannen(d) ? "scan"
-      : d.verwerkingsstatus === "embedding" ? "embedding" : "extractie";
-    const { error: insErr } = await svc.from("document_processing_jobs").insert({
-      document_id: d.id,
-      fonds_id: d.fonds_id,
-      stap,
-      status: "wachtend",
-    });
-    if (insErr) {
-      // 23505 = partiële unieke index (concurrente enqueue) → onschadelijk.
-      const dubbel = insErr.code === "23505" || /duplicate|unique/i.test(insErr.message ?? "");
-      if (!dubbel) {
-        console.error(`[ingest-worker] reaper enqueue mislukt voor ${d.id}:`, insErr.message);
+  // Legacy-scans uit het pipelinepad (bv. een expliciete herverwerking van een
+  // legacy-origineel) gaan niet ongeteld de keten in: ze krijgen een slot via
+  // legacyReaper, met voorrang op de automatische selectie.
+  const legacyUitPipeline: (ReaperDocument & { actief: boolean })[] = [];
+  if (kandidaten.length > 0) {
+    const ids = kandidaten.map((d) => d.id as string);
+    const { data: openJobs } = await svc
+      .from("document_processing_jobs")
+      .select("document_id")
+      .in("document_id", ids)
+      .in("status", ["wachtend", "bezig"]);
+    const heeftJob = new Set((openJobs ?? []).map((j) => j.document_id as string));
+    for (const d of kandidaten) {
+      if (heeftJob.has(d.id as string)) continue;
+      if (!(d.quarantaine_pad && !d.opslag_pad) && moetLegacyOrigineelScannen(d)) {
+        legacyUitPipeline.push(d);
+        continue;
       }
-    } else {
-      n += 1;
+      const stap = d.quarantaine_pad && !d.opslag_pad
+        ? "scan"
+        : d.verwerkingsstatus === "embedding" ? "embedding" : "extractie";
+      if (await enqueue(svc, d, stap)) n += 1;
     }
   }
+
+  if (process.env.WP3_MALWARESCAN_AAN === "true") {
+    const gestart = await legacyReaper(svc, {
+      batch: leesLegacyScanBatch(process.env.LEGACY_SCAN_BATCH),
+      nuMs: Date.now(),
+      alGepland: new Set(kandidaten.map((d) => d.id)),
+      expliciet: legacyUitPipeline,
+      log: (regel) => console.log(JSON.stringify({ tag: "ingest-meting", ...regel })),
+    });
+    n += gestart.length;
+  }
   return n;
+}
+
+async function enqueue(svc: SupabaseClient, d: ReaperDocument, stap: string): Promise<boolean> {
+  const { error: insErr } = await svc.from("document_processing_jobs").insert({
+    document_id: d.id,
+    fonds_id: d.fonds_id,
+    stap,
+    status: "wachtend",
+  });
+  if (!insErr) return true;
+  // 23505 = partiële unieke index (concurrente enqueue) → onschadelijk.
+  const dubbel = insErr.code === "23505" || /duplicate|unique/i.test(insErr.message ?? "");
+  if (!dubbel) console.error(`[ingest-worker] reaper enqueue mislukt voor ${d.id}:`, insErr.message);
+  return false;
 }
 
 // ── Claim ───────────────────────────────────────────────────────────────────
@@ -444,8 +435,20 @@ async function verwerkJob(
 
   // Legacy-originelen staan al in de leesbucket, maar missen het bij WP3
   // ingevoerde, hash-gebonden scanbewijs. Scan ze vóór élke parser- of AI-call.
+  // Bestaande chunks blijven staan tot de scanner clean bevestigt; zie
+  // platform/lib/legacy-scan.ts voor het faalgedrag per scenario.
   if (moetLegacyOrigineelScannen(document)) {
-    return await scanLegacyOrigineel(svc, job, document, oidcToken);
+    return await scanLegacyOrigineel(svc, job, document, {
+      oidcToken,
+      leesScannerHealth,
+      scanSignedUrl,
+      valideerUpload,
+      contentTypeVoor: (t) => CONTENT_TYPE_PER_BESTANDSTYPE[t as Bestandstype] ?? "",
+      markeerGeweigerd: (foutcode) => markeerGeweigerd(svc, job, document.id, foutcode),
+      securityConflict: (foutcode) => securityConflict(svc, job, document.id, foutcode),
+      markeerMislukt: (foutcode) => markeerMislukt(svc, job, document.id, foutcode),
+      yieldJob: () => yieldJob(svc, job),
+    });
   }
 
   const aiScope = bepaalDocumentIngestAiScope(document.bibliotheek, job.fonds_id);
@@ -698,107 +701,6 @@ function moetLegacyOrigineelScannen(
   return process.env.WP3_MALWARESCAN_AAN === "true" &&
     !!doc.opslag_pad &&
     !heeftSchoonScanbewijs(doc);
-}
-
-// ── WP3-hotfix: bestaand origineel in leesbucket → scanbewijs → herindex ───
-// Dit pad promoveert niets: de bytes staan al op hun definitieve plek. Het doet
-// wel exact dezelfde magic-byte-, hash-, scannerhealth- en deploymentcontroles
-// als het quarantainepad. Bestaande chunks worden vóór de externe scan gewist,
-// zodat ongescande legacy-inhoud tijdens een storing niet via een oud RAG-pad
-// kan blijven lekken. Het origineel zelf blijft voor herstel/audit bewaard.
-async function scanLegacyOrigineel(
-  svc: SupabaseClient,
-  job: IngestJob,
-  doc: DocumentRij,
-  oidcToken: string | null
-): Promise<Uitkomst> {
-  if (!doc.opslag_pad) return await markeerMislukt(svc, job, doc.id, "geen_origineel");
-
-  const naam = doc.bestandsnaam ?? doc.opslag_pad.split("/").pop() ?? "document";
-  const { data: blob, error: dlErr } = await svc.storage
-    .from("documenten")
-    .download(doc.opslag_pad);
-  if (dlErr || !blob) return await backoff(svc, job, "legacy_storage_download");
-
-  const buffer = Buffer.from(await blob.arrayBuffer());
-  const validatie = await valideerUpload({
-    naam,
-    mimeType: doc.bestandstype
-      ? CONTENT_TYPE_PER_BESTANDSTYPE[doc.bestandstype as Bestandstype] ?? ""
-      : "",
-    buffer,
-  });
-
-  // Vanaf dit moment is het document expliciet in herstel. Oude afgeleide
-  // inhoud blijft niet bruikbaar terwijl het scanbewijs nog ontbreekt.
-  const { error: chunkDeleteError } = await svc
-    .from("document_chunks")
-    .delete()
-    .eq("document_id", doc.id);
-  if (chunkDeleteError) return await backoff(svc, job, "legacy_chunks_blokkeren");
-  await svc.from("documenten").update({ geindexeerd: false }).eq("id", doc.id);
-
-  if (!validatie.ok) {
-    return await markeerGeweigerd(svc, job, doc.id, `legacy_${validatie.foutcode}`);
-  }
-  if (doc.bestandstype && validatie.bestandstype !== doc.bestandstype) {
-    return await markeerGeweigerd(svc, job, doc.id, "legacy_extensie_inhoud_mismatch");
-  }
-
-  if (!oidcToken) return await backoff(svc, job, "scanner_oidc_ontbreekt");
-  const health = await leesScannerHealth(oidcToken);
-  if (!health) return await backoff(svc, job, "scanner_onbereikbaar");
-  if (signatureOordeel(health) === "verouderd") {
-    return await backoffVerouderdeSignatures(svc, job);
-  }
-
-  const { data: signed, error: signErr } = await svc.storage
-    .from("documenten")
-    .createSignedUrl(doc.opslag_pad, 90);
-  if (signErr || !signed?.signedUrl) return await backoff(svc, job, "signed_url_mislukt");
-
-  const scan = await scanSignedUrl({ signedUrl: signed.signedUrl, oidcToken });
-  // Nooit signed URL of bestandsnaam bewaren; alleen het begrensde scannercontract.
-  await svc.from("documenten").update({ scan_resultaat: scan }).eq("id", doc.id);
-  if (scan.verdict === "scanner_unreachable" || scan.verdict === "error") {
-    return await backoff(svc, job, scan.code ?? "scanner_onbereikbaar");
-  }
-  if (scan.verdict === "stale_definitions") {
-    return await backoffVerouderdeSignatures(svc, job);
-  }
-  if (scan.verdict === "infected" || scan.verdict === "policy_blocked") {
-    await svc.from("document_processing_jobs").update({
-      status: "mislukt", eind: nu(), foutcode: scan.verdict,
-    }).eq("id", job.id);
-    await svc.from("documenten").update({
-      bestand_hash: validatie.hash,
-      geindexeerd: false,
-      verwerkingsstatus: "gequarantineerd",
-    }).eq("id", doc.id).eq("opslag_pad", doc.opslag_pad);
-    return "mislukt";
-  }
-  if (scan.verdict !== "clean") return await backoff(svc, job, "scanner_verdict_onbekend");
-  if (!gelijkeHash(scan.sha256, validatie.hash)) {
-    return await securityConflict(svc, job, doc.id, "legacy_hash_mismatch");
-  }
-  if (scan.deploymentId !== health.deploymentId) {
-    return await backoff(svc, job, "scanner_deployment_gewijzigd");
-  }
-
-  const { data: geraakt, error: updateErr } = await svc.from("documenten").update({
-    bestand_hash: validatie.hash,
-    bestandstype: validatie.bestandstype,
-    mime_gedetecteerd: validatie.mimeGedetecteerd,
-    geindexeerd: false,
-    verwerkingsstatus: "gescand",
-  }).eq("id", doc.id).eq("opslag_pad", doc.opslag_pad).select("id");
-  if (updateErr || !geraakt?.length) {
-    return await securityConflict(svc, job, doc.id, "legacy_scan_db_update");
-  }
-
-  // Extractie/herindexering begint in een nieuwe workerinvocatie. Vanaf dit
-  // moment is het origineel al veilig downloadbaar dankzij het scanbewijs.
-  return await yieldJob(svc, job);
 }
 
 async function verwijderQuarantaine(

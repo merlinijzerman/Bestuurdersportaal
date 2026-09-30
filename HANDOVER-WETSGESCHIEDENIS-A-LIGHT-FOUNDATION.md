@@ -647,6 +647,48 @@ hashbewijs de toelatingspoort (`core/lib/retrieval/toelatingspoort.ts`) nooit.
 Generieke documenten zonder `documentdatum` worden geweigerd met
 `versiebewijs_ontbreekt`.
 
+## 6d. Legacy-documenten met uitgesteld WP3-scanbewijs (Refs #500)
+
+**Oorzaak (read-only gemeten op Productie, 30-09-2026).** 14 actieve generieke
+documenten (4.351 chunks, o.a. de Pensioenwet met 968 chunks, wetgeving/pw, datums
+gezet) hebben `scan_resultaat = {scan:'uitgesteld_wp3'}` uit de P1-pipeline en een
+geldige SHA-256. Onder `WP3_MALWARESCAN_AAN=true` eist de versiepoort
+(`bewijsUitVersierij`) terecht een schoon hash-gebonden verdict, dus deze bronnen
+vielen stil uit retrieval. De reaper selecteerde alleen `bestand_hash is null of
+scan_resultaat is null` en pakte ze dus nooit op.
+
+**Oplossing (geen migratie, geen beheerknop).** `platform/lib/legacy-scan.ts`:
+selectie uitgebreid met de categorie *uitgesteld scanbewijs* (geldige hash, geen of
+technisch verdict), met expliciete uitsluiting van negatieve statussen, negatieve
+verdicts, bewijsconflicten, open jobs en een 24-uursafkoeling na een technische
+mislukking. `LEGACY_SCAN_BATCH` (standaard 1, max 2) begrenst lopende legacy-scans;
+`REAPER_LIMIET` is ongewijzigd. De worker scant nu **vóór** hij iets wist: bij een
+technische fout blijven de chunks staan (document dicht door ontbrekend bewijs), bij
+`infected`/`policy_blocked` worden ze verwijderd, bij `clean` vervangt de gewone
+herindexering ze. Omdat chunks nu tijdens een storing blijven staan, zijn vijf
+leeswegen gedicht die ongescande chunkinhoud nog konden lezen (dekkingsbreed pad,
+reflectie, reranker vóór de poort, T8-extractie + semantische evidence,
+her-indexering); zie `MALWARESCAN-WP3-ONTWERP.md` voor de tabel per leesweg.
+
+**Selectie-uitkomst.** Productie: precies de 14 (eerste bij batch 1:
+`2745d314…`, de Pensioenwet is de negende). Preview: 0 in de nieuwe categorie; de
+bestaande legacyregel dekt daar 6 synthetische fondsdocumenten zonder hash/scan.
+
+**Serialisatie (vervolg-PR).** `LEGACY_SCAN_BATCH=1` garandeerde niet één
+document tegelijk: twee overlappende cron-aanroepen konden allebei "0 lopend"
+lezen. Nu draagt de legacy-scanjob een `legacy_slot` (migratie
+`2026_09_30_legacy_scan_slot.sql`). De partiële unieke index
+`uq_dpj_legacy_slot_open` laat per slot hooguit één open job toe, voor de hele
+keten tot en met finaliseer. Bewijs: `scripts/legacy-scan-overlap.mts` (echte
+PostgREST, overlappende reapers, negatieve controle zonder index), aangesloten in
+de cross-tenant-gate. **Volgorde:** eerst de migratie op portal_preview en
+portal_production, dan de code.
+
+**Releasecheck na de productiedeploy.**
+`supabase/checks/2026_09_30_legacy_scan_wp3_releasecheck_productie.sql` (read-only,
+bewust niet in CI: productiespecifiek). Eerst `pensioenwet.ok`, daarna
+`samenvatting.klaar` = 14.
+
 ## 7. Volgende fasen
 
 | # | Stap | Verwachte bestanden | Tests |
