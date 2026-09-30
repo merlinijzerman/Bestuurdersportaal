@@ -25,6 +25,12 @@ const expected = {
     count: 5,
     titlesSha256: "4683b6f5268e537e79cfb5bb4b33a9d48f1b69da50cbc0ac6697385ae11e1736",
   },
+  // Productie-incident 30-09-2026: een uitgeputte Mistral-OCR-retrylus op 429
+  // moet tijdelijk blijven; een definitieve 400 behoudt de lege fallback.
+  "core/lib/ocr.test.ts": {
+    count: 2,
+    titlesSha256: "c77257b9d0ea8989d1701428fb2db737865a49c27ffb11e02f213ac04966b351",
+  },
   // #311 T3 — contracttests van de AI-gateway (gateway.test.ts) en de
   // secret-/foutlaag (secrets.test.ts); titels gepind zoals de overige suites.
   "core/lib/ai-gateway/gateway.test.ts": {

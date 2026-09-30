@@ -27,7 +27,11 @@ import {
   verrijkChunks,
   bouwChunkRecordsZonderVerrijking,
 } from "@/core/lib/chunk-ingest";
-import { extractTekstMetOcrFallback } from "@/core/lib/ocr";
+import {
+  extractTekstMetOcrFallback,
+  OcrTijdelijkeFout,
+  ocrPogingMetJobRetry,
+} from "@/core/lib/ocr";
 import type { Bestandstype } from "@/core/lib/document-extractie";
 import {
   overschrijdtChunkCap,
@@ -776,13 +780,20 @@ async function extracteerEnChunk(
           provider: "mistral",
           model: "mistral-ocr-latest",
           ocrPaginas: paginas,
-          idempotentie: systeemSleutel(job.id, ocrActietype, poging),
+          idempotentie: systeemSleutel(
+            job.id,
+            ocrActietype,
+            ocrPogingMetJobRetry(job.retry_count, poging)
+          ),
           vingerafdruk: vingerafdruk({ documentId: doc.id, paginas }),
         });
         return uitkomst.uitkomst === "nieuw";
       },
     });
   } catch (e) {
+    if (e instanceof OcrTijdelijkeFout) {
+      return await backoff(svc, job, e.foutcode);
+    }
     if (e instanceof IngestCapError) {
       // Bewuste weigering (bv. xlsx-rijlimiet), geen fout.
       return await markeerGeweigerd(svc, job, doc.id, e.foutcode);

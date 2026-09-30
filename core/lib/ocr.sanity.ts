@@ -19,6 +19,9 @@ import assert from "node:assert/strict";
 import {
   heeftOcrNodig,
   magOcrDraaien,
+  classificeerTijdelijkeOcrHttpStatus,
+  OcrTijdelijkeFout,
+  ocrPogingMetJobRetry,
   OCR_ENGINE_LABEL,
   OCR_MODEL,
   OCR_PROVIDER,
@@ -129,6 +132,30 @@ check("engine-label is stabiel (landt in documenten.ocr_engine, audit)", () => {
   assert.equal(OCR_PROVIDER, "mistral");
   assert.equal(OCR_MODEL, "mistral-ocr-latest");
   assert.equal(OCR_ENGINE_LABEL, `${OCR_PROVIDER}:${OCR_MODEL}`);
+});
+
+check("tijdelijke OCR-statussen blijven herkenbaar voor workerbackoff", () => {
+  assert.equal(classificeerTijdelijkeOcrHttpStatus(429), "ocr_rate_limit");
+  assert.equal(classificeerTijdelijkeOcrHttpStatus(500), "ocr_provider_tijdelijk");
+  assert.equal(classificeerTijdelijkeOcrHttpStatus(503), "ocr_provider_tijdelijk");
+  assert.equal(classificeerTijdelijkeOcrHttpStatus(400), null);
+  assert.equal(classificeerTijdelijkeOcrHttpStatus(422), null);
+
+  const fout = new OcrTijdelijkeFout("ocr_rate_limit", "rate limited", 429);
+  assert.equal(fout.foutcode, "ocr_rate_limit");
+  assert.equal(fout.status, 429);
+});
+
+check("OCR-idempotentiepoging is uniek na iedere jobbackoff", () => {
+  assert.deepEqual(
+    [1, 2, 3, 4].map((poging) => ocrPogingMetJobRetry(0, poging)),
+    [1, 2, 3, 4]
+  );
+  assert.deepEqual(
+    [1, 2, 3, 4].map((poging) => ocrPogingMetJobRetry(1, poging)),
+    [5, 6, 7, 8]
+  );
+  assert.equal(ocrPogingMetJobRetry(2, 1), 9);
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);
