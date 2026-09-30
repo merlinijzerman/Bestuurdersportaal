@@ -18,6 +18,12 @@
 --      chunks zonder RLS-filter zijn hier precies de vraag).
 --
 -- Leesvolgorde van de uitkomst:
+--   0. in_keten: welk legacy-document NU in de keten zit (open job met
+--      legacy_slot, migratie 2026_09_30_legacy_scan_slot) en in welke fase:
+--      scan (evt. backoff: retry/foutcode/lease) → extractie → prefix_embedding
+--      (chunks, zonder embedding/prefix). Met LEGACY_SCAN_BATCH=1 is dit hooguit
+--      één rij; draai de check "na elk document" tot in_keten leeg is en de
+--      volgende rij verschijnt.
 --   1. pensioenwet.ok = true: schoon hash-gebonden scanbewijs, beschikbaar +
 --      geindexeerd, 968 → opnieuw geïndexeerd (chunks > 0, allemaal met
 --      embedding en prefix, indexering_versie r1), metadata wetgeving/pw +
@@ -80,6 +86,24 @@ per_doc as (
     ) j on true
 )
 select json_build_object(
+  'in_keten', (
+    select coalesce(json_agg(json_build_object(
+      'legacy_slot', j.legacy_slot, 'document_id', j.document_id, 'titel', d.titel,
+      'fase', case
+        when not coalesce(d.scan_resultaat->>'verdict' = 'clean' and d.scan_resultaat->>'sha256' = d.bestand_hash, false) then 'scan'
+        when d.verwerkingsstatus in ('gescand','extractie','ocr','chunking') then 'extractie'
+        when d.verwerkingsstatus = 'embedding' then 'prefix_embedding'
+        else coalesce(d.verwerkingsstatus, '∅') end,
+      'verwerkingsstatus', d.verwerkingsstatus,
+      'scanstand', coalesce(d.scan_resultaat->>'verdict', 'scan=' || (d.scan_resultaat->>'scan'), '∅'),
+      'job_status', j.status, 'retry_count', j.retry_count, 'claim_count', j.claim_count,
+      'foutcode', j.foutcode, 'lease_expires_at', j.lease_expires_at, 'aangemaakt', j.aangemaakt,
+      'chunks', (select count(*) from document_chunks c where c.document_id = j.document_id),
+      'zonder_embedding', (select count(*) from document_chunks c where c.document_id = j.document_id and c.embedding is null),
+      'zonder_prefix', (select count(*) from document_chunks c where c.document_id = j.document_id and c.context_prefix is null)
+    ) order by j.legacy_slot), '[]'::json)
+      from document_processing_jobs j join documenten d on d.id = j.document_id
+     where j.legacy_slot is not null and j.status in ('wachtend','bezig')),
   'pensioenwet', (
     select json_build_object(
       'ok', coalesce(p.schoon_bewijs, false)
@@ -124,6 +148,8 @@ select json_build_object(
       'gequarantineerd', count(*) filter (where verwerkingsstatus = 'gequarantineerd'),
       'geweigerd', count(*) filter (where verwerkingsstatus = 'geweigerd'),
       'open_jobs', sum(open_jobs),
+      'in_keten', (select count(*) from document_processing_jobs
+                    where legacy_slot is not null and status in ('wachtend','bezig')),
       'chunks_voor', sum(chunks_voor), 'chunks_na', sum(chunks),
       'zonder_embedding', sum(zonder_embedding))
       from per_doc)
