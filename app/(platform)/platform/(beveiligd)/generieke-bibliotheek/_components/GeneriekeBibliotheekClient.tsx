@@ -9,7 +9,7 @@
 //  zodat label en gedrag niet uiteenlopen (§8.3 #6).
 // ============================================================================
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/core/lib/supabase";
 import { NORMGEWICHTEN, NORMGEWICHT_LABEL } from "@/core/lib/bronsoort";
@@ -123,6 +123,30 @@ const LEEG_FORM = {
   reden: "",
 };
 type FormState = typeof LEEG_FORM;
+
+// #504 — datumvelden. Het formulier verstuurde uitsluitend de React-state. Een
+// waarde die zonder React-onChange in een datumveld komt (autofill, extensies,
+// browserautomatisering: `el.value = …` werkt React's value-tracker bij, zodat
+// het daaropvolgende input-event geen onChange meer oplevert) stond dan wél
+// zichtbaar in het veld, maar kwam leeg in de serveractie aan → "Geen
+// wijzigingen." (Pensioenwet, productie 29-09-2026). Daarom: (1) DatumInput
+// synchroniseert óók op het native input-/blur-event, en (2) bij verzenden is
+// de zichtbare DOM-waarde van elk datumveld leidend.
+const DATUMVELDEN = ["documentdatum", "geldig_vanaf", "geldig_tot", "volgende_review"] as const;
+type Datumveld = (typeof DATUMVELDEN)[number];
+
+function bouwCuratieFormData(
+  form: FormState,
+  formElement: HTMLFormElement | null
+): FormData {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(form)) fd.set(k, v);
+  for (const veld of DATUMVELDEN) {
+    const el = formElement?.elements.namedItem(veld);
+    if (el instanceof HTMLInputElement) fd.set(veld, el.value);
+  }
+  return fd;
+}
 
 function veiligeVerwerkingsstatus(status: string | null): string {
   if (["ontvangen", "gevalideerd", "gescand"].includes(status ?? "")) {
@@ -263,6 +287,7 @@ export default function GeneriekeBibliotheekClient({
   const router = useRouter();
   const [modus, setModus] = useState<Modus>(null);
   const [form, setForm] = useState<FormState>(LEEG_FORM);
+  const formRef = useRef<HTMLFormElement>(null);
   const [bestand, setBestand] = useState<File | null>(null);
   const [bezig, startTransitie] = useTransition();
   const [melding, setMelding] = useState<{ ok: boolean; tekst: string } | null>(null);
@@ -302,8 +327,7 @@ export default function GeneriekeBibliotheekClient({
   // is al direct naar de quarantainezone geüpload; we geven alleen het pad +
   // oorspronkelijke naam/mime mee zodat de server het kan ophalen en valideren.
   function bouwFormData(quarantainePad: string | null, gekozenBestand: File | null): FormData {
-    const fd = new FormData();
-    for (const [k, v] of Object.entries(form)) fd.set(k, v);
+    const fd = bouwCuratieFormData(form, formRef.current);
     if (quarantainePad && gekozenBestand) {
       fd.set("quarantaine_pad", quarantainePad);
       fd.set("bestandsnaam", gekozenBestand.name);
@@ -577,6 +601,7 @@ export default function GeneriekeBibliotheekClient({
 
       {modus && (
         <form
+          ref={formRef}
           onSubmit={(e) => {
             e.preventDefault();
             verstuur();
@@ -747,16 +772,16 @@ export default function GeneriekeBibliotheekClient({
               </select>
             </Veld>
             <Veld label="Documentdatum" fout={veldfouten.documentdatum}>
-              <Input type="date" value={form.documentdatum} onChange={(v) => set("documentdatum", v)} />
+              <DatumInput naam="documentdatum" value={form.documentdatum} onChange={(v) => set("documentdatum", v)} />
             </Veld>
             <Veld label="Thema" fout={veldfouten.thema}>
               <Input value={form.thema} onChange={(v) => set("thema", v)} />
             </Veld>
             <Veld label="Geldig vanaf" fout={veldfouten.geldig_vanaf}>
-              <Input type="date" value={form.geldig_vanaf} onChange={(v) => set("geldig_vanaf", v)} />
+              <DatumInput naam="geldig_vanaf" value={form.geldig_vanaf} onChange={(v) => set("geldig_vanaf", v)} />
             </Veld>
             <Veld label="Geldig tot" fout={veldfouten.geldig_tot}>
-              <Input type="date" value={form.geldig_tot} onChange={(v) => set("geldig_tot", v)} />
+              <DatumInput naam="geldig_tot" value={form.geldig_tot} onChange={(v) => set("geldig_tot", v)} />
             </Veld>
             <Veld
               label={juridischStatusveldLabel(form.documenttype) ?? "Documentstatus"}
@@ -791,7 +816,7 @@ export default function GeneriekeBibliotheekClient({
               <Input value={form.versie} onChange={(v) => set("versie", v)} />
             </Veld>
             <Veld label="Volgende review" fout={veldfouten.volgende_review}>
-              <Input type="date" value={form.volgende_review} onChange={(v) => set("volgende_review", v)} />
+              <DatumInput naam="volgende_review" value={form.volgende_review} onChange={(v) => set("volgende_review", v)} />
             </Veld>
           </div>
 
@@ -980,6 +1005,34 @@ function Input({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+    />
+  );
+}
+
+// #504 — datuminvoer die ook een DOM-waarde oppakt die React's onChange mist
+// (native input-/blur-event). `name` maakt de zichtbare waarde bij verzenden
+// leesbaar (bouwCuratieFormData).
+function DatumInput({
+  naam,
+  value,
+  onChange,
+}: {
+  naam: Datumveld;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const synchroniseer = (el: HTMLInputElement) => {
+    if (el.value !== value) onChange(el.value);
+  };
+  return (
+    <input
+      type="date"
+      name={naam}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onInput={(e) => synchroniseer(e.currentTarget)}
+      onBlur={(e) => synchroniseer(e.currentTarget)}
       className="w-full rounded-lg border border-line px-3 py-2 text-sm"
     />
   );

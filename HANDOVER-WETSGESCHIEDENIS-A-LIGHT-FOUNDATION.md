@@ -589,6 +589,64 @@ historisch; bij een groot document geldt daar nog de 8 s-grens (de fout wordt nu
 genegeerd). (3) De `440-*`-drift-artefacten zijn niet geregenereerd, net als
 bij eerdere migraties.
 
+## 6c. #504 — datumvelden in de generieke curatie werden niet opgeslagen
+
+**Aanleiding.** Productie, 29-09-2026, Pensioenwet (968 chunks): documentdatum
+`2026-01-01`, geldig vanaf `2026-01-01` en volgende review `2026-12-15` stonden
+zichtbaar in de invoervelden, maar opslaan gaf "Geen wijzigingen."; de kolommen
+bleven NULL en er kwam geen audit.
+
+**Oorzaak (bewezen).** "Geen wijzigingen." ontstaat alleen als de diff in
+`curatieBijwerken` leeg is, dus de serveractie kreeg lege datums binnen. De
+server- en DB-keten verwerken datums wél correct: `leesInvoer` → validatie → diff
+geven drie wijzigingen (sanity), de RPC-allowlist bevat de datumvelden, en
+`jsonb_populate_record` cast ze naar `date` (DB-check D1/D2). De fout zat in de
+client. `bouwFormData` verstuurde uitsluitend de React-state. Een waarde die
+zonder React-onChange in een datumveld komt, blijft zichtbaar maar komt leeg in
+de FormData. Dat gebeurt bij autofill, extensies en browserautomatisering:
+`el.value = …` werkt React's value-tracker bij, dus het volgende `input`-event
+levert geen onChange op. Het formulierpad reproduceert dit in echte Chrome
+(harness met het echte component) en in jsdom: waarde zichtbaar, FormData `""`.
+Met de oude code zijn drie componenttests rood. Hoe de waarden in Productie
+precies in de velden kwamen, is niet te achterhalen. Dit mechanisme geeft wel
+exact het waargenomen beeld.
+
+**Oplossing (geen migratie).** (1) Datumvelden krijgen `name` en een
+`DatumInput` die ook op het native input- en blur-event synchroniseert. (2) Bij
+verzenden is de zichtbare DOM-waarde van elk datumveld leidend
+(`bouwCuratieFormData`). (3) De FormData-lezing en de diff staan nu als pure kern
+in `platform/lib/generiek-curatie-diff.ts`. Datumkolommen worden daar als
+JJJJ-MM-DD vergeleken. `documentdatum` en `geldig_vanaf` krijgen
+`rag_impact=true`: ze worden naar de chunks gedenormaliseerd en `documentdatum`
+is het versiebewijs van de toelatingspoort.
+
+**Leegmaken.** Dit is toegestaan: het veld wordt NULL op het document en, voor
+`documentdatum`/`geldig_vanaf`, op alle chunks, met een auditregel oud → null.
+Uitzondering: bij wetsgeschiedenis blijft `documentdatum` verplicht
+(`valideerJuridischeMetadata`). Leegmaken wordt daar gevalideerd geweigerd.
+Let op: een wetgevingsdocument zonder `documentdatum` valt in retrieval terug op
+`versiebewijs_ontbreekt` (zie open punt).
+
+**Tests.** `tests/component/GeneriekeBibliotheekDatumvelden.component.test.tsx`
+(6; drie rood op de oude code), `platform/lib/generiek-curatie-diff.sanity.ts`
+(10, inclusief de pariteit tussen de app-veldlijst en de RPC-allowlist), en
+DB-check `supabase/checks/2026_09_30_504_curatie_datumvelden.sql` (D0–D6: klein
+document en 1.000 chunks, denorm, audit met actor en reden, identieke opslag,
+leegmaken, ongeldige datum → rollback, negatieve controle zonder
+denorm-trigger), aangesloten in `scripts/cross-tenant-ci.sh`.
+
+**Postcheck Productie (na promotie).** Vul de drie datums van de Pensioenwet
+opnieuw in via de beheer-UI. Verwacht "3 veld(en) bijgewerkt", 968/968 chunks
+met `documentdatum`/`geldig_vanaf` = `2026-01-01` en drie auditregels. Een
+tweede opslag geeft "Geen wijzigingen.".
+
+**OPEN vervolgpunt (niet in #504).** Het zoekpad draagt `indexering_versie` en
+`bestand_hash` niet mee (alleen `REFLECTIE_SELECT` doet dat; zie
+`chunkAlsBronresultaat` in `core/lib/rag.ts`). Daardoor bereikt het sterke
+hashbewijs de toelatingspoort (`core/lib/retrieval/toelatingspoort.ts`) nooit.
+Generieke documenten zonder `documentdatum` worden geweigerd met
+`versiebewijs_ontbreekt`.
+
 ## 7. Volgende fasen
 
 | # | Stap | Verwachte bestanden | Tests |
