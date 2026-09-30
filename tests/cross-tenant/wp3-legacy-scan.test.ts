@@ -13,7 +13,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  duidSlotInsertFout,
   kiesLegacyScanBatch,
+  legacyKetenStand,
+  legacyReaper,
   leesLegacyScanBatch,
   legacyScanCategorie,
   scanLegacyOrigineel,
@@ -608,4 +611,111 @@ test("L4 — elke chunkleesweg naar model of gebruiker dwingt het scanbewijs af 
   assert.match(download, /isOrigineelBeschikbaar/);
   const versie = lees("core/lib/retrieval/supabase-versie.ts");
   assert.match(versie, /vereisScanbewijs && !heeftSchoonScanbewijs/);
+});
+
+// ── K: serialisatie — "in de keten" en slots ─────────────────────────────────
+test("K1 — in de keten = open job MET legacy-slot; gewone jobs tellen nooit mee", () => {
+  const stand = legacyKetenStand([
+    { document_id: "a", legacy_slot: 1, status: "wachtend" }, // na clean scan: yield → wachtend
+    { document_id: "b", legacy_slot: null, status: "bezig" }, // gewone upload/pipeline
+    { document_id: "c", legacy_slot: 2, status: "geslaagd" }, // afgerond
+    { document_id: "d", legacy_slot: 2, status: "mislukt" }, // eindfout
+  ], 1);
+  assert.deepEqual(stand, { inKeten: ["a"], bezet: [1], vrij: [] });
+  assert.deepEqual(legacyKetenStand([], 1).vrij, [1]);
+  assert.deepEqual(legacyKetenStand([], 2).vrij, [1, 2]);
+  assert.deepEqual(legacyKetenStand([], 0).vrij, []);
+  assert.deepEqual(legacyKetenStand([], 9).vrij, [1, 2], "nooit meer dan het maximum");
+  assert.deepEqual(legacyKetenStand([{ document_id: "a", legacy_slot: 2, status: "bezig" }], 2).vrij, [1]);
+  // Batch verlaagd van 2 naar 1 terwijl slot 2 loopt: geen nieuw document.
+  assert.deepEqual(legacyKetenStand([{ document_id: "a", legacy_slot: 2, status: "bezig" }], 1).vrij, []);
+});
+
+test("K2 — 23505 wordt per constraint geduid", () => {
+  assert.equal(duidSlotInsertFout(null), "ok");
+  assert.equal(duidSlotInsertFout({ code: "23505", message: 'duplicate key value violates unique constraint "uq_dpj_legacy_slot_open"' }), "slot_bezet");
+  assert.equal(duidSlotInsertFout({ code: "23505", message: 'duplicate key value violates unique constraint "uq_dpj_open_stap"' }), "document_bezet");
+  assert.equal(duidSlotInsertFout({ code: "23505", message: "iets anders" }), "fout");
+  assert.equal(duidSlotInsertFout({ code: "PGRST204", message: "legacy_slot bestaat niet" }), "fout");
+});
+
+// In-memory stand-in met dezelfde twee partiële unieke indexen.
+function slotSvc(docs: LegacyScanDocument[], jobs: Rij[]) {
+  const open = (r: Rij) => r.status === "wachtend" || r.status === "bezig";
+  const inserts: Rij[] = [];
+  const b = (tabel: "documenten" | "document_processing_jobs") => {
+    const filters: Array<(r: Rij) => boolean> = [];
+    let rij: Rij | null = null;
+    const q: Record<string, unknown> = {};
+    q.select = () => q;
+    q.order = () => q;
+    q.limit = () => q;
+    q.or = () => q; // voorfilter: het predicaat beslist
+    q.eq = (k: string, v: unknown) => { filters.push((r) => r[k] === v); return q; };
+    q.in = (k: string, v: unknown[]) => { filters.push((r) => v.includes(r[k])); return q; };
+    q.not = (k: string) => { filters.push((r) => r[k] !== null && r[k] !== undefined); return q; };
+    q.insert = (r: Rij) => { rij = r; return q; };
+    q.then = (res: (v: unknown) => unknown) => {
+      if (rij) {
+        const nieuw = rij;
+        if (nieuw.legacy_slot && jobs.some((j) => open(j) && j.legacy_slot === nieuw.legacy_slot)) {
+          return Promise.resolve({ error: { code: "23505", message: 'violates unique constraint "uq_dpj_legacy_slot_open"' } }).then(res);
+        }
+        if (jobs.some((j) => open(j) && j.document_id === nieuw.document_id && j.stap === nieuw.stap)) {
+          return Promise.resolve({ error: { code: "23505", message: 'violates unique constraint "uq_dpj_open_stap"' } }).then(res);
+        }
+        jobs.push({ ...nieuw });
+        inserts.push(nieuw);
+        return Promise.resolve({ error: null }).then(res);
+      }
+      const bron = (tabel === "documenten" ? docs : jobs) as Rij[];
+      return Promise.resolve({ data: bron.filter((r) => filters.every((f) => f(r))), error: null }).then(res);
+    };
+    return q;
+  };
+  return { svc: { from: b } as unknown as SupabaseClient, inserts };
+}
+
+test("K3 — legacyReaper: fase ná de clean scan houdt het slot bezet, geen tweede document", async () => {
+  const docs = veertien.slice(0, 3).map((d) => ({ ...d }));
+  const jobs: Rij[] = [{ document_id: docs[0].id, stap: "scan", status: "wachtend", legacy_slot: 1, foutcode: null, eind: null }];
+  // Clean scan is vastgelegd; de keten loopt nog (extractie/embedding).
+  docs[0].scan_resultaat = { verdict: "clean", sha256: HASH };
+  docs[0].verwerkingsstatus = "embedding";
+  const { svc, inserts } = slotSvc(docs, jobs);
+  assert.deepEqual(await legacyReaper(svc, { batch: 1, nuMs: NU }), []);
+  assert.equal(inserts.length, 0);
+  // Na finaliseer (geslaagd) komt precies het volgende document.
+  jobs[0].status = "geslaagd";
+  docs[0].verwerkingsstatus = "beschikbaar";
+  assert.deepEqual(await legacyReaper(svc, { batch: 1, nuMs: NU }), [docs[1].id]);
+  assert.equal(inserts[0].legacy_slot, 1);
+  assert.equal(inserts[0].stap, "scan");
+});
+
+test("K4 — legacyReaper: batch 0 leest niets, batch 2 vult twee slots, explicit gaat voor", async () => {
+  const docs = veertien.slice(0, 4);
+  const nul = slotSvc(docs, []);
+  assert.deepEqual(await legacyReaper({ from: () => { throw new Error("geen query bij batch 0"); } } as unknown as SupabaseClient, { batch: 0, nuMs: NU }), []);
+  assert.equal(nul.inserts.length, 0);
+  const twee = slotSvc(docs, []);
+  const expliciet = doc({ id: "ffffffff-0000-4000-8000-000000000000", bestand_hash: null, scan_resultaat: null, verwerkingsstatus: "embedding" });
+  const gestart = await legacyReaper(twee.svc, { batch: 2, nuMs: NU, expliciet: [expliciet] });
+  assert.deepEqual(gestart, [expliciet.id, docs[0].id]);
+  assert.deepEqual(twee.inserts.map((r) => r.legacy_slot), [1, 2]);
+});
+
+test("K5 — legacyReaper: slot al door een gelijktijdige aanroep genomen ⇒ volgend slot of stoppen", async () => {
+  const docs = veertien.slice(0, 3);
+  // Simuleer: de slotlezing zag niets, maar vóór de insert pakte een andere
+  // aanroep slot 1 (de pauze-hook zet die job erbij).
+  const jobs: Rij[] = [];
+  const { svc, inserts } = slotSvc(docs, jobs);
+  const pauze = async () => { jobs.push({ document_id: docs[0].id, stap: "scan", status: "wachtend", legacy_slot: 1 }); };
+  assert.deepEqual(await legacyReaper(svc, { batch: 1, nuMs: NU, pauze }), [], "batch 1: slot bezet ⇒ geen tweede document");
+  assert.equal(inserts.length, 0);
+  jobs.length = 0;
+  const gestart = await legacyReaper(svc, { batch: 2, nuMs: NU, pauze });
+  assert.deepEqual(gestart, [docs[1].id], "batch 2: tweede slot, ander document");
+  assert.equal(inserts[0].legacy_slot, 2);
 });
