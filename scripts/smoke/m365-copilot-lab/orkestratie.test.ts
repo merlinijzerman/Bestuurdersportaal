@@ -451,6 +451,31 @@ test("een 403 op de Retrieval-call levert een rapport in plaats van een gesneuve
   assert.equal(rapport.akkoordGegeven, true);
 });
 
+test("de 403-diagnose bereikt het labrapport zonder providerinhoud of tweede poging", async () => {
+  const teller = { n: 0 };
+  const requestId = "a1b2c3d4-1111-4111-8111-a1b2c3d4e5f6";
+  const geheim = "https://vertrouwelijk.example/pad?token=GEHEIM";
+  const retrievalFetch = (async () => {
+    teller.n++;
+    return new Response(JSON.stringify({
+      error: { code: "Forbidden", message: `weigering voor ${geheim}` },
+    }), { status: 403, headers: { "request-id": requestId } });
+  }) as typeof fetch;
+  const { deps } = bouw({ vraagAkkoord: async () => true, retrievalFetch });
+  const { rapport, exitcode } = await voerSmokeUit(deps);
+  const tekst = rapporteer(rapport);
+
+  assert.equal(exitcode, EXIT.retrievalAfgewezen);
+  assert.equal(teller.n, 1);
+  assert.equal(rapport.retrievalFout?.httpStatus, 403);
+  assert.equal(rapport.providerDiagnostiek?.foutcode, "forbidden");
+  assert.equal(rapport.providerDiagnostiek?.requestId, requestId);
+  assert.match(tekst, /Microsoft-foutcode \(gesloten label\): `forbidden`/);
+  assert.match(tekst, /Graph request-id: `a1b2c3d4-1111-4111-8111-a1b2c3d4e5f6`/);
+  assert.ok(!tekst.includes(geheim));
+  assert.ok(!JSON.stringify(rapport).includes(geheim));
+});
+
 test("een 402 wordt als billing gerapporteerd, niet als autorisatieweigering", async () => {
   const teller = { n: 0 };
   const { deps } = bouw({ vraagAkkoord: async () => true, retrievalFetch: afwijzendeRetrieval(402, teller) });
