@@ -50,14 +50,9 @@ import { leesScannerHealth, scanSignedUrl } from "@/platform/lib/malware-scan-cl
 import { signatureOordeel } from "@/core/lib/malware-scan-beleid";
 import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 import {
-  kiesLegacyScanBatch,
   leesLegacyScanBatch,
-  legacyScanCategorie,
+  legacyReaper,
   scanLegacyOrigineel,
-  LEGACY_SCAN_JOBVENSTER,
-  LEGACY_SCAN_VENSTER,
-  LEGACY_SCAN_VOORFILTER,
-  type LegacyJobRij,
 } from "@/platform/lib/legacy-scan";
 import { isProviderAuthenticatieFout } from "@/core/lib/provider-fout";
 import { bepaalDocumentIngestAiScope } from "@/core/lib/document-ingest-ai-scope";
@@ -330,14 +325,18 @@ async function ruimVerweesdeOriginelenOp(svc: SupabaseClient): Promise<number> {
 async function reaper(svc: SupabaseClient): Promise<number> {
   const { data: pipelineKandidaten, error } = await svc
     .from("documenten")
-    .select("id, fonds_id, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
+    .select("id, fonds_id, actief, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
     .in("verwerkingsstatus", NEEDS_WORK_STATUSSEN)
     .eq("geindexeerd", false)
     .eq("actief", true)
     .limit(REAPER_LIMIET);
-  const kandidaten = error ? [] : ((pipelineKandidaten ?? []) as ReaperDocument[]);
+  const kandidaten = error ? [] : ((pipelineKandidaten ?? []) as (ReaperDocument & { actief: boolean })[]);
 
   let n = 0;
+  // Legacy-scans uit het pipelinepad (bv. een expliciete herverwerking van een
+  // legacy-origineel) gaan niet ongeteld de keten in: ze krijgen een slot via
+  // legacyReaper, met voorrang op de automatische selectie.
+  const legacyUitPipeline: (ReaperDocument & { actief: boolean })[] = [];
   if (kandidaten.length > 0) {
     const ids = kandidaten.map((d) => d.id as string);
     const { data: openJobs } = await svc
@@ -348,16 +347,26 @@ async function reaper(svc: SupabaseClient): Promise<number> {
     const heeftJob = new Set((openJobs ?? []).map((j) => j.document_id as string));
     for (const d of kandidaten) {
       if (heeftJob.has(d.id as string)) continue;
+      if (!(d.quarantaine_pad && !d.opslag_pad) && moetLegacyOrigineelScannen(d)) {
+        legacyUitPipeline.push(d);
+        continue;
+      }
       const stap = d.quarantaine_pad && !d.opslag_pad
         ? "scan"
-        : moetLegacyOrigineelScannen(d) ? "scan"
         : d.verwerkingsstatus === "embedding" ? "embedding" : "extractie";
       if (await enqueue(svc, d, stap)) n += 1;
     }
   }
 
   if (process.env.WP3_MALWARESCAN_AAN === "true") {
-    n += await legacyReaper(svc, new Set(kandidaten.map((d) => d.id)));
+    const gestart = await legacyReaper(svc, {
+      batch: leesLegacyScanBatch(process.env.LEGACY_SCAN_BATCH),
+      nuMs: Date.now(),
+      alGepland: new Set(kandidaten.map((d) => d.id)),
+      expliciet: legacyUitPipeline,
+      log: (regel) => console.log(JSON.stringify({ tag: "ingest-meting", ...regel })),
+    });
+    n += gestart.length;
   }
   return n;
 }
@@ -374,83 +383,6 @@ async function enqueue(svc: SupabaseClient, d: ReaperDocument, stap: string): Pr
   const dubbel = insErr.code === "23505" || /duplicate|unique/i.test(insErr.message ?? "");
   if (!dubbel) console.error(`[ingest-worker] reaper enqueue mislukt voor ${d.id}:`, insErr.message);
   return false;
-}
-
-// WP3-compatibiliteit: originelen die vóór de quarantaine direct in de
-// leesbucket zijn beland (geen hash/scan) én de P1-documenten met een
-// uitgestelde scan (`{scan:'uitgesteld_wp3'}`, geldige hash). Selectie en
-// begrenzing zijn puur (platform/lib/legacy-scan.ts). LEGACY_SCAN_BATCH begrenst
-// het aantal LOPENDE legacy-scans (standaard 1, max 2), los van REAPER_LIMIET.
-async function legacyReaper(svc: SupabaseClient, alGepland: ReadonlySet<string>): Promise<number> {
-  const batch = leesLegacyScanBatch(process.env.LEGACY_SCAN_BATCH);
-  if (batch === 0) return 0;
-
-  const { data, error } = await svc
-    .from("documenten")
-    .select("id, fonds_id, actief, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
-    .eq("actief", true)
-    .not("opslag_pad", "is", null)
-    .or(LEGACY_SCAN_VOORFILTER)
-    .order("id", { ascending: true })
-    .limit(LEGACY_SCAN_VENSTER);
-  if (error) {
-    console.error("[ingest-worker] legacy-scanselectie mislukt:", error.message);
-    return 0;
-  }
-  // Op id gesorteerd (DB); de eerste LEGACY_SCAN_JOBVENSTER kandidaten gaan de
-  // jobtoets in (houdt de `in`-lijst van de volgende query begrensd).
-  const documenten = ((data ?? []) as (ReaperDocument & { actief: boolean })[])
-    .filter((d) => legacyScanCategorie(d) !== null)
-    .slice(0, LEGACY_SCAN_JOBVENSTER);
-  if (documenten.length === 0) return 0;
-
-  // Lopende legacy-scans: open scan-jobs op een document dat niet (meer) in
-  // quarantaine staat. Conservatief: een gepromoveerde upload die nog indexeert
-  // telt ook mee en houdt legacywerk dus even tegen, nooit andersom.
-  const { data: openScan, error: openErr } = await svc
-    .from("document_processing_jobs")
-    .select("document_id")
-    .eq("stap", "scan")
-    .in("status", ["wachtend", "bezig"])
-    .limit(100);
-  if (openErr) return 0;
-  const openIds = [...new Set((openScan ?? []).map((j) => j.document_id as string))];
-  let lopend = 0;
-  if (openIds.length > 0) {
-    const { data: lopendeDocs, error: lopendErr } = await svc
-      .from("documenten")
-      .select("id")
-      .in("id", openIds)
-      .is("quarantaine_pad", null);
-    if (lopendErr) return 0;
-    lopend = (lopendeDocs ?? []).length;
-  }
-  if (lopend >= batch) return 0;
-
-  const { data: jobs, error: jobsErr } = await svc
-    .from("document_processing_jobs")
-    .select("document_id, stap, status, foutcode, eind")
-    .in("document_id", documenten.map((d) => d.id));
-  if (jobsErr) return 0;
-
-  const keuze = kiesLegacyScanBatch({
-    documenten,
-    jobs: (jobs ?? []) as LegacyJobRij[],
-    lopend,
-    batch,
-    nuMs: Date.now(),
-    alGepland,
-  });
-  let n = 0;
-  for (const d of keuze.gekozen) {
-    if (await enqueue(svc, d, "scan")) n += 1;
-  }
-  if (n > 0) {
-    console.log(JSON.stringify({
-      tag: "ingest-meting", fase: "legacy-scan-enqueue", aantal: n, batch, lopend,
-    }));
-  }
-  return n;
 }
 
 // ── Claim ───────────────────────────────────────────────────────────────────

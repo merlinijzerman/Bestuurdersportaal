@@ -17,8 +17,15 @@
 //     policy_blocked), een clean-verdict met afwijkende hash (bewijsconflict),
 //     een onbekend verdict, een eerder hash-/promotieconflict in de jobhistorie,
 //     een open job, of een technische mislukking binnen de afkoeltermijn.
-//     Begrenzing: LEGACY_SCAN_BATCH (standaard 1, max 2) LOPENDE legacy-scans
-//     tegelijk, deterministisch op document-id. Los van REAPER_LIMIET.
+//     Begrenzing: hooguit LEGACY_SCAN_BATCH (standaard 1, max 2) legacy-
+//     documenten tegelijk IN DE KETEN (scan → extractie → prefix → embedding →
+//     finaliseer), over alle overlappende workeraanroepen heen. Mechanisme: de
+//     legacy-scanjob krijgt een slot (document_processing_jobs.legacy_slot,
+//     1..batch); de partiële unieke index uq_dpj_legacy_slot_open staat per
+//     slot hooguit één OPEN job toe. Die ene job draagt de hele keten (yield en
+//     backoff werken op dezelfde rij; pas finaliseer/een eindfout sluit hem),
+//     dus "in de keten" = open job met slot. Deterministisch op document-id.
+//     Los van REAPER_LIMIET.
 //
 //  2. WORKER-KERN. scanLegacyOrigineel: valideer → hashcheck → scan → pas bij
 //     `clean` + gelijke SHA-256 + zelfde scannerdeployment het scanbewijs
@@ -212,6 +219,158 @@ export function kiesLegacyScanBatch<D extends LegacyScanDocument>(p: {
     ruimte -= 1;
   }
   return { gekozen, uitgesloten };
+}
+
+// ── Serialisatie: legacy-slots ──────────────────────────────────────────────
+
+export const LEGACY_SLOT_INDEX = "uq_dpj_legacy_slot_open";
+const OPEN_STATUSSEN = ["wachtend", "bezig"] as const;
+
+export interface LegacySlotRij {
+  document_id: string;
+  legacy_slot: number | null;
+  status: string;
+}
+
+export interface LegacyKetenStand {
+  /** Documenten waarvoor de legacy-rescan loopt en die nog geen eindstatus hebben. */
+  inKeten: string[];
+  bezet: number[];
+  vrij: number[];
+}
+
+/**
+ * Welke legacy-documenten zitten in de keten en welke slots zijn vrij. Alleen
+ * open jobs MET slot tellen: gewone uploads/pipelinejobs hebben nooit een slot.
+ * Zitten er al ≥ batch in de keten (bv. na verlaging van 2 naar 1), dan is er
+ * geen vrij slot, ook al is slot 1 zelf leeg.
+ */
+export function legacyKetenStand(rijen: readonly LegacySlotRij[], batch: number): LegacyKetenStand {
+  const open = rijen.filter((r) =>
+    r.legacy_slot !== null && (OPEN_STATUSSEN as readonly string[]).includes(r.status));
+  const bezet = [...new Set(open.map((r) => r.legacy_slot as number))].sort((a, b) => a - b);
+  const inKeten = [...new Set(open.map((r) => r.document_id))].sort();
+  const max = Math.max(0, Math.min(batch, LEGACY_SCAN_BATCH_MAX));
+  const vrij = inKeten.length >= max
+    ? []
+    : Array.from({ length: max }, (_, i) => i + 1).filter((s) => !bezet.includes(s));
+  return { inKeten, bezet, vrij };
+}
+
+export type SlotInsertUitkomst = "ok" | "slot_bezet" | "document_bezet" | "fout";
+
+/** Duidt een insertfout: welk uniek-constraint sloeg aan (PostgREST 23505). */
+export function duidSlotInsertFout(err: { code?: string; message?: string; details?: string } | null): SlotInsertUitkomst {
+  if (!err) return "ok";
+  const tekst = `${err.message ?? ""} ${err.details ?? ""}`;
+  if (err.code === "23505" && tekst.includes(LEGACY_SLOT_INDEX)) return "slot_bezet";
+  if (err.code === "23505" && tekst.includes("uq_dpj_open_stap")) return "document_bezet";
+  return "fout";
+}
+
+export interface LegacyReaperOpties {
+  batch: number;
+  nuMs: number;
+  /** Door het gewone pipelinepad al behandelde documenten. */
+  alGepland?: ReadonlySet<string>;
+  /**
+   * Legacy-scans die het pipelinepad aanlevert (bv. een expliciete
+   * herverwerking): zelfde slotbudget, voorrang, zonder categorietoets.
+   */
+  expliciet?: readonly LegacyScanDocument[];
+  /** Alleen voor de overlaptest: pauze tussen slotlezing en keuze. */
+  pauze?: (fase: "na_slotlezing") => Promise<void>;
+  log?: (regel: Record<string, unknown>) => void;
+}
+
+/**
+ * Enqueuet legacy-scanjobs op een vrij slot. De telling vooraf is alleen een
+ * optimalisatie; de garantie komt van de unieke index: van twee gelijktijdige
+ * aanroepen die hetzelfde slot kiezen, krijgt er één 23505 en stopt.
+ * Fail-closed: bij elke lees-/schrijffout geen (verdere) enqueue.
+ */
+export async function legacyReaper(svc: SupabaseClient, opts: LegacyReaperOpties): Promise<string[]> {
+  if (opts.batch <= 0) return [];
+
+  const { data: slotRijen, error: slotErr } = await svc
+    .from("document_processing_jobs")
+    .select("document_id, legacy_slot, status")
+    .not("legacy_slot", "is", null)
+    .in("status", [...OPEN_STATUSSEN]);
+  if (slotErr) {
+    opts.log?.({ fase: "legacy-slotlezing-mislukt", fout: slotErr.message });
+    return [];
+  }
+  const stand = legacyKetenStand((slotRijen ?? []) as LegacySlotRij[], opts.batch);
+  if (stand.vrij.length === 0) return [];
+  if (opts.pauze) await opts.pauze("na_slotlezing");
+
+  const { data, error } = await svc
+    .from("documenten")
+    .select("id, fonds_id, actief, verwerkingsstatus, quarantaine_pad, opslag_pad, bestand_hash, scan_resultaat")
+    .eq("actief", true)
+    .not("opslag_pad", "is", null)
+    .or(LEGACY_SCAN_VOORFILTER)
+    .order("id", { ascending: true })
+    .limit(LEGACY_SCAN_VENSTER);
+  if (error) {
+    opts.log?.({ fase: "legacy-selectie-mislukt", fout: error.message });
+    return [];
+  }
+  const expliciet = [...(opts.expliciet ?? [])];
+  const explicietIds = new Set(expliciet.map((d) => d.id));
+  const documenten = ((data ?? []) as LegacyScanDocument[])
+    .filter((d) => legacyScanCategorie(d) !== null && !explicietIds.has(d.id))
+    .slice(0, LEGACY_SCAN_JOBVENSTER);
+
+  let geselecteerd: LegacyScanDocument[] = [];
+  if (documenten.length > 0) {
+    const { data: jobs, error: jobsErr } = await svc
+      .from("document_processing_jobs")
+      .select("document_id, stap, status, foutcode, eind")
+      .in("document_id", documenten.map((d) => d.id));
+    if (jobsErr) return [];
+    geselecteerd = kiesLegacyScanBatch({
+      documenten,
+      jobs: (jobs ?? []) as LegacyJobRij[],
+      lopend: 0,
+      batch: LEGACY_SCAN_JOBVENSTER,
+      nuMs: opts.nuMs,
+      alGepland: opts.alGepland,
+    }).gekozen;
+  }
+
+  const rij = [...expliciet.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), ...geselecteerd];
+  const gestart: string[] = [];
+  let slot = 0;
+  let i = 0;
+  while (i < rij.length && slot < stand.vrij.length) {
+    const d = rij[i];
+    const { error: insErr } = await svc.from("document_processing_jobs").insert({
+      document_id: d.id,
+      fonds_id: d.fonds_id,
+      stap: "scan",
+      status: "wachtend",
+      legacy_slot: stand.vrij[slot],
+    });
+    const uitkomst = duidSlotInsertFout(insErr);
+    if (uitkomst === "ok") {
+      gestart.push(d.id);
+      slot += 1;
+      i += 1;
+    } else if (uitkomst === "slot_bezet") {
+      slot += 1; // een gelijktijdige aanroep was eerst; zelfde document, volgend slot
+    } else if (uitkomst === "document_bezet") {
+      i += 1; // dit document heeft al een open job; volgende kandidaat
+    } else {
+      opts.log?.({ fase: "legacy-enqueue-mislukt", fout: insErr?.message ?? null });
+      break;
+    }
+  }
+  if (gestart.length > 0) {
+    opts.log?.({ fase: "legacy-scan-enqueue", aantal: gestart.length, batch: opts.batch, in_keten: stand.inKeten.length });
+  }
+  return gestart;
 }
 
 // ── Worker-kern ─────────────────────────────────────────────────────────────

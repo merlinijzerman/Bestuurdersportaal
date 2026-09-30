@@ -674,6 +674,16 @@ her-indexering); zie `MALWARESCAN-WP3-ONTWERP.md` voor de tabel per leesweg.
 `2745d314…`, de Pensioenwet is de negende). Preview: 0 in de nieuwe categorie; de
 bestaande legacyregel dekt daar 6 synthetische fondsdocumenten zonder hash/scan.
 
+**Serialisatie (vervolg-PR).** `LEGACY_SCAN_BATCH=1` garandeerde niet één
+document tegelijk: twee overlappende cron-aanroepen konden allebei "0 lopend"
+lezen. Nu draagt de legacy-scanjob een `legacy_slot` (migratie
+`2026_09_30_legacy_scan_slot.sql`). De partiële unieke index
+`uq_dpj_legacy_slot_open` laat per slot hooguit één open job toe, voor de hele
+keten tot en met finaliseer. Bewijs: `scripts/legacy-scan-overlap.mts` (echte
+PostgREST, overlappende reapers, negatieve controle zonder index), aangesloten in
+de cross-tenant-gate. **Volgorde:** eerst de migratie op portal_preview en
+portal_production, dan de code.
+
 **Releasecheck na de productiedeploy.**
 `supabase/checks/2026_09_30_legacy_scan_wp3_releasecheck_productie.sql` (read-only,
 bewust niet in CI: productiespecifiek). Eerst `pensioenwet.ok`, daarna
