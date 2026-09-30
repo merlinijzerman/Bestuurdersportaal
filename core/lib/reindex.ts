@@ -23,6 +23,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractTekstMetOcrFallback, type OcrReservering } from "./ocr";
 import type { GatewayAanroep } from "./ai-gateway/contract";
+import { heeftSchoonScanbewijs, isMalwarescanAan } from "./document-scan-poort";
 
 /**
  * Bovengrens op het aantal OCR-pagina's per her-indexering (besluit 0180).
@@ -93,6 +94,27 @@ export async function herindexeerDocument(
   if (!doc.opslag_pad) {
     await markeerOvergeslagen(client, doc.id);
     return { status: "overgeslagen", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "geen_origineel" };
+  }
+
+  // WP3 — dit pad voert de originele bytes aan parser/OCR en de chunktekst aan
+  // een model. Zonder schoon hash-gebonden scanbewijs niet: de ingestworker
+  // scant en herindexeert zo'n document zelf (platform/lib/legacy-scan.ts).
+  // Stempelen als overgeslagen voorkomt dat de backfill (.limit(1)) blijft
+  // hangen op hetzelfde document; de worker vervangt de chunks na een schone
+  // scan door R1-chunks.
+  if (isMalwarescanAan()) {
+    const { data: bewijs, error: bewijsErr } = await client
+      .from("documenten")
+      .select("bestand_hash, scan_resultaat")
+      .eq("id", doc.id)
+      .maybeSingle();
+    if (bewijsErr) {
+      return { status: "mislukt", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "scanbewijs_lezen_mislukt" };
+    }
+    if (!bewijs || !heeftSchoonScanbewijs(bewijs as { bestand_hash: string | null; scan_resultaat: Record<string, unknown> | null })) {
+      await markeerOvergeslagen(client, doc.id);
+      return { status: "overgeslagen", aantalChunks: 0, prefixModel: null, embeddingsGelukt: false, reden: "scanbewijs_ontbreekt" };
+    }
   }
 
   const bestandstype = (doc.bestandstype as Bestandstype) || "pdf";

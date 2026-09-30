@@ -356,6 +356,13 @@
         "document_chunks"
       ]
     },
+    "platform/lib/legacy-scan.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
     "platform/lib/semantische-extractie-job.ts": {
       "modules": {},
       "rpcs": [],

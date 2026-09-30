@@ -20,6 +20,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { heeftSchoonScanbewijs, isMalwarescanAan } from "@/core/lib/document-scan-poort";
 import {
   extraheerUnits,
   maakGatewayVoorkomenExtractor,
@@ -68,6 +69,8 @@ interface DocRij {
   geindexeerd: boolean | null;
   actief: boolean | null;
   vervangt_document_id: string | null;
+  bestand_hash: string | null;
+  scan_resultaat: Record<string, unknown> | null;
 }
 
 interface ChunkRij {
@@ -114,11 +117,16 @@ export async function enqueueSemantischeExtractie(
 
   const { data: doc, error } = await svc
     .from("documenten")
-    .select("id, fonds_id, actief, geindexeerd")
+    .select("id, fonds_id, actief, geindexeerd, bestand_hash, scan_resultaat")
     .eq("id", documentId)
     .single();
   if (error || !doc) return { enqueued: false, reden: "document_niet_gevonden" };
   if (doc.actief === false) return { enqueued: false, reden: "document_inactief" };
+  // WP3: de extractie stuurt chunktekst naar een model; zonder schoon
+  // hash-gebonden scanbewijs mag die tekst de database niet verlaten.
+  if (isMalwarescanAan() && !heeftSchoonScanbewijs(doc)) {
+    return { enqueued: false, reden: "scanbewijs_ontbreekt" };
+  }
   // Tweede grens (W5b PR 2 / #103): extractie leest chunks die de indexering
   // aanmaakt. Zonder indexering is er niets te extraheren en zou de job in de
   // worker alsnog stranden. Weiger vroeg, MET reden — een operator die vlak na
@@ -196,7 +204,7 @@ export async function verwerkSemantischeExtractieJob(
   // 1. Document laden.
   const { data: docData, error: docErr } = await svc
     .from("documenten")
-    .select("id, fonds_id, status, geindexeerd, actief, vervangt_document_id")
+    .select("id, fonds_id, status, geindexeerd, actief, vervangt_document_id, bestand_hash, scan_resultaat")
     .eq("id", job.document_id)
     .single();
   if (docErr || !docData) {
@@ -210,6 +218,12 @@ export async function verwerkSemantischeExtractieJob(
   }
   if (doc.actief === false) {
     await jobTerminaal(svc, job.id, "overgeslagen", "document_inactief");
+    return "overgeslagen";
+  }
+  // WP3: zelfde leespoort als de enqueue (defensief; een job kan ouder zijn).
+  // Terminaal i.p.v. backoff: pas een nieuwe enqueue na een schone scan zinvol.
+  if (isMalwarescanAan() && !heeftSchoonScanbewijs(doc)) {
+    await jobTerminaal(svc, job.id, "overgeslagen", "scanbewijs_ontbreekt");
     return "overgeslagen";
   }
   // Nog niet geïndexeerd = nog geen chunks (ingest loopt mogelijk nog) → backoff.

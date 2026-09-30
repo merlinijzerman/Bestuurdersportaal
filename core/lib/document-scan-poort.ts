@@ -53,3 +53,27 @@ export function isAiContextBeschikbaar(
     (typeof document.documentdatum === "string" && document.documentdatum.length > 0)
   );
 }
+
+/** WP3 staat aan: uitsluitend de exacte waarde "true" (zoals overal elders). */
+export function isMalwarescanAan(): boolean {
+  return process.env.WP3_MALWARESCAN_AAN === "true";
+}
+
+/**
+ * Leespoort voor afgeleide inhoud (chunks) onder WP3. Een chunk mag alleen naar
+ * een model of gebruiker als zijn document een schoon, hash-gebonden scanbewijs
+ * heeft. Bewust fail-closed: ontbreken de velden in de select, dan valt de chunk
+ * af. Zonder WP3 is dit een no-op (gedrag van vóór de malwarescan).
+ */
+export function handhaafScanbewijs<
+  T extends { documenten: { bestand_hash?: string | null; scan_resultaat?: Record<string, unknown> | null } }
+>(chunks: readonly T[], malwareScanAan: boolean): { chunks: T[]; gedropt: number } {
+  if (!malwareScanAan) return { chunks: [...chunks], gedropt: 0 };
+  const behouden = chunks.filter((c) =>
+    heeftSchoonScanbewijs({
+      bestand_hash: c.documenten?.bestand_hash ?? null,
+      scan_resultaat: c.documenten?.scan_resultaat ?? null,
+    })
+  );
+  return { chunks: behouden, gedropt: chunks.length - behouden.length };
+}

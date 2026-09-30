@@ -64,6 +64,11 @@ SQL_499="supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql"
 # klein document én 1.000 chunks, chunk-denorm, audit met actor/reden, leegmaken,
 # ongeldige datum → rollback; negatieve controle zonder denorm-trigger.
 SQL_504="supabase/checks/2026_09_30_504_curatie_datumvelden.sql"
+# WP3 legacy-scan (Refs #500) — selectie uitgesteld_wp3, technische fout behoudt
+# chunks, clean vóór wissen, herindex met denorm wetgeving/pw/datums + 150d en
+# complete embeddings, infected verwijdert chunks; negatieve controle zonder
+# insert-denormtrigger.
+SQL_LEGACY_SCAN="supabase/checks/2026_09_30_legacy_scan_wp3.sql"
 # Increment T8 — config-/manifestlaag: cross-tenant + rolgate + append-only.
 SQL_T8C="supabase/checks/2026_07_09_t8_config_cross_tenant.sql"
 # Increment T10 — review-verval-gate op retrieval + generieke toestandsmachine.
@@ -372,6 +377,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"
 echo
 echo "-- #504 (curatie-datumvelden: klein + 1.000 chunks, denorm, audit, leegmaken) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_504"
+echo
+echo "-- WP3 legacy-scan (uitgesteld_wp3: scan vóór wissen, herindex met denorm, infected wist) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_LEGACY_SCAN"
 echo
 echo "-- T8 (config-/manifestlaag: cross-tenant + rolgate + append-only) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T8C"
