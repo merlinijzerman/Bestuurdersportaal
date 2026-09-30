@@ -21,6 +21,7 @@ import type { ActueleVersiestand, Bronresultaat, RetrievalAdapter, RetrievalCont
 import { verifieerToelating } from "./toelatingspoort";
 import { binnenCentraleServergrens } from "./orkestratie";
 import { neutraliseerBrontekst } from "../bron-afbakening";
+import { heeftSchoonScanbewijs, isMalwarescanAan } from "../document-scan-poort";
 import { neutraliseerModelcontextTekst } from "./modelcontext";
 import { bevatPersoonsgegevens } from "../pii-gate";
 import { generiekGeldigheidsstatus, isReviewVerlopen } from "../generiek-status";
@@ -587,6 +588,16 @@ interface DocumentVersieRij {
   geldig_vanaf: string | null;
   geldig_tot: string | null;
   volgende_review: string | null;
+  scan_resultaat?: Record<string, unknown> | null;
+}
+
+// WP3 — semantic_units zijn afgeleid van chunktekst. Zonder schoon,
+// hash-gebonden scanbewijs op het document komt die afgeleide inhoud niet vrij.
+function scanbewijsOntbreekt(document: DocumentVersieRij): boolean {
+  return isMalwarescanAan() && !heeftSchoonScanbewijs({
+    bestand_hash: document.bestand_hash,
+    scan_resultaat: document.scan_resultaat ?? null,
+  });
 }
 
 function documentProjectieHash(document: DocumentVersieRij): string {
@@ -603,6 +614,7 @@ function documentProjectieHash(document: DocumentVersieRij): string {
     geldig_vanaf: document.geldig_vanaf,
     geldig_tot: document.geldig_tot,
     volgende_review: document.volgende_review,
+    scan_resultaat: document.scan_resultaat ?? null,
   });
 }
 
@@ -610,7 +622,7 @@ function documentProjectieHash(document: DocumentVersieRij): string {
 // Zonder expliciete relatiehint weigert PostgREST de embed als ambigu (PGRST201),
 // óók wanneer de documentselectie geen semantic units bevat.
 const SEMANTIC_SELECT = "id, fonds_id, document_id, extraction_run_id, type, value_num, value_date, value_text, value_raw, value_unit, page, evidence, concepts!fk_semantic_units_concept_type!inner(key)";
-const DOCUMENT_VERSIE_SELECT = "id, fonds_id, bibliotheek, bestand_hash, documentdatum, status, bronstatus, actief, titel, geldig_vanaf, geldig_tot, volgende_review";
+const DOCUMENT_VERSIE_SELECT = "id, fonds_id, bibliotheek, bestand_hash, documentdatum, status, bronstatus, actief, titel, geldig_vanaf, geldig_tot, volgende_review, scan_resultaat";
 
 function ruweSemantischeWaarde(r: SemanticRij): SemantischeEvidenceWaarde | null {
   if (!r.concepts?.key) return null;
@@ -727,6 +739,7 @@ export async function leesSemantischeEvidence(
       return geweigerd(opdracht, "semantische_unit", 1, "buiten_scope");
     }
     if (!documentIsActueel(document, opdracht)) return geweigerd(opdracht, "semantische_unit", 1, "onvolledig");
+    if (scanbewijsOntbreekt(document)) return geweigerd(opdracht, "semantische_unit", 1, "onvolledig");
     if (gelezenRows.length > max) return geweigerd(opdracht, "semantische_unit", 1, "afgekapt");
     if (isGeneriekDocument(document) && gelezenRows.length === 0) {
       // semantic_units is tenantgebonden. Een geldige generieke vergelijkbron
@@ -824,6 +837,7 @@ export async function leesSemantischeEvidence(
       && v5Document.id === privateDocumentRef
       && v5Rows.length <= max
       && documentIsActueel(v5Document, opdracht)
+      && !scanbewijsOntbreekt(v5Document)
       && v5DocumentIdentiteit === documentIdentiteit
       && documentProjectieHash(v5Document) === documentProjectieHash(document)
       && v5Set.runId === set.runId
