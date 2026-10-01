@@ -158,8 +158,9 @@ export async function verwerkGeneriekBestand(
   // PDF) valt dit terug op Mistral OCR. Synchrone OCR is hier aanvaard omdat de
   // generieke curatie back-office + laagfrequent is (zelfde risicoprofiel als de
   // her-extract-route); de maxDuration op de curatiepagina dekt de extra
-  // wandkloktijd. Faalt OCR, dan houdt extractTekstMetOcrFallback het (lege)
-  // tekstlaag-resultaat aan en vangt de <100-tekens-poort hieronder dat af.
+  // wandkloktijd. Een definitieve OCR-afwijzing houdt het (lege)
+  // tekstlaag-resultaat aan; een tijdelijke providerfout blijft een exception
+  // en wordt hieronder niet verkeerd als document-eigen lege tekst gelabeld.
   t = new Date().toISOString();
   await zetStatus(svc, documentId, "extractie");
   let extractie;

@@ -8,6 +8,7 @@ const nodeTestbestanden = [
   "core/lib/redirect-veilig.test.ts",
   "core/lib/vraagtype.test.ts",
   "core/lib/provider-fout.test.ts",
+  "core/lib/ocr.test.ts",
   "core/lib/ai-gateway/gateway.test.ts",
   "core/lib/ai-gateway/anthropic-adapter.test.ts",
   "core/lib/ai-gateway/secrets.test.ts",
