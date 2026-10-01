@@ -51,6 +51,49 @@ export class OcrGeweigerdError extends Error {
   }
 }
 
+/**
+ * De provider was tijdelijk niet beschikbaar nadat de korte interne retrylus
+ * was uitgeput. Aanroepers met een duurzame jobqueue moeten dit als backoff
+ * behandelen en niet als document-eigen "geen tekst".
+ */
+export type OcrTijdelijkeFoutcode =
+  | "ocr_rate_limit"
+  | "ocr_timeout"
+  | "ocr_provider_onbereikbaar"
+  | "ocr_provider_tijdelijk";
+
+export class OcrTijdelijkeFout extends Error {
+  readonly foutcode: OcrTijdelijkeFoutcode;
+  readonly status: number | null;
+
+  constructor(foutcode: OcrTijdelijkeFoutcode, melding: string, status: number | null = null) {
+    super(melding);
+    this.name = "OcrTijdelijkeFout";
+    this.foutcode = foutcode;
+    this.status = status;
+  }
+}
+
+/** Alleen 429 en 5xx zijn HTTP-uitkomsten die een latere jobretry verdienen. */
+export function classificeerTijdelijkeOcrHttpStatus(
+  status: number
+): OcrTijdelijkeFoutcode | null {
+  if (status === 429) return "ocr_rate_limit";
+  if (status >= 500) return "ocr_provider_tijdelijk";
+  return null;
+}
+
+/**
+ * Maakt de OCR-reserveringspoging uniek over jobbackoffs heen. Zonder deze
+ * cycluscomponent hergebruikt retry 1 dezelfde preflight-idempotentiesleutel
+ * als de vorige workerinvocatie en wordt een geldige hervatting geweigerd.
+ */
+export function ocrPogingMetJobRetry(jobRetry: number | null | undefined, poging: number): number {
+  const cyclus = Math.max(0, Math.trunc(jobRetry ?? 0));
+  const providerPoging = Math.max(1, Math.trunc(poging));
+  return cyclus * (MAX_RETRIES + 1) + providerPoging;
+}
+
 export type OcrOvergeslagenReden =
   | "te_veel_paginas"
   | "quotum_bereikt"
@@ -182,7 +225,12 @@ export async function ocrPdfNaarResultaat(
           : error instanceof Error
             ? error.message
             : String(error);
-      throw new Error(`Mistral OCR: ${reden}`);
+      throw new OcrTijdelijkeFout(
+        error instanceof Error && error.name === "AbortError"
+          ? "ocr_timeout"
+          : "ocr_provider_onbereikbaar",
+        `Mistral OCR: ${reden}`
+      );
     } finally {
       clearTimeout(timeout);
     }
@@ -214,15 +262,22 @@ export async function ocrPdfNaarResultaat(
       };
     }
 
-    const tijdelijk = res.status === 429 || res.status >= 500;
-    if (tijdelijk && poging < MAX_RETRIES) {
+    const tijdelijkeFoutcode = classificeerTijdelijkeOcrHttpStatus(res.status);
+    if (tijdelijkeFoutcode && poging < MAX_RETRIES) {
       await slaap(1000 * 2 ** poging); // 1s → 2s → 4s (OCR is trager dan embed)
       continue;
     }
     const detail = await res.text().catch(() => "");
-    throw new Error(`Mistral OCR ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+    const melding = `Mistral OCR ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`;
+    if (tijdelijkeFoutcode) {
+      throw new OcrTijdelijkeFout(tijdelijkeFoutcode, melding, res.status);
+    }
+    throw new Error(melding);
   }
-  throw new Error("Mistral OCR: max retries overschreden");
+  throw new OcrTijdelijkeFout(
+    "ocr_provider_tijdelijk",
+    "Mistral OCR: max retries overschreden"
+  );
 }
 
 // Resultaat van de gecombineerde extractie, uitgebreid met audit-velden zodat
@@ -273,9 +328,10 @@ export interface OcrFallbackOpties {
 }
 
 // Hoofdingang voor ingest: probeer eerst de goedkope tekstlaag-extractie en val
-// alleen terug op OCR als die te dun is. Faalt OCR (corrupt PDF, API-fout),
-// dan geven we het oorspronkelijke (lege) resultaat terug — de aanroeper houdt
-// zo zijn bestaande "geen tekst gevonden"-afhandeling. Wordt nu gebruikt door de
+// alleen terug op OCR als die te dun is. Een definitieve providerafwijzing of
+// onleesbare inhoud houdt het oorspronkelijke (lege) resultaat; een tijdelijke
+// providerfout wordt doorgegeven zodat een jobqueue later kan hervatten. Wordt
+// nu gebruikt door de
 // her-extract-route; bedoeld als gedeeld pad dat ook het bulk-migratiescript
 // (apart ticket #12) gaat hergebruiken. De upload-route roept dit pad bewust
 // NIET aan (besluit 0020 §Gevolgen: geen live synchrone OCR op het high-volume
@@ -337,6 +393,10 @@ export async function extractTekstMetOcrFallback(
       console.warn(`[OCR] Overgeslagen: Mistral-poort dicht (${error.reden}).`);
       return { ...basis, ocrToegepast: false, ocrEngine: null, ocrOvergeslagen: "provider_gestopt" };
     }
+    // Tijdelijke providerproblemen mogen niet degraderen naar een leeg
+    // extractieresultaat: de worker zou dat permanent als geen tekst markeren.
+    // Laat de duurzame jobqueue de langere backoff en retry afhandelen.
+    if (error instanceof OcrTijdelijkeFout) throw error;
     console.error(
       `[OCR] Fallback mislukt — origineel (lege) resultaat behouden:`,
       error instanceof Error ? error.message : error

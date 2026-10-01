@@ -7,7 +7,7 @@
 //  logische job. Deze test borgt beide kanten van de reconciliatie:
 //    - generieke ingest/OCR is globaal; fondsdocumenten blijven fondsgebonden;
 //    - yield/backoff van ingest hergebruikt poging 1;
-//    - betaalde OCR-pogingen houden hun eigen pogingnummer.
+//    - betaalde OCR-pogingen houden hun eigen pogingnummer, ook na jobbackoff.
 // ============================================================================
 
 import test from "node:test";
@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { bepaalDocumentIngestAiScope } from "../../core/lib/document-ingest-ai-scope";
+import { ocrPogingMetJobRetry } from "../../core/lib/ocr";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const wortel = join(hier, "..", "..");
@@ -50,10 +51,12 @@ test("één logische ingestjob houdt één reservering over yield en backoff", (
   );
 });
 
-test("iedere betaalde OCR-poging houdt een afzonderlijke reservering", () => {
+test("iedere betaalde OCR-poging houdt een afzonderlijke reservering, ook na jobbackoff", () => {
   assert.match(
     orchestrator,
-    /idempotentie:\s*systeemSleutel\(job\.id,\s*ocrActietype,\s*poging\)/,
-    "OCR moet het providerpogingnummer in de idempotentiesleutel behouden"
+    /idempotentie:\s*systeemSleutel\(\s*job\.id,\s*ocrActietype,\s*ocrPogingMetJobRetry\(job\.retry_count,\s*poging\)\s*\)/,
+    "OCR moet jobretry en providerpoging in de idempotentiesleutel verwerken"
   );
+  assert.deepEqual([1, 2, 3, 4].map((poging) => ocrPogingMetJobRetry(0, poging)), [1, 2, 3, 4]);
+  assert.deepEqual([1, 2, 3, 4].map((poging) => ocrPogingMetJobRetry(1, poging)), [5, 6, 7, 8]);
 });
