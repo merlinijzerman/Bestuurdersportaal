@@ -412,31 +412,32 @@ jobs:
           echo "artikelspoor-500-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
-      # #500 vervolg (gecombineerde vraag, retrieval:timeout op Productie): de
-      # drie 150d-vragen binnen het retrievalbudget onder een GESCHAALDE replica
-      # van Productie — JWT van productieomvang, statement_timeout 2 s en budget
-      # 5 s (zelfde verhouding als 8 s / 20 s). Productiepad: FTS (geen
-      # HYBRID_SEARCH). Na de keten-pass: de fixture staat er dan al.
-      # Het script zet rolinstelling, fondsvlag en metadata zelf en herstelt ze.
+      # Twee gescheiden bewijzen, beide na de keten-pass (de fixture staat er dan):
       #
-      # #505 (RLS-InitPlan) — vier servers, twee RLS-standen:
-      #   A. MET #505 (de migratie staat er na testdb-apply-migrations):
-      #      A1 productieconfiguratie (begrenzing aan) en A2 met
-      #      ARTIKELFOCUS_VOLSCANBEGRENZING=off: alle vier vragen, ook de
-      #      reglementvraag, ronden af zonder 57014 en binnen het budget
-      #      (`groen-505`). A2 bewijst dat #505 ZELF de marge geeft.
-      #   B. ZONDER #505 (rollbackscript tijdelijk toegepast = de RLS-kosten
-      #      waarvoor de #500-begrenzing bestaat): B1 begrenzing aan (`groen`,
-      #      incl. de gelijktijdigheidseis) en B2 begrenzing uit (`rood`, de
-      #      negatieve controle). Zonder deze opzet heeft de begrenzing op een
-      #      snelle database niets meer te begrenzen en bewijst `rood` niets.
-      #      Daarna de migratie opnieuw — ook een rollback→migratie-rondgang.
-      - name: "#500/#505 gecombineerde vraag — retrievalbudget (geschaalde productiereplica)"
+      # #505 PERFORMANCE — normale instellingen (statement_timeout 8 s van de
+      # rol, standaardbudget 20 s; de test verkrapt niets en controleert dat),
+      # realistische JWT's van ~0,9 en ~1,5 kB, alle vier pilotvragen, zonder één
+      # db_timeout-fase en ruim binnen budget. Twee servers: met de
+      # volscanbegrenzing (productieconfiguratie) en met
+      # ARTIKELFOCUS_VOLSCANBEGRENZING=off (#505 geeft zelf de marge).
+      #
+      # #516 GEDRAG — deterministisch, onafhankelijk van de databasesnelheid:
+      # de test vervangt zoek_chunks/zoek_chunks_hybride tijdelijk door een
+      # functie die direct 57014 gooit, en bewijst per pad (FTS, hybride) dat de
+      # vangnetten mét begrenzing worden overgeslagen en zónder begrenzing wél
+      # draaien, dat het artikelspoor in beide gevallen de exacte wet- en
+      # MvT-passages levert, en dat tenant/status/review/scanpoort intact
+      # blijven (server met WP3_MALWARESCAN_AAN=true). Mutatiecontrole: tegen de
+      # server waar de begrenzing genegeerd wordt, moet de verwachting
+      # 'begrensd' rood worden op uitsluitend de begrenzingseisen.
+      - name: "#505 performance + #516 gedrag (gecombineerde vraag, artikelspoor)"
         env:
           ART500_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          MISTRAL_API_KEY: "t1b-stub-sleutel-niet-echt"
+          WP4_E2E_EMBED_PROVIDER: "local"
+          WP4_E2E_EMBED_PROVIDER_URL: "http://127.0.0.1:8791"
         run: |
           t0=$(date +%s)
-          DB=postgresql://postgres:postgres@127.0.0.1:54322/postgres
           start_server() {
             APP_BASE_URL="http://127.0.0.1:$1" PORT="$1" npm run start &
             SERVER=$!
@@ -444,46 +445,42 @@ jobs:
               curl -sf "http://127.0.0.1:$1/api/healthz/ping" >/dev/null && return 0
               sleep 1
             done
-            echo "FOUT: next start (#500 budget, poort $1) kwam niet op binnen 60s." >&2
+            echo "FOUT: next start (poort $1) kwam niet op binnen 60s." >&2
             kill "$SERVER" 2>/dev/null || true
             return 1
           }
           stop_server() { kill "$SERVER" 2>/dev/null || true; wait "$SERVER" 2>/dev/null || true; }
+          node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/art516-embed-stub.log" 2>&1 &
+          STUB=$!
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8791/_verzoeken >/dev/null && break; sleep 1; done
           code=0
-          # A1 — #505, productieconfiguratie.
-          unset ARTIKELFOCUS_VOLSCANBEGRENZING
-          start_server 3006 || exit 1
-          ART500_BUDGET_VERWACHTING=groen-505 APP_BASE_URL=http://127.0.0.1:3006 \
-            node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
-          stop_server
-          [ "$code" = "0" ] || exit $code
-          # A2 — #505 zonder volscanbegrenzing: #505 geeft zelf de marge.
-          export ARTIKELFOCUS_VOLSCANBEGRENZING=off
-          start_server 3007 || exit 1
-          ART500_BUDGET_VERWACHTING=groen-505 APP_BASE_URL=http://127.0.0.1:3007 \
-            node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
-          stop_server
-          [ "$code" = "0" ] || exit $code
-          # B — RLS-kosten van vóór #505 (rollback), de #500-controle.
-          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/2026_10_02_505_rls_auth_uid_initplan_ROLLBACK.sql
-          unset ARTIKELFOCUS_VOLSCANBEGRENZING
-          start_server 3008 || exit 1
-          APP_BASE_URL=http://127.0.0.1:3008 node tests/karakterisering/artikelspoor-500-budget.mjs \
-            | tee "$RUNNER_TEMP/art500-budget-groen.json" || code=1
-          stop_server
-          if [ "$code" = "0" ]; then
-            groen_ms=$(node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8");const j=JSON.parse(t.slice(0,t.lastIndexOf("}")+1));console.log(j.vragen.gecombineerd.retrieval_ms)' "$RUNNER_TEMP/art500-budget-groen.json")
+          # ── #505 performance ──
+          for begrenzing in aan uit; do
+            if [ "$begrenzing" = "uit" ]; then export ARTIKELFOCUS_VOLSCANBEGRENZING=off; else unset ARTIKELFOCUS_VOLSCANBEGRENZING; fi
+            start_server 3006 || { code=1; break; }
+            ART505_BEGRENZING_LABEL=$begrenzing APP_BASE_URL=http://127.0.0.1:3006 \
+              node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
+            stop_server
+          done
+          # ── #516 gedrag (57014 geïnjecteerd) ──
+          export WP3_MALWARESCAN_AAN=true
+          for pad in fts hybride; do
+            if [ "$pad" = "hybride" ]; then export HYBRID_SEARCH=on; else unset HYBRID_SEARCH; fi
+            unset ARTIKELFOCUS_VOLSCANBEGRENZING
+            start_server 3007 || { code=1; break; }
+            ART516_PAD=$pad ART516_VERWACHTING=begrensd APP_BASE_URL=http://127.0.0.1:3007 \
+              node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
+            stop_server
             export ARTIKELFOCUS_VOLSCANBEGRENZING=off
-            start_server 3009 || code=1
-            if [ "$code" = "0" ]; then
-              ART500_BUDGET_VERWACHTING=rood ART500_GROEN_MS="$groen_ms" APP_BASE_URL=http://127.0.0.1:3009 \
-                node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
-              stop_server
-            fi
-          fi
-          # Migratie opnieuw (idempotent) — ook bij een rode B-stap.
-          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/2026_10_02_505_rls_auth_uid_initplan.sql || code=1
-          echo "artikelspoor-500/505-budget-pass: $(( $(date +%s) - t0 ))s"
+            start_server 3008 || { code=1; break; }
+            ART516_PAD=$pad ART516_VERWACHTING=onbegrensd APP_BASE_URL=http://127.0.0.1:3008 \
+              node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
+            ART516_PAD=$pad ART516_VERWACHTING=begrensd ART516_MUTATIECONTROLE=1 APP_BASE_URL=http://127.0.0.1:3008 \
+              node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
+            stop_server
+          done
+          kill "$STUB" 2>/dev/null || true
+          echo "art505-perf/art516-gedrag-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
       - name: Supabase-stack stoppen
