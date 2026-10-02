@@ -27,6 +27,7 @@
 --   - GEEN beurt `fallback_reason = volscan_begrensd` draagt (de #516-
 --     begrenzing grijpt alleen in na een 57014);
 --   - GEEN retrieval met uitkomst `timeout` eindigde;
+--   - elke beurt een correlatie draagt en geen correlatie dubbel voorkomt;
 --   - de p95 van elke gerangschikte RPC-fase (`rpc_fts`, `rpc_hybride`) onder
 --     een kwart van het retrievalbudget ligt ("ruim binnen budget").
 -- Vóór #505 (02-10-2026, read-only gemeten): één `zoek_chunks`-aanroep kostte
@@ -43,33 +44,46 @@
 -- ── STAP B: de serverlogregels (Vercel) — door de opdrachtgever ─────────────
 -- Waarom: een beurt die de retrieval niet haalt (deadline, client-abort,
 -- onverwachte fout) schrijft GEEN governance_log-regel, maar wél precies één
--- logregel `[retrieval][fasetijden] {…}` (orkestratie, `finally`; per uitgang
--- getest in tests/cross-tenant/retrieval-500-fasetijden.test.ts F11 + F12).
--- Alleen een harde platformkill valt buiten die `finally`; het budget is
--- begrensd op ≤ 60 s en de chatroute heeft maxDuration 300 s, dus de deadline
--- vuurt altijd eerst.
+-- TERMINALE logregel `[retrieval][fasetijden] {…}` (orkestratie, `finally`;
+-- per afloop getest in tests/cross-tenant/retrieval-500-fasetijden.test.ts
+-- F11–F13). Alleen een harde platformkill valt buiten die `finally`; het budget
+-- is begrensd op ≤ 60 s en de chatroute heeft maxDuration 300 s, dus de
+-- deadline vuurt altijd eerst.
+--
+-- De logregel (JSON na het voorvoegsel) draagt, inhoudsvrij:
+--   correlatie  = request-id = `retrieval_meta.correlation_id` in governance_log
+--   terminaal   = true (het eindrecord van die retrieval; er zijn geen tussenregels)
+--   afloop      = succes | db_timeout | deadline | afgebroken | fout
+--                 (db_timeout = beurt afgerond, maar via een 57014 = time-outroute)
+--   taak        = bv. chat_generatie (filter op de AI-chat)
+--   volgnummer  = 1; ≥ 2 alleen bij een herhaalde retrieval binnen DEZELFDE beurt
+--   uitkomst, totaal_ms, budget_ms, fasen[] (fase, poging, status, ms)
 --
 -- (a) Ophalen, read-only (Claude heeft geen Vercel-toegang):
 --     - Dashboard: Vercel → project `bestuurdersportaal` (de app, níet
 --       `bestuurdersportaal-beheer`) → Logs → omgeving Production → periode =
 --       hetzelfde venster als `vanaf` hierboven → zoekveld:
---       `[retrieval][fasetijden]`. Exporteer of kopieer de regels.
---     - Of CLI: `vercel logs <productie-deployment-url> --json` (recente
---       runtimelogs), en filter lokaal:
---       `… | grep '\[retrieval\]\[fasetijden\]'`.
---     Regels met uitkomst `ok` staan op niveau info, de overige op warn.
--- (b) Beoordelen per regel (de JSON na het voorvoegsel):
---     - `uitkomst` = "ok" (geen "timeout", "annulering" of "fout");
+--       `[retrieval][fasetijden]` (eventueel verfijnd met `"taak":"chat_generatie"`).
+--       Exporteer of kopieer de regels.
+--     - Of CLI: `vercel logs <productie-deployment-url> --json` en filter lokaal:
+--       `… | grep '\[retrieval\]\[fasetijden\]' | grep '"taak":"chat_generatie"'`.
+--     Regels met afloop `succes`/`db_timeout` staan op niveau info, de overige op warn.
+-- (b) Beoordelen PER UNIEKE correlatie (niet het ruwe aantal regels — zo tellen
+--     dubbele regels, retries of gelijktijdige vragen van anderen niet mee):
+--     - precies één regel met `terminaal: true` voor die correlatie. Meer dan
+--       één (volgnummer ≥ 2) = een retry binnen de beurt: onderzoeken;
+--     - `afloop` = "succes" (dus geen db_timeout, deadline, afgebroken of fout);
 --     - geen element in `fasen` met `status` = "db_timeout";
---     - geen `fts_plain`/`fts_ilike` = "overgeslagen" bij een 150d-vraag
---       (dat is de volscanbegrenzing na een 57014 = de time-outroute);
---     - `rpc_fts`/`rpc_hybride` `ms` < `budget_ms`/4, en `totaal_ms` < `budget_ms`.
--- (c) Tellen: het aantal logregels in het venster moet gelijk zijn aan het
---     aantal gestelde vragen (voor een pilotronde: het aantal vragen dat je
---     zelf stelde). Vergelijk de `correlatie`-waarden van de logregels met
---     `correlaties` uit deze query: een correlatie die wél in de logs staat
---     maar NIET hier, is een beurt zonder governance-regel — een afgebroken
---     beurt — en maakt de release rood, ook als `ok` hierboven true is.
+--     - geen `fts_plain`/`fts_ilike` = "overgeslagen" (= volscan_begrensd);
+--     - `rpc_fts`/`rpc_hybride` `ms` < `budget_ms`/4, en `totaal_ms` < `budget_ms`;
+--     - de correlatie staat in `per_correlatie` van deze query (er is een
+--       governance_log-regel). Bij `afloop` deadline/afgebroken mag die
+--       ontbreken — maar dan is de release voor die vraag rood.
+-- (c) Per pilotvraag verwacht: precies één unieke correlatie (de eigen vragen
+--     herken je aan tijdstip en `taak`; de governance-kant via `per_correlatie`).
+--     Een correlatie in de logs die NIET in `per_correlatie` staat, is een beurt
+--     zonder governance-regel (afgebroken); een correlatie in `per_correlatie`
+--     zonder logregel wijst op een logverlies of verkeerd venster.
 --
 -- ── NAMETING NA DE PRODUCTIEMIGRATIE (licht) ────────────────────────────────
 -- Hooguit 3 runs per variant, alleen `zoek_chunks_strikt` en `chunks_count`
@@ -125,15 +139,31 @@ samen as (
          (select coalesce(jsonb_agg(jsonb_build_object('fase', fase, 'n', n, 'p50_ms', round(p50_ms::numeric),
                     'p95_ms', round(p95_ms::numeric), 'max_ms', max_ms) order by fase), '[]'::jsonb) from rpc) as rpc_fasen,
          (select max(p95_ms) from rpc) as rpc_p95_max,
-         -- Voor de vergelijking met de Vercel-logregels (stap B hieronder):
-         -- request-id's, geen inhoud.
-         (select coalesce(jsonb_agg(correlatie order by aangemaakt), '[]'::jsonb)
-            from (select correlatie, aangemaakt from beurten order by aangemaakt desc limit 200) x) as correlaties
+         -- Per unieke correlatie (stap B): de governance-kant. Inhoudsvrij.
+         (select coalesce(jsonb_agg(x order by x->>'aangemaakt' desc), '[]'::jsonb) from (
+            select jsonb_build_object(
+                     'correlatie', b.correlatie,
+                     'aangemaakt', min(b.aangemaakt),
+                     'governance_regels', count(*),
+                     'db_timeout', bool_or(exists (select 1 from jsonb_array_elements(coalesce(b.ft->'fasen','[]'::jsonb)) f
+                                                    where f->>'status' = 'db_timeout')),
+                     'volscan_begrensd', bool_or(b.fallback_reason = 'volscan_begrensd'),
+                     'totaal_ms', max(nullif(b.ft->>'totaal_ms','')::numeric),
+                     'budget_ms', max(nullif(b.ft->>'budget_ms','')::numeric)) as x
+              from beurten b
+             group by b.correlatie
+             order by min(b.aangemaakt) desc
+             limit 200) y) as per_correlatie,
+         -- Een correlatie met meer dan één governance-regel is een dubbele beurt.
+         (select count(*) from (select correlatie from beurten group by correlatie having count(*) > 1) d) as dubbele_correlaties,
+         (select count(*) from beurten where correlatie is null) as zonder_correlatie
 )
 select s.*,
        (s.beurten > 0
         and s.fasen_db_timeout = 0
         and s.volscan_begrensd = 0
         and s.retrieval_timeouts = 0
+        and s.dubbele_correlaties = 0
+        and s.zonder_correlatie = 0
         and coalesce(s.rpc_p95_max, 0) < coalesce(s.budget_ms_max, 20000) / 4) as ok
   from samen s;
