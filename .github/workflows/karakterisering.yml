@@ -438,7 +438,11 @@ jobs:
           WP4_E2E_EMBED_PROVIDER_URL: "http://127.0.0.1:8791"
         run: |
           t0=$(date +%s)
+          # Elke run een EIGEN poort, en bij het stoppen de poort echt vrijgeven:
+          # `kill` op het npm-proces laat de Next-server staan, en een volgende
+          # run op dezelfde poort zou dan stil de vorige configuratie testen.
           start_server() {
+            POORT=$1
             APP_BASE_URL="http://127.0.0.1:$1" PORT="$1" npm run start &
             SERVER=$!
             for i in $(seq 1 60); do
@@ -449,35 +453,44 @@ jobs:
             kill "$SERVER" 2>/dev/null || true
             return 1
           }
-          stop_server() { kill "$SERVER" 2>/dev/null || true; wait "$SERVER" 2>/dev/null || true; }
+          stop_server() {
+            kill "$SERVER" 2>/dev/null || true; wait "$SERVER" 2>/dev/null || true
+            fuser -k "$POORT/tcp" 2>/dev/null || (lsof -ti "tcp:$POORT" | xargs -r kill) 2>/dev/null || true
+            for i in $(seq 1 20); do curl -sf "http://127.0.0.1:$POORT/api/healthz/ping" >/dev/null || return 0; sleep 1; done
+            echo "FOUT: poort $POORT bleef bezet." >&2; return 1
+          }
           node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/art516-embed-stub.log" 2>&1 &
           STUB=$!
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8791/_verzoeken >/dev/null && break; sleep 1; done
           code=0
           # ── #505 performance ──
+          poort=3006
           for begrenzing in aan uit; do
             if [ "$begrenzing" = "uit" ]; then export ARTIKELFOCUS_VOLSCANBEGRENZING=off; else unset ARTIKELFOCUS_VOLSCANBEGRENZING; fi
-            start_server 3006 || { code=1; break; }
-            ART505_BEGRENZING_LABEL=$begrenzing APP_BASE_URL=http://127.0.0.1:3006 \
+            start_server $poort || { code=1; break; }
+            ART505_BEGRENZING_LABEL=$begrenzing APP_BASE_URL=http://127.0.0.1:$poort \
               node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
-            stop_server
+            stop_server || code=1
+            poort=$((poort + 1))
           done
           # ── #516 gedrag (57014 geïnjecteerd) ──
           export WP3_MALWARESCAN_AAN=true
           for pad in fts hybride; do
             if [ "$pad" = "hybride" ]; then export HYBRID_SEARCH=on; else unset HYBRID_SEARCH; fi
             unset ARTIKELFOCUS_VOLSCANBEGRENZING
-            start_server 3007 || { code=1; break; }
-            ART516_PAD=$pad ART516_VERWACHTING=begrensd APP_BASE_URL=http://127.0.0.1:3007 \
+            start_server $poort || { code=1; break; }
+            ART516_PAD=$pad ART516_VERWACHTING=begrensd APP_BASE_URL=http://127.0.0.1:$poort \
               node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
-            stop_server
+            stop_server || code=1
+            poort=$((poort + 1))
             export ARTIKELFOCUS_VOLSCANBEGRENZING=off
-            start_server 3008 || { code=1; break; }
-            ART516_PAD=$pad ART516_VERWACHTING=onbegrensd APP_BASE_URL=http://127.0.0.1:3008 \
+            start_server $poort || { code=1; break; }
+            ART516_PAD=$pad ART516_VERWACHTING=onbegrensd APP_BASE_URL=http://127.0.0.1:$poort \
               node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
-            ART516_PAD=$pad ART516_VERWACHTING=begrensd ART516_MUTATIECONTROLE=1 APP_BASE_URL=http://127.0.0.1:3008 \
+            ART516_PAD=$pad ART516_VERWACHTING=begrensd ART516_MUTATIECONTROLE=1 APP_BASE_URL=http://127.0.0.1:$poort \
               node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
-            stop_server
+            stop_server || code=1
+            poort=$((poort + 1))
           done
           kill "$STUB" 2>/dev/null || true
           echo "art505-perf/art516-gedrag-pass: $(( $(date +%s) - t0 ))s"
