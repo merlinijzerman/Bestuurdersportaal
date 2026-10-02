@@ -50,9 +50,19 @@ WITH CHECK blijven gelijk (migratie `2026_10_02_505_rls_auth_uid_initplan.sql`).
   dezelfde catalogusvergelijking fail-closed uit in haar eigen transactie.
 - **Performance:** de JWT-parse gebeurt één keer per statement; de kosten per aanroep worden
   vrijwel onafhankelijk van de JWT-omvang (cijfers in de PR en `HANDOVER.md`).
-- **#500-hotfix:** de volscanbegrenzing (`ARTIKELFOCUS_VOLSCANBEGRENZING`) blijft staan. Haar
-  negatieve controle draait in de karakterisering voortaan onder de RLS-kosten van vóór #505
-  (rollbackscript tijdelijk toegepast), anders heeft zij niets meer te begrenzen.
+- **#500-hotfix (#516) — bewijs gesplitst (reviewbesluit 02-10-2026):** de volscanbegrenzing
+  (`ARTIKELFOCUS_VOLSCANBEGRENZING`) blijft staan. Haar oude negatieve controle hing af van "de
+  database moet traag genoeg zijn" en bewees onder #505 niets meer. Daarom drie lagen:
+  (1) **#505-performance** (`artikelspoor-500-budget.mjs`): normale instellingen (8 s / 20 s),
+  JWT ~0,9 en ~1,5 kB, alle vier pilotvragen zonder `db_timeout`, met én zonder begrenzing;
+  (2) **#516-gedrag, deterministisch** (`artikelspoor-516-gedrag.mjs`): 57014 wordt
+  geïnjecteerd via een vervangende RPC-functie; mét begrenzing worden de vangnetten
+  overgeslagen, zónder wél aangeroepen, het artikelspoor levert in beide gevallen de exacte
+  passages en tenant/status/review/scanpoort blijven intact; een mutatiecontrole
+  (begrenzing genegeerd) moet rood worden; (3) **productieregressie** (read-only
+  `2026_10_02_505_releasecheck_productie.sql` + Vercel-logregels `[retrieval][fasetijden]`).
+  De rollback-rondgang draait als rollbacktest in de cross-tenant-suite, niet als
+  timingafhankelijke gedragscontrole.
 - **Grants/datamodel:** geen. V3-allowlist ongewijzigd.
 - **Drift/fidelity:** de policyvingerafdrukken veranderen bewust; na toepassing op een gehoste
   omgeving de bijbehorende pin herijken (Preview-fidelity, daarna de productiedriftpin).
@@ -64,5 +74,6 @@ WITH CHECK blijven gelijk (migratie `2026_10_02_505_rls_auth_uid_initplan.sql`).
 - Issue #505 (en de meetcomment van 02-10-2026), #500, PR #516.
 - `supabase/migrations/2026_10_02_505_rls_auth_uid_initplan.sql`
 - `supabase/checks/2026_10_02_505_rls_initplan_tenantpariteit.sql`
-- `tests/karakterisering/rls-505-meting.mjs`, `tests/karakterisering/artikelspoor-500-budget.mjs`
+- `tests/karakterisering/rls-505-meting.mjs`, `tests/karakterisering/artikelspoor-500-budget.mjs`,
+  `tests/karakterisering/artikelspoor-516-gedrag.mjs`, `supabase/checks/2026_10_02_505_releasecheck_productie.sql`
 - `T3-RLS-CONTROLEKADER.md` §8c
