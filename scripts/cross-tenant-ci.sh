@@ -376,6 +376,15 @@ echo
 echo "-- #505 RLS-InitPlan: tenantpariteit vóór/na (8 actoren, SELECT+I/U/D) + catalogus + negatieve controles --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_505"
 echo
+# Rollbacktest #505 (geen timing): rollback → pariteit in de VÓÓR-stand →
+# migratie opnieuw (idempotent) → pariteit in de NA-stand. De suites hierna
+# draaien dus weer op de na-stand.
+echo "-- #505 rollbacktest: rollback → check (voor) → migratie → check (na) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/rollbacks/2026_10_02_505_rls_auth_uid_initplan_ROLLBACK.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -v f505_verwacht=voor -f "$SQL_505"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/2026_10_02_505_rls_auth_uid_initplan.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_505"
+echo
 echo "-- #499 (generieke metadatawijziging op 1.000 chunks: budget, atomisch, consistent) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"
 echo

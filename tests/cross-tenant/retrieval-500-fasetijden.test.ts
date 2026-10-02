@@ -373,3 +373,82 @@ test("#500-F11 — bij een retrieval-time-out schrijft de orkestratie één inho
   assert.deepEqual(fasen, [["rpc_fts", "afgebroken", 0], ["zoek", "afgebroken", 0]]);
   assert.ok(!fasenregels[0].includes("150d") && !fasenregels[0].includes("Pensioenwet"), "geen vraagtekst in de logregel");
 });
+
+// ── F12: de logregel langs ÉLKE uitgang (#505-releasecheck leunt hierop) ─────
+// De productieregressie-check telt `[retrieval][fasetijden]`-regels tegen het
+// aantal gestelde vragen, juist omdat een afgebroken beurt geen governance-regel
+// schrijft. Dat werkt alleen als de regel bij iedere afloop precies één keer
+// verschijnt: ok, deadline (F11), annulering door de client en een onverwachte
+// fout. Een harde platformkill (Vercel maxDuration 300 s) valt buiten elke
+// `finally`; het retrievalbudget is begrensd op ≤ 60 s (TIMEOUT_MAX_MS), dus de
+// deadline vuurt altijd eerst.
+
+async function loopMetAdapter(
+  zoek: RetrievalAdapter["zoek"],
+  signal?: AbortSignal
+): Promise<{ regels: { niveau: string; tekst: string }[]; fout: unknown }> {
+  const adapter: RetrievalAdapter = {
+    naam: "supabase-rag",
+    capabilities: () => ({
+      bronsoorten: ["fonds", "generiek", "notulen"], strategieen: ["gericht"], ondersteundeFilters: [],
+      versiebewijs: true, versiebeleid: { sterk: ["hash"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
+    }),
+    zoek,
+  };
+  const regels: { niveau: string; tekst: string }[] = [];
+  const origWarn = console.warn;
+  const origInfo = console.info;
+  const origError = console.error;
+  console.warn = (r: unknown) => void regels.push({ niveau: "warn", tekst: String(r) });
+  console.info = (r: unknown) => void regels.push({ niveau: "info", tekst: String(r) });
+  console.error = () => {};
+  let fout: unknown = null;
+  try {
+    await voerVolledigeRetrievalUit(
+      { ...CTX, ...(signal ? { signal } : {}) },
+      { adapter, sporen: [{ query: QUERY(), grenzen: { maxPerDoc: 3, representatieConstraints: false, regimeWeging: false, relevantieDrempel: false } }], timeoutMs: 5_000 },
+      { primaireDocumentIds: new Set(), peildatum: "2026-10-02", hoofddocumentLabel: "" }
+    );
+  } catch (e) {
+    fout = e;
+  } finally {
+    console.warn = origWarn;
+    console.info = origInfo;
+    console.error = origError;
+  }
+  return { regels: regels.filter((r) => r.tekst.startsWith("[retrieval][fasetijden] ")), fout };
+}
+
+const LEEG: AdapterUitkomst = { kandidaten: [], methode: "geen", provider: "supabase", latencyMs: 0, opgehaald: 0 };
+
+test("#500-F12 — precies één fasetijdenregel bij ok, annulering én onverwachte fout", async () => {
+  // ok
+  const ok = await loopMetAdapter(async () => LEEG);
+  assert.equal(ok.fout, null);
+  assert.equal(ok.regels.length, 1, "ok: één regel");
+  assert.equal(JSON.parse(ok.regels[0].tekst.slice(24)).uitkomst, "ok");
+  assert.equal(ok.regels[0].niveau, "info");
+
+  // annulering: de client breekt af terwijl de adapter nog loopt.
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 20);
+  const afgebroken = await loopMetAdapter(async (ctx) => {
+    await (ctx.fasemeter ?? GEEN_FASEMETER).meet("rpc_fts", () => slaapMetSignaal(500, ctx.signal), { poging: "strikt" });
+    return LEEG;
+  }, ctrl.signal);
+  assert.ok(afgebroken.fout && isAfbreking(afgebroken.fout), "annulering gooit een afbreking door");
+  assert.equal(afgebroken.regels.length, 1, "annulering: één regel");
+  const a = JSON.parse(afgebroken.regels[0].tekst.slice(24));
+  assert.equal(a.uitkomst, "annulering");
+  assert.equal(afgebroken.regels[0].niveau, "warn");
+  assert.ok(a.fasen.some((f: { fase: string; status: string }) => f.fase === "rpc_fts" && f.status === "afgebroken"));
+
+  // onverwachte fout in de adapter (geen afbreking).
+  const kapot = await loopMetAdapter(async () => {
+    throw new Error("onverwacht");
+  });
+  assert.ok(kapot.fout instanceof Error && !isAfbreking(kapot.fout));
+  assert.equal(kapot.regels.length, 1, "fout: één regel");
+  assert.equal(JSON.parse(kapot.regels[0].tekst.slice(24)).uitkomst, "fout");
+  assert.ok(!kapot.regels[0].tekst.includes("onverwacht"), "geen fouttekst in de logregel");
+});
