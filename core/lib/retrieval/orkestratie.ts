@@ -31,7 +31,13 @@ import {
 } from "./toelatingspoort";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type { Afbreekgrendel } from "./afbreken";
-import { GEEN_FASEMETER, logFasetijden, maakFasemeter, type Retrievaluitkomst } from "./fasetijden";
+import { GEEN_FASEMETER, logFasetijden, maakFasemeter, type Fasemeter, type Retrievaluitkomst } from "./fasetijden";
+
+/**
+ * #505 — hoeveel retrievals er met dezelfde meter (= dezelfde beurt) liepen.
+ * Zwak gerefereerd: verdwijnt met de meter, nooit gedeeld tussen beurten.
+ */
+const AANROEPEN_PER_METER = new WeakMap<Fasemeter, number>();
 import { maakDocumentIdentiteit } from "./identiteit";
 import { BronNietGeraadpleegd } from "./contract";
 import {
@@ -919,6 +925,9 @@ export async function voerVolledigeRetrievalUit(
   const meter = ctx.fasemeter ?? maakFasemeter();
   const ctxMetMeter: RetrievalContext = { ...ctx, fasemeter: meter };
   const budgetMs = opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS;
+  // De gedeelde nulmeter telt niet: zij is per definitie niet aan één beurt gebonden.
+  const volgnummer = meter === GEEN_FASEMETER ? 1 : (AANROEPEN_PER_METER.get(meter) ?? 0) + 1;
+  if (meter !== GEEN_FASEMETER) AANROEPEN_PER_METER.set(meter, volgnummer);
   let uitkomst: Retrievaluitkomst = "fout";
   try {
     const tussen = await voerRetrievalUit(ctxMetMeter, opdracht, grendel, herkomst);
@@ -934,7 +943,10 @@ export async function voerVolledigeRetrievalUit(
   } finally {
     grendel.stop();
     try {
-      logFasetijden(ctx.correlationId, meter.samenvatting(uitkomst, budgetMs));
+      logFasetijden(ctx.correlationId, meter.samenvatting(uitkomst, budgetMs), {
+        taak: ctx.taaktype,
+        volgnummer,
+      });
     } catch {
       // Observability mag de beurt nooit laten mislukken.
     }
