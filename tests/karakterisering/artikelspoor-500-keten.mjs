@@ -57,8 +57,8 @@ import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
 import { pseudoEmbedding, vectorLiteral } from "../e2e/fixtures/embed-vector.mjs";
 import { EMBED_STUB_MODEL } from "../e2e/fixtures/config.mjs";
 
-const PW_DOC = "05002000-0000-0000-0000-00000000a001";
-const MVT_DOC = "05002000-0000-0000-0000-00000000a002";
+export const PW_DOC = "05002000-0000-0000-0000-00000000a001";
+export const MVT_DOC = "05002000-0000-0000-0000-00000000a002";
 const LIMIET_CHAT_ENDPOINT = "chat";
 
 export const VRAGEN = [
@@ -73,7 +73,7 @@ export const VRAGEN = [
 ];
 
 /** Concurrerende MvT-passages: alle vraagwoorden, maar geen exacte artikelpassage. */
-function concurrenten() {
+export function concurrenten() {
   const uit = [];
   for (let i = 0; i < 30; i++) {
     const tekst =
@@ -128,7 +128,7 @@ function leesSse(tekst) {
   return events;
 }
 
-async function stelVraag(admin, cookieHeader, gebruikerId, vraag) {
+export async function stelVraag(admin, cookieHeader, gebruikerId, vraag) {
   await admin.from("rate_limit_events").delete().eq("endpoint", LIMIET_CHAT_ENDPOINT);
   const voor = new Date().toISOString();
   const t0 = performance.now();
@@ -172,7 +172,7 @@ function sleutel(prefix, delen) {
     .join("|");
   return `${prefix}_v1_${createHash("sha256").update(canoniek).digest("hex")}`;
 }
-async function juridischePassages(admin) {
+export async function juridischePassages(admin) {
   const perPassage = new Map();
   for (const [documentId, titel, documenttype] of [
     [PW_DOC, "Pensioenwet", "wetgeving"],
@@ -198,7 +198,7 @@ async function juridischePassages(admin) {
   return perPassage;
 }
 
-function beschrijfChunks(passages, meta) {
+export function beschrijfChunks(passages, meta) {
   return (meta?.chunks ?? []).map((c, i) => {
     const p = passages.get(c.id);
     return {

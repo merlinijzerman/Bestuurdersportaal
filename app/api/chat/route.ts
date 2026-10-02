@@ -23,6 +23,7 @@ import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, 
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import { maakFasemeter, type FasetijdenSamenvatting } from "@/core/lib/retrieval/fasetijden";
 import {
   leesDirecteSharePointScope,
   maakProductieDirecteSharePointAdapter,
@@ -3006,6 +3007,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // niets te melden is, zodat het bestaande antwoordcontract ongewijzigd blijft.
     let bronstatusDto: import("@/core/lib/retrieval/bronstatus-dto").BronstatusDto[] | undefined;
     let retrievalMeta: RetrievalMeta | null = null;
+    // #500 — inhoudsvrije fasetijden van de retrievalketen; landen onder
+    // `retrieval_meta.invoer.retrieval_fasetijden` (basis, migratievrij).
+    let retrievalFasetijden: FasetijdenSamenvatting | undefined;
     let reflectieBronsetResolutie: RetrievalMeta["contextbron_resolutie"];
 
     // ── G3 (plateau B) — de bevroren reflectiebronset ───────────────────────
@@ -3300,8 +3304,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       // ref → chunk providerprivaat; deze helper haalt op ná de citatie de
       // chunkvorm terug voor de bestaande, ongewijzigde downstreamlogica.
       // T2-2/T2-4 laten die consumenten op Bronresultaat werken.
+      // #500 — één meter per beurt; de orkestratie logt zijn samenvatting langs
+      // elke uitgang (ook bij een time-out), de route legt hem bij succes vast.
+      const retrievalFasemeter = maakFasemeter();
       const retrievalContext = {
         fondsId,
+        fasemeter: retrievalFasemeter,
         actor: { soort: "gebruiker" as const, id: ctx.gebruikerId },
         taaktype: "chat_generatie" as const,
         bronbeleid: {
@@ -3444,6 +3452,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       if (voltooid.meta.correlation_id !== gatewayCtx.correlatieId) {
         throw new Error("retrieval_correlation_mismatch");
       }
+      retrievalFasetijden = retrievalFasemeter.samenvatting("ok", effectiefRetrievalTimeoutMs);
       if (sharepointMapSelectie && voltooid.truncatie) {
         // Ook een beurtbreed byte-/teken- of contextplafond betekent dat niet
         // alle geselecteerde mapinhoud in het antwoord terechtkwam.
@@ -4951,6 +4960,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
               // van de effectieve vraag. Gesloten enums, geen vraagtekst;
               // observe-only (stuurt niets). Basisniveau via `invoer`, migratievrij.
               juridische_intentie: juridischeIntentie,
+              // #500 — fasetijden van de retrievalketen: gesloten fasenamen, ms,
+              // status en rijentellingen; geen vraag-, query- of documenttekst.
+              ...(retrievalFasetijden ? { retrieval_fasetijden: retrievalFasetijden } : {}),
             },
             ...(contextGeneutraliseerd > 0
               ? { context_geneutraliseerd: contextGeneutraliseerd }
