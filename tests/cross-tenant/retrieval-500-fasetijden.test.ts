@@ -452,3 +452,111 @@ test("#500-F12 — precies één fasetijdenregel bij ok, annulering én onverwac
   assert.equal(JSON.parse(kapot.regels[0].tekst.slice(24)).uitkomst, "fout");
   assert.ok(!kapot.regels[0].tekst.includes("onverwacht"), "geen fouttekst in de logregel");
 });
+
+// ── F13: terminaal kenmerk, afloop en volgnummer (#505-releasecheck) ─────────
+// De releasecheck beoordeelt per UNIEKE correlatie: precies één terminale regel,
+// afloop `succes`. Daarvoor moet elke regel de correlatie (= request-id =
+// retrieval_meta.correlation_id) dragen, als eindrecord herkenbaar zijn, en een
+// herhaalde aanroep binnen dezelfde beurt zich als zodanig melden.
+
+const regelJson = (r: { tekst: string }) => JSON.parse(r.tekst.slice("[retrieval][fasetijden] ".length));
+
+test("#500-F13 — afloop succes/db_timeout/afgebroken/deadline/fout, terminaal en met correlatie", async () => {
+  // succes
+  const ok = regelJson((await loopMetAdapter(async () => LEEG)).regels[0]);
+  assert.deepEqual([ok.terminaal, ok.afloop, ok.correlatie, ok.taak, ok.volgnummer, ok.uitkomst],
+    [true, "succes", "corr-500-fasen", "chat_generatie", 1, "ok"]);
+
+  // 57014 op een gerangschikte RPC, beurt zelf wel afgerond (de time-outroute).
+  const viaTimeout = await loopMetAdapter(async (ctx) => {
+    await (ctx.fasemeter ?? GEEN_FASEMETER).meet("rpc_fts", async () => ({ data: null, error: DB_TIMEOUT }), {
+      poging: "strikt",
+      status: statusVanPostgrest,
+    });
+    return LEEG;
+  });
+  const t = regelJson(viaTimeout.regels[0]);
+  assert.equal(viaTimeout.regels.length, 1);
+  assert.deepEqual([t.terminaal, t.uitkomst, t.afloop], [true, "ok", "db_timeout"]);
+
+  // client-abort
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 20);
+  const ab = await loopMetAdapter(async (ctx) => {
+    await (ctx.fasemeter ?? GEEN_FASEMETER).meet("rpc_fts", () => slaapMetSignaal(500, ctx.signal), { poging: "strikt" });
+    return LEEG;
+  }, ctrl.signal);
+  assert.equal(ab.regels.length, 1);
+  assert.equal(regelJson(ab.regels[0]).afloop, "afgebroken");
+
+  // fout
+  const kapot = await loopMetAdapter(async () => {
+    throw new Error("onverwacht");
+  });
+  assert.equal(kapot.regels.length, 1);
+  assert.deepEqual([regelJson(kapot.regels[0]).terminaal, regelJson(kapot.regels[0]).afloop], [true, "fout"]);
+});
+
+test("#500-F13b — deadline: één terminale regel met afloop 'deadline'", async () => {
+  const adapter: RetrievalAdapter = {
+    naam: "supabase-rag",
+    capabilities: () => ({
+      bronsoorten: ["fonds", "generiek", "notulen"], strategieen: ["gericht"], ondersteundeFilters: [],
+      versiebewijs: true, versiebeleid: { sterk: ["hash"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
+    }),
+    async zoek(ctx): Promise<AdapterUitkomst> {
+      await (ctx.fasemeter ?? GEEN_FASEMETER).meet("rpc_fts", () => slaapMetSignaal(500, ctx.signal), { poging: "strikt" });
+      return LEEG;
+    },
+  };
+  const regels: string[] = [];
+  const [w, i] = [console.warn, console.info];
+  console.warn = (r: unknown) => void regels.push(String(r));
+  console.info = (r: unknown) => void regels.push(String(r));
+  try {
+    await assert.rejects(() =>
+      voerVolledigeRetrievalUit(
+        CTX,
+        { adapter, sporen: [{ query: QUERY(), grenzen: { maxPerDoc: 3, representatieConstraints: false, regimeWeging: false, relevantieDrempel: false } }], timeoutMs: 40 },
+        { primaireDocumentIds: new Set(), peildatum: "2026-10-02", hoofddocumentLabel: "" }
+      )
+    );
+  } finally {
+    [console.warn, console.info] = [w, i];
+  }
+  const f = regels.filter((r) => r.startsWith("[retrieval][fasetijden] "));
+  assert.equal(f.length, 1);
+  const j = JSON.parse(f[0].slice(24));
+  assert.deepEqual([j.terminaal, j.afloop, j.uitkomst], [true, "deadline", "timeout"]);
+});
+
+test("#500-F13c — dubbele aanroep binnen één beurt: zelfde correlatie, volgnummer 1 en 2; aparte beurten elk 1", async () => {
+  const meter = maakFasemeter();
+  const regels: string[] = [];
+  const [w, i] = [console.warn, console.info];
+  console.warn = (r: unknown) => void regels.push(String(r));
+  console.info = (r: unknown) => void regels.push(String(r));
+  const adapter: RetrievalAdapter = {
+    naam: "supabase-rag",
+    capabilities: () => ({
+      bronsoorten: ["fonds", "generiek", "notulen"], strategieen: ["gericht"], ondersteundeFilters: [],
+      versiebewijs: true, versiebeleid: { sterk: ["hash"], gedegradeerd: [] }, permissionProof: false, preview: false, cancellation: true, timeout: true,
+    }),
+    zoek: async () => LEEG,
+  };
+  const opdracht = { adapter, sporen: [{ query: QUERY(), grenzen: { maxPerDoc: 3, representatieConstraints: false, regimeWeging: false, relevantieDrempel: false } }] as const, timeoutMs: 5_000 };
+  const cit = { primaireDocumentIds: new Set<string>(), peildatum: "2026-10-02", hoofddocumentLabel: "" };
+  try {
+    await voerVolledigeRetrievalUit({ ...CTX, fasemeter: meter }, opdracht as never, cit);
+    await voerVolledigeRetrievalUit({ ...CTX, fasemeter: meter }, opdracht as never, cit); // retry, zelfde beurt
+    await voerVolledigeRetrievalUit({ ...CTX, correlationId: "corr-andere-beurt" }, opdracht as never, cit);
+  } finally {
+    [console.warn, console.info] = [w, i];
+  }
+  const j = regels.filter((r) => r.startsWith("[retrieval][fasetijden] ")).map((r) => JSON.parse(r.slice(24)));
+  assert.deepEqual(j.map((x) => [x.correlatie, x.volgnummer, x.terminaal]), [
+    ["corr-500-fasen", 1, true],
+    ["corr-500-fasen", 2, true],
+    ["corr-andere-beurt", 1, true],
+  ]);
+});
