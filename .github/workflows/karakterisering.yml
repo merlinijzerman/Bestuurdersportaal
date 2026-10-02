@@ -416,15 +416,27 @@ jobs:
       # drie 150d-vragen binnen het retrievalbudget onder een GESCHAALDE replica
       # van Productie — JWT van productieomvang, statement_timeout 2 s en budget
       # 5 s (zelfde verhouding als 8 s / 20 s). Productiepad: FTS (geen
-      # HYBRID_SEARCH). Twee servers: met de begrensde volscans (groen) en met
-      # ARTIKELFOCUS_VOLSCANBEGRENZING=off als negatieve controle (rood of
-      # aantoonbaar trager). Na de keten-pass: de fixture staat er dan al.
+      # HYBRID_SEARCH). Na de keten-pass: de fixture staat er dan al.
       # Het script zet rolinstelling, fondsvlag en metadata zelf en herstelt ze.
-      - name: "#500 gecombineerde vraag — retrievalbudget (geschaalde productiereplica)"
+      #
+      # #505 (RLS-InitPlan) — vier servers, twee RLS-standen:
+      #   A. MET #505 (de migratie staat er na testdb-apply-migrations):
+      #      A1 productieconfiguratie (begrenzing aan) en A2 met
+      #      ARTIKELFOCUS_VOLSCANBEGRENZING=off: alle vier vragen, ook de
+      #      reglementvraag, ronden af zonder 57014 en binnen het budget
+      #      (`groen-505`). A2 bewijst dat #505 ZELF de marge geeft.
+      #   B. ZONDER #505 (rollbackscript tijdelijk toegepast = de RLS-kosten
+      #      waarvoor de #500-begrenzing bestaat): B1 begrenzing aan (`groen`,
+      #      incl. de gelijktijdigheidseis) en B2 begrenzing uit (`rood`, de
+      #      negatieve controle). Zonder deze opzet heeft de begrenzing op een
+      #      snelle database niets meer te begrenzen en bewijst `rood` niets.
+      #      Daarna de migratie opnieuw — ook een rollback→migratie-rondgang.
+      - name: "#500/#505 gecombineerde vraag — retrievalbudget (geschaalde productiereplica)"
         env:
           ART500_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
           t0=$(date +%s)
+          DB=postgresql://postgres:postgres@127.0.0.1:54322/postgres
           start_server() {
             APP_BASE_URL="http://127.0.0.1:$1" PORT="$1" npm run start &
             SERVER=$!
@@ -436,21 +448,42 @@ jobs:
             kill "$SERVER" 2>/dev/null || true
             return 1
           }
-          start_server 3006 || exit 1
+          stop_server() { kill "$SERVER" 2>/dev/null || true; wait "$SERVER" 2>/dev/null || true; }
           code=0
-          APP_BASE_URL=http://127.0.0.1:3006 node tests/karakterisering/artikelspoor-500-budget.mjs \
-            | tee "$RUNNER_TEMP/art500-budget-groen.json" || code=1
-          kill "$SERVER" 2>/dev/null || true
-          wait "$SERVER" 2>/dev/null || true
+          # A1 — #505, productieconfiguratie.
+          unset ARTIKELFOCUS_VOLSCANBEGRENZING
+          start_server 3006 || exit 1
+          ART500_BUDGET_VERWACHTING=groen-505 APP_BASE_URL=http://127.0.0.1:3006 \
+            node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
+          stop_server
           [ "$code" = "0" ] || exit $code
-          groen_ms=$(node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8");const j=JSON.parse(t.slice(0,t.lastIndexOf("}")+1));console.log(j.vragen.gecombineerd.retrieval_ms)' "$RUNNER_TEMP/art500-budget-groen.json")
+          # A2 — #505 zonder volscanbegrenzing: #505 geeft zelf de marge.
           export ARTIKELFOCUS_VOLSCANBEGRENZING=off
           start_server 3007 || exit 1
-          ART500_BUDGET_VERWACHTING=rood ART500_GROEN_MS="$groen_ms" APP_BASE_URL=http://127.0.0.1:3007 \
+          ART500_BUDGET_VERWACHTING=groen-505 APP_BASE_URL=http://127.0.0.1:3007 \
             node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
-          kill "$SERVER" 2>/dev/null || true
-          wait "$SERVER" 2>/dev/null || true
-          echo "artikelspoor-500-budget-pass: $(( $(date +%s) - t0 ))s"
+          stop_server
+          [ "$code" = "0" ] || exit $code
+          # B — RLS-kosten van vóór #505 (rollback), de #500-controle.
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/2026_10_02_505_rls_auth_uid_initplan_ROLLBACK.sql
+          unset ARTIKELFOCUS_VOLSCANBEGRENZING
+          start_server 3008 || exit 1
+          APP_BASE_URL=http://127.0.0.1:3008 node tests/karakterisering/artikelspoor-500-budget.mjs \
+            | tee "$RUNNER_TEMP/art500-budget-groen.json" || code=1
+          stop_server
+          if [ "$code" = "0" ]; then
+            groen_ms=$(node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8");const j=JSON.parse(t.slice(0,t.lastIndexOf("}")+1));console.log(j.vragen.gecombineerd.retrieval_ms)' "$RUNNER_TEMP/art500-budget-groen.json")
+            export ARTIKELFOCUS_VOLSCANBEGRENZING=off
+            start_server 3009 || code=1
+            if [ "$code" = "0" ]; then
+              ART500_BUDGET_VERWACHTING=rood ART500_GROEN_MS="$groen_ms" APP_BASE_URL=http://127.0.0.1:3009 \
+                node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
+              stop_server
+            fi
+          fi
+          # Migratie opnieuw (idempotent) — ook bij een rode B-stap.
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/2026_10_02_505_rls_auth_uid_initplan.sql || code=1
+          echo "artikelspoor-500/505-budget-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
       - name: Supabase-stack stoppen

@@ -35,6 +35,25 @@
 //  dus buiten deze hotfix) wordt alleen gerapporteerd: zij laat zien dat
 //  vragen zonder artikelfocus onder dezelfde RLS-kosten krap blijven (#505).
 //
+//  #505 (RLS-InitPlan, 02-10-2026). Sinds `2026_10_02_505_rls_auth_uid_initplan`
+//  evalueert de RLS `auth.uid()` eenmaal per statement; de JWT-omvang drukt dan
+//  niet meer per rij op de kosten en de oude, sequentiële FTS-keten past zelf
+//  binnen het geschaalde budget. Daarom twee aanvullingen:
+//    - `ART500_BUDGET_VERWACHTING=groen-505` (#505 toegepast; CI draait haar
+//      met de begrenzing aan én met ARTIKELFOCUS_VOLSCANBEGRENZING=off): de
+//      tweede bewijst dat #505 ZELF de marge geeft — alle VIER vragen (ook de reglementvraag, die buiten
+//      de #500-hotfix valt) ronden af zonder 57014/time-out en binnen het budget.
+//      De gelijktijdigheidseis van de begrenzing geldt hier bewust niet: met
+//      #505 slaagt de strikte poging, dus wordt de verslapte niet gebruikt.
+//    - `ART500_REGLEMENT_EISEN=1` (bij `groen`): ook de reglementvraag moet
+//      zonder time-out en binnen het budget afronden.
+//  De #500-negatieve controle (`rood`) bewijst nog steeds dat de begrenzing
+//  werkt: zij draait in CI met de RLS-kosten van vóór #505, door het
+//  #505-rollbackscript tijdelijk toe te passen (en daarna de migratie opnieuw;
+//  zie .github/workflows/karakterisering.yml). Zonder die opzet zou de
+//  begrenzing op een snelle database niets meer te begrenzen hebben, en zou de
+//  controle niets bewijzen.
+//
 //  DRAAIRECEPT: zie `artikelspoor-500-keten.mjs` (stack, migraties, seed,
 //  fixture met `art500_behoud=1`, build, beide stubs). Daarna, ZONDER
 //  HYBRID_SEARCH (Productie draait voor dit fonds het FTS-pad):
@@ -96,7 +115,7 @@ export async function main() {
   if (process.env.SEED_DOELOMGEVING !== "local") throw new Error("Alleen lokaal (SEED_DOELOMGEVING=local).");
   bevestigLokaleDatabase(DB_URL);
   const verwachting = process.env.ART500_BUDGET_VERWACHTING ?? "groen";
-  if (!["groen", "rood"].includes(verwachting)) throw new Error(`ART500_BUDGET_VERWACHTING=${verwachting}?`);
+  if (!["groen", "groen-505", "rood"].includes(verwachting)) throw new Error(`ART500_BUDGET_VERWACHTING=${verwachting}?`);
 
   const admin = adminClient();
   const { users } = await seed(admin);
@@ -172,16 +191,36 @@ export async function main() {
         fasen: (fasetijden?.fasen ?? []).map((f) => `${f.fase}${f.poging ? `/${f.poging}` : ""}:${f.status}:${f.ms}`),
         bronnen: bronnen.map((b) => `${b.document}${b.pw150d ? " art.150d" : ""}${b.mvtP395 ? " p.395" : ""}`),
       };
-      if (naam === "reglement") continue; // buiten de hotfix (geen artikelfocus) — alleen gerapporteerd
       if (verwachting === "rood") continue; // beoordeeld na de lus
-      eis(r.status === 200 && klaar && !fout, `${naam}: niet afgerond (fout ${fout?.error ?? "-"})`);
+      // #505: "zonder 57014" betekent ook geen enkele RPC-fase die op de
+      // statement_timeout afbrak. De app vangt zo'n 57014 op (begrenzing of
+      // vangnet), dus de SSE-stroom zelf toont hem niet — de fasetijden wel.
+      const dbTimeouts = (fasetijden?.fasen ?? []).filter((f) => f.status === "db_timeout");
+      if (verwachting === "groen-505" || (naam === "reglement" && process.env.ART500_REGLEMENT_EISEN === "1")) {
+        eis(dbTimeouts.length === 0,
+          `${naam}: ${dbTimeouts.length} RPC-fase(n) met 57014 (${dbTimeouts.map((f) => `${f.fase}/${f.poging ?? "-"}`).join(", ")})`);
+      }
+      if (naam === "reglement") {
+        // Buiten de #500-hotfix (geen artikelfocus). Onder #505 moet zij wél
+        // afronden zonder time-out en binnen het budget (acceptatie #505).
+        if (verwachting === "groen-505" || process.env.ART500_REGLEMENT_EISEN === "1") {
+          eis(r.status === 200 && klaar && !fout && !timeout, `${naam}: niet afgerond (fout ${fout?.error ?? "-"}, time-out ${timeout})`);
+          eis(!/57014|statement timeout/i.test(JSON.stringify(r.events)), `${naam}: 57014 in de stroom`);
+          eis(Boolean(fasetijden), `${naam}: geen invoer.retrieval_fasetijden`);
+          eis((fasetijden?.totaal_ms ?? Infinity) < BUDGET_MS, `${naam}: retrieval ${fasetijden?.totaal_ms} ms ≥ budget ${BUDGET_MS} ms`);
+          eis(artikel === null, `${naam}: selectie.juridisch.artikel hoort te ontbreken`);
+        }
+        continue;
+      }
+      eis(r.status === 200 && klaar && !fout && !timeout, `${naam}: niet afgerond (fout ${fout?.error ?? "-"})`);
+      eis(!/57014|statement timeout/i.test(JSON.stringify(r.events)), `${naam}: 57014 in de stroom`);
       eis(Boolean(fasetijden), `${naam}: geen invoer.retrieval_fasetijden`);
       eis((fasetijden?.totaal_ms ?? Infinity) < BUDGET_MS, `${naam}: retrieval ${fasetijden?.totaal_ms} ms ≥ budget ${BUDGET_MS} ms`);
       eis((artikel?.exact ?? 0) >= 1, `${naam}: artikel.exact < 1`);
       eis((artikel?.geboost_geselecteerd ?? 0) >= 1, `${naam}: artikel.geboost_geselecteerd < 1`);
       const wet = bronnen.findIndex((b) => b.pw150d);
       const mvt = bronnen.findIndex((b) => b.documenttype === "wetsgeschiedenis");
-      if (naam === "gecombineerd") {
+      if (naam === "gecombineerd" && verwachting === "groen") {
         // De fix zelf, zichtbaar in de fasetijden: de twee gerangschikte
         // volscans liepen gelijktijdig, niet na elkaar.
         const fts = (fasetijden?.fasen ?? []).filter((f) => f.fase === "rpc_fts");
@@ -189,6 +228,8 @@ export async function main() {
         const terugval = fts.find((f) => f.poging === "terugval" && f.status !== "ongebruikt");
         eis(Boolean(strikt && terugval) && terugval.start_ms < strikt.start_ms + strikt.ms,
           `${naam}: strikte en verslapte FTS-poging liepen niet gelijktijdig (${JSON.stringify(fts)})`);
+      }
+      if (naam === "gecombineerd") {
         eis(wet >= 0 && mvt >= 0, `${naam}: wet en MvT niet beide geselecteerd`);
         eis(wet < mvt, `${naam}: wet niet vóór MvT`);
         eis(bronnen[mvt]?.mvtP395 === true, `${naam}: eerste MvT-passage is niet p.395`);
@@ -223,8 +264,10 @@ export async function main() {
     process.exit(1);
   }
   console.log(
-    verwachting === "groen"
+ verwachting === "groen"
       ? "GROEN: de drie 150d-vragen ronden binnen het geschaalde budget af, wet vóór MvT."
+      : verwachting === "groen-505"
+      ? "GROEN (#505): zonder volscanbegrenzing ronden alle vier vragen (incl. reglement) binnen het budget af, zonder 57014."
       : "GROEN (negatieve controle): zonder de fix is de gecombineerde vraag rood of aantoonbaar trager."
   );
 }
