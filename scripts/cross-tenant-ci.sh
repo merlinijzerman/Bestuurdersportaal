@@ -226,6 +226,9 @@ SQL_AIGW55="supabase/checks/2026_09_27_ai_gateway_opus_5_5_contract.sql"
 # #438 PR2 — nullable effortobservability; legacy blijft NULL en de minimale
 # gatewayrol kan uitsluitend een waarde uit het gesloten contract schrijven.
 SQL_AIGW_EFFORT="supabase/checks/2026_09_28_ai_gateway_effort_observability.sql"
+# Klant-eigen Azure OpenAI — aparte provider, fonds-eigen profiel en standaard
+# gesloten kill switch; geen live endpoint/model wordt door de migratie gezaaid.
+SQL_AZURE_OPENAI="supabase/checks/2026_10_02_azure_openai_klantprovider.sql"
 # #322 PR-C — de toelatingssamenvatting (en `gateway`) overleven beide
 # leesniveaus van het auditspoor, met de tellingen intact.
 SQL_TOELATING="supabase/checks/2026_09_11_toelating_auditprojectie.sql"
@@ -559,6 +562,8 @@ echo "-- #438 PR1 (Opus 5.5/Sonnet 5 gatewaycontract) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW55"
 echo "-- #438 PR2 (werkelijk toegepast effort in gatewayaudit) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIGW_EFFORT"
+echo "-- Klant-eigen Azure OpenAI-provider (inert contract) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AZURE_OPENAI"
 echo
 
 echo "-- #322 PR-C: toelating + gateway leesbaar op basis- én bronniveau van het auditspoor --"
