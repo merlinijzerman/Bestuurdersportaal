@@ -60,6 +60,7 @@ SQL_ART500_PERF="supabase/checks/2026_09_29_500_artikelspoor_performance.sql"
 # statement_timeout, trigger alleen bij waardewijziging, atomisch bij time-out/
 # statusovergang, consistente chunkmetadata; negatieve controle met oude trigger.
 SQL_499="supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql"
+SQL_505="supabase/checks/2026_10_02_505_rls_initplan_tenantpariteit.sql"
 # #504 — datumvelden (documentdatum/geldig_vanaf/volgende_review) via de #499-RPC:
 # klein document én 1.000 chunks, chunk-denorm, audit met actor/reden, leegmaken,
 # ongeldige datum → rollback; negatieve controle zonder denorm-trigger.
@@ -372,6 +373,18 @@ echo
 echo "-- #500 artikelspoor performance (18.418 chunks, p95 < 500 ms onder RLS) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ART500_PERF"
 echo
+echo "-- #505 RLS-InitPlan: tenantpariteit vóór/na (8 actoren, SELECT+I/U/D) + catalogus + negatieve controles --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_505"
+echo
+# Rollbacktest #505 (geen timing): rollback → pariteit in de VÓÓR-stand →
+# migratie opnieuw (idempotent) → pariteit in de NA-stand. De suites hierna
+# draaien dus weer op de na-stand.
+echo "-- #505 rollbacktest: rollback → check (voor) → migratie → check (na) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/rollbacks/2026_10_02_505_rls_auth_uid_initplan_ROLLBACK.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -v f505_verwacht=voor -f "$SQL_505"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/2026_10_02_505_rls_auth_uid_initplan.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_505"
+echo
 echo "-- #499 (generieke metadatawijziging op 1.000 chunks: budget, atomisch, consistent) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"
 echo
@@ -594,6 +607,7 @@ echo "  T16 stuurinfo tabs 6/7 oper/premie-RPC + mutatie-consistentie + één-br
 echo "  T17 stuurinfo tab 3 biometrie reeks-isolatie + één-bron-koppeling soli/oper + deny-delete (DB-laag)"
 echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-default (DB-laag)"
 echo "  G20  retrieval-filtering status/bronstatus/geldigheid                (DB-laag)"
+echo "  #505 RLS-InitPlan: tenanttoegang vóór = na, alleen expressievorm gewijzigd (DB-laag)"
 echo "  R1   tenantcorrectheid van policies + anon + search_path (gates A-E)  (DB-laag)"
 echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (DB-laag)"
 echo "  MP   maak_profiel deterministisch fonds + zelfregistratiegrens PT-1   (DB-laag)"

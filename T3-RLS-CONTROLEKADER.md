@@ -318,6 +318,41 @@ geïntroduceerd lek de bijbehorende test ROOD maakt — nooit naar main gecommit
 
 ---
 
+## 8c. Expressievorm `(select auth.uid())` — #505 (02-10-2026)
+
+**Policymatrix `documenten`/`document_chunks`: predicaten ongewijzigd.** De zes policies
+(`documenten select`/`insert eigen fonds`/`update eigen fonds`/`delete eigen fonds`,
+`chunks select`, `chunks write eigen fonds`) houden naam, command, PERMISSIVE, rollen
+(`public`) en USING/WITH CHECK. Alleen de vorm veranderde: elke `auth.uid()` staat als
+`(select auth.uid())`, ook binnen de profiel-fonds-lookup
+(migratie `2026_10_02_505_rls_auth_uid_initplan.sql`, besluit 0216). Postgres evalueert die
+ongecorreleerde subquery als **InitPlan** — één keer per statement — in plaats van de kale
+STABLE-functie per rij. Per rij kostte dat een jsonb-parse van `request.jwt.claims`; met een
+realistische JWT (~0,9–1,5 kB) en ~25k chunks liep één `zoek_chunks`-aanroep op Productie
+tegen de `statement_timeout` van 8 s (57014).
+
+**Bewijs dat het alleen vorm is:** `supabase/checks/2026_10_02_505_rls_initplan_tenantpariteit.sql`
+(aangesloten in `scripts/cross-tenant-ci.sh`) meet onder echte RLS een toegangsmatrix van
+8 actoren (eigen fonds, ander fonds, zonder profiel, authenticated zonder sub, anon, anon met
+sub, service_role, portaal_beperkt) × 27 uitkomsten (SELECT op beide tabellen, `zoek_chunks`,
+en INSERT/UPDATE/verhuizen/DELETE per doel) in de NA- én de VÓÓR-stand en eist exacte
+gelijkheid; plus een catalogusvergelijking (na normalisatie `( SELECT auth.uid() AS uid)` →
+`auth.uid()` identiek) en drie negatieve controles (verruimde varianten ⇒ rood). De migratie
+zelf voert dezelfde catalogusvergelijking fail-closed uit binnen haar transactie.
+
+**Voorkeursvorm voor nieuwe policies:** schrijf `(select auth.uid())`, niet `auth.uid()`.
+Let op: een verruiming BINNEN een subquery op `documenten` (bv. in `chunks select`) lekt
+niet, omdat die subquery zelf onder de leespolicy van `documenten` valt — de negatieve
+controle N2 laat daarom de documentbinding als geheel los.
+
+**Buiten scope gebleven (gemeten 02-10-2026, lokaal):** 166 van de 173 policies in `public`/
+`storage` gebruiken nog een kale `auth.uid()`, waaronder `document_inzage`,
+`document_metadata_log` en de storage-policies op bucket `documenten`. Hun subqueries op
+`documenten` profiteren wel van de herschreven `documenten select`. Een algemene herschrijving
+is een apart besluit met eigen pariteitsbewijs.
+
+---
+
 ## 8b. Opvolging 31-07-2026 — waarom §8 niet volstond, en wat ervoor in de plaats komt
 
 > Toegevoegd na de integrale review van 30-31 juli 2026. Zie `REVIEW-ADDENDUM-2026-07-31.md`

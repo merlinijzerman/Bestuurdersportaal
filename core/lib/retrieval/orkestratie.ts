@@ -31,6 +31,13 @@ import {
 } from "./toelatingspoort";
 import { maakAfbreekgrendel, isAfbreking, redenVan, GrendelGesloten, TIMEOUT_DEFAULT_MS } from "./afbreken";
 import type { Afbreekgrendel } from "./afbreken";
+import { GEEN_FASEMETER, logFasetijden, maakFasemeter, type Fasemeter, type Retrievaluitkomst } from "./fasetijden";
+
+/**
+ * #505 — hoeveel retrievals er met dezelfde meter (= dezelfde beurt) liepen.
+ * Zwak gerefereerd: verdwijnt met de meter, nooit gedeeld tussen beurten.
+ */
+const AANROEPEN_PER_METER = new WeakMap<Fasemeter, number>();
 import { maakDocumentIdentiteit } from "./identiteit";
 import { BronNietGeraadpleegd } from "./contract";
 import {
@@ -386,14 +393,18 @@ export async function voerRetrievalUit(
   // `resterendMs` komt uit DEZELFDE grendel als `signal`. Twee klokken die
   // onafhankelijk worden meegegeven, bewaken vroeg of laat verschillende dingen.
   const ctxMetGrendel = { ...ctx, signal: grendel.signal, resterendMs: () => grendel.resterendMs() };
+  // #500 — fasetijden (inhoudsvrij). Zonder meter meet niets en loopt alles identiek.
+  const meter = ctx.fasemeter ?? GEEN_FASEMETER;
 
   const vandaagVoorDezeBeurt = effectievePeildatum(undefined);
   const peildatumVanSpoor = (q: RetrievalQuery) => q.filters?.peildatum ?? vandaagVoorDezeBeurt;
 
-  const spoorContext = sporen.map(({ query }) => ({
+  const spoorContext = sporen.map(({ query }, i) => ({
     ...ctxMetGrendel,
     scope: { ...ctx.scope, documentIds: query.documentScope },
+    ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter.voorSpoor(i) } : {}),
   }));
+  const spoorMeter = (i: number) => spoorContext[i].fasemeter ?? GEEN_FASEMETER;
   // #500 — artikelfocus per spoor: ALLEEN op sporen die het juridisch beleid
   // dragen (R-3: de bibliotheeksporen), achter dezelfde poort. Zonder focus
   // krijgt de adapter exact dezelfde query als vóór #500.
@@ -433,9 +444,14 @@ export async function voerRetrievalUit(
               opgehaald: 0,
               fout: "configuratiefout",
             })
-          : adapterVanSpoor(i).zoek(
-              spoorContext[i],
-              artikelfocusPerSpoor[i] ? { ...query, artikelfocus: artikelfocusPerSpoor[i] ?? undefined } : query
+          : spoorMeter(i).meet(
+              "zoek",
+              () =>
+                adapterVanSpoor(i).zoek(
+                  spoorContext[i],
+                  artikelfocusPerSpoor[i] ? { ...query, artikelfocus: artikelfocusPerSpoor[i] ?? undefined } : query
+                ),
+              { rijen: (u) => u.kandidaten.length }
             )
       )
     );
@@ -473,9 +489,14 @@ export async function voerRetrievalUit(
         extraPerSpoor.push({});
         continue;
       }
-      const v = await hook.call(adapterVanSpoor(i), spoorContext[i], voorgeselecteerd[i], {
-        peildatum: peildatumVanSpoor(sporen[i].query),
-      });
+      const v = await spoorMeter(i).meet(
+        "verrijk",
+        () =>
+          hook.call(adapterVanSpoor(i), spoorContext[i], voorgeselecteerd[i], {
+            peildatum: peildatumVanSpoor(sporen[i].query),
+          }),
+        { rijen: (r) => r.resultaten.length }
+      );
       verrijkt.push(v.resultaten);
       extraPerSpoor.push({ ...(v.meta ?? {}) });
       grendel.bewaak();
@@ -491,12 +512,17 @@ export async function voerRetrievalUit(
     );
 
     // ── 5. TOELATINGSPOORT, per adaptergroep, met ÉÉN gedeelde `poortNu` ─────
-    const poort = await verifieerToelatingPerGroep(
-      ctxMetGrendel,
-      groepen,
-      beleidsToegelaten,
-      spoorNaarGroep,
-      Date.now()
+    const poort = await meter.meet(
+      "poort",
+      () =>
+        verifieerToelatingPerGroep(
+          ctxMetGrendel,
+          groepen,
+          beleidsToegelaten,
+          spoorNaarGroep,
+          Date.now()
+        ),
+      { rijen: (p) => p.toegelatenPerSpoor.reduce((t, l) => t + l.length, 0) }
     );
     grendel.bewaak();
     const toegelatenPerSpoor = poort.toegelatenPerSpoor;
@@ -539,7 +565,7 @@ export async function voerRetrievalUit(
     for (let i = 0; i < uitkomsten.length; i++) {
       const g = sporen[i].grenzen;
       const perRef = new Map(begrensd[i].map((b) => [b.ref, b]));
-      const sel = await selecteerEnVerrijk(
+      const sel = await spoorMeter(i).meet("selectie", () => selecteerEnVerrijk(
         begrensd[i].map(alsSelectieBron),
         uitkomsten[i].methode as RetrievalMeta["methode"],
         {
@@ -552,7 +578,7 @@ export async function voerRetrievalUit(
           ...(g.juridischeIntentie ? { juridischeIntentie: g.juridischeIntentie } : {}),
           ...(artikelfocusPerSpoor[i] ? { artikelfocus: artikelfocusPerSpoor[i] } : {}),
         }
-      );
+      ), { rijen: (r) => r.chunks.length });
       geselecteerdPerSpoor.push(
         sel.chunks.map((b) => perRef.get(b.id)).filter((b): b is Bronresultaat => Boolean(b))
       );
@@ -891,11 +917,39 @@ export async function voerVolledigeRetrievalUit(
   // verschillende fondsen zouden delen, en geen veld op het tussenresultaat, dat
   // via `Omit<…>` in `RetrievalUitkomst` zit en de orkestratie dus verlaat.
   const herkomst = maakHerkomstStaat();
+  // #500 — de fasetijden van deze beurt. De aanroeper kan een eigen meter
+  // meegeven (de chatroute legt de samenvatting in het auditspoor); anders is
+  // deze functie ook daarvan eigenaar. De logregel hieronder wordt langs ELKE
+  // uitgang geschreven — juist bij een time-out, want dan schrijft de route geen
+  // governance-log en is dit het enige spoor van waar het budget bleef.
+  const meter = ctx.fasemeter ?? maakFasemeter();
+  const ctxMetMeter: RetrievalContext = { ...ctx, fasemeter: meter };
+  const budgetMs = opdracht.timeoutMs ?? TIMEOUT_DEFAULT_MS;
+  // De gedeelde nulmeter telt niet: zij is per definitie niet aan één beurt gebonden.
+  const volgnummer = meter === GEEN_FASEMETER ? 1 : (AANROEPEN_PER_METER.get(meter) ?? 0) + 1;
+  if (meter !== GEEN_FASEMETER) AANROEPEN_PER_METER.set(meter, volgnummer);
+  let uitkomst: Retrievaluitkomst = "fout";
   try {
-    const tussen = await voerRetrievalUit(ctx, opdracht, grendel, herkomst);
-    return await citeer(ctx, opdracht.adapter, tussen, citaatOpdracht, herkomst);
+    const tussen = await voerRetrievalUit(ctxMetMeter, opdracht, grendel, herkomst);
+    const voltooid = await meter.meet("citatie", () =>
+      citeer(ctxMetMeter, opdracht.adapter, tussen, citaatOpdracht, herkomst)
+    );
+    uitkomst = "ok";
+    return voltooid;
+  } catch (e) {
+    const categorie = foutcategorieVoor(e);
+    uitkomst = categorie === "timeout" ? "timeout" : categorie === "annulering" ? "annulering" : "fout";
+    throw e;
   } finally {
     grendel.stop();
+    try {
+      logFasetijden(ctx.correlationId, meter.samenvatting(uitkomst, budgetMs), {
+        taak: ctx.taaktype,
+        volgnummer,
+      });
+    } catch {
+      // Observability mag de beurt nooit laten mislukken.
+    }
   }
 }
 

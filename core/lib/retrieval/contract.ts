@@ -16,6 +16,7 @@ import type { AdapterTellers, RetrievalFilters, RetrievalMeta, BronVerwijzing } 
 import type { Actor, Taaktype } from "../ai-gateway/contract";
 import type { RetrievalModus } from "../vraagtype";
 import type { Artikelfocus } from "./artikelverwijzing";
+import type { Fasemeter } from "./fasetijden";
 
 export type Bronsoort = "fonds" | "generiek" | "sharepoint" | "notulen" | "web";
 export type Retrievalstrategie = "gericht" | "volledig" | "vergelijk" | "bevroren";
@@ -76,6 +77,13 @@ export interface RetrievalContext {
    * stoppen — niet terug te vallen op een eigen standaard.
    */
   resterendMs?: () => number;
+  /**
+   * #500 — request-lokale meter voor de fasetijden van de keten (inhoudsvrij:
+   * gesloten fasenamen, ms, status, rijentelling). Gezet door de aanroeper of
+   * door `voerVolledigeRetrievalUit()`; een adapter meet er zijn eigen stappen
+   * mee. Ontbreekt hij, dan wordt er niets gemeten en loopt alles identiek.
+   */
+  fasemeter?: Fasemeter;
 }
 
 /**

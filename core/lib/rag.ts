@@ -11,6 +11,13 @@ import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { isPoortGesloten } from "./ai-poort";
 import { handhaafScanbewijs, heeftSchoonScanbewijs, isMalwarescanAan } from "./document-scan-poort";
 import { isAfbreking, bewaakNaIO } from "./retrieval/afbreken";
+import {
+  GEEN_FASEMETER,
+  isDbTimeout,
+  statusVanPostgrest,
+  type Fasemeter,
+  type Fasepoging,
+} from "./retrieval/fasetijden";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
@@ -318,6 +325,44 @@ export interface RetrievalOpties {
   // de kandidatensets, zodat een (mogelijk verkeerde) reformulatie alleen recall
   // kan TOEVOEGEN, nooit wegnemen. Leeg/gelijk → geen extra poging (huidig gedrag).
   origineleVraag?: string;
+  /**
+   * #500 — request-lokale meter voor de fasetijden (inhoudsvrij). Alleen
+   * observatie: zonder meter loopt de keten identiek.
+   */
+  fasemeter?: Fasemeter;
+  /**
+   * #500 — BEGRENSDE VOLSCANS. Uitsluitend gezet door de Supabase-adapter bij een
+   * juridische artikelfocus (dezelfde poort als het artikelspoor). Onder RLS is
+   * elke zoek-RPC een volledige scan over alle zichtbare chunks; op Productie
+   * kost één aanroep met een echte JWT 6–12 s (de statement_timeout is 8 s). De
+   * keten deed er tot vier na elkaar (strikt → verslapt → plain → ilike) en
+   * overschreed zo het retrievalbudget van 20 s. Met deze vlag:
+   *   (a) start de G-12/OR-terugvalpoging GELIJKTIJDIG met de strikte poging;
+   *       de beslisregel (strikt leeg → terugval) en de parameters zijn
+   *       ongewijzigd, dus de uitkomst ook — alleen de wandklok wordt max i.p.v. som;
+   *   (b) start de keten na een DATABASE-time-out (57014) op een gerangschikte
+   *       zoek-RPC geen nieuwe volscan (geen FTS-terugval vanaf hybride, geen
+   *       plain-/ilike-vangnet). De exacte passages komen via het begrensde
+   *       artikelspoor; `fallback_reason: "volscan_begrensd"` maakt dat zichtbaar.
+   * Zonder de vlag (elke vraag zonder artikelfocus) is het gedrag byte-identiek.
+   */
+  begrensVolscans?: boolean;
+}
+
+/** #500 — `fallback_reason` wanneer een volscan na een DB-time-out bewust uitbleef. */
+export const VOLSCAN_BEGRENSD = "volscan_begrensd";
+
+type Afgerond<T> = { ok: true; waarde: T } | { ok: false; fout: unknown };
+/** Een gestarte belofte die nooit "unhandled" kan worden; uitpakken gooit de fout alsnog. */
+function vangAf<T>(p: Promise<T>): Promise<Afgerond<T>> {
+  return p.then(
+    (waarde) => ({ ok: true as const, waarde }),
+    (fout) => ({ ok: false as const, fout })
+  );
+}
+function pakUit<T>(r: Afgerond<T>): T {
+  if (r.ok) return r.waarde;
+  throw r.fout;
 }
 
 // Conservatieve default-drempel (R1.5 b2): kandidaten met een rerankscore < 20
@@ -337,6 +382,8 @@ type VolledigeOpties = {
   gateway?: RetrievalOpties["gateway"];
   stopNaRangschikking: boolean;
   signal?: AbortSignal;
+  fasemeter: Fasemeter;
+  begrensVolscans: boolean;
 };
 
 /**
@@ -366,6 +413,8 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     gateway: o?.gateway,
     stopNaRangschikking: o?.stopNaRangschikking ?? false,
     signal: o?.signal,
+    fasemeter: o?.fasemeter ?? GEEN_FASEMETER,
+    begrensVolscans: o?.begrensVolscans === true,
   };
 }
 
@@ -472,16 +521,21 @@ async function naVerwerking(
   // richting een model. De centrale toelatingspoort zou ze later ook weigeren,
   // maar de rerank stuurt de tekst al eerder naar een provider.
   let kandidaten = isMalwarescanAan()
-    ? await filterOpScanbewijs(bewaakteChunks, opties.signal)
+    ? await opties.fasemeter.meet("scanbewijs", () => filterOpScanbewijs(bewaakteChunks, opties.signal), {
+        rijen: (c) => c.length,
+      })
     : bewaakteChunks;
 
   // A — Haiku-reranker (alleen op de sterke paden: hybride + Dutch-FTS-ranked).
   let rerankScores: Record<string, number> | null = null;
   if (opties.rerank && rerankToegestaan && kandidaten.length >= 2) {
-    const prefixMap = await haalContextPrefixes(kandidaten.map((c) => c.id), opties.signal);
-    const r = await rerankChunks(
+    const teRanken = kandidaten;
+    const prefixMap = await opties.fasemeter.meet("context_prefix", () =>
+      haalContextPrefixes(teRanken.map((c) => c.id), opties.signal)
+    );
+    const r = await opties.fasemeter.meet("rerank", () => rerankChunks(
       zoekvraag,
-      kandidaten,
+      teRanken,
       (c) => verrijkTekst(prefixMap.get(c.id), c.tekst),
       {
         client: opties.rerankClient,
@@ -493,7 +547,7 @@ async function naVerwerking(
         // een ongemeten call te doen.
         gateway: opties.gateway,
       }
-    );
+    ), { rijen: (u) => u.chunks.length });
     kandidaten = r.chunks;
     extra.rerank = r.meta;
     if (r.meta.toegepast) rerankScores = r.meta.scores;
@@ -1213,6 +1267,10 @@ export interface RetrievalMeta {
     // `meta_projectie()` op beide leesniveaus zichtbaar blijft — net als
     // `geen_generatiecall`. R-3 (#492) mag hierop aansluiten.
     juridische_intentie?: JuridischeVraagintentieResultaat;
+    // #500 — fasetijden van de retrievalketen (gesloten fasenamen, ms, status,
+    // rijentellingen; geen tekst of identiteit). Bewust onder `invoer` (basis,
+    // niet in SUB_NIVEAUS.invoer): migratievrij zichtbaar via `meta_projectie()`.
+    retrieval_fasetijden?: import("./retrieval/fasetijden").FasetijdenSamenvatting;
   };
   // H-10 (review 2026-07-30) — hoeveel bronlabel-achtige patronen zijn
   // geneutraliseerd in de chunktekst vóórdat die de prompt in ging. >0 betekent
@@ -1452,17 +1510,30 @@ export function fuseerHybridePogingen(pogingen: HybridePogingResultaat[]): {
 export function maakHybrideRpc(
   supabase: { rpc: (fn: string, args: Record<string, unknown>) => any },
   gedeeldeParams: Record<string, unknown>,
-  signal?: AbortSignal
-): (ftsQuery: string, embedding: number[]) => Promise<DocumentChunk[] | null> {
-  return async (ftsQuery, embedding) => {
-    const { data, error } = await metSignaal(
-      supabase.rpc("zoek_chunks_hybride", {
-        p_query: ftsQuery,
-        p_embedding: naarVectorLiteral(embedding),
-        ...gedeeldeParams,
-      }),
-      signal
+  signal?: AbortSignal,
+  /** #500 — fasetijden per poging, en een melding van de foutvorm (nooit de tekst). */
+  meting?: { meter?: Fasemeter; bijFout?: (fout: unknown) => void }
+): (ftsQuery: string, embedding: number[], poging?: Fasepoging) => Promise<DocumentChunk[] | null> {
+  const meter = meting?.meter ?? GEEN_FASEMETER;
+  return async (ftsQuery, embedding, poging) => {
+    const { data, error } = await meter.meet(
+      "rpc_hybride",
+      () =>
+        metSignaal(
+          supabase.rpc("zoek_chunks_hybride", {
+            p_query: ftsQuery,
+            p_embedding: naarVectorLiteral(embedding),
+            ...gedeeldeParams,
+          }),
+          signal
+        ) as Promise<{ data: unknown; error: unknown }>,
+      {
+        ...(poging ? { poging } : {}),
+        rijen: (u) => (Array.isArray(u.data) ? u.data.length : undefined),
+        status: (u) => statusVanPostgrest(u, signal),
+      }
     );
+    if (error) meting?.bijFout?.(error);
     // PostgREST GOOIT een abort niet door — hij levert een gewoon
     // foutresultaat. Het SIGNAAL is dus gezaghebbend, niet de vorm van de fout.
     bewaakNaIO(signal, error);
@@ -1594,9 +1665,14 @@ export async function vulAanMetArtikelkandidaten(
     maxKandidaten: number;
     signal?: AbortSignal;
     supabase?: { from: (tabel: string) => any };
+    /** #500 — fasetijden (inhoudsvrij) van de drie begrensde queries. */
+    fasemeter?: Fasemeter;
   }
 ): Promise<DocumentChunk[]> {
   const fondsFilter = opdracht.fondsId && opdracht.fondsId.length > 0 ? opdracht.fondsId : null;
+  const meter = opdracht.fasemeter ?? GEEN_FASEMETER;
+  const telRijen = (u: { data?: unknown }) => (Array.isArray(u.data) ? u.data.length : undefined);
+  const statusVan = (u: { error?: unknown }) => statusVanPostgrest(u, opdracht.signal);
   const scope = opdracht.scope && opdracht.scope.length > 0 ? opdracht.scope : null;
   try {
     const supabase = opdracht.supabase ?? (await createServerSupabase());
@@ -1609,7 +1685,11 @@ export async function vulAanMetArtikelkandidaten(
       .eq("actief", true);
     if (scope) dq = dq.in("id", scope);
     dq = dq.order("id", { ascending: true }).limit(ARTIKEL_JURIDISCHE_DOCUMENTEN_MAX);
-    const { data: docs, error: docFout } = await metSignaal(dq, opdracht.signal);
+    const { data: docs, error: docFout } = await meter.meet(
+      "artikel_documenten",
+      () => metSignaal(dq, opdracht.signal) as Promise<{ data: unknown; error: unknown }>,
+      { rijen: telRijen, status: statusVan }
+    );
     bewaakNaIO(opdracht.signal, docFout);
     if (docFout || !Array.isArray(docs)) {
       if (docFout) console.error("[rag] artikelspoor: documentopzoeking mislukt — kandidaten ongewijzigd:", docFout);
@@ -1636,7 +1716,11 @@ export async function vulAanMetArtikelkandidaten(
       .order("document_id", { ascending: true })
       .order("chunk_index", { ascending: true })
       .limit(ARTIKEL_OPZOEK_MAX);
-    const { data, error } = await metSignaal(q, opdracht.signal);
+    const { data, error } = await meter.meet(
+      "artikel_opzoeking",
+      () => metSignaal(q, opdracht.signal) as Promise<{ data: unknown; error: unknown }>,
+      { rijen: telRijen, status: statusVan }
+    );
     bewaakNaIO(opdracht.signal, error);
     if (error || !Array.isArray(data)) {
       if (error) console.error("[rag] artikelspoor: opzoeking mislukt — kandidaten ongewijzigd:", error);
@@ -1672,7 +1756,11 @@ export async function vulAanMetArtikelkandidaten(
       .order("document_id", { ascending: true })
       .order("chunk_index", { ascending: true })
       .limit(ARTIKEL_TOELATING_ID_MAX);
-    const { data: rijen, error: toelatingsFout } = await metSignaal(tq, opdracht.signal);
+    const { data: rijen, error: toelatingsFout } = await meter.meet(
+      "artikel_toelating",
+      () => metSignaal(tq, opdracht.signal) as Promise<{ data: unknown; error: unknown }>,
+      { rijen: telRijen, status: statusVan }
+    );
     bewaakNaIO(opdracht.signal, toelatingsFout);
     if (toelatingsFout || !Array.isArray(rijen)) {
       if (toelatingsFout) console.error("[rag] artikelspoor: toelating mislukt — kandidaten ongewijzigd:", toelatingsFout);
@@ -1715,13 +1803,22 @@ export async function vulAanMetArtikelkandidaten(
 }
 
 export interface HybrideDeps {
-  /** Eén hybride RPC-poging; `null` bij een RPC-fout. */
-  draai(ftsQuery: string, embedding: number[]): Promise<DocumentChunk[] | null>;
+  /** Eén hybride RPC-poging; `null` bij een RPC-fout. `poging` is alleen telemetrie. */
+  draai(ftsQuery: string, embedding: number[], poging?: Fasepoging): Promise<DocumentChunk[] | null>;
   /** Embedding van de originele vraag (M-R3). */
   embed(tekst: string): Promise<number[]>;
   /** De STRIKTE FTS-query voor een tekst (eventueel jargon-verbreed). */
   ftsQueryVoor(tekst: string): string;
   signal?: AbortSignal;
+  /**
+   * #500 — start de (eventuele) G-12-verslapte poging GELIJKTIJDIG met de
+   * primaire, in plaats van erna. De beslisregel en de parameters veranderen
+   * niet: de uitkomst wordt alleen gebruikt als `moetHybrideVerslappen` dat
+   * zegt, precies zoals sequentieel. Alleen bij `begrensVolscans`.
+   */
+  speculatieveVerslapping?: boolean;
+  /** #500 — telemetrie: een speculatief gestarte poging bleef ongebruikt. */
+  bijOngebruikt?: (poging: Fasepoging) => void;
 }
 
 export type HybrideUitkomst =
@@ -1771,9 +1868,24 @@ export async function voerHybridePogingenUit(
   const pogingen: HybridePogingResultaat[] = [];
   const pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]> = [];
 
+  // #500 — speculatief: de verslapte poging loopt vanaf hier mee met de strikte.
+  // Hij gebruikt dezelfde primaire vector en hetzelfde parameterblok als
+  // sequentieel; of zijn uitkomst telt, beslist verderop ongewijzigd G-12.
+  const speculatieveTerugval = deps.speculatieveVerslapping ? bouwTerugvalFtsQuery(vraag) : null;
+  const speculatief = speculatieveTerugval
+    ? vangAf(deps.draai(speculatieveTerugval.query, vector, "verslapt"))
+    : null;
+  let speculatiefGebruikt = false;
+  const laatSpeculatiefVallen = () => {
+    if (speculatief && !speculatiefGebruikt) deps.bijOngebruikt?.("verslapt");
+  };
+
   // Poging 1 (primair): de (mogelijk geherformuleerde) vraag.
-  const primair = await deps.draai(primaireQuery, vector);
-  if (primair === null) return { soort: "rpc_fout" };
+  const primair = await deps.draai(primaireQuery, vector, "primair");
+  if (primair === null) {
+    laatSpeculatiefVallen();
+    return { soort: "rpc_fout" };
+  }
   pogingen.push({ naam: "primair", chunks: primair });
   pogingMeta.push({ naam: "primair", query: primaireQuery, rijen: primair.length });
 
@@ -1787,7 +1899,7 @@ export async function voerHybridePogingenUit(
       const origFts = deps.ftsQueryVoor(origineel);
       try {
         const origVec = await deps.embed(origineel);
-        const origChunks = await deps.draai(origFts, origVec);
+        const origChunks = await deps.draai(origFts, origVec, "origineel");
         if (origChunks === null) {
           pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });
         } else {
@@ -1816,7 +1928,12 @@ export async function voerHybridePogingenUit(
       // Een extra RPC valt binnen de beurtdeadline; start hem niet als die al
       // verstreken is.
       bewaakNaIO(deps.signal);
-      const verslapt = await deps.draai(terugval.query, vector);
+      // #500 — al speculatief gestart? Dan is dit exact dezelfde aanroep
+      // (zelfde query uit dezelfde pure functie, zelfde vector en parameters).
+      speculatiefGebruikt = speculatief !== null;
+      const verslapt = speculatief
+        ? pakUit(await speculatief)
+        : await deps.draai(terugval.query, vector, "verslapt");
       if (verslapt === null) {
         // Non-destructief: de strikte uitkomst blijft staan.
         pogingMeta.push({ naam: "verslapt", query: terugval.query, rijen: null });
@@ -1826,6 +1943,7 @@ export async function voerHybridePogingenUit(
       }
     }
   }
+  laatSpeculatiefVallen();
 
   return { soort: "pogingen", pogingen, pogingMeta };
 }
@@ -1877,7 +1995,9 @@ export async function zoekRelevanteChunksMetMeta(
   // en blokkers expliciet" verbiedt.
   let vector: number[];
   try {
-    vector = await embedTekst({ supabase, label: "rag.hybride" }, vraag, opt.signal);
+    vector = await opt.fasemeter.meet("embedding", () => embedTekst({ supabase, label: "rag.hybride" }, vraag, opt.signal), {
+      poging: "primair",
+    });
   } catch (e) {
     // PR-B — een AFBREKING is geen providerfout. De terugval hieronder bestaat
     // voor een dichte kill-switch of een falende provider; vangt hij ook een
@@ -1915,15 +2035,50 @@ export async function zoekRelevanteChunksMetMeta(
   // De strikte pogingen (primair, en bij reformulatie de originele vraag) en —
   // G-12 — hooguit één verslapte. Uitgebreid in `voerHybridePogingenUit`, zodat
   // de beslisregels hermetisch te toetsen zijn; hier alleen de bedrading.
+  // #500 — kreeg een hybride poging een DATABASE-time-out (57014)? Alleen de
+  // foutvorm, nooit de tekst; stuurt uitsluitend onder `begrensVolscans`.
+  let hybrideDbTimeout = false;
   const uitkomst = await voerHybridePogingenUit(vraag, ftsQuery, vector, opties?.origineleVraag, {
-    draai: maakHybrideRpc(supabase, gedeeldeRpcParams, opt.signal),
-    embed: (tekst) => embedTekst({ supabase, label: "rag.hybride.origineel" }, tekst, opt.signal),
+    draai: maakHybrideRpc(supabase, gedeeldeRpcParams, opt.signal, {
+      meter: opt.fasemeter,
+      bijFout: (fout) => {
+        if (isDbTimeout(fout)) hybrideDbTimeout = true;
+      },
+    }),
+    embed: (tekst) =>
+      opt.fasemeter.meet("embedding", () => embedTekst({ supabase, label: "rag.hybride.origineel" }, tekst, opt.signal), {
+        poging: "origineel",
+      }),
     ftsQueryVoor: (tekst) => ftsQueryVoor(tekst, opt).ftsQuery,
     signal: opt.signal,
+    ...(opt.begrensVolscans
+      ? {
+          speculatieveVerslapping: true,
+          bijOngebruikt: (poging: Fasepoging) => opt.fasemeter.noteer("rpc_hybride", "ongebruikt", { poging }),
+        }
+      : {}),
   });
+  // #500 — begrensde volscans: na een DB-time-out geen nieuwe volscan via de
+  // FTS-terugval (die doet er tot vier). Het artikelspoor levert de exacte
+  // passages; de lege uitkomst draagt zichtbaar `volscan_begrensd`.
+  const begrensNaDbTimeout = (pogingMeta?: RetrievalMeta["retrieval_pogingen"]) => {
+    opt.fasemeter.noteer("rpc_fts", "overgeslagen");
+    return {
+      chunks: [] as DocumentChunk[],
+      meta: {
+        ...bouwMeta("geen", 0, []),
+        filters: metaFilters(filters),
+        ...fondsMeta(fondsFilter, 0),
+        embedding_query_success: true,
+        fallback_reason: VOLSCAN_BEGRENSD,
+        ...(pogingMeta ? { retrieval_pogingen: pogingMeta } : {}),
+      },
+    };
+  };
   if (uitkomst.soort === "rpc_fout") {
     // Vóór de terugval: is er intussen afgebroken, dan start hij niet.
     bewaakNaIO(opt.signal);
+    if (opt.begrensVolscans && hybrideDbTimeout) return begrensNaDbTimeout();
     // RPC faalde → terugval op FTS (embedding lukte wél). GEEN verslapte hybride
     // poging: de RPC zelf is stuk, een tweede aanroep ervan helpt niet.
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
@@ -1939,6 +2094,7 @@ export async function zoekRelevanteChunksMetMeta(
 
   if (gefuseerd.length === 0) {
     bewaakNaIO(opt.signal);
+    if (opt.begrensVolscans && hybrideDbTimeout) return begrensNaDbTimeout(pogingMeta);
     // Geen enkele poging leverde treffers → terugval op FTS (embedding lukte wél).
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
@@ -1979,6 +2135,67 @@ export async function zoekRelevanteChunksMetMeta(
   };
 }
 
+export interface FtsDeps {
+  /** Eén gerangschikte `zoek_chunks`-aanroep; `poging` is alleen telemetrie. */
+  draai(pQuery: string, poging: "strikt" | "terugval"): Promise<{ data: unknown; error: unknown }>;
+  signal?: AbortSignal;
+  /** #500 — zie `RetrievalOpties.begrensVolscans`. */
+  begrensVolscans?: boolean;
+  /** #500 — telemetrie: de speculatief gestarte terugval bleef ongebruikt. */
+  bijOngebruikt?: () => void;
+}
+
+export type FtsPogingUitkomst =
+  | { soort: "strikt"; rijen: ZoekChunkRij[] }
+  | { soort: "terugval"; rijen: ZoekChunkRij[]; terugval: NonNullable<ReturnType<typeof bouwTerugvalFtsQuery>> }
+  /** #500 — DB-time-out op een gerangschikte poging onder `begrensVolscans`: geen vangnet. */
+  | { soort: "begrensd" }
+  /** Door naar het ongerangschikte vangnet (plain → ilike), ongewijzigd. */
+  | { soort: "vangnet" };
+
+/**
+ * De twee GERANGSCHIKTE FTS-pogingen: strikt (AND-keten), en alleen als die
+ * niets oplevert de verslapte OR-keten (30-07-2026). Uitgebreid in een eigen
+ * functie zodat de beslisregels hermetisch te toetsen zijn.
+ *
+ * #500 — met `begrensVolscans` start de terugval GELIJKTIJDIG met de strikte
+ * poging (dezelfde pure query, hetzelfde parameterblok). De beslisregel is
+ * ongewijzigd — strikt met rijen wint, anders de terugval — dus de uitkomst ook;
+ * alleen de wandklok wordt max(strikt, terugval) in plaats van de som. Brak de
+ * database een van beide af (57014) en leverde geen van beide rijen, dan volgt
+ * `begrensd` in plaats van het vangnet.
+ */
+export async function voerFtsPogingenUit(
+  vraag: string,
+  ftsQuery: string,
+  deps: FtsDeps
+): Promise<FtsPogingUitkomst> {
+  // De verslapte query is een pure functie van de vraag; vooraf bepalen
+  // verandert niets aan wanneer of hoe hij wordt gebruikt.
+  const terugval = bouwTerugvalFtsQuery(vraag);
+  const speculatief = deps.begrensVolscans && terugval ? vangAf(deps.draai(terugval.query, "terugval")) : null;
+
+  const { data, error } = await deps.draai(ftsQuery, "strikt");
+  bewaakNaIO(deps.signal, error);
+  if (!error && Array.isArray(data) && data.length > 0) {
+    if (speculatief) deps.bijOngebruikt?.();
+    return { soort: "strikt", rijen: data as ZoekChunkRij[] };
+  }
+
+  let dbTimeout = isDbTimeout(error);
+  if (terugval) {
+    const { data: dataT, error: errorT } = speculatief
+      ? pakUit(await speculatief)
+      : await deps.draai(terugval.query, "terugval");
+    bewaakNaIO(deps.signal, errorT);
+    if (!errorT && Array.isArray(dataT) && dataT.length > 0) {
+      return { soort: "terugval", rijen: dataT as ZoekChunkRij[], terugval };
+    }
+    if (isDbTimeout(errorT)) dbTimeout = true;
+  }
+  return deps.begrensVolscans && dbTimeout ? { soort: "begrensd" } : { soort: "vangnet" };
+}
+
 // Bestaande FTS-route mét retrieval-diagnostiek (fundament en fallback).
 //
 // Strategie:
@@ -2011,17 +2228,34 @@ async function zoekViaFTS(
   // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af.
   // R1.4 — de FTS-query is hier (evt.) jargon-verbreed (websearch-arm).
   const { ftsQuery, jargon } = ftsQueryVoor(vraag, opt);
-  const { data, error } = await metSignaal(supabase.rpc("zoek_chunks", {
-    p_query: ftsQuery,
-    p_limit: overFetch,
-    p_document_ids: scope,
-    ...rpcFilterParams(filters),
-    p_fonds_id: fondsFilter,
-  }), opt.signal);
-  bewaakNaIO(opt.signal, error);
+  // #500 — één bron voor beide gerangschikte FTS-pogingen: hetzelfde
+  // parameterblok, alleen `p_query` verschilt. De meter is pure telemetrie.
+  const rangschikFts = (p_query: string, poging: "strikt" | "terugval") =>
+    opt.fasemeter.meet(
+      "rpc_fts",
+      () =>
+        Promise.resolve(metSignaal(supabase.rpc("zoek_chunks", {
+          p_query,
+          p_limit: overFetch,
+          p_document_ids: scope,
+          ...rpcFilterParams(filters),
+          p_fonds_id: fondsFilter,
+        }), opt.signal)),
+      {
+        poging,
+        rijen: (u) => (Array.isArray(u.data) ? u.data.length : undefined),
+        status: (u) => statusVanPostgrest(u, opt.signal),
+      }
+    );
+  const fts = await voerFtsPogingenUit(vraag, ftsQuery, {
+    draai: rangschikFts,
+    signal: opt.signal,
+    begrensVolscans: opt.begrensVolscans,
+    bijOngebruikt: () => opt.fasemeter.noteer("rpc_fts", "ongebruikt", { poging: "terugval" }),
+  });
 
-  if (!error && Array.isArray(data) && data.length > 0) {
-    const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
+  if (fts.soort === "strikt") {
+    const gerangschikt = fts.rijen.map(rijNaarChunk);
     const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum, filters?.modus);
     // R1.3 rerank (sterk pad) → R1.5 drempel → weeg → R1.6 parent.
     const na = await naVerwerking(
@@ -2050,48 +2284,51 @@ async function zoekViaFTS(
   // houdt de vraag op het gerangschikte pad — inclusief ts_rank_cd, bronsoort-
   // weging, reranker (R1.3) en relevantie-ondergrens (R1.5).
   // De strikte query blijft poging 1: precisie waar precisie werkt, recall alleen
-  // waar streng zoeken niets oplevert.
-  const terugval = bouwTerugvalFtsQuery(vraag);
-  if (terugval) {
-    const { data: dataT, error: errorT } = await metSignaal(
-      supabase.rpc("zoek_chunks", {
-        p_query: terugval.query,
-        p_limit: overFetch,
-        p_document_ids: scope,
-        ...rpcFilterParams(filters),
-        p_fonds_id: fondsFilter,
-      }),
-      opt.signal
+  // waar streng zoeken niets oplevert. (Uitgevoerd in `voerFtsPogingenUit`.)
+  if (fts.soort === "terugval") {
+    const { terugval } = fts;
+    const gerangschikt = fts.rijen.map(rijNaarChunk);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum, filters?.modus);
+    // Rerank is hier JUIST gewenst: de OR-keten verbreedt de kandidatenset, en de
+    // reranker is precies het instrument dat daar de precisie in terugbrengt.
+    // De rerank draait op de ORIGINELE vraag, niet op de verslapte query — we
+    // willen weten of een chunk de vráág beantwoordt.
+    const na = await naVerwerking(
+      bewaakt.chunks, "fts_dutch_terugval", vraag, filters, maxResults, maxPerDoc,
+      fondsFilter, peildatum, opt, true
     );
-    bewaakNaIO(opt.signal, errorT);
-
-    if (!errorT && Array.isArray(dataT) && dataT.length > 0) {
-      const gerangschikt = (dataT as ZoekChunkRij[]).map(rijNaarChunk);
-      const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum, filters?.modus);
-      // Rerank is hier JUIST gewenst: de OR-keten verbreedt de kandidatenset, en de
-      // reranker is precies het instrument dat daar de precisie in terugbrengt.
-      // De rerank draait op de ORIGINELE vraag, niet op de verslapte query — we
-      // willen weten of een chunk de vráág beantwoordt.
-      const na = await naVerwerking(
-        bewaakt.chunks, "fts_dutch_terugval", vraag, filters, maxResults, maxPerDoc,
-        fondsFilter, peildatum, opt, true
-      );
-      return {
-        chunks: na.chunks,
-        meta: {
-          ...bouwMeta("fts_dutch_terugval", bewaakt.chunks.length, na.chunks),
-          filters: fMeta,
-          ...fondsMeta(fondsFilter, bewaakt.gedropt),
-          ...(jargon.length ? { jargon_expansie: jargon } : {}),
-          terugval: {
-            termen: terugval.termen,
-            query: terugval.query,
-            versie: terugval.versie,
-          },
-          ...na.extra,
+    return {
+      chunks: na.chunks,
+      meta: {
+        ...bouwMeta("fts_dutch_terugval", bewaakt.chunks.length, na.chunks),
+        filters: fMeta,
+        ...fondsMeta(fondsFilter, bewaakt.gedropt),
+        ...(jargon.length ? { jargon_expansie: jargon } : {}),
+        terugval: {
+          termen: terugval.termen,
+          query: terugval.query,
+          versie: terugval.versie,
         },
-      };
-    }
+        ...na.extra,
+      },
+    };
+  }
+
+  // #500 — begrensde volscans: brak de database een gerangschikte poging af
+  // (57014), dan zijn de ongerangschikte vangnetten hieronder óók volscans onder
+  // dezelfde RLS-kosten. Niet starten; het artikelspoor levert de exacte passages.
+  if (fts.soort === "begrensd") {
+    opt.fasemeter.noteer("fts_plain", "overgeslagen");
+    opt.fasemeter.noteer("fts_ilike", "overgeslagen");
+    return {
+      chunks: [],
+      meta: {
+        ...bouwMeta("geen", 0, []),
+        filters: fMeta,
+        ...fondsMeta(fondsFilter, 0),
+        fallback_reason: VOLSCAN_BEGRENSD,
+      },
+    };
   }
 
   // Fallback-cascade (ongerangschikt) — vangnet als de RPC niets oplevert.
@@ -2139,7 +2376,11 @@ async function zoekViaFTS(
     if (filters?.documentstatus) q2 = q2.in("documentstatus", filters.documentstatus);
     if (filters?.procesinstantie_ids) q2 = q2.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q2 = q2.in("bibliotheek", filters.bronsoort);
-    const { data: data2, error: error2 } = await metSignaal(q2, opt.signal);
+    const { data: data2, error: error2 } = await opt.fasemeter.meet(
+      "fts_plain",
+      () => Promise.resolve(metSignaal(q2, opt.signal)),
+      { rijen: (u) => (Array.isArray(u.data) ? u.data.length : undefined), status: (u) => statusVanPostgrest(u, opt.signal) }
+    );
     bewaakNaIO(opt.signal, error2);
 
     if (!error2 && data2 && data2.length > 0) {
@@ -2186,7 +2427,11 @@ async function zoekViaFTS(
     if (filters?.documentstatus) q3 = q3.in("documentstatus", filters.documentstatus);
     if (filters?.procesinstantie_ids) q3 = q3.in("procesinstantie_id", filters.procesinstantie_ids);
     if (filters?.bronsoort) q3 = q3.in("bibliotheek", filters.bronsoort);
-    const { data: data3, error: error3 } = await metSignaal(q3, opt.signal);
+    const { data: data3, error: error3 } = await opt.fasemeter.meet(
+      "fts_ilike",
+      () => Promise.resolve(metSignaal(q3, opt.signal)),
+      { rijen: (u) => (Array.isArray(u.data) ? u.data.length : undefined), status: (u) => statusVanPostgrest(u, opt.signal) }
+    );
     bewaakNaIO(opt.signal, error3);
 
     if (data3 && data3.length > 0) {

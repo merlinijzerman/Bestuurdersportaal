@@ -275,7 +275,9 @@ test("PR-B — elke I/O in de retrievalketen draagt het signaal", async () => {
   // De zoek-RPC's en de fallbackqueries lopen alle door `metSignaal(...)`.
   const rpcs = [...rag.matchAll(/supabase\.rpc\("zoek_chunks[a-z_]*"/g)].length;
   const gekoppeld = [...rag.matchAll(/metSignaal\(/g)].length;
-  assert.ok(rpcs >= 3, `verwacht ten minste 3 zoek-RPC's, gevonden ${rpcs}`);
+  // #500 — de strikte en de verslapte FTS-poging delen sinds de begrensde
+  // volscans één aanroepplek (`rangschikFts`); vandaar twee in plaats van drie.
+  assert.ok(rpcs >= 2, `verwacht ten minste 2 zoek-RPC-aanroepplekken, gevonden ${rpcs}`);
   assert.ok(gekoppeld >= rpcs, `elke zoek-RPC hoort door metSignaal te lopen (${gekoppeld} < ${rpcs})`);
 
   const embed = readFileSync(new URL("../../core/lib/embeddings.ts", import.meta.url), "utf8");

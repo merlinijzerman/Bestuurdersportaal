@@ -913,47 +913,85 @@ alter table public.governance_log enable row level security;
 create policy "eigen profiel" on public.profielen
   for all using (auth.uid() = id);
 
--- Documenten (Increment C+/B13, migratie 2026_06_20e authoritatief): RLS-split per
--- command. SELECT gedeeld (eigen fonds OF generiek); INSERT/UPDATE alleen eigen
--- fonds ÉN bibliotheek='fonds'; DELETE alleen eigen fonds. Tenants zijn read-only
--- op generiek; generiek-curatie loopt interim via service-role (omzeilt RLS).
+-- Documenten (Increment C+/B13, migratie 2026_06_20e authoritatief; leesbinding
+-- aan een sessie via 2026_07_31_r1 §7; expressievorm via 2026_10_02_505): RLS-split
+-- per command. SELECT gedeeld (eigen fonds OF generiek, alleen met sessie);
+-- INSERT/UPDATE alleen eigen fonds ÉN bibliotheek='fonds'; DELETE alleen eigen
+-- fonds. Tenants zijn read-only op generiek; generiek-curatie loopt interim via
+-- service-role (omzeilt RLS).
+-- #505: elke auth.uid() staat als `(select auth.uid())` — een InitPlan, één
+-- evaluatie per statement i.p.v. per rij (JWT-parse). Predicaten ongewijzigd.
 create policy "documenten select" on public.documenten
-  for select using (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-    or bibliotheek = 'generiek');
+  as permissive for select to public
+  using (
+    (select auth.uid()) is not null
+    and (
+      fonds_id = (select profielen.fonds_id from public.profielen
+                   where profielen.id = (select auth.uid()))
+      or bibliotheek = 'generiek'
+    )
+  );
 
 create policy "documenten insert eigen fonds" on public.documenten
-  for insert with check (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-    and bibliotheek = 'fonds');
+  as permissive for insert to public
+  with check (
+    fonds_id = (select profielen.fonds_id from public.profielen
+                 where profielen.id = (select auth.uid()))
+    and bibliotheek = 'fonds'
+  );
 
 create policy "documenten update eigen fonds" on public.documenten
-  for update using (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-  ) with check (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-    and bibliotheek = 'fonds');
+  as permissive for update to public
+  using (
+    fonds_id = (select profielen.fonds_id from public.profielen
+                 where profielen.id = (select auth.uid()))
+  )
+  with check (
+    fonds_id = (select profielen.fonds_id from public.profielen
+                 where profielen.id = (select auth.uid()))
+    and bibliotheek = 'fonds'
+  );
 
 create policy "documenten delete eigen fonds" on public.documenten
-  for delete using (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid()));
+  as permissive for delete to public
+  using (
+    fonds_id = (select profielen.fonds_id from public.profielen
+                 where profielen.id = (select auth.uid()))
+  );
 
--- Chunks: SELECT gedeeld (incl. generiek), schrijven alleen eigen fondsdocs.
+-- Chunks: SELECT gedeeld (incl. generiek, alleen met sessie), schrijven alleen
+-- eigen fondsdocs. De permissive ALL-policy wordt bij SELECT via OR mee-
+-- geëvalueerd (bewust ongewijzigd in #505, zie besluit 0216).
 create policy "chunks select" on public.document_chunks
-  for select using (
-    document_id in (select id from public.documenten where
-      fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-      or bibliotheek = 'generiek'));
+  as permissive for select to public
+  using (
+    (select auth.uid()) is not null
+    and document_id in (
+      select documenten.id from public.documenten
+       where documenten.fonds_id = (select profielen.fonds_id from public.profielen
+                                     where profielen.id = (select auth.uid()))
+          or documenten.bibliotheek = 'generiek'
+    )
+  );
 
 create policy "chunks write eigen fonds" on public.document_chunks
-  for all using (
-    document_id in (select id from public.documenten where
-      fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-      and bibliotheek = 'fonds')
-  ) with check (
-    document_id in (select id from public.documenten where
-      fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-      and bibliotheek = 'fonds'));
+  as permissive for all to public
+  using (
+    document_id in (
+      select documenten.id from public.documenten
+       where documenten.fonds_id = (select profielen.fonds_id from public.profielen
+                                     where profielen.id = (select auth.uid()))
+         and documenten.bibliotheek = 'fonds'
+    )
+  )
+  with check (
+    document_id in (
+      select documenten.id from public.documenten
+       where documenten.fonds_id = (select profielen.fonds_id from public.profielen
+                                     where profielen.id = (select auth.uid()))
+         and documenten.bibliotheek = 'fonds'
+    )
+  );
 
 -- Governance log: alleen eigen fonds (T3: WITH CHECK sluit schrijfkant, append-only via trigger)
 create policy "fonds log" on public.governance_log

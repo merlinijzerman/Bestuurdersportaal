@@ -283,6 +283,54 @@ en valt bewust buiten deze hotfix. Het zou ook de andere zoek-RPC's
 `retrieval_meta.selectie.juridisch.artikel` moet `exact ≥ 1` en
 `geboost_geselecteerd ≥ 1` tonen, en de bronkaart p. 395.
 
+#### Vervolg 02-10-2026 — gecombineerde vraag: `retrieval:timeout` (fasetijden + begrensde volscans)
+
+**Waarneming.** Na de legacy-rescan (#511/#513) slaagden bedoeling- en
+normvraag; de gecombineerde vraag eindigde tweemaal na ~20 s in
+`retrieval:timeout`, vóór enige modelcall, zonder governance-log.
+
+**Diagnose (Productie read-only, als authenticated, fonds m365-demo).** Het
+fonds draait het FTS-pad (`hybride_zoeken=false`). Keten: `zoek_chunks` strikt
+(AND-keten van tien termen, 0 rijen) → `zoek_chunks` verslapt (8 OR-termen) →
+bij een fout plain → ilike → artikelspoor → versies/poort. Elke `zoek_chunks`-
+aanroep is onder RLS een volledige scan (~136k buffers); de policy evalueert
+`auth.uid()` — een jsonb-parse van `request.jwt.claims` — per rij, dus de kosten
+schalen met de JWT-omvang: minimale claims 1,5–1,7 s mediaan, ~0,5 kB 6,0 s,
+~0,9 kB 8,0–12,7 s (statement_timeout 8 s → 57014). `pg_stat_statements`:
+PostgREST-`zoek_chunks` mean 5,2 s, max 7,8 s (alleen afgeronde aanroepen).
+Twee gerangschikte volscans na elkaar (2× 8 s) plus plain (0,8–4,8 s) overschrijden
+het budget van 20 s; artikelspoor (~70 ms per query) en versies (~10 ms) zijn
+verwaarloosbaar. De reglementvraag (0 bronnen, 15,5 s) past in hetzelfde beeld.
+
+**Oplossing (geen migratie, geen RLS-/policy-/time-outwijziging).**
+`RetrievalOpties.begrensVolscans`, uitsluitend gezet door de Supabase-adapter bij
+een juridische artikelfocus (schakelaar `ARTIKELFOCUS_VOLSCANBEGRENZING=off`):
+(a) de verslapte poging start gelijktijdig met de strikte (FTS:
+`voerFtsPogingenUit`; hybride: speculatieve G-12) — zelfde query, parameters en
+beslisregel, dus dezelfde uitkomst, wandklok max i.p.v. som; (b) na een 57014
+op een gerangschikte RPC geen nieuwe volscan (geen plain/ilike, geen
+FTS-terugval vanaf hybride): het artikelspoor levert de exacte passages,
+`fallback_reason: "volscan_begrensd"`. Vragen zonder artikelfocus: byte-identiek.
+
+**Observability.** `core/lib/retrieval/fasetijden.ts`: gesloten fasenamen
+(zoek, embedding, rpc_hybride/rpc_fts per poging, fts_plain/ilike, scanbewijs,
+rerank, artikel_*, versies, parent, notulen, documentmeta, poort, selectie,
+citatie), ms, status (`ok/fout/db_timeout/afgebroken/ongebruikt/overgeslagen`),
+rijentelling — geen tekst. Bij succes onder
+`retrieval_meta.invoer.retrieval_fasetijden` (basis, migratievrij); langs elke
+uitgang, ook bij time-out, één serverlogregel `[retrieval][fasetijden] {…}`.
+
+**Tests.** `tests/cross-tenant/retrieval-500-fasetijden.test.ts` (F1–F11, met
+mutatiecontroles); `tests/karakterisering/artikelspoor-500-budget.mjs` — geschaalde
+productiereplica (JWT ~1,1 kB, statement_timeout 2 s, budget 5 s = 8/20): met de
+fix gecombineerd 2,06 s, wet vóór MvT p.395; zonder (negatieve controle) 4,30 s
+sequentieel; aangesloten in `karakterisering.yml` na de keten-pass.
+
+**Open (#505).** Elke vraag zonder artikelfocus blijft onder echte JWT's één
+tot vier volscans van 6–12 s doen; zonder de RLS-herschrijving
+(`(select auth.uid())`) is er voor die vragen geen marge. Voor de 150d-vragen
+geldt na de fix ≈ 8 s (DB-grens) + ~0,4 s.
+
 ## 3. Migratie en deployvolgorde
 
 De Microsoft-release is geland; de rebase en volledige lokale hertest zijn afgerond. Stappen 1–4 zijn uitgevoerd; stap 5 blijft de harde Preview-begrenzing en stap 6 is nog niet uitgevoerd.

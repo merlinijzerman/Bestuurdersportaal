@@ -24,6 +24,7 @@ import {
 } from "../rag";
 import { verrijkMetParents } from "../parent-context";
 import { alsActueleVersiestand, leesSupabaseVersies } from "./supabase-versie";
+import { GEEN_FASEMETER } from "./fasetijden";
 import type {
   AdapterCapabilities,
   AdapterUitkomst,
@@ -79,6 +80,16 @@ export interface SupabaseAdapterDependencies {
   verrijkDocumentmeta?: typeof verrijkDocumentmetadata;
   /** #500 — injecteerbaar gericht artikelspoor (hermetische tests). */
   artikelkandidaten?: typeof vulAanMetArtikelkandidaten;
+}
+
+/**
+ * #500 — schakelaar voor de begrensde volscans bij een artikelfocus. Standaard
+ * AAN; `ARTIKELFOCUS_VOLSCANBEGRENZING=off` zet het gedrag van vóór deze hotfix
+ * terug (operationele terugrol én de negatieve controle in de keten-test). Raakt
+ * uitsluitend vragen MET een juridische artikelfocus.
+ */
+export function artikelfocusBegrenzingAan(): boolean {
+  return process.env.ARTIKELFOCUS_VOLSCANBEGRENZING !== "off";
 }
 
 export function maakSupabaseAdapter(
@@ -139,6 +150,7 @@ export function maakSupabaseAdapter(
 
     async zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst> {
       const t0 = Date.now();
+      const meter = ctx.fasemeter ?? GEEN_FASEMETER;
       const { chunks: gerangschikt, meta } = await zoek(
         query.zoekvraag,
         ctx.fondsId,
@@ -157,6 +169,12 @@ export function maakSupabaseAdapter(
           stopNaRangschikking: true,
           // PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt.
           signal: ctx.signal,
+          // #500 — fasetijden (inhoudsvrij) van embedding, zoek-RPC's per poging,
+          // scanbewijs en rerank.
+          ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter } : {}),
+          // #500 — begrensde volscans: ALLEEN bij een juridische artikelfocus
+          // (dezelfde poort als het artikelspoor). Zie `RetrievalOpties`.
+          ...(query.artikelfocus && artikelfocusBegrenzingAan() ? { begrensVolscans: true } : {}),
         }
       );
 
@@ -172,13 +190,16 @@ export function maakSupabaseAdapter(
             filters: query.filters,
             maxKandidaten: query.maxKandidaten,
             signal: ctx.signal,
+            ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter } : {}),
           })
         : gerangschikt;
 
       const diagnostiek: Partial<RetrievalMeta> = { ...meta };
       for (const veld of SELECTIE_AFGELEID) delete (diagnostiek as Record<string, unknown>)[veld];
 
-      const versies = await leesVersies(chunks, ctx.fondsId, ctx.signal);
+      const versies = await meter.meet("versies", () => leesVersies(chunks, ctx.fondsId, ctx.signal), {
+        rijen: (v) => v.size,
+      });
       const kandidaten = chunks.map((c, i) => ({
         ...chunkAlsBronresultaat(c, i),
         versie: versies.get(c.id) ?? { soort: "onbekend" as const, waarde: null, gecontroleerdOp: null },
@@ -239,22 +260,26 @@ export function maakSupabaseAdapter(
       if (chunks.length === 0) return { resultaten: kandidaten };
 
       let parentMeta: Partial<RetrievalMeta> | undefined;
+      const meter = ctx.fasemeter ?? GEEN_FASEMETER;
       if (vlaggen.parentRetrieval) {
         // De peildatum van HET SPOOR, nooit "vandaag": anders zou een
         // historische retrieval ongemerkt met de datum van nu worden verrijkt.
-        const p = await verrijkMetParents(chunks, ctx.fondsId, opties.peildatum, {
+        const huidig = chunks;
+        const p = await meter.meet("parent", () => verrijkMetParents(huidig, ctx.fondsId, opties.peildatum, {
           signal: ctx.signal,
           verwachteVersies: new Map(kandidaten.map((bron) => {
             const chunk = chunkPerRef.get(bron.ref);
             return [chunk?.id ?? bron.ref, bron.versie] as const;
           })),
-        });
+        }), { rijen: (r) => r.chunks.length });
         chunks = p.chunks;
         parentMeta = { parent: p.meta };
       }
 
-      chunks = await doeNotulen(chunks, ctx.signal);
-      chunks = await doeDocumentmeta(chunks, ctx.fondsId, ctx.signal);
+      const naParent = chunks;
+      chunks = await meter.meet("notulen", () => doeNotulen(naParent, ctx.signal));
+      const naNotulen = chunks;
+      chunks = await meter.meet("documentmeta", () => doeDocumentmeta(naNotulen, ctx.fondsId, ctx.signal));
 
       const resultaten = chunks.map((c, i) => behoudIdentiteit(chunkAlsBronresultaat(c, i)));
       for (const [index, bron] of resultaten.entries()) chunkPerRef.set(bron.ref, chunks[index]);
