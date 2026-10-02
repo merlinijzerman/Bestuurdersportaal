@@ -248,12 +248,53 @@ export const GEEN_FASEMETER: Fasemeter = {
 };
 
 /**
- * De gestructureerde serverlogregel. Eén regel per retrieval, ook (juist) bij
- * een time-out — dan is er geen governance-log en is dit het enige spoor.
- * Inhoud: correlatie-id (request-id, geen inhoud), fondsloos, en de samenvatting.
+ * #505 — de afloop van één retrieval, voor de productieregressie-check. Anders
+ * dan `uitkomst` (die ook in het auditspoor staat) onderscheidt zij een beurt
+ * die alleen slaagde via de time-outroute: uitkomst `ok`, maar een fase brak op
+ * de statement_timeout af (57014).
  */
-export function logFasetijden(correlatieId: string, samenvatting: FasetijdenSamenvatting): void {
-  const regel = `[retrieval][fasetijden] ${JSON.stringify({ correlatie: correlatieId, ...samenvatting })}`;
+export type Retrievalafloop = "succes" | "db_timeout" | "deadline" | "afgebroken" | "fout";
+
+export function afloopVan(samenvatting: FasetijdenSamenvatting): Retrievalafloop {
+  if (samenvatting.uitkomst === "timeout") return "deadline";
+  if (samenvatting.uitkomst === "annulering") return "afgebroken";
+  if (samenvatting.uitkomst === "fout") return "fout";
+  return samenvatting.fasen.some((f) => f.status === "db_timeout") ? "db_timeout" : "succes";
+}
+
+export interface LogKenmerken {
+  /** Taaktype van de beurt (bv. `chat_generatie`); inhoudsvrij filter. */
+  taak?: string;
+  /**
+   * Volgnummer van deze retrieval binnen dezelfde beurt (zelfde meter en
+   * correlatie). Normaal 1; een herhaalde aanroep binnen één beurt krijgt 2, …
+   * zodat een retry niet als tweede vraag wordt geteld.
+   */
+  volgnummer?: number;
+}
+
+/**
+ * De gestructureerde serverlogregel. Precies één regel per retrieval, langs
+ * élke uitgang (ok, deadline, annulering, fout) — juist bij een time-out, want
+ * dan is er geen governance-log en is dit het enige spoor.
+ * `terminaal: true` markeert de regel als het eindrecord van die retrieval (er
+ * zijn geen tussenregels); `afloop` is het oordeel voor de releasecheck.
+ * Inhoud: correlatie-id (request-id = `retrieval_meta.correlation_id`, geen
+ * inhoud), fondsloos, en de samenvatting.
+ */
+export function logFasetijden(
+  correlatieId: string,
+  samenvatting: FasetijdenSamenvatting,
+  kenmerken: LogKenmerken = {}
+): void {
+  const regel = `[retrieval][fasetijden] ${JSON.stringify({
+    correlatie: correlatieId,
+    terminaal: true,
+    afloop: afloopVan(samenvatting),
+    ...(kenmerken.taak ? { taak: kenmerken.taak } : {}),
+    volgnummer: kenmerken.volgnummer ?? 1,
+    ...samenvatting,
+  })}`;
   if (samenvatting.uitkomst === "ok") console.info(regel);
   else console.warn(regel);
 }

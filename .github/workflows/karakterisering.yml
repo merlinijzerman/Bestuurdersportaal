@@ -412,45 +412,88 @@ jobs:
           echo "artikelspoor-500-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
-      # #500 vervolg (gecombineerde vraag, retrieval:timeout op Productie): de
-      # drie 150d-vragen binnen het retrievalbudget onder een GESCHAALDE replica
-      # van Productie — JWT van productieomvang, statement_timeout 2 s en budget
-      # 5 s (zelfde verhouding als 8 s / 20 s). Productiepad: FTS (geen
-      # HYBRID_SEARCH). Twee servers: met de begrensde volscans (groen) en met
-      # ARTIKELFOCUS_VOLSCANBEGRENZING=off als negatieve controle (rood of
-      # aantoonbaar trager). Na de keten-pass: de fixture staat er dan al.
-      # Het script zet rolinstelling, fondsvlag en metadata zelf en herstelt ze.
-      - name: "#500 gecombineerde vraag — retrievalbudget (geschaalde productiereplica)"
+      # Twee gescheiden bewijzen, beide na de keten-pass (de fixture staat er dan):
+      #
+      # #505 PERFORMANCE — normale instellingen (statement_timeout 8 s van de
+      # rol, standaardbudget 20 s; de test verkrapt niets en controleert dat),
+      # realistische JWT's van ~0,9 en ~1,5 kB, alle vier pilotvragen, zonder één
+      # db_timeout-fase en ruim binnen budget. Twee servers: met de
+      # volscanbegrenzing (productieconfiguratie) en met
+      # ARTIKELFOCUS_VOLSCANBEGRENZING=off (#505 geeft zelf de marge).
+      #
+      # #516 GEDRAG — deterministisch, onafhankelijk van de databasesnelheid:
+      # de test vervangt zoek_chunks/zoek_chunks_hybride tijdelijk door een
+      # functie die direct 57014 gooit, en bewijst per pad (FTS, hybride) dat de
+      # vangnetten mét begrenzing worden overgeslagen en zónder begrenzing wél
+      # draaien, dat het artikelspoor in beide gevallen de exacte wet- en
+      # MvT-passages levert, en dat tenant/status/review/scanpoort intact
+      # blijven (server met WP3_MALWARESCAN_AAN=true). Mutatiecontrole: tegen de
+      # server waar de begrenzing genegeerd wordt, moet de verwachting
+      # 'begrensd' rood worden op uitsluitend de begrenzingseisen.
+      - name: "#505 performance + #516 gedrag (gecombineerde vraag, artikelspoor)"
         env:
           ART500_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          MISTRAL_API_KEY: "t1b-stub-sleutel-niet-echt"
+          WP4_E2E_EMBED_PROVIDER: "local"
+          WP4_E2E_EMBED_PROVIDER_URL: "http://127.0.0.1:8791"
         run: |
           t0=$(date +%s)
+          # Elke run een EIGEN poort, en bij het stoppen de poort echt vrijgeven:
+          # `kill` op het npm-proces laat de Next-server staan, en een volgende
+          # run op dezelfde poort zou dan stil de vorige configuratie testen.
           start_server() {
+            POORT=$1
             APP_BASE_URL="http://127.0.0.1:$1" PORT="$1" npm run start &
             SERVER=$!
             for i in $(seq 1 60); do
               curl -sf "http://127.0.0.1:$1/api/healthz/ping" >/dev/null && return 0
               sleep 1
             done
-            echo "FOUT: next start (#500 budget, poort $1) kwam niet op binnen 60s." >&2
+            echo "FOUT: next start (poort $1) kwam niet op binnen 60s." >&2
             kill "$SERVER" 2>/dev/null || true
             return 1
           }
-          start_server 3006 || exit 1
+          stop_server() {
+            kill "$SERVER" 2>/dev/null || true; wait "$SERVER" 2>/dev/null || true
+            fuser -k "$POORT/tcp" 2>/dev/null || (lsof -ti "tcp:$POORT" | xargs -r kill) 2>/dev/null || true
+            for i in $(seq 1 20); do curl -sf "http://127.0.0.1:$POORT/api/healthz/ping" >/dev/null || return 0; sleep 1; done
+            echo "FOUT: poort $POORT bleef bezet." >&2; return 1
+          }
+          node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/art516-embed-stub.log" 2>&1 &
+          STUB=$!
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8791/_verzoeken >/dev/null && break; sleep 1; done
           code=0
-          APP_BASE_URL=http://127.0.0.1:3006 node tests/karakterisering/artikelspoor-500-budget.mjs \
-            | tee "$RUNNER_TEMP/art500-budget-groen.json" || code=1
-          kill "$SERVER" 2>/dev/null || true
-          wait "$SERVER" 2>/dev/null || true
-          [ "$code" = "0" ] || exit $code
-          groen_ms=$(node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8");const j=JSON.parse(t.slice(0,t.lastIndexOf("}")+1));console.log(j.vragen.gecombineerd.retrieval_ms)' "$RUNNER_TEMP/art500-budget-groen.json")
-          export ARTIKELFOCUS_VOLSCANBEGRENZING=off
-          start_server 3007 || exit 1
-          ART500_BUDGET_VERWACHTING=rood ART500_GROEN_MS="$groen_ms" APP_BASE_URL=http://127.0.0.1:3007 \
-            node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
-          kill "$SERVER" 2>/dev/null || true
-          wait "$SERVER" 2>/dev/null || true
-          echo "artikelspoor-500-budget-pass: $(( $(date +%s) - t0 ))s"
+          # ── #505 performance ──
+          poort=3006
+          for begrenzing in aan uit; do
+            if [ "$begrenzing" = "uit" ]; then export ARTIKELFOCUS_VOLSCANBEGRENZING=off; else unset ARTIKELFOCUS_VOLSCANBEGRENZING; fi
+            start_server $poort || { code=1; break; }
+            ART505_BEGRENZING_LABEL=$begrenzing APP_BASE_URL=http://127.0.0.1:$poort \
+              node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
+            stop_server || code=1
+            poort=$((poort + 1))
+          done
+          # ── #516 gedrag (57014 geïnjecteerd) ──
+          export WP3_MALWARESCAN_AAN=true
+          for pad in fts hybride; do
+            if [ "$pad" = "hybride" ]; then export HYBRID_SEARCH=on; else unset HYBRID_SEARCH; fi
+            unset ARTIKELFOCUS_VOLSCANBEGRENZING
+            start_server $poort || { code=1; break; }
+            ART516_PAD=$pad ART516_VERWACHTING=begrensd APP_BASE_URL=http://127.0.0.1:$poort \
+              node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
+            stop_server || code=1
+            poort=$((poort + 1))
+            export ARTIKELFOCUS_VOLSCANBEGRENZING=off
+            start_server $poort || { code=1; break; }
+            ART516_PAD=$pad ART516_VERWACHTING=onbegrensd APP_BASE_URL=http://127.0.0.1:$poort \
+              node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
+            ART516_PAD=$pad ART516_VERWACHTING=begrensd ART516_MUTATIECONTROLE=1 APP_BASE_URL=http://127.0.0.1:$poort \
+              node tests/karakterisering/artikelspoor-516-gedrag.mjs || code=1
+            stop_server || code=1
+            poort=$((poort + 1))
+          done
+          kill "$STUB" 2>/dev/null || true
+          echo "art505-perf/art516-gedrag-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
       - name: Supabase-stack stoppen
