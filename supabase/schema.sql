@@ -679,6 +679,25 @@ as $$
    limit greatest(p_limit, 1);
 $$;
 
+-- R1 (besluit 0218, migratie 2026_10_03_r1_zoek_chunks_begrensd.sql — AUTHORITATIEF):
+-- `public.zoek_chunks_begrensd(…)` — plpgsql-variant van zoek_chunks met EXACT
+-- hetzelfde contract (10 parameters, 23 retourkolommen zoals in de T4-migratie
+-- 2026_08_12 §7a) en hetzelfde filterblok, SECURITY INVOKER, STABLE,
+-- `set search_path = public, pg_temp`, ACL byte-gelijk (revoke public/anon;
+-- grant execute authenticated, service_role). Verschil zit in de PLANVORM:
+--   1. v_tsq := websearch_to_tsquery('dutch', p_query)   -- tsquery als variabele
+--   2. v_doc_ids := toelaatbare documenten onder RLS (d.actief, documentscope)
+--   3. with docs as materialized (… documenten where id = any(v_doc_ids))
+--      select … from document_chunks c join docs d on d.id = c.document_id
+--       where c.document_id = any(v_doc_ids) and <oud filterblok, q.query → v_tsq>
+--       order by rang desc, c.chunk_index asc, c.id        -- tiebreaker (bewust)
+--       limit greatest(p_limit, 1);
+-- en in de bovengrens: p_limit > 1000 ⇒ raise exception SQLSTATE 'P0R01'
+-- (bewust, niet stil afgekapt). De app roept haar alleen aan met de vlag
+-- ZOEK_TEKST_V2=on (+ fondsvlag zoek_tekst_v2); pariteit met zoek_chunks:
+-- supabase/checks/2026_10_03_r1_zoektekst_pariteit.sql. Rollback:
+-- supabase/rollbacks/2026_10_03_r1_zoek_chunks_begrensd_ROLLBACK.sql.
+
 -- ── 5. Governance log ──────────────────────────────────────
 create table if not exists public.governance_log (
   id              uuid primary key default uuid_generate_v4(),

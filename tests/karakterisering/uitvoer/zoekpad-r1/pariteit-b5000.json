@@ -1,0 +1,8941 @@
+{
+ "stand": "b5000",
+ "limit": 30,
+ "cellen": [
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 9
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 9
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 9
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 4,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 4,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 6,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 6,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 9
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 9
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 9
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 4,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 4,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 6,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 6,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "A",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "bedoeling",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "norm",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "gecombineerd",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "reglement",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r2",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r3",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r6",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r7",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "r10",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "c1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a2",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a3",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a6",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a7",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a10",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a11",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a12",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a13",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a14",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 4,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a15",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "09",
+   "vraag": "a16",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "bedoeling",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "norm",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "gecombineerd",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "reglement",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r2",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r3",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r6",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 5,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r7",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "r10",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "c1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a1",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a2",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a3",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a4",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a5",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a6",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a7",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a8",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a9",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a10",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 1,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a11",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a12",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a13",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "strikt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 2,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "frase",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 3,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "scope",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a14",
+   "variant": "actueel",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 4,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a15",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "strikt",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "verslapt",
+   "status": "gelijk_grens_tie",
+   "detail": {
+    "ties": 0,
+    "grensTie": 1,
+    "n": 30
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "frase",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "nul",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "scope",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  },
+  {
+   "fonds": "B",
+   "jwt": "15",
+   "vraag": "a16",
+   "variant": "actueel",
+   "status": "gelijk",
+   "detail": {
+    "ties": 0,
+    "grensTie": 0,
+    "n": 0
+   }
+  }
+ ],
+ "gelijk": 468,
+ "gelijk_grens_tie": 276,
+ "afwijking": 0,
+ "fout": 0,
+ "met_ties": 150,
+ "leeg": 462,
+ "afwijkingen": []
+}

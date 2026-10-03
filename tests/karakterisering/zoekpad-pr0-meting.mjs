@@ -30,7 +30,8 @@
 //    --uit <dir>         uitvoermap (default tests/karakterisering/uitvoer/zoekpad-pr0)
 //    --runs <n>          runs per pilotvraag per cel (default 20)
 //    --runs-overig <n>   runs per overige vraag per cel (default 2)
-//    --routes R0,R1,R1p,R2,R2g   subset
+//    --routes R0,R1,R1p,R2,R2g,R1prod   subset (R1prod = de echte
+//                public.zoek_chunks_begrensd uit migratie 2026_10_03_r1; alleen tekst)
 //    --jwt 09,15         subset
 //    --varianten strikt,verslapt,frase,nul,scope,actueel,hybride,hybride_verslapt,hybride_hnsw,hybride_iteratief
 //                (hybride = exacte vectorarm zoals R0; hybride_hnsw = HNSW ef 40 zonder
@@ -189,6 +190,13 @@ function routeSql(route, p, vec, fonds = FONDS.A) {
       ? `select id, document_id, rang, fts_rang, vec_rang from public.zoek_chunks_hybride(${q}, ${vec}, 30, 40, 60, ${sc}, null, null, null, ${m}, ${d}, ${bs}, ${f})`
       : `select id, document_id, rang from public.zoek_chunks(${q}, 30, ${sc}, null, null, null, ${m}, ${d}, ${bs}, ${f})`;
   }
+  // R1prod (0218): de ECHTE productiefunctie `public.zoek_chunks_begrensd`
+  // (migratie 2026_10_03_r1), met het volledige zoek_chunks-parameterblok.
+  // Alleen tekstvarianten; hybride is PR R1b.
+  if (route === "R1prod") {
+    if (p.hybride) throw new Error("R1prod kent geen hybride variant (R1b)");
+    return `select id, document_id, rang from public.zoek_chunks_begrensd(${q}, 30, ${sc}, null, null, null, ${m}, ${d}, ${bs}, ${f})`;
+  }
   if (route === "R1" || route === "R1p") {
     const fn = route === "R1p" ? "r1_fts_plpgsql" : "r1_fts";
     return p.hybride
@@ -246,6 +254,7 @@ async function faseMeting() {
       const c = claims(jwt, USER.A);
       for (const variant of VARIANTEN) {
         if (variant.startsWith("hybride_") && variant !== "hybride_verslapt" && route === "R0") continue;
+        if (variant.startsWith("hybride") && route === "R1prod") continue;
         const tijden = [], buffers = [], perVraag = {};
         let fouten = 0, eersteFout = null;
         for (const [i, v] of vragen.entries()) {
@@ -292,6 +301,7 @@ async function fasePlannen() {
   for (const route of ROUTES) {
     for (const variant of VARIANTEN) {
       if (variant.startsWith("hybride_") && variant !== "hybride_verslapt" && route === "R0") continue;
+      if (variant.startsWith("hybride") && route === "R1prod") continue;
       const p = variantParams(variant, v);
       const sql = routeSql(route, p, vecVoor(0));
       notices.length = 0;

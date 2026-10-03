@@ -434,3 +434,27 @@ die 8 s af. Daarnaast schrijft de functie de `document_metadata_log`-regels in
 dezelfde transactie: geen auditregel zonder wijziging en geen wijziging zonder
 auditregel. Gemeten in `supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql`
 (M0 rechten en budget, M6 weigering onder `authenticated`/`anon`).
+
+## R1 zoekpad (besluit 0218) — `public.zoek_chunks_begrensd(…)` (migratie 2026_10_03_r1_zoek_chunks_begrensd.sql)
+
+Nieuwe `plpgsql`-functie, bewust **SECURITY INVOKER** en qua rechten **byte-gelijk
+aan `zoek_chunks`**: `revoke all … from public, anon; grant execute … to
+authenticated, service_role`. Drie regels in de allowlist (anon `-`,
+authenticated `EXECUTE`, service_role `EXECUTE`), exact het patroon van
+`zoek_chunks` en `zoek_chunks_hybride` (regels 474–479).
+
+Waarom dezelfde ACL en niet smaller: de functie is een snellere vorm van
+dezelfde zoekvraag (zelfde 10 parameters, zelfde 23 retourkolommen, zelfde
+filterblok) en bewijst haar pariteit juist onder de acht actoren van de
+#505-matrix, inclusief `service_role` (BYPASSRLS, door `p_fonds_id` begrensd)
+en `portaal_beperkt` (42501). Een afwijkende ACL zou die pariteit breken en
+een eigen matrixverwachting vragen (`supabase/checks/2026_10_03_r1_zoektekst_pariteit.sql`,
+sectie C pint de ACL als set gelijk aan die van `zoek_chunks`). RLS op
+`documenten`/`document_chunks` blijft de enige tenantgrens; de functie voegt
+uitsluitend filters toe en bevat geen `set_config`.
+
+Rollback (`supabase/rollbacks/2026_10_03_r1_zoek_chunks_begrensd_ROLLBACK.sql`)
+verwijdert de functie. Een rollback hoort dan óók deze drie regels terug te
+draaien: de V3-gate meldt anders terecht "ontbrekend object" (de rollbackrondgang
+in `scripts/cross-tenant-ci.sh` bewijst dat V3 in de teruggedraaide stand — de
+allowlist zonder deze drie regels — schoon is).
