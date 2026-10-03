@@ -1,12 +1,13 @@
 {
  "stand": "b5000",
- "lekken": 6,
+ "lekken": 7,
  "bevindingen": [
   "LEK R2 portaal_beperkt_A verslapt: 18879 id's buiten de verwachting",
   "LEK R2 portaal_beperkt_A actueel: 18519 id's buiten de verwachting",
   "LEK R2 portaal_beperkt_A scope: 1268 id's buiten de verwachting",
   "LEK R2 portaal_beperkt_A frase: 9 id's buiten de verwachting",
   "LEK R2 portaal_beperkt_A bronsoort_fonds: 5100 id's buiten de verwachting",
+  "LEK R2 portaal_beperkt_A algemeen: 3147 id's buiten de verwachting",
   "LEK R2 portaal_beperkt_A hybride: 19111 id's buiten de verwachting"
  ],
  "matrix": {
@@ -174,8 +175,8 @@
     "pariteit": true
    },
    "algemeen/R0": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 3180,
+    "verwacht_n": 3180,
     "rls_docs": 75,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -183,8 +184,8 @@
     "pariteit": true
    },
    "algemeen/R1": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 3147,
+    "verwacht_n": 3147,
     "rls_docs": 75,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -192,8 +193,8 @@
     "pariteit": true
    },
    "algemeen/R2": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 3147,
+    "verwacht_n": 3147,
     "rls_docs": 75,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -392,8 +393,8 @@
     "pariteit": true
    },
    "algemeen/R0": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 7846,
+    "verwacht_n": 7846,
     "rls_docs": 64,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -401,8 +402,8 @@
     "pariteit": true
    },
    "algemeen/R1": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 7846,
+    "verwacht_n": 7846,
     "rls_docs": 64,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -410,8 +411,8 @@
     "pariteit": true
    },
    "algemeen/R2": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 7846,
+    "verwacht_n": 7846,
     "rls_docs": 64,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -610,8 +611,8 @@
     "pariteit": true
    },
    "algemeen/R0": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 2312,
+    "verwacht_n": 2312,
     "rls_docs": 30,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -619,8 +620,8 @@
     "pariteit": true
    },
    "algemeen/R1": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 2312,
+    "verwacht_n": 2312,
     "rls_docs": 30,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -628,8 +629,8 @@
     "pariteit": true
    },
    "algemeen/R2": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 2312,
+    "verwacht_n": 2312,
     "rls_docs": 30,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -1097,17 +1098,17 @@
    },
    "algemeen/R0": {
     "uitkomst": "fout:42501",
-    "verwacht_n": 0,
+    "verwacht_n": 3180,
     "rls_docs": 75
    },
    "algemeen/R1": {
     "uitkomst": "fout:42501",
-    "verwacht_n": 0,
+    "verwacht_n": 3147,
     "rls_docs": 75
    },
    "algemeen/R2": {
     "uitkomst": "fout:42501",
-    "verwacht_n": 0,
+    "verwacht_n": 3147,
     "rls_docs": 75
    },
    "hybride/R0": {
@@ -1290,8 +1291,8 @@
     "pariteit": false
    },
    "algemeen/R0": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 3180,
+    "verwacht_n": 3180,
     "rls_docs": 121,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -1299,8 +1300,8 @@
     "pariteit": true
    },
    "algemeen/R1": {
-    "n": 0,
-    "verwacht_n": 0,
+    "n": 3147,
+    "verwacht_n": 3147,
     "rls_docs": 121,
     "buiten_verwachting": 0,
     "ontbrekend": 0,
@@ -1309,12 +1310,12 @@
    },
    "algemeen/R2": {
     "n": 0,
-    "verwacht_n": 0,
+    "verwacht_n": 8924,
     "rls_docs": 121,
     "buiten_verwachting": 0,
-    "ontbrekend": 0,
+    "ontbrekend": 8924,
     "lek": false,
-    "pariteit": true
+    "pariteit": false
    },
    "hybride/R0": {
     "n": 19351,
@@ -1490,14 +1491,14 @@
     "rls_select": "fout:42501"
    },
    "algemeen/R2": {
-    "n": 0,
+    "n": 3147,
     "verwacht_n": 0,
     "rls_docs": 0,
     "rls_select": "fout:42501",
-    "buiten_verwachting": 0,
+    "buiten_verwachting": 3147,
     "ontbrekend": 0,
-    "lek": false,
-    "pariteit": true
+    "lek": true,
+    "pariteit": false
    },
    "hybride/R0": {
     "uitkomst": "fout:42501",

@@ -346,7 +346,9 @@ const SCENARIOS = {
   scope: { variant: "scope", vraag: VRAAG_VERSLAPT },
   frase: { variant: "frase", vraag: VRAGEN[0] },
   bronsoort_fonds: { variant: "bronsoort_fonds", vraag: VRAAG_VERSLAPT },
-  algemeen: { variant: "strikt", vraag: VRAGEN[5] },
+  // Algemene (niet-juridische) vraag met een strikte AND-keten die in de
+  // fixture wél treffers heeft (twee woorden uit de woordenschat).
+  algemeen: { variant: "strikt", vraag: { ...VRAGEN[22], vraag: "dekkingsgraad premie" } },
   hybride: { variant: "hybride", vraag: VRAAG_VERSLAPT },
 };
 // Scenario-SQL met grote limiet (set-vergelijking) en p_lek voor de negatieve controles.

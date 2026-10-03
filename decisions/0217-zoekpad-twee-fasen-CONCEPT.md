@@ -53,9 +53,12 @@ rechtenwijziging raakt bestaande aanroepers (inventaris in het rapport §10).
   af; vastgelegd met id-/score-vergelijking 0 vs 5.000 B-chunks.
 - **Vector**: bij een gedeelde HNSW filtert Postgres **ná** de indexscan; met
   `ef_search = 40` gaan voor fonds A kandidaten verloren (recall@40 0,75 zonder
-  B-rijen; met 5.000 B-rijen die dicht bij de vraag liggen nog lager — zie
-  rapport). `hnsw.iterative_scan = relaxed_order` (pgvector ≥ 0.8.0, dus ook
-  Productie) herstelt de recall tot ≥ 0,975 tegen ~1,5× de buffers.
+  B-rijen; met 5.000 B-rijen die dicht bij de vraag liggen **0 van 40**, ook bij
+  ef 200). `hnsw.iterative_scan = relaxed_order` (pgvector ≥ 0.8.0, dus ook
+  Productie) vult aan tot 40/40 (recall 1,0 in dat geval) tegen 5–10× de
+  buffers; bij een ander onderwerp met documentscope is hij duur én matig
+  (recall 0,575, 48k buffers). `ef_search` 100–200 is goedkoper zolang het
+  andere fonds de buurt niet domineert. Geen fysieke scheiding beloofd.
 
 ## Opties (geen keuze)
 
