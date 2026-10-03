@@ -411,16 +411,18 @@ jobs:
           wait "$SERVER" 2>/dev/null || true
           # R1 (0218): dezelfde volledige vraagketen met het nieuwe tekstzoekpad
           # aan (ZOEK_TEKST_V2=on ⇒ zoek_chunks_begrensd i.p.v. zoek_chunks).
-          # Eigen poort, zodat de vlag-uit-server niet stil wordt hergebruikt.
+          # Eigen poort (3105, buiten de reeks 3006–3021 van de volgende stap),
+          # zodat de vlag-uit-server niet stil wordt hergebruikt; na afloop de
+          # poort echt vrijgeven (`kill` op npm laat next-server staan).
           if [ "$code" = "0" ]; then
             fuser -k 3005/tcp 2>/dev/null || (lsof -ti tcp:3005 | xargs -r kill) 2>/dev/null || true
             node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/art500-embed-stub-r1.log" 2>&1 &
             STUB=$!
-            ZOEK_TEKST_V2=on HYBRID_SEARCH=on PORT=3015 APP_BASE_URL=http://127.0.0.1:3015 npm run start &
+            ZOEK_TEKST_V2=on HYBRID_SEARCH=on PORT=3105 APP_BASE_URL=http://127.0.0.1:3105 npm run start &
             SERVER=$!
             ok=0
             for i in $(seq 1 60); do
-              curl -sf http://127.0.0.1:3015/api/healthz/ping >/dev/null \
+              curl -sf http://127.0.0.1:3105/api/healthz/ping >/dev/null \
                 && curl -sf http://127.0.0.1:8791/_verzoeken >/dev/null && ok=1 && break
               sleep 1
             done
@@ -428,9 +430,10 @@ jobs:
               echo "FOUT: next start (R1, vlag aan) kwam niet op binnen 60s." >&2
               kill "$SERVER" "$STUB" 2>/dev/null || true; exit 1
             fi
-            APP_BASE_URL=http://127.0.0.1:3015 node tests/karakterisering/artikelspoor-500-keten.mjs || code=1
+            APP_BASE_URL=http://127.0.0.1:3105 node tests/karakterisering/artikelspoor-500-keten.mjs || code=1
             kill "$SERVER" "$STUB" 2>/dev/null || true
             wait "$SERVER" 2>/dev/null || true
+            fuser -k 3105/tcp 2>/dev/null || (lsof -ti tcp:3105 | xargs -r kill) 2>/dev/null || true
           fi
           echo "artikelspoor-500-pass: $(( $(date +%s) - t0 ))s"
           exit $code
