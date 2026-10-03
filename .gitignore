@@ -68,3 +68,6 @@ test-results/e2e/
 .pgb-sharepoint-bewijs.local.ndjson
 /node_modules
 .440-tmp.*
+
+# --- PR 0 zoekpad-meting: ruwe runs (JSONL) blijven lokaal; samenvattingen worden gecommit ---
+tests/karakterisering/uitvoer/zoekpad-pr0/*.jsonl

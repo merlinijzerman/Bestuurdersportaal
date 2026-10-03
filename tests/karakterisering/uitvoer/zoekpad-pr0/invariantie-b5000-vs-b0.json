@@ -1,0 +1,146 @@
+{
+ "pilot_strikt/R0": {
+  "ids_b0": 0,
+  "ids_nu": 0,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "pilot_strikt/R1": {
+  "ids_b0": 0,
+  "ids_nu": 0,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "pilot_strikt/R2": {
+  "ids_b0": 0,
+  "ids_nu": 0,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "verslapt/R0": {
+  "ids_b0": 19119,
+  "ids_nu": 19119,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "verslapt/R1": {
+  "ids_b0": 18879,
+  "ids_nu": 18879,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "verslapt/R2": {
+  "ids_b0": 18879,
+  "ids_nu": 18879,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "actueel/R0": {
+  "ids_b0": 18759,
+  "ids_nu": 18759,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "actueel/R1": {
+  "ids_b0": 18519,
+  "ids_nu": 18519,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "actueel/R2": {
+  "ids_b0": 18519,
+  "ids_nu": 18519,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "scope/R0": {
+  "ids_b0": 1268,
+  "ids_nu": 1268,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "scope/R1": {
+  "ids_b0": 1268,
+  "ids_nu": 1268,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "scope/R2": {
+  "ids_b0": 1268,
+  "ids_nu": 1268,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "frase/R0": {
+  "ids_b0": 9,
+  "ids_nu": 9,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "frase/R1": {
+  "ids_b0": 9,
+  "ids_nu": 9,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "frase/R2": {
+  "ids_b0": 9,
+  "ids_nu": 9,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "bronsoort_fonds/R0": {
+  "ids_b0": 5340,
+  "ids_nu": 5340,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "bronsoort_fonds/R1": {
+  "ids_b0": 5100,
+  "ids_nu": 5100,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "bronsoort_fonds/R2": {
+  "ids_b0": 5100,
+  "ids_nu": 5100,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "algemeen/R0": {
+  "ids_b0": 0,
+  "ids_nu": 0,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "algemeen/R1": {
+  "ids_b0": 0,
+  "ids_nu": 0,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "algemeen/R2": {
+  "ids_b0": 0,
+  "ids_nu": 0,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "hybride/R0": {
+  "ids_b0": 19351,
+  "ids_nu": 19351,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "hybride/R1": {
+  "ids_b0": 19111,
+  "ids_nu": 19111,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ },
+ "hybride/R2": {
+  "ids_b0": 19111,
+  "ids_nu": 19111,
+  "ids_gelijk": true,
+  "scores_gelijk": true
+ }
+}
