@@ -17,7 +17,9 @@ import {
   statusVanPostgrest,
   type Fasemeter,
   type Fasepoging,
+  type Tekstzoekpad,
 } from "./retrieval/fasetijden";
+import { ZOEK_TEKST_V2_ENV, zoekTekstV2Actief } from "./retrieval/zoektekst-vlag";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
@@ -347,6 +349,17 @@ export interface RetrievalOpties {
    * Zonder de vlag (elke vraag zonder artikelfocus) is het gedrag byte-identiek.
    */
   begrensVolscans?: boolean;
+  /**
+   * R1 (besluit 0218) — het nieuwe tekstzoekpad: de gerangschikte FTS-pogingen
+   * (strikt/terugval) roepen `zoek_chunks_begrensd` aan i.p.v. `zoek_chunks`
+   * (zelfde parameterblok, zelfde retourvorm; RLS-behoudend). De aanroeper
+   * (route) resolvet de fondsvlag via `retrievalVlaggenVoorFonds`; de env
+   * `ZOEK_TEKST_V2` blijft de hoofdstop en wordt hier opnieuw toegepast
+   * (zie `retrieval/zoektekst-vlag.ts`). Ontbreekt de functie in de database
+   * (PGRST202), dan valt de keten éénmaal per retrieval terug op `zoek_chunks`
+   * met een warn-logregel en de marker `fallback_pgrst202`. Standaard uit.
+   */
+  zoekTekstV2?: boolean;
 }
 
 /** #500 — `fallback_reason` wanneer een volscan na een DB-time-out bewust uitbleef. */
@@ -363,6 +376,15 @@ function vangAf<T>(p: Promise<T>): Promise<Afgerond<T>> {
 function pakUit<T>(r: Afgerond<T>): T {
   if (r.ok) return r.waarde;
   throw r.fout;
+}
+
+/**
+ * R1 (0218) — PostgREST kent de RPC niet (`PGRST202`: functie ontbreekt in het
+ * schema-cache). Dat is het enige foutgeval waarin de keten terugvalt op
+ * `zoek_chunks`; elke andere fout (57014, 42501, …) wordt NIET gemaskeerd.
+ */
+export function isPgrst202(fout: unknown): boolean {
+  return typeof fout === "object" && fout !== null && (fout as { code?: unknown }).code === "PGRST202";
 }
 
 // Conservatieve default-drempel (R1.5 b2): kandidaten met een rerankscore < 20
@@ -384,6 +406,7 @@ type VolledigeOpties = {
   signal?: AbortSignal;
   fasemeter: Fasemeter;
   begrensVolscans: boolean;
+  zoekTekstV2: boolean;
 };
 
 /**
@@ -415,6 +438,9 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     signal: o?.signal,
     fasemeter: o?.fasemeter ?? GEEN_FASEMETER,
     begrensVolscans: o?.begrensVolscans === true,
+    // R1 — de env is de hoofdstop, óók voor een al geresolveerde fondsvlag:
+    // zonder ZOEK_TEKST_V2=on is het pad uit, wat de aanroeper ook meegeeft.
+    zoekTekstV2: zoekTekstV2Actief(process.env[ZOEK_TEKST_V2_ENV], o?.zoekTekstV2),
   };
 }
 
@@ -1545,6 +1571,55 @@ export function maakHybrideRpc(
   };
 }
 
+// ── R1 (besluit 0218) — de gerangschikte tekstzoek-RPC ─────────────────────
+/**
+ * Eén bron voor de RPC-KEUZE van de gerangschikte FTS-pogingen (strikt én
+ * terugval): `zoek_chunks_begrensd` met de vlag aan, anders `zoek_chunks`.
+ * Beide krijgen EXACT hetzelfde parameterblok (`gedeeldeParams` + `p_query`);
+ * alleen de functienaam verschilt — de twee namen staan hier letterlijk,
+ * zodat de census en de afbreektest (`supabase.rpc("zoek_chunks…")` via
+ * `metSignaal`) ze blijven zien.
+ *
+ * PGRST202-terugval. Ontbreekt `zoek_chunks_begrensd` in de database (migratie
+ * niet toegepast, of de vlag te vroeg aan), dan antwoordt PostgREST met
+ * `PGRST202`. Dan — en alleen dan — valt deze retrieval ÉÉNMAAL terug op
+ * `zoek_chunks`: een request-lokale grendel zorgt dat elke verdere poging in
+ * dezelfde retrieval (ook de speculatief gestarte terugval) direct de oude
+ * functie neemt, met precies één warn-regel. Elke andere fout (57014, 42501,
+ * netwerk) wordt NIET gemaskeerd. `pad()` levert de auditmarker: `nieuw`,
+ * `fallback_pgrst202`, of `undefined` met de vlag uit (dan verandert er niets
+ * aan de meta — byte-gelijk aan vóór R1).
+ */
+export function maakTekstRpc(
+  supabase: { rpc: (fn: string, args: Record<string, unknown>) => any },
+  gedeeldeParams: Record<string, unknown>,
+  opties: { zoekTekstV2: boolean; signal?: AbortSignal; waarschuw?: (melding: string) => void }
+): { draai: (p_query: string) => Promise<{ data: unknown; error: unknown }>; pad: () => Tekstzoekpad | undefined } {
+  const waarschuw = opties.waarschuw ?? ((m: string) => console.warn(m));
+  let tekstzoekpad: Tekstzoekpad | undefined = opties.zoekTekstV2 ? "nieuw" : undefined;
+  const params = (p_query: string): Record<string, unknown> => ({ p_query, ...gedeeldeParams });
+  return {
+    async draai(p_query) {
+      if (tekstzoekpad === "nieuw") {
+        const nieuw = (await Promise.resolve(
+          metSignaal(supabase.rpc("zoek_chunks_begrensd", params(p_query)), opties.signal)
+        )) as { data: unknown; error: unknown };
+        if (!isPgrst202(nieuw.error)) return nieuw;
+        // Gelijktijdige pogingen kunnen hier beide binnenkomen; de grendel en
+        // de warn-regel kantelen maar één keer.
+        if (tekstzoekpad === "nieuw") {
+          tekstzoekpad = "fallback_pgrst202";
+          waarschuw(
+            "[retrieval][tekstzoekpad] zoek_chunks_begrensd ontbreekt (PGRST202): migratie 2026_10_03_r1 niet toegepast of vlag ZOEK_TEKST_V2 te vroeg aan; eenmalige terugval op zoek_chunks voor deze retrieval"
+          );
+        }
+      }
+      return Promise.resolve(metSignaal(supabase.rpc("zoek_chunks", params(p_query)), opties.signal));
+    },
+    pad: () => tekstzoekpad,
+  };
+}
+
 // ── #500 — Gericht artikelspoor (Supabase) ──────────────────────────────────
 // WAAR DE PASSAGE WEGVIEL. De exact gelabelde artikelsgewijze toelichting
 // (MvT Wtp p. 395, "Artikelsgewijze toelichting — Artikel 150d") kwam niet in
@@ -2230,17 +2305,17 @@ async function zoekViaFTS(
   const { ftsQuery, jargon } = ftsQueryVoor(vraag, opt);
   // #500 — één bron voor beide gerangschikte FTS-pogingen: hetzelfde
   // parameterblok, alleen `p_query` verschilt. De meter is pure telemetrie.
+  // R1 (0218) — hetzelfde parameterblok gaat naar `zoek_chunks_begrensd`
+  // (vlag aan) of `zoek_chunks` (vlag uit); de RPC-naam is de enige keuze.
+  const tekstRpc = maakTekstRpc(
+    supabase,
+    { p_limit: overFetch, p_document_ids: scope, ...rpcFilterParams(filters), p_fonds_id: fondsFilter },
+    { zoekTekstV2: opt.zoekTekstV2, signal: opt.signal }
+  );
   const rangschikFts = (p_query: string, poging: "strikt" | "terugval") =>
     opt.fasemeter.meet(
       "rpc_fts",
-      () =>
-        Promise.resolve(metSignaal(supabase.rpc("zoek_chunks", {
-          p_query,
-          p_limit: overFetch,
-          p_document_ids: scope,
-          ...rpcFilterParams(filters),
-          p_fonds_id: fondsFilter,
-        }), opt.signal)),
+      () => tekstRpc.draai(p_query),
       {
         poging,
         rijen: (u) => (Array.isArray(u.data) ? u.data.length : undefined),
@@ -2253,6 +2328,10 @@ async function zoekViaFTS(
     begrensVolscans: opt.begrensVolscans,
     bijOngebruikt: () => opt.fasemeter.noteer("rpc_fts", "ongebruikt", { poging: "terugval" }),
   });
+  // R1 — auditmarker (alleen met de vlag aan): `retrieval_fasetijden.tekstzoekpad`
+  // in retrieval_meta.invoer én in de [retrieval][fasetijden]-logregel.
+  const tekstzoekpad = tekstRpc.pad();
+  if (tekstzoekpad) opt.fasemeter.markeerTekstzoekpad(tekstzoekpad);
 
   if (fts.soort === "strikt") {
     const gerangschikt = fts.rijen.map(rijNaarChunk);

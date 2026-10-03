@@ -29,6 +29,11 @@ import {
   type ThemaTokenKey,
   type JsonWaarde,
 } from "@/core/lib/fonds-config-core";
+import {
+  ZOEK_TEKST_V2_ENV,
+  ZOEK_TEKST_V2_FONDSVLAG,
+  zoekTekstV2Actief,
+} from "@/core/lib/retrieval/zoektekst-vlag";
 
 // Re-export zodat consumenten (route) het type naast de async resolver kunnen
 // betrekken uit deze server-laag; de definitie leeft in fonds-config-core.
@@ -265,6 +270,11 @@ export interface RetrievalVlaggen {
    *  5.000–60.000 → de veilige default van 20 s (zie timeoutUitConfig). */
   retrievalTimeoutMs?: number;
   generatieTimeoutMs?: number;
+  /** R1 (0218) — het nieuwe tekstzoekpad (`zoek_chunks_begrensd`). Waarheids-
+   *  tabel in `retrieval/zoektekst-vlag.ts`: env `ZOEK_TEKST_V2` is de
+   *  hoofdstop (ontbrekend/≠ on ⇒ altijd uit), fondsvlag `zoek_tekst_v2` kan
+   *  per fonds uitzetten. Standaard uit. */
+  zoekTekstV2: boolean;
 }
 
 export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<RetrievalVlaggen> {
@@ -285,6 +295,8 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
       "retrieval_timeout_ms",
       // #356 — eigen deadline over de GENERATIE (ms); ander werk, ander profiel.
       "generatie_timeout_ms",
+      // R1 (0218) — nieuw tekstzoekpad; env ZOEK_TEKST_V2 is de hoofdstop.
+      ZOEK_TEKST_V2_FONDSVLAG,
     ]);
 
   const m = new Map<string, JsonWaarde>();
@@ -314,6 +326,10 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
     drempelWaarde,
     retrievalTimeoutMs,
     generatieTimeoutMs,
+    zoekTekstV2: zoekTekstV2Actief(
+      process.env[ZOEK_TEKST_V2_ENV],
+      m.has(ZOEK_TEKST_V2_FONDSVLAG) ? flagAlsBoolean(m.get(ZOEK_TEKST_V2_FONDSVLAG)!) : undefined
+    ),
   };
 }
 
