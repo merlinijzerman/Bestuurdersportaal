@@ -7,8 +7,11 @@
 //    psql $DB -f supabase/checks/2026_10_03_pr0_zoekpad_fixture.sql
 //    psql $DB -f supabase/checks/2026_10_03_pr0_zoekpad_prototypes.sql
 //  (optioneel, voor stand "b5000": …_fixture_b_match.sql; opruimen met
-//   …_fixture_opruimen.sql). Nooit tegen een gehoste omgeving: alleen
-//   127.0.0.1/localhost/host.docker.internal worden geaccepteerd.
+//   …_fixture_opruimen.sql) — elk met `-v pr0_lokaal_ok=ja`: de vier bestanden
+//   dragen een fail-closed lokaal-alleen-guardblok (tenant-host, serveradres,
+//   GUC pr0.lokaal_ok, PostgREST-sessie), zie zoekpad-pr0-guard.test.mjs.
+//   Nooit tegen een gehoste omgeving: alleen 127.0.0.1/localhost/
+//   host.docker.internal worden geaccepteerd, en de sessie zet pr0.lokaal_ok.
 //
 //  Fasen (--fase, komma-gescheiden; default alles):
 //    meting      route × JWT × variant × vraag, N runs, p50/p95/max/buffers.
@@ -599,6 +602,9 @@ async function faseHypothesen() {
 async function main() {
   db = new pg.Client({ connectionString: PG_URL });
   await db.connect();
+  // Markeert deze sessie als expliciet lokaal: dezelfde GUC die het guardblok
+  // in de vier pr0-SQL-bestanden eist (psql: -v pr0_lokaal_ok=ja).
+  await db.query("select set_config('pr0.lokaal_ok', 'ja', false)");
   try {
     await laadVectoren();
     const info = (await db.query(`select (select count(*) from public.document_chunks where embedding_model like 'pr0-zoekpad%') chunks,

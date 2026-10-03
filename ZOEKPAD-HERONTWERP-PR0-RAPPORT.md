@@ -29,6 +29,8 @@
 | `statement_timeout` tijdens meting | 120 s (meting), geen 8 s-afkap | 8 s (`authenticated`) |
 | CPU | Apple Silicon, ongeknepen; plus `docker update --cpus 0.25` voor de staart | gedeelde Supabase-compute |
 
+**Lokaal-alleen, fail-closed (reviewbesluit op PR #526).** De vier SQL-bestanden `supabase/checks/2026_10_03_pr0_zoekpad_{fixture,fixture_b_match,prototypes,fixture_opruimen}.sql` dragen bovenaan één byte-identiek guardblok dat vóór de eerste wijzigende opdracht (vóór `begin`/DDL/insert) met `raise exception` weigert tenzij álle drie gelden: (1) geen rij in `public.tenant_domains` met `host like '%bestuurdersportaal.com'` (dezelfde heuristiek als `scripts/drift/genereer.sh`) — en de rol is eigenaar van die tabel of heeft BYPASSRLS, anders zou deny-by-default-RLS de check stil leeg laten; (2) `inet_server_addr()` is null (unix-socket) of loopback/docker/privé (127.0.0.0/8, ::1, 172.16.0.0/12, 10.0.0.0/8, 192.168.0.0/16); (3) de GUC `pr0.lokaal_ok` is exact `'ja'` (psql: `-v pr0_lokaal_ok=ja`, in het bestand naar de GUC vertaald; het meetharnas zet hem zelf). Het blok weigert bovendien als `request.jwt.claims` gezet is (PostgREST-sessie). Reden: de bestanden schrijven/verwijderen fixtures, het prototype bevat bewust een lekvariant met extra EXECUTE-grant, en de weigering van het JS-harnas wordt bij rechtstreeks `psql`-gebruik omzeild. Negatieve test: `tests/karakterisering/zoekpad-pr0-guard.test.mjs` (per bestand: tenant-host-rij ⇒ stop vóór de eerste mutatie; zonder GUC ⇒ stop; met JWT-claims ⇒ stop; positieve controle op `_opruimen.sql`).
+
 Meetmethode (`tests/karakterisering/zoekpad-pr0-meting.mjs`): per run één transactie — `set_config('request.jwt.claims', <claims>, true)`, `set local role <rol>`, `explain (analyze, buffers, format json) select … from <functie>(…)`, rollback. JWT-claimsets zijn byte-voor-byte die van `rls-505-meting.mjs` (0,9 kB en 1,5 kB, GoTrue/Entra-vorm, synthetisch). Interne plannen van de functies zijn met `auto_explain.log_nested_statements` opgevangen (superuser-verbinding, rol `authenticated` via `set local role`), zie `tests/karakterisering/uitvoer/zoekpad-pr0/plannen-*.txt`.
 
 ## 3. Fixture (`supabase/checks/2026_10_03_pr0_zoekpad_fixture.sql`)
@@ -712,6 +714,6 @@ De nummering H1–H9 is overgenomen uit de opdracht (het ontwerp zelf staat niet
 ## 13. Bestanden
 
 - `supabase/checks/2026_10_03_pr0_zoekpad_fixture.sql`, `…_fixture_b_match.sql`, `…_prototypes.sql`, `…_fixture_opruimen.sql` — lokaal onderzoek, **niet** aangesloten op CI (zwaar, committend, onderzoekend; motivering §3).
-- `tests/karakterisering/zoekpad-pr0-meting.mjs` — harnas (fasen `meting`, `plannen`, `lek`, `vector`, `invariantie`, `hypothesen`); `zoekpad-pr0-tabellen.mjs` — tabellen uit de JSON-uitvoer.
+- `tests/karakterisering/zoekpad-pr0-meting.mjs` — harnas (fasen `meting`, `plannen`, `lek`, `vector`, `invariantie`, `hypothesen`); `zoekpad-pr0-tabellen.mjs` — tabellen uit de JSON-uitvoer; `zoekpad-pr0-guard.test.mjs` — negatieve test van het lokaal-alleen-guardblok.
 - `tests/karakterisering/uitvoer/zoekpad-pr0/` — samenvattingen, lekmatrices, vector-/invariantie-/hypothesen-JSON en `plannen-*.txt`; ruwe runs (`*.jsonl`) blijven lokaal (`.gitignore`).
 - `decisions/0217-zoekpad-twee-fasen-CONCEPT.md` — opties, invarianten, restrisico's, open beslissingen.
