@@ -303,9 +303,16 @@ async function fasePlannen() {
         await adm.query("rollback");
       }
       // Alleen de geneste plannen (de functie-inhoud), zonder de vectorliteralen.
+      // Alleen de geneste plannen; de querytekst (het functielichaam) tot één
+      // regel ingekort, set_config-regels weg, vectorliteralen weg.
       const tekst = notices
-        .filter((n) => n.includes("plan:"))
-        .map((n) => n.replace(/\[-?\d[^\]]{200,}\]/g, "[…vector…]").replace(/Query Parameters:.*\n?/g, ""))
+        .filter((n) => n.includes("plan:") && !/Query Text: (select|SELECT) set_config/.test(n))
+        .map((n) => n
+          .replace(/Query Text: ([^\n]*)\n[\s\S]*?(?=\n(?:Query Parameters:|[A-Z][A-Za-z ]+ {2}\(cost))/, "Query Text: $1 …")
+          .replace(/\[-?\d[^\]]{200,}\]/g, "[…vector…]")
+          .replace(/Query Parameters:.*\n?/g, "")
+          // RLS-boilerplate (InitPlans voor auth.uid()/profielen) weglaten.
+          .split("\n").filter((l) => !/^\s*(InitPlan \d+( \(returns \$\d+\))?|->  Result .*|One-Time Filter: .*|->  Seq Scan on profielen.*|Filter: \(id = \(InitPlan \d+\)\.col1\)|Rows Removed by Filter: 2|Buffers: shared hit=1)\s*$/.test(l)).join("\n"))
         .join("\n\n");
       uit.push(`==== ${route} / ${variant} (stand ${STAND}) ====\n${tekst}\n`);
       console.log(`plan ${route}/${variant}: ${notices.length} notices`);

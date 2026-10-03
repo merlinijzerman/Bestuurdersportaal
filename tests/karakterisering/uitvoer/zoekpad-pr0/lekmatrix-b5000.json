@@ -1,0 +1,1629 @@
+{
+ "stand": "b5000",
+ "lekken": 6,
+ "bevindingen": [
+  "LEK R2 portaal_beperkt_A verslapt: 18879 id's buiten de verwachting",
+  "LEK R2 portaal_beperkt_A actueel: 18519 id's buiten de verwachting",
+  "LEK R2 portaal_beperkt_A scope: 1268 id's buiten de verwachting",
+  "LEK R2 portaal_beperkt_A frase: 9 id's buiten de verwachting",
+  "LEK R2 portaal_beperkt_A bronsoort_fonds: 5100 id's buiten de verwachting",
+  "LEK R2 portaal_beperkt_A hybride: 19111 id's buiten de verwachting"
+ ],
+ "matrix": {
+  "eigen_fonds_A": {
+   "pilot_strikt/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R0": {
+    "n": 19119,
+    "verwacht_n": 19119,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R1": {
+    "n": 18879,
+    "verwacht_n": 18879,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R2": {
+    "n": 18879,
+    "verwacht_n": 18879,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R0": {
+    "n": 18759,
+    "verwacht_n": 18759,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R1": {
+    "n": 18519,
+    "verwacht_n": 18519,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R2": {
+    "n": 18519,
+    "verwacht_n": 18519,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R0": {
+    "n": 1268,
+    "verwacht_n": 1268,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R1": {
+    "n": 1268,
+    "verwacht_n": 1268,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R2": {
+    "n": 1268,
+    "verwacht_n": 1268,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R0": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R1": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R2": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R0": {
+    "n": 5340,
+    "verwacht_n": 5340,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R1": {
+    "n": 5100,
+    "verwacht_n": 5100,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R2": {
+    "n": 5100,
+    "verwacht_n": 5100,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R0": {
+    "n": 19351,
+    "verwacht_n": 19351,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R1": {
+    "n": 19111,
+    "verwacht_n": 19111,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R2": {
+    "n": 19111,
+    "verwacht_n": 19111,
+    "rls_docs": 75,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   }
+  },
+  "ander_fonds_B": {
+   "pilot_strikt/R0": {
+    "n": 5000,
+    "verwacht_n": 5000,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R1": {
+    "n": 5000,
+    "verwacht_n": 5000,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R2": {
+    "n": 5000,
+    "verwacht_n": 5000,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R0": {
+    "n": 21899,
+    "verwacht_n": 21899,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R1": {
+    "n": 21899,
+    "verwacht_n": 21899,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R2": {
+    "n": 21899,
+    "verwacht_n": 21899,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R0": {
+    "n": 21899,
+    "verwacht_n": 21899,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R1": {
+    "n": 21899,
+    "verwacht_n": 21899,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R2": {
+    "n": 21899,
+    "verwacht_n": 21899,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R0": {
+    "n": 968,
+    "verwacht_n": 968,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R1": {
+    "n": 968,
+    "verwacht_n": 968,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R2": {
+    "n": 968,
+    "verwacht_n": 968,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R0": {
+    "n": 5009,
+    "verwacht_n": 5009,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R1": {
+    "n": 5009,
+    "verwacht_n": 5009,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R2": {
+    "n": 5009,
+    "verwacht_n": 5009,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R0": {
+    "n": 8120,
+    "verwacht_n": 8120,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R1": {
+    "n": 8120,
+    "verwacht_n": 8120,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R2": {
+    "n": 8120,
+    "verwacht_n": 8120,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R0": {
+    "n": 22131,
+    "verwacht_n": 22131,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R1": {
+    "n": 22131,
+    "verwacht_n": 22131,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R2": {
+    "n": 22131,
+    "verwacht_n": 22131,
+    "rls_docs": 64,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   }
+  },
+  "zonder_profiel": {
+   "pilot_strikt/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R0": {
+    "n": 13779,
+    "verwacht_n": 13779,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R1": {
+    "n": 13779,
+    "verwacht_n": 13779,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R2": {
+    "n": 13779,
+    "verwacht_n": 13779,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R0": {
+    "n": 13779,
+    "verwacht_n": 13779,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R1": {
+    "n": 13779,
+    "verwacht_n": 13779,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R2": {
+    "n": 13779,
+    "verwacht_n": 13779,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R0": {
+    "n": 968,
+    "verwacht_n": 968,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R1": {
+    "n": 968,
+    "verwacht_n": 968,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R2": {
+    "n": 968,
+    "verwacht_n": 968,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R0": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R1": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R2": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R0": {
+    "n": 14011,
+    "verwacht_n": 14011,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R1": {
+    "n": 14011,
+    "verwacht_n": 14011,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R2": {
+    "n": 14011,
+    "verwacht_n": 14011,
+    "rls_docs": 30,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   }
+  },
+  "authenticated_zonder_sub": {
+   "pilot_strikt/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   }
+  },
+  "anon": {
+   "pilot_strikt/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "pilot_strikt/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "pilot_strikt/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "verslapt/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "verslapt/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "verslapt/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "actueel/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "actueel/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "actueel/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "scope/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "scope/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "scope/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "frase/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "frase/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "frase/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "bronsoort_fonds/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "bronsoort_fonds/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "bronsoort_fonds/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "algemeen/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "algemeen/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "algemeen/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "hybride/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "hybride/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   },
+   "hybride/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0
+   }
+  },
+  "anon_met_sub_A": {
+   "pilot_strikt/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 75
+   },
+   "pilot_strikt/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 75
+   },
+   "pilot_strikt/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 75
+   },
+   "verslapt/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 19119,
+    "rls_docs": 75
+   },
+   "verslapt/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 18879,
+    "rls_docs": 75
+   },
+   "verslapt/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 18879,
+    "rls_docs": 75
+   },
+   "actueel/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 18759,
+    "rls_docs": 75
+   },
+   "actueel/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 18519,
+    "rls_docs": 75
+   },
+   "actueel/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 18519,
+    "rls_docs": 75
+   },
+   "scope/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 1268,
+    "rls_docs": 75
+   },
+   "scope/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 1268,
+    "rls_docs": 75
+   },
+   "scope/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 1268,
+    "rls_docs": 75
+   },
+   "frase/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 9,
+    "rls_docs": 75
+   },
+   "frase/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 9,
+    "rls_docs": 75
+   },
+   "frase/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 9,
+    "rls_docs": 75
+   },
+   "bronsoort_fonds/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 5340,
+    "rls_docs": 75
+   },
+   "bronsoort_fonds/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 5100,
+    "rls_docs": 75
+   },
+   "bronsoort_fonds/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 5100,
+    "rls_docs": 75
+   },
+   "algemeen/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 75
+   },
+   "algemeen/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 75
+   },
+   "algemeen/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 75
+   },
+   "hybride/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 19351,
+    "rls_docs": 75
+   },
+   "hybride/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 19111,
+    "rls_docs": 75
+   },
+   "hybride/R2": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 19111,
+    "rls_docs": 75
+   }
+  },
+  "service_role": {
+   "pilot_strikt/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "pilot_strikt/R2": {
+    "n": 0,
+    "verwacht_n": 5000,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 5000,
+    "lek": false,
+    "pariteit": false
+   },
+   "verslapt/R0": {
+    "n": 19119,
+    "verwacht_n": 19119,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R1": {
+    "n": 18879,
+    "verwacht_n": 18879,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R2": {
+    "n": 0,
+    "verwacht_n": 28559,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 28559,
+    "lek": false,
+    "pariteit": false
+   },
+   "actueel/R0": {
+    "n": 18759,
+    "verwacht_n": 18759,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R1": {
+    "n": 18519,
+    "verwacht_n": 18519,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "actueel/R2": {
+    "n": 0,
+    "verwacht_n": 28199,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 28199,
+    "lek": false,
+    "pariteit": false
+   },
+   "scope/R0": {
+    "n": 1268,
+    "verwacht_n": 1268,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R1": {
+    "n": 1268,
+    "verwacht_n": 1268,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "scope/R2": {
+    "n": 0,
+    "verwacht_n": 1268,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 1268,
+    "lek": false,
+    "pariteit": false
+   },
+   "frase/R0": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R1": {
+    "n": 9,
+    "verwacht_n": 9,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "frase/R2": {
+    "n": 0,
+    "verwacht_n": 5009,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 5009,
+    "lek": false,
+    "pariteit": false
+   },
+   "bronsoort_fonds/R0": {
+    "n": 5340,
+    "verwacht_n": 5340,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R1": {
+    "n": 5100,
+    "verwacht_n": 5100,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "bronsoort_fonds/R2": {
+    "n": 0,
+    "verwacht_n": 14780,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 14780,
+    "lek": false,
+    "pariteit": false
+   },
+   "algemeen/R0": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R1": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "algemeen/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R0": {
+    "n": 19351,
+    "verwacht_n": 19351,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R1": {
+    "n": 19111,
+    "verwacht_n": 19111,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R2": {
+    "n": 0,
+    "verwacht_n": 28791,
+    "rls_docs": 121,
+    "buiten_verwachting": 0,
+    "ontbrekend": 28791,
+    "lek": false,
+    "pariteit": false
+   }
+  },
+  "portaal_beperkt_A": {
+   "pilot_strikt/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "pilot_strikt/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "pilot_strikt/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "verslapt/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "verslapt/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "verslapt/R2": {
+    "n": 18879,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 18879,
+    "ontbrekend": 0,
+    "lek": true,
+    "pariteit": false
+   },
+   "actueel/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "actueel/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "actueel/R2": {
+    "n": 18519,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 18519,
+    "ontbrekend": 0,
+    "lek": true,
+    "pariteit": false
+   },
+   "scope/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "scope/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "scope/R2": {
+    "n": 1268,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 1268,
+    "ontbrekend": 0,
+    "lek": true,
+    "pariteit": false
+   },
+   "frase/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "frase/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "frase/R2": {
+    "n": 9,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 9,
+    "ontbrekend": 0,
+    "lek": true,
+    "pariteit": false
+   },
+   "bronsoort_fonds/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "bronsoort_fonds/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "bronsoort_fonds/R2": {
+    "n": 5100,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 5100,
+    "ontbrekend": 0,
+    "lek": true,
+    "pariteit": false
+   },
+   "algemeen/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "algemeen/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "algemeen/R2": {
+    "n": 0,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 0,
+    "ontbrekend": 0,
+    "lek": false,
+    "pariteit": true
+   },
+   "hybride/R0": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "hybride/R1": {
+    "uitkomst": "fout:42501",
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501"
+   },
+   "hybride/R2": {
+    "n": 19111,
+    "verwacht_n": 0,
+    "rls_docs": 0,
+    "rls_select": "fout:42501",
+    "buiten_verwachting": 19111,
+    "ontbrekend": 0,
+    "lek": true,
+    "pariteit": false
+   }
+  }
+ },
+ "negatieve_controles": {
+  "fonds/R1": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 0,
+   "rood": false,
+   "rls_dekt": true
+  },
+  "fonds/R2": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 9680,
+   "rood": true
+  },
+  "scope/R1": {
+   "scenario": "scope",
+   "buiten_verwachting": 17611,
+   "rood": true
+  },
+  "scope/R2": {
+   "scenario": "scope",
+   "buiten_verwachting": 17611,
+   "rood": true
+  },
+  "scan/R1": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 240,
+   "rood": true
+  },
+  "scan/R2": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 240,
+   "rood": true
+  },
+  "review/R1": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 300,
+   "rood": true
+  },
+  "review/R2": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 300,
+   "rood": true
+  },
+  "actief/R1": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 120,
+   "rood": true
+  },
+  "actief/R2": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 120,
+   "rood": true
+  },
+  "gearchiveerd/R1": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 120,
+   "rood": true
+  },
+  "gearchiveerd/R2": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 120,
+   "rood": true
+  },
+  "actueel/R1": {
+   "scenario": "actueel",
+   "buiten_verwachting": 360,
+   "rood": true
+  },
+  "actueel/R2": {
+   "scenario": "actueel",
+   "buiten_verwachting": 360,
+   "rood": true
+  },
+  "generiek_published/R1": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 900,
+   "rood": true
+  },
+  "generiek_published/R2": {
+   "scenario": "verslapt",
+   "buiten_verwachting": 900,
+   "rood": true
+  },
+  "bronstatus/R1": {
+   "scenario": "actueel",
+   "buiten_verwachting": 120,
+   "rood": true
+  },
+  "bronstatus/R2": {
+   "scenario": "actueel",
+   "buiten_verwachting": 120,
+   "rood": true
+  },
+  "bronsoort/R1": {
+   "scenario": "bronsoort_fonds",
+   "buiten_verwachting": 13779,
+   "rood": true
+  },
+  "bronsoort/R2": {
+   "scenario": "bronsoort_fonds",
+   "buiten_verwachting": 13779,
+   "rood": true
+  }
+ }
+}
