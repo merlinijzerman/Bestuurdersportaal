@@ -106,6 +106,9 @@ const f = FONDS === "null" ? "null" : `'${FONDS}'::uuid`;
 const QUERIES = {
   zoek_chunks_strikt: `select * from public.zoek_chunks('bedoeling wetgever transitieplan', 24, null, null, null, null, 'alles', current_date, null, ${f})`,
   zoek_chunks_verslapt: `select * from public.zoek_chunks('bedoeling or wetgever or transitieplan', 24, null, null, null, null, 'alles', current_date, null, ${f})`,
+  // R1 (0218): dezelfde twee vragen via zoek_chunks_begrensd (zelfde parameterblok).
+  zcb_strikt: `select * from public.zoek_chunks_begrensd('bedoeling wetgever transitieplan', 24, null, null, null, null, 'alles', current_date, null, ${f})`,
+  zcb_verslapt: `select * from public.zoek_chunks_begrensd('bedoeling or wetgever or transitieplan', 24, null, null, null, null, 'alles', current_date, null, ${f})`,
   zoek_chunks_hybride: `select * from public.zoek_chunks_hybride('bedoeling wetgever transitieplan', array_fill(0.01::real, array[1024])::vector, 8, 40, 60, null, null, null, null, 'alles', current_date, null, ${f})`,
   // PostgREST-vorm van het ilike-vangnet (`document_chunks?tekst=ilike.*…*&limit=50`).
   chunks_postgrest_ilike: `with pgrst_source as (select "document_chunks"."id", "document_chunks"."document_id", "document_chunks"."chunk_index", "document_chunks"."tekst" from "public"."document_chunks" where "document_chunks"."tekst" ilike '%transitieplan%' limit 50 offset 0) select coalesce(json_agg(_postgrest_t), '[]') as body from (select * from pgrst_source) _postgrest_t`,

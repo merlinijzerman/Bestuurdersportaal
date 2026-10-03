@@ -85,7 +85,9 @@ function bevestigLokaleDatabase(url) {
   }
 }
 
-const RPCS = ["zoek_chunks", "zoek_chunks_hybride"];
+// R1 (0218): ook `zoek_chunks_begrensd` (plpgsql) krijgt de 57014-injectie,
+// zodat de #516-begrenzing met ZOEK_TEKST_V2=on hetzelfde bewijs levert.
+const RPCS = ["zoek_chunks", "zoek_chunks_hybride", "zoek_chunks_begrensd"];
 const INJECTIEBODY =
   "\nbegin\n  raise exception using errcode = '57014',\n    message = 'canceling statement due to statement timeout';\nend\n";
 
@@ -101,8 +103,9 @@ async function injecteer(db) {
     origineel[naam] = rows[0];
     const def = rows[0].def;
     const kop = def.slice(0, def.indexOf("AS $function$"));
-    if (!/ LANGUAGE sql\n/.test(kop)) throw new Error(`${naam}: onverwachte definitievorm`);
-    const nieuw = `${kop.replace(" LANGUAGE sql\n", " LANGUAGE plpgsql\n")}AS $function$${INJECTIEBODY}$function$`;
+    // `zoek_chunks`/`_hybride` zijn LANGUAGE sql, `zoek_chunks_begrensd` is al plpgsql (R1).
+    if (!/ LANGUAGE (sql|plpgsql)\n/.test(kop)) throw new Error(`${naam}: onverwachte definitievorm`);
+    const nieuw = `${kop.replace(/ LANGUAGE (sql|plpgsql)\n/, " LANGUAGE plpgsql\n")}AS $function$${INJECTIEBODY}$function$`;
     await db.query(nieuw);
   }
   await db.query("notify pgrst, 'reload schema'");
