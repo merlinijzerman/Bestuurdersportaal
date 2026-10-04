@@ -51,6 +51,7 @@ import { adminClient, seed } from "./seed.mjs";
 import { sessieCookies } from "./sessie.mjs";
 import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
 import { VRAGEN, beschrijfChunks, concurrenten, juridischePassages, stelVraag } from "./artikelspoor-500-keten.mjs";
+import { controleerTekstzoekpad } from "./zoektekst-fondsvlag.mjs";
 
 const DB_URL = process.env.ART500_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const PAD = process.env.ART516_PAD ?? "fts";
@@ -85,7 +86,9 @@ function bevestigLokaleDatabase(url) {
   }
 }
 
-const RPCS = ["zoek_chunks", "zoek_chunks_hybride"];
+// R1 (0218): ook `zoek_chunks_begrensd` (plpgsql) krijgt de 57014-injectie,
+// zodat de #516-begrenzing met ZOEK_TEKST_V2=on hetzelfde bewijs levert.
+const RPCS = ["zoek_chunks", "zoek_chunks_hybride", "zoek_chunks_begrensd"];
 const INJECTIEBODY =
   "\nbegin\n  raise exception using errcode = '57014',\n    message = 'canceling statement due to statement timeout';\nend\n";
 
@@ -101,8 +104,9 @@ async function injecteer(db) {
     origineel[naam] = rows[0];
     const def = rows[0].def;
     const kop = def.slice(0, def.indexOf("AS $function$"));
-    if (!/ LANGUAGE sql\n/.test(kop)) throw new Error(`${naam}: onverwachte definitievorm`);
-    const nieuw = `${kop.replace(" LANGUAGE sql\n", " LANGUAGE plpgsql\n")}AS $function$${INJECTIEBODY}$function$`;
+    // `zoek_chunks`/`_hybride` zijn LANGUAGE sql, `zoek_chunks_begrensd` is al plpgsql (R1).
+    if (!/ LANGUAGE (sql|plpgsql)\n/.test(kop)) throw new Error(`${naam}: onverwachte definitievorm`);
+    const nieuw = `${kop.replace(/ LANGUAGE (sql|plpgsql)\n/, " LANGUAGE plpgsql\n")}AS $function$${INJECTIEBODY}$function$`;
     await db.query(nieuw);
   }
   await db.query("notify pgrst, 'reload schema'");
@@ -150,6 +154,7 @@ export async function main() {
     if (!ok) fouten.push(`[${cat}] ${tekst}`);
   };
   let origineel = null;
+  const metasGlobaal = []; // R1 (0218) — markercontrole (alleen FTS-pad; hybride-primair draagt geen marker)
   let gescand = [];
   try {
     // 1. Verboden kopieën (tenant/status/review/scan).
@@ -200,6 +205,7 @@ export async function main() {
       const fout = a.events.find((e) => e.type === "error");
       const klaar = a.events.some((e) => e.type === "done");
       const meta = a.log?.retrieval_meta ?? null;
+      metasGlobaal.push(meta);
       const fasen = meta?.invoer?.retrieval_fasetijden?.fasen ?? [];
       const bronnen = beschrijfChunks(passages, meta);
       const artikel = meta?.selectie?.juridisch?.artikel ?? null;
@@ -287,6 +293,7 @@ export async function main() {
     await db.end();
   }
 
+  if (PAD === "fts") for (const f of controleerTekstzoekpad(metasGlobaal)) fouten.push(`[tekstzoekpad] ${f}`);
   uitkomst.fouten = fouten;
   console.log(JSON.stringify(uitkomst, null, 2));
   if (MUTATIE) {

@@ -156,7 +156,11 @@ eigen `fonds_id` — de grens loopt via de join naar `documenten` (zie 0045).
 **SECURITY INVOKER (respecteert RLS, correct):** `zoek_chunks()`/`zoek_chunks_hybride()`
 (RAG-retrieval — RLS op `document_chunks`/`documenten` dwingt isolatie af; T4 voegt de
 additieve `p_fonds_id`-filter + published-only-generiek toe als defense-in-depth,
-zonder de INVOKER-semantiek te wijzigen), RPC `profiel_opslaan`,
+zonder de INVOKER-semantiek te wijzigen), `zoek_chunks_begrensd()` (R1, besluit 0218,
+migratie 2026_10_03_r1 — plpgsql-variant van `zoek_chunks` met hetzelfde contract,
+filterblok en ACL; id-begrensd via `documenten` onder RLS, geen `set_config`;
+pariteit onder 8 actoren in `supabase/checks/2026_10_03_r1_zoektekst_pariteit.sql`,
+alleen aangeroepen achter de vlag `ZOEK_TEKST_V2` + `zoek_tekst_v2`), RPC `profiel_opslaan`,
 `fn_decision_readiness_overview()`.
 
 > Let op: `schema.sql` toont nog de **oude** `maak_profiel()`-body (`limit 1`); dat is

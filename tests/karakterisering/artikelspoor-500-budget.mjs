@@ -54,6 +54,7 @@ import { pathToFileURL } from "node:url";
 import pg from "pg";
 import { ENV, FONDS_ID, WACHTWOORD, emailVoor } from "./config.mjs";
 import { adminClient, seed } from "./seed.mjs";
+import { controleerTekstzoekpad } from "./zoektekst-fondsvlag.mjs";
 import { sessieCookies } from "./sessie.mjs";
 import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
 import { VRAGEN, beschrijfChunks, concurrenten, juridischePassages, stelVraag } from "./artikelspoor-500-keten.mjs";
@@ -114,6 +115,7 @@ export async function main() {
   const eis = (ok, tekst) => {
     if (!ok) fouten.push(tekst);
   };
+  const metas = []; // R1 (0218) — markercontrole per ronde (ART_VERWACHT_TEKSTZOEKPAD)
   try {
     // 1. Normale instellingen: niets verkrappen, alleen vaststellen.
     const { rows: rol } = await db.query(
@@ -151,6 +153,7 @@ export async function main() {
         const fout = a.events.find((e) => e.type === "error");
         const klaar = a.events.some((e) => e.type === "done");
         const meta = a.log?.retrieval_meta ?? null;
+        metas.push(meta);
         const fasetijden = meta?.invoer?.retrieval_fasetijden ?? null;
         const fasen = fasetijden?.fasen ?? [];
         const bronnen = beschrijfChunks(passages, meta);
@@ -199,6 +202,7 @@ export async function main() {
     await db.end();
   }
 
+  for (const f of controleerTekstzoekpad(metas)) fouten.push(`tekstzoekpad: ${f}`);
   console.log(JSON.stringify(uitkomst, null, 2));
   if (fouten.length > 0) {
     console.error(`ROOD: ${fouten.join(" | ")}`);

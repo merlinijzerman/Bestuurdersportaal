@@ -54,6 +54,7 @@ import { ENV, FONDS_ID, WACHTWOORD, emailVoor } from "./config.mjs";
 import { adminClient, seed } from "./seed.mjs";
 import { sessieCookies } from "./sessie.mjs";
 import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
+import { controleerTekstzoekpad } from "./zoektekst-fondsvlag.mjs";
 import { pseudoEmbedding, vectorLiteral } from "../e2e/fixtures/embed-vector.mjs";
 import { EMBED_STUB_MODEL } from "../e2e/fixtures/config.mjs";
 
@@ -245,11 +246,13 @@ export async function main() {
   const eis = (ok, tekst) => {
     if (!ok) fouten.push(tekst);
   };
+  const metas = []; // R1 (0218) — markercontrole per ronde (ART_VERWACHT_TEKSTZOEKPAD)
   for (const { naam, vraag } of VRAGEN) {
     const r = await stelVraag(admin, cookieHeader, bestuurder.userId, vraag);
     const fout = r.events.find((e) => e.type === "error");
     const klaar = r.events.some((e) => e.type === "done");
     const meta = r.log?.retrieval_meta ?? null;
+    metas.push(meta);
     const bronnen = beschrijfChunks(passages, meta);
     const artikel = meta?.selectie?.juridisch?.artikel;
     uitkomst[naam] = {
@@ -290,6 +293,7 @@ export async function main() {
       eis(bronnen[eersteMvtIdx]?.mvtP395 === true, `${naam}: eerste MvT-passage is niet p.395`);
     }
   }
+  for (const f of controleerTekstzoekpad(metas)) fouten.push(`tekstzoekpad: ${f}`);
   console.log(JSON.stringify({ fonds: FONDS_ID, uitkomst, fouten }, null, 2));
   if (fouten.length > 0) {
     console.error(`ROOD: ${fouten.length} acceptatiepunt(en) niet gehaald.`);
