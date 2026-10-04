@@ -413,6 +413,9 @@ jobs:
           # aan. Het pad is alleen aan bij ZOEK_TEKST_V2=on ÉN fondsvlag
           # zoek_tekst_v2=true; de fondsvlag wordt vóór de serverstart gezet en
           # daarna gewist, en de keten eist de marker tekstzoekpad=nieuw.
+          # R1 wijzigt alleen de FTS-arm (rpc_fts); met HYBRID_SEARCH=on draait
+          # die alleen als terugval, dus deze ronde draait bewust zonder
+          # HYBRID_SEARCH (FTS-pad) — anders bewijst ze het nieuwe pad niet.
           # Eigen poort (3105, buiten de reeks 3006–3021 van de volgende stap),
           # zodat de vlag-uit-server niet stil wordt hergebruikt; na afloop de
           # poort echt vrijgeven (`kill` op npm laat next-server staan).
@@ -421,7 +424,7 @@ jobs:
             node tests/karakterisering/zoektekst-fondsvlag.mjs zet || code=1
             node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/art500-embed-stub-r1.log" 2>&1 &
             STUB=$!
-            ZOEK_TEKST_V2=on HYBRID_SEARCH=on PORT=3105 APP_BASE_URL=http://127.0.0.1:3105 npm run start &
+            env -u HYBRID_SEARCH ZOEK_TEKST_V2=on PORT=3105 APP_BASE_URL=http://127.0.0.1:3105 npm run start &
             SERVER=$!
             ok=0
             for i in $(seq 1 60); do
