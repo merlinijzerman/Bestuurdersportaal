@@ -62,8 +62,12 @@
 --    (`fonds_feature_flags.zoek_tekst_v2 = true`), pilotvragen stellen, dan
 --    deze query opnieuw met `vanaf` = het moment van aanzetten. Verwacht:
 --    `tekstzoekpad = 'nieuw'` alleen op beurten van dat fonds, fallback 0,
---    ok = true. Terugdraaien: fondsvlag verwijderen (dat fonds) of env off
---    (hoofdstop, alle fondsen).
+--    ok = true. Terugdraaien: fondsvlag op `false` zetten mét versie + 1
+--    (via de beheer-UI / schrijfFlag; dat fonds) of env off (hoofdstop, alle
+--    fondsen). NIET verwijderen: een delete wordt niet geaudit
+--    (fn_fonds_config_capture vuurt alleen op insert/update), en opnieuw
+--    aanzetten met de default-versie botst daarna op
+--    fonds_config_log_versie_uniek.
 --
 -- ── VERCEL-LOGCONTROLE (door de opdrachtgever; Claude heeft geen toegang) ───
 -- Project `bestuurdersportaal` → Logs → Production → zelfde venster → zoek:

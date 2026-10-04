@@ -128,7 +128,10 @@ expliciet en getest.
   geen enkele beurt met marker `nieuw`, want geen fonds heeft de vlag) →
   fondsvlag `zoek_tekst_v2 = true` uitsluitend op het gekozen pilotfonds →
   releasecheck (marker `nieuw` alleen bij dat fonds). Terugdraaien: fondsvlag
-  weg (per fonds) of env `off` (hoofdstop, alle fondsen).
+  op `false` mét versie + 1 (per fonds; geaudit via `fonds_config_log`) of env
+  `off` (hoofdstop, alle fondsen). Niet verwijderen: een delete wordt niet
+  geaudit en opnieuw aanzetten botst dan op `fonds_config_log_versie_uniek`
+  (gevonden in CI, 04-10-2026).
 - **Niet opgelost door deze PR:** #500 blijft open tot R1b (vectorarm) en de
   pilot; de FTS blijft O(zichtbare chunks) (geen GIN onder RLS); het
   `plain`-vangnet (H7) blijft een apart issue.

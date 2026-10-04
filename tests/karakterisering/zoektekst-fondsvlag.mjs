@@ -25,10 +25,37 @@ import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
 
 export const ZOEK_TEKST_V2_FONDSVLAG = "zoek_tekst_v2";
 
+// De audittrigger (fn_fonds_config_capture) kopieert `versie` van de rij naar
+// fonds_config_log, uniek per (fonds, type, sleutel, versie). Na `wis` (delete)
+// staat de logregel er nog; een nieuwe insert met de default-versie botst dan.
+// Daarom altijd de volgende versie t.o.v. rij én log — zoals `schrijfFlag`.
+async function volgendeVersie(admin) {
+  const { data: rij } = await admin
+    .from("fonds_feature_flags")
+    .select("versie")
+    .eq("fonds_id", FONDS_ID)
+    .eq("flag_key", ZOEK_TEKST_V2_FONDSVLAG)
+    .maybeSingle();
+  const { data: log, error } = await admin
+    .from("fonds_config_log")
+    .select("versie")
+    .eq("fonds_id", FONDS_ID)
+    .eq("config_type", "flag")
+    .eq("config_sleutel", ZOEK_TEKST_V2_FONDSVLAG)
+    .order("versie", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`zoek_tekst_v2 versie lezen: ${error.message}`);
+  return Math.max(rij?.versie ?? 0, log?.[0]?.versie ?? 0) + 1;
+}
+
 export async function zetFondsvlag(admin = adminClient()) {
+  const versie = await volgendeVersie(admin);
   const { error } = await admin
     .from("fonds_feature_flags")
-    .upsert({ fonds_id: FONDS_ID, flag_key: ZOEK_TEKST_V2_FONDSVLAG, waarde: true }, { onConflict: "fonds_id,flag_key" });
+    .upsert(
+      { fonds_id: FONDS_ID, flag_key: ZOEK_TEKST_V2_FONDSVLAG, waarde: true, versie },
+      { onConflict: "fonds_id,flag_key" }
+    );
   if (error) throw new Error(`zoek_tekst_v2 zetten: ${error.message}`);
   const { data, error: leesFout } = await admin
     .from("fonds_feature_flags")
