@@ -1,0 +1,116 @@
+{
+ "H4.postgres_is_superuser": false,
+ "H4.set_local_als_authenticated": {
+  "a": "123",
+  "b": "relaxed_order"
+ },
+ "H4.create_function_set_hnsw_als_postgres": "150/relaxed_order",
+ "H4.alter_function_set_hnsw_als_postgres": [
+  "search_path=public, pg_temp",
+  "hnsw.ef_search=77"
+ ],
+ "H4.set_config_in_stable_plpgsql_zichtbaar_in_plan": {
+  "a": "99",
+  "b": "relaxed_order"
+ },
+ "H5.plpgsql_auto": {
+  "ms_per_run": [
+   21.4,
+   13,
+   10.1,
+   11.4,
+   10.3,
+   10.7,
+   11.3,
+   9.9
+  ],
+  "buffers_per_run": [
+   5315,
+   5297,
+   5297,
+   5297,
+   5297,
+   5297,
+   5297,
+   5297
+  ]
+ },
+ "H5.plpgsql_force_custom_plan": {
+  "ms_per_run": [
+   10.9,
+   9.2,
+   8.6,
+   9.2,
+   9.8,
+   10.8,
+   9.4,
+   8.1
+  ],
+  "buffers_per_run": [
+   5308,
+   5308,
+   5308,
+   5308,
+   5308,
+   5308,
+   5308,
+   5308
+  ]
+ },
+ "H5.plpgsql_force_generic_plan": {
+  "ms_per_run": [
+   11.2,
+   11.9,
+   11.8,
+   11.9,
+   9.3,
+   8.8,
+   8.2,
+   9.2
+  ],
+  "buffers_per_run": [
+   5297,
+   5297,
+   5297,
+   5297,
+   5297,
+   5297,
+   5297,
+   5297
+  ]
+ },
+ "H7.default_text_search_config": "pg_catalog.english",
+ "H7.plainto_zonder_config_vs_dutch": {
+  "zonder_config": "'pensioneren' & 'deeltijdpensioen'",
+  "dutch": "'pensioner' & 'deeltijdpensioen'",
+  "match_zonder_config": false,
+  "match_dutch": true
+ },
+ "H7.treffers_fixture_zonder_config_vs_dutch": {
+  "zonder_config": "0",
+  "dutch": "16619"
+ },
+ "H9.pgvector_lokaal": "0.8.2",
+ "H9.hnsw_gucs": [
+  {
+   "name": "hnsw.ef_search",
+   "setting": "40",
+   "context": "user"
+  },
+  {
+   "name": "hnsw.iterative_scan",
+   "setting": "off",
+   "context": "user"
+  },
+  {
+   "name": "hnsw.max_scan_tuples",
+   "setting": "20000",
+   "context": "user"
+  },
+  {
+   "name": "hnsw.scan_mem_multiplier",
+   "setting": "1",
+   "context": "user"
+  }
+ ]
+}

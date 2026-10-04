@@ -78,6 +78,18 @@ export interface Fasemeting {
 
 export type Retrievaluitkomst = "ok" | "timeout" | "annulering" | "fout";
 
+/**
+ * R1 (besluit 0218) — welk TEKSTZOEKPAD de retrieval gebruikte. Alleen gezet
+ * als de vlag ZOEK_TEKST_V2 aan stond (met de vlag uit ontbreekt de sleutel,
+ * zodat de samenvatting byte-gelijk blijft aan vóór R1):
+ * - `nieuw`             — `zoek_chunks_begrensd` is aangeroepen;
+ * - `fallback_pgrst202` — die functie ontbrak (PGRST202, migratie niet
+ *                          toegepast) en de keten viel éénmaal terug op
+ *                          `zoek_chunks`. Telt rood in de r1-releasecheck.
+ * Gesloten enum: inhoudsvrij, dus toegestaan op basisniveau én in de logregel.
+ */
+export type Tekstzoekpad = "nieuw" | "fallback_pgrst202";
+
 /** Wat in `retrieval_meta.invoer.retrieval_fasetijden` en in de logregel staat. */
 export interface FasetijdenSamenvatting {
   versie: 1;
@@ -87,6 +99,8 @@ export interface FasetijdenSamenvatting {
   /** Hoeveel metingen er wegvielen door de bovengrens (normaal 0). */
   afgekapt: number;
   fasen: Fasemeting[];
+  /** R1 (0218) — alleen aanwezig met de vlag ZOEK_TEKST_V2 aan. */
+  tekstzoekpad?: Tekstzoekpad;
 }
 
 export interface MeetOpties<T> {
@@ -104,6 +118,12 @@ export interface Fasemeter {
   noteer(fase: Fase, status: Fasestatus, opties?: { poging?: Fasepoging; rijen?: number; startMs?: number; ms?: number }): void;
   /** Dezelfde meetstaat, met de spoorindex op elke meting. */
   voorSpoor(spoor: number): Fasemeter;
+  /**
+   * R1 (0218) — markeert het gebruikte tekstzoekpad op de hele meter (beurt-
+   * breed, over alle sporen). `fallback_pgrst202` wint van `nieuw`: één
+   * terugval in de beurt maakt de hele beurt een terugvalbeurt.
+   */
+  markeerTekstzoekpad(pad: Tekstzoekpad): void;
   /** Relatieve tijd sinds het begin van de meter. */
   nu(): number;
   samenvatting(uitkomst: Retrievaluitkomst, budgetMs?: number | null): FasetijdenSamenvatting;
@@ -141,6 +161,7 @@ interface Staat {
   metingen: Fasemeting[];
   afgekapt: number;
   klok: () => number;
+  tekstzoekpad?: Tekstzoekpad;
 }
 
 function maakMeter(staat: Staat, spoor: number | null): Fasemeter {
@@ -203,6 +224,9 @@ function maakMeter(staat: Staat, spoor: number | null): Fasemeter {
     voorSpoor(nieuw: number) {
       return maakMeter(staat, nieuw);
     },
+    markeerTekstzoekpad(pad) {
+      if (staat.tekstzoekpad !== "fallback_pgrst202") staat.tekstzoekpad = pad;
+    },
     nu() {
       return staat.klok();
     },
@@ -215,6 +239,8 @@ function maakMeter(staat: Staat, spoor: number | null): Fasemeter {
         afgekapt: staat.afgekapt,
         // Gesorteerd op start, zodat parallelle sporen leesbaar in volgorde staan.
         fasen: [...staat.metingen].sort((a, b) => a.start_ms - b.start_ms),
+        // R1 — alleen met de vlag aan; anders ontbreekt de sleutel (byte-gelijk).
+        ...(staat.tekstzoekpad ? { tekstzoekpad: staat.tekstzoekpad } : {}),
       };
     },
   };
@@ -236,6 +262,7 @@ export const GEEN_FASEMETER: Fasemeter = {
   meet: (_fase, werk) => werk(),
   noteer: () => undefined,
   voorSpoor: () => GEEN_FASEMETER,
+  markeerTekstzoekpad: () => undefined,
   nu: () => Date.now(),
   samenvatting: (uitkomst, budgetMs = null) => ({
     versie: 1,
