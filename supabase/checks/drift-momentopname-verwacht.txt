@@ -299,6 +299,7 @@ execute|public.word_similarity_dist_commutator_op|anon=true authenticated=true
 execute|public.word_similarity_dist_op|anon=true authenticated=true
 execute|public.word_similarity_op|anon=true authenticated=true
 execute|public.word_similarity|anon=true authenticated=true
+execute|public.zoek_chunks_begrensd|anon=false authenticated=true
 execute|public.zoek_chunks_hybride|anon=false authenticated=true
 execute|public.zoek_chunks|anon=false authenticated=true
 extensie|pg_stat_statements|versie=1.11
@@ -609,6 +610,7 @@ functie|public.word_similarity_dist_commutator_op|secdef=false searchpath=niet g
 functie|public.word_similarity_dist_op|secdef=false searchpath=niet gepind md5=ab0c2cb7ec6c0cbe0937ec3288d2cfda
 functie|public.word_similarity_op|secdef=false searchpath=niet gepind md5=9cb3bc9ce246a2c4c4d17c7205f4a17f
 functie|public.word_similarity|secdef=false searchpath=niet gepind md5=f9acfb3b071c96db4b1bb593b621c747
+functie|public.zoek_chunks_begrensd|secdef=false searchpath=search_path=public, pg_temp md5=6a298a23c1f6904ec93b215354b3c731
 functie|public.zoek_chunks_hybride|secdef=false searchpath=search_path=public, pg_temp md5=82aacc6ac18418901de4886b53a314b8
 functie|public.zoek_chunks|secdef=false searchpath=search_path=public, pg_temp md5=b028e3132bf135cca8e22e9dfe47bfee
 policy|public.agendapunt_inbreng.eigen inbreng schrijven|cmd=INSERT qual=geen withcheck=cd3c3a3fa0b1d344fe1921796da66edb
