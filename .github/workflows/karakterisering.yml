@@ -406,16 +406,19 @@ jobs:
             kill "$SERVER" "$STUB" 2>/dev/null || true; exit 1
           fi
           code=0
-          node tests/karakterisering/artikelspoor-500-keten.mjs || code=1
+          ART_VERWACHT_TEKSTZOEKPAD=afwezig node tests/karakterisering/artikelspoor-500-keten.mjs || code=1
           kill "$SERVER" "$STUB" 2>/dev/null || true
           wait "$SERVER" 2>/dev/null || true
           # R1 (0218): dezelfde volledige vraagketen met het nieuwe tekstzoekpad
-          # aan (ZOEK_TEKST_V2=on ⇒ zoek_chunks_begrensd i.p.v. zoek_chunks).
+          # aan. Het pad is alleen aan bij ZOEK_TEKST_V2=on ÉN fondsvlag
+          # zoek_tekst_v2=true; de fondsvlag wordt vóór de serverstart gezet en
+          # daarna gewist, en de keten eist de marker tekstzoekpad=nieuw.
           # Eigen poort (3105, buiten de reeks 3006–3021 van de volgende stap),
           # zodat de vlag-uit-server niet stil wordt hergebruikt; na afloop de
           # poort echt vrijgeven (`kill` op npm laat next-server staan).
           if [ "$code" = "0" ]; then
             fuser -k 3005/tcp 2>/dev/null || (lsof -ti tcp:3005 | xargs -r kill) 2>/dev/null || true
+            node tests/karakterisering/zoektekst-fondsvlag.mjs zet || code=1
             node tests/e2e/fixtures/embed-stub.mjs > "$RUNNER_TEMP/art500-embed-stub-r1.log" 2>&1 &
             STUB=$!
             ZOEK_TEKST_V2=on HYBRID_SEARCH=on PORT=3105 APP_BASE_URL=http://127.0.0.1:3105 npm run start &
@@ -430,10 +433,11 @@ jobs:
               echo "FOUT: next start (R1, vlag aan) kwam niet op binnen 60s." >&2
               kill "$SERVER" "$STUB" 2>/dev/null || true; exit 1
             fi
-            APP_BASE_URL=http://127.0.0.1:3105 node tests/karakterisering/artikelspoor-500-keten.mjs || code=1
+            ART_VERWACHT_TEKSTZOEKPAD=nieuw APP_BASE_URL=http://127.0.0.1:3105 node tests/karakterisering/artikelspoor-500-keten.mjs || code=1
             kill "$SERVER" "$STUB" 2>/dev/null || true
             wait "$SERVER" 2>/dev/null || true
             fuser -k 3105/tcp 2>/dev/null || (lsof -ti tcp:3105 | xargs -r kill) 2>/dev/null || true
+            node tests/karakterisering/zoektekst-fondsvlag.mjs wis || code=1
           fi
           echo "artikelspoor-500-pass: $(( $(date +%s) - t0 ))s"
           exit $code
@@ -491,17 +495,26 @@ jobs:
           code=0
           # ── #505 performance — met de #516-begrenzing aan/uit, en (R1, 0218)
           #    nogmaals met het nieuwe tekstzoekpad aan (ZOEK_TEKST_V2=on). ──
+          #    R1-vlag: alleen aan bij ZOEK_TEKST_V2=on ÉN fondsvlag true. De
+          #    stand "env_zonder_fondsvlag" bewijst dat de env alléén geen fonds
+          #    omschakelt (marker moet ontbreken).
           poort=3006
-          for zoektekst in uit aan; do
-            if [ "$zoektekst" = "aan" ]; then export ZOEK_TEKST_V2=on; else unset ZOEK_TEKST_V2; fi
-            for begrenzing in aan uit; do
+          for zoektekst in uit env_zonder_fondsvlag aan; do
+            case "$zoektekst" in
+              uit) unset ZOEK_TEKST_V2; verwacht=afwezig; begrenzingen="aan uit" ;;
+              env_zonder_fondsvlag) export ZOEK_TEKST_V2=on; verwacht=afwezig; begrenzingen="aan" ;;
+              aan) export ZOEK_TEKST_V2=on; verwacht=nieuw; begrenzingen="aan uit"
+                   node tests/karakterisering/zoektekst-fondsvlag.mjs zet || code=1 ;;
+            esac
+            for begrenzing in $begrenzingen; do
               if [ "$begrenzing" = "uit" ]; then export ARTIKELFOCUS_VOLSCANBEGRENZING=off; else unset ARTIKELFOCUS_VOLSCANBEGRENZING; fi
               start_server $poort || { code=1; break; }
-              ART505_BEGRENZING_LABEL="$begrenzing-zoektekst_$zoektekst" APP_BASE_URL=http://127.0.0.1:$poort \
+              ART505_BEGRENZING_LABEL="$begrenzing-zoektekst_$zoektekst" ART_VERWACHT_TEKSTZOEKPAD=$verwacht APP_BASE_URL=http://127.0.0.1:$poort \
                 node tests/karakterisering/artikelspoor-500-budget.mjs || code=1
               stop_server || code=1
               poort=$((poort + 1))
             done
+            if [ "$zoektekst" = "aan" ]; then node tests/karakterisering/zoektekst-fondsvlag.mjs wis || code=1; fi
           done
           unset ZOEK_TEKST_V2
           # ── #516 gedrag (57014 geïnjecteerd) — vlag uit én (R1) vlag aan: de
@@ -509,7 +522,12 @@ jobs:
           #    mutatiecontrole moeten in beide standen hetzelfde bewijs geven. ──
           export WP3_MALWARESCAN_AAN=true
           for zoektekst in uit aan; do
-            if [ "$zoektekst" = "aan" ]; then export ZOEK_TEKST_V2=on; else unset ZOEK_TEKST_V2; fi
+            if [ "$zoektekst" = "aan" ]; then
+              export ZOEK_TEKST_V2=on ART_VERWACHT_TEKSTZOEKPAD=nieuw
+              node tests/karakterisering/zoektekst-fondsvlag.mjs zet || code=1
+            else
+              unset ZOEK_TEKST_V2; export ART_VERWACHT_TEKSTZOEKPAD=afwezig
+            fi
             for pad in fts hybride; do
               if [ "$pad" = "hybride" ]; then export HYBRID_SEARCH=on; else unset HYBRID_SEARCH; fi
               unset ARTIKELFOCUS_VOLSCANBEGRENZING
@@ -527,8 +545,9 @@ jobs:
               stop_server || code=1
               poort=$((poort + 1))
             done
+            if [ "$zoektekst" = "aan" ]; then node tests/karakterisering/zoektekst-fondsvlag.mjs wis || code=1; fi
           done
-          unset ZOEK_TEKST_V2
+          unset ZOEK_TEKST_V2 ART_VERWACHT_TEKSTZOEKPAD
           kill "$STUB" 2>/dev/null || true
           echo "art505-perf/art516-gedrag-pass: $(( $(date +%s) - t0 ))s"
           exit $code

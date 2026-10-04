@@ -272,8 +272,9 @@ export interface RetrievalVlaggen {
   generatieTimeoutMs?: number;
   /** R1 (0218) — het nieuwe tekstzoekpad (`zoek_chunks_begrensd`). Waarheids-
    *  tabel in `retrieval/zoektekst-vlag.ts`: env `ZOEK_TEKST_V2` is de
-   *  hoofdstop (ontbrekend/≠ on ⇒ altijd uit), fondsvlag `zoek_tekst_v2` kan
-   *  per fonds uitzetten. Standaard uit. */
+   *  hoofdstop (ontbrekend/≠ on ⇒ altijd uit); alleen aan bij env `on` én
+   *  fondsvlag `zoek_tekst_v2` = true (ontbrekende vlag ⇒ uit). Beide
+   *  standaard uit; uitrol per gekozen pilotfonds. */
   zoekTekstV2: boolean;
 }
 

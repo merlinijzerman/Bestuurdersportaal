@@ -353,9 +353,10 @@ export interface RetrievalOpties {
    * R1 (besluit 0218) — het nieuwe tekstzoekpad: de gerangschikte FTS-pogingen
    * (strikt/terugval) roepen `zoek_chunks_begrensd` aan i.p.v. `zoek_chunks`
    * (zelfde parameterblok, zelfde retourvorm; RLS-behoudend). De aanroeper
-   * (route) resolvet de fondsvlag via `retrievalVlaggenVoorFonds`; de env
-   * `ZOEK_TEKST_V2` blijft de hoofdstop en wordt hier opnieuw toegepast
-   * (zie `retrieval/zoektekst-vlag.ts`). Ontbreekt de functie in de database
+   * (route) resolvet de fondsvlag via `retrievalVlaggenVoorFonds`; dezelfde
+   * waarheidstabel (env `ZOEK_TEKST_V2` = on ÉN fondsvlag true) wordt hier
+   * opnieuw toegepast (zie `retrieval/zoektekst-vlag.ts`); zonder meegegeven
+   * vlag is het pad uit. Ontbreekt de functie in de database
    * (PGRST202), dan valt de keten éénmaal per retrieval terug op `zoek_chunks`
    * met een warn-logregel en de marker `fallback_pgrst202`. Standaard uit.
    */
@@ -438,8 +439,8 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     signal: o?.signal,
     fasemeter: o?.fasemeter ?? GEEN_FASEMETER,
     begrensVolscans: o?.begrensVolscans === true,
-    // R1 — de env is de hoofdstop, óók voor een al geresolveerde fondsvlag:
-    // zonder ZOEK_TEKST_V2=on is het pad uit, wat de aanroeper ook meegeeft.
+    // R1 — dezelfde waarheidstabel, óók voor een al geresolveerde fondsvlag:
+    // alleen aan bij ZOEK_TEKST_V2=on én een meegegeven `zoekTekstV2: true`.
     zoekTekstV2: zoekTekstV2Actief(process.env[ZOEK_TEKST_V2_ENV], o?.zoekTekstV2),
   };
 }

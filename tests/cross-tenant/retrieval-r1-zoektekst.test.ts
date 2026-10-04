@@ -48,17 +48,22 @@ const PARAMS = { p_limit: 24, p_document_ids: null, p_modus: "actueel", p_fonds_
 
 // ── Vlag-waarheidstabel ──────────────────────────────────────────────────────
 
-test("R1-V1 — waarheidstabel: env is de hoofdstop, fondsvlag kan alleen uitzetten", () => {
+test("R1-V1 — waarheidstabel: alleen aan bij env on ÉN fondsvlag true", () => {
   // env ontbreekt / ≠ on ⇒ altijd uit, wat de fondsvlag ook zegt.
   for (const env of [undefined, "off", "", "ON", "true", "1"]) {
     assert.equal(zoekTekstV2Actief(env, undefined), false, `env=${env}, fonds=∅`);
     assert.equal(zoekTekstV2Actief(env, true), false, `env=${env}, fonds=true`);
     assert.equal(zoekTekstV2Actief(env, false), false, `env=${env}, fonds=false`);
   }
-  // env on ⇒ default aan; fondsvlag false zet per fonds uit.
-  assert.equal(zoekTekstV2Actief("on", undefined), true);
-  assert.equal(zoekTekstV2Actief("on", true), true);
+  // env on: alleen een expliciete fondsvlag true zet aan; een fonds zonder
+  // vlagrij (undefined) blijft uit — geen stille omschakeling van alle fondsen.
+  assert.equal(zoekTekstV2Actief("on", undefined), false);
   assert.equal(zoekTekstV2Actief("on", false), false);
+  assert.equal(zoekTekstV2Actief("on", true), true);
+  // Strikt `true`: geen truthy-coërcie vanaf de aanroeper.
+  for (const v of ["true", "on", 1, null] as unknown[]) {
+    assert.equal(zoekTekstV2Actief("on", v as boolean | undefined), false, `fondsvlag=${String(v)}`);
+  }
 });
 
 test("R1-V2 — resolveerRetrievalVlaggen past de hoofdstop opnieuw toe op een meegegeven vlag", () => {
@@ -67,8 +72,10 @@ test("R1-V2 — resolveerRetrievalVlaggen past de hoofdstop opnieuw toe op een m
   assert.equal(metEnv("off", () => resolveerRetrievalVlaggen({ zoekTekstV2: true }).zoekTekstV2), false);
   assert.equal(metEnv("on", () => resolveerRetrievalVlaggen({ zoekTekstV2: true }).zoekTekstV2), true);
   assert.equal(metEnv("on", () => resolveerRetrievalVlaggen({ zoekTekstV2: false }).zoekTekstV2), false);
-  // Zonder meegegeven vlag: env on = aan (fonds zonder rij), anders uit.
-  assert.equal(metEnv("on", () => resolveerRetrievalVlaggen({}).zoekTekstV2), true);
+  // Zonder meegegeven vlag (fonds zonder rij, of aanroeper zonder
+  // fondsresolutie): ook met env on uit.
+  assert.equal(metEnv("on", () => resolveerRetrievalVlaggen({}).zoekTekstV2), false);
+  assert.equal(metEnv("on", () => resolveerRetrievalVlaggen(undefined).zoekTekstV2), false);
   assert.equal(metEnv(undefined, () => resolveerRetrievalVlaggen({}).zoekTekstV2), false);
   assert.equal(metEnv(undefined, () => resolveerRetrievalVlaggen(undefined).zoekTekstV2), false);
 });

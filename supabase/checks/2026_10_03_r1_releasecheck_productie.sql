@@ -54,10 +54,16 @@
 --    = 3 runs × 2 queries × 2 JWT's = 12 aanroepen (géén hybride, géén
 --    verslapt): oud en nieuw naast elkaar op dezelfde Productiedata; verwacht
 --    buffers nieuw ≤ 1/3 oud en dezelfde rijentelling.
--- 2. Vlag per fonds aan (`fonds_feature_flags.zoek_tekst_v2 = true` ná
---    ZOEK_TEKST_V2=on in Vercel — zonder env blijft álles uit), pilotvragen
---    stellen, dan deze query opnieuw met `vanaf` = het moment van aanzetten.
---    Verwacht: `tekstzoekpad = 'nieuw'` op die beurten, fallback 0, ok = true.
+-- 2. Env ZOEK_TEKST_V2=on in Vercel zetten. Dat schakelt NOG GEEN fonds om:
+--    het pad is alleen aan bij env on ÉN fondsvlag true (besluit 0218). Draai
+--    deze query met `vanaf` = het moment van de env-wijziging; verwacht 0
+--    beurten met `tekstzoekpad = 'nieuw'`.
+-- 3. Fondsvlag aan UITSLUITEND voor het gekozen pilotfonds
+--    (`fonds_feature_flags.zoek_tekst_v2 = true`), pilotvragen stellen, dan
+--    deze query opnieuw met `vanaf` = het moment van aanzetten. Verwacht:
+--    `tekstzoekpad = 'nieuw'` alleen op beurten van dat fonds, fallback 0,
+--    ok = true. Terugdraaien: fondsvlag verwijderen (dat fonds) of env off
+--    (hoofdstop, alle fondsen).
 --
 -- ── VERCEL-LOGCONTROLE (door de opdrachtgever; Claude heeft geen toegang) ───
 -- Project `bestuurdersportaal` → Logs → Production → zelfde venster → zoek:

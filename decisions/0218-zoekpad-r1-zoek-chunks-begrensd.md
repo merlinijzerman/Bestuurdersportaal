@@ -51,11 +51,16 @@ expliciet en getest.
    | env `ZOEK_TEKST_V2` | fondsvlag `zoek_tekst_v2` | effect |
    |---|---|---|
    | ontbreekt / ≠ `on` | (wat dan ook) | **uit** — env is de hoofdstop |
-   | `on` | ontbreekt | **aan** (default aan) |
-   | `on` | `true` | aan |
-   | `on` | `false` | **uit** — per fonds uitgezet |
+   | `on` | ontbreekt | **uit** — geen stille omschakeling |
+   | `on` | `false` | uit |
+   | `on` | `true` | **aan** — alleen dit (pilot)fonds |
 
-   Standaard uit. Met de vlag uit roept de app de functie nooit aan en zijn de
+   Beide schakelaars staan standaard uit; het pad is **alleen aan bij env `on`
+   én fondsvlag `true`** (besluit opdrachtgever 04-10-2026, correctie op de
+   eerste PR-versie waarin env `on` + ontbrekende fondsvlag "aan" was). Env
+   `on` alleen schakelt dus geen enkel fonds om; fondsen zonder vlagrij
+   blijven op `zoek_chunks`. Ook een aanroeper zonder fondsresolutie
+   (meegegeven vlag ontbreekt) blijft uit. Standaard uit. Met de vlag uit roept de app de functie nooit aan en zijn de
    karakteriseringssnapshots byte-gelijk.
 3. **Limiet — expliciete afwijzing.** `p_limit > 1000` ⇒ `raise exception`
    met SQLSTATE `P0R01` ('zoek_chunks_begrensd: p_limit > 1000'), niet stil
@@ -119,7 +124,11 @@ expliciet en getest.
 - **Deployvolgorde:** Preview-migratie en merge zijn aparte akkoorden;
   fidelitypin +2 regels (functie + comment). Productie: nulmeting
   (`2026_10_03_r1_releasecheck_productie.sql`) → migratie met vlag uit →
-  nameting ≤ 12 aanroepen → per fonds aan → releasecheck.
+  nameting ≤ 12 aanroepen → env `ZOEK_TEKST_V2=on` in Vercel (verwacht: nog
+  geen enkele beurt met marker `nieuw`, want geen fonds heeft de vlag) →
+  fondsvlag `zoek_tekst_v2 = true` uitsluitend op het gekozen pilotfonds →
+  releasecheck (marker `nieuw` alleen bij dat fonds). Terugdraaien: fondsvlag
+  weg (per fonds) of env `off` (hoofdstop, alle fondsen).
 - **Niet opgelost door deze PR:** #500 blijft open tot R1b (vectorarm) en de
   pilot; de FTS blijft O(zichtbare chunks) (geen GIN onder RLS); het
   `plain`-vangnet (H7) blijft een apart issue.
