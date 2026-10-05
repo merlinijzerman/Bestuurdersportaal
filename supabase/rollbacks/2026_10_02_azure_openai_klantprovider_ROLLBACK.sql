@@ -1,4 +1,4 @@
--- Handmatige rollback van 20261002153652_azure_openai_klantprovider.sql.
+-- Handmatige rollback van 2026_10_02_azure_openai_klantprovider.sql.
 -- Fail-closed zodra Azure OpenAI-data bestaat; exporteer/verwijder die eerst.
 
 begin;

@@ -1,5 +1,5 @@
 -- ============================================================================
---  Klant-eigen Azure OpenAI als afzonderlijke AI-gatewayprovider
+--  Klant-eigen Azure OpenAI als afzonderlijke AI-gatewayprovider (#524)
 -- ----------------------------------------------------------------------------
 --  Alleen het contract wordt geopend. Er wordt GEEN klantprofiel, endpoint,
 --  secret of model geactiveerd. De nieuwe kill switch staat standaard dicht;

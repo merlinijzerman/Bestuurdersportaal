@@ -136,7 +136,7 @@ auditspoor en verwijder geen logregels om de rollback te forceren.
 
 ### Klant-eigen Azure OpenAI — inert contract
 
-`20261002153652_azure_openai_klantprovider.sql` opent `azure_openai` als aparte provider en
+`2026_10_02_azure_openai_klantprovider.sql` opent `azure_openai` als aparte provider en
 maakt de providerswitch aan op `gestopt`. De migratie registreert bewust geen model, profiel,
 endpoint of fondsconfiguratie. De code accepteert uitsluitend de secretreferenties
 `AZURE_OPENAI_API_KEY` en `AZURE_OPENAI_BASE_URL`; de URL moet eindigen op `/openai/v1` en op
