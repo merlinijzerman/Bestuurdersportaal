@@ -2,6 +2,7 @@
 
 - **Status:** Geaccepteerd
 - **Datum:** 2026-09-04
+- **Aangevuld:** 2026-10-02 (klant-eigen Azure OpenAI-provider)
 - **Betrokkenen:** Merlin (product owner), development
 
 ## Context
@@ -27,6 +28,26 @@ Embeddings en OCR blijven voorlopig buiten de tekstgateway, omdat een embeddingm
 re-index vereist en OCR een eigen paginabudget heeft. Beide blijven verplicht gepoort en
 gereserveerd. De ongebruikte Message Batches-baan is verwijderd; herintroductie vereist eerst een
 providerneutraal batchcontract dat configuratieversie en actie-ID over start en polling bindt.
+
+## Aanvulling: klant-eigen Azure OpenAI
+
+Azure OpenAI van een klant is een afzonderlijke provider (`azure_openai`) en geen alias van het
+platformprofiel `openai`. Daarmee blijven eigendom, kill switch, allowlist, kosten en audit
+ondubbelzinnig. Het portaal blijft de instructies, retrievalcontext, bronverwijzingen en
+antwoordopbouw bepalen; alleen de modelaanroep gaat naar het Azure OpenAI-resource en de
+deployment van de klant.
+
+De eerste implementatiefase opent uitsluitend het inerte providercontract en de adapter. Er wordt
+geen klantprofiel, model of endpoint gezaaid en de providerswitch staat standaard op `gestopt`.
+Een latere activering vereist een fonds-eigen profiel, expliciet allowlisted deploymentmodel,
+secrets in de deploymentomgeving, een Preview-smoke over alle vier taakgroepen en de bestaande
+vier-ogenprocedure. Er is geen stille terugval op Anthropic of platform-OpenAI.
+
+De adapter gebruikt Azure OpenAI v1 Responses met `store: false`, de deploymentnaam als `model`,
+de portaalprompt als `instructions` en uitsluitend een door code geallowliste HTTPS-endpoint op
+een Azure AI-host. API-keys en endpoints staan nooit in de database. Microsoft Entra-workload-
+authenticatie en verdere dataminimalisatie worden na de klanttoets apart beoordeeld; deze fase
+wijzigt het bestaande portaalopslag- en auditbeleid niet.
 
 ## Overwogen alternatieven
 
@@ -54,4 +75,3 @@ providerneutraal batchcontract dat configuratieversie en actie-ID over start en 
 - `supabase/migrations/2026_09_04_ai_gateway_configuratie.sql`
 - `supabase/migrations/2026_09_04_t4_ai_actietype_semantische_extractie.sql`
 - besluit `0208-twee-productvarianten-eigen-en-microsoft.md`
-
