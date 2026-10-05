@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { extractTekstUitPdf } from "../../core/lib/document-extractie";
 import {
   maakDirecteSharePointAdapter,
   rangschikDirectePassages,
@@ -18,6 +21,16 @@ const HOST = "voorbeeld.sharepoint.com";
 const DRIVE = "drive-1";
 const ROOT_PAD = `/drives/${DRIVE}/root:/PGB`;
 const WEB_URL = `https://${HOST}/sites/lab/Gedeelde%20documenten/PGB/beleid.docx`;
+
+test("de synthetische PGB354-PDF-003-scan levert daadwerkelijk nul tekstsegmenten", async () => {
+  const pad = resolve(
+    import.meta.dirname,
+    "../e2e/fixtures/pgb-sharepoint/bibliotheek/99 Mutatie- en intrekkingstests/PGB354-PDF-003-Scan-zonder-tekstlaag.pdf"
+  );
+  const extractie = await extractTekstUitPdf(readFileSync(pad));
+  assert.equal(extractie.aantalPaginas, 1);
+  assert.deepEqual(extractie.segmenten, []);
+});
 
 const BRON: BronSnapshot = {
   id: "33333333-3333-4333-8333-333333333333",
@@ -299,4 +312,219 @@ test("mapdocumenten delen één downloadbudget en worden zichtbaar afgekapt", as
   assert.equal(uit.opgehaald, 1);
   assert.deepEqual(uit.truncatie, { reden: "kandidaten" });
   assert.ok(uit.kandidaten.length > 0);
+});
+
+test("een tekstloze PDF in een map laat andere documenten door en telt gedeeltelijke dekking", async () => {
+  const scan: GeregistreerdDocument = {
+    ...DOCUMENT,
+    ref: "66666666-6666-4666-8666-666666666666",
+    itemId: "scan-1",
+    naam: "bijlage-scan.pdf",
+    bestandstype: "pdf",
+  };
+  let herlezingen = 0;
+  let overgeslagen = 0;
+  const adapter = maakDirecteSharePointAdapter({
+    bron: BRON,
+    tokenTenantId: BRON.tenantId,
+    accessToken: "test-token",
+    documenten: [{ document: scan }, { document: DOCUMENT }],
+    leesItem: async (id) => id === BRON.rootItemId ? root() : id === scan.itemId
+      ? {
+          ...item(),
+          id: scan.itemId,
+          name: scan.naam,
+          webUrl: `https://${HOST}/sites/lab/Gedeelde%20documenten/PGB/${scan.naam}`,
+          file: { mimeType: "application/pdf" },
+        }
+      : item(),
+    herleesBron: async () => {
+      herlezingen += 1;
+      return BRON;
+    },
+    downloadImpl: async () => ({ ok: true, bytes: Buffer.from("fixture") }),
+    extractImpl: async (_bytes, type) => type === "pdf"
+      ? { tekst: "", aantalPaginas: 2, segmenten: [] }
+      : {
+          tekst: "Beleidsmarker Zandloperbaken twaalf staat in dit document.",
+          aantalPaginas: 1,
+          segmenten: [{ pagina: 1, paragraaf: null, tekst: "Beleidsmarker Zandloperbaken twaalf staat in dit document." }],
+        },
+    onPdfZonderTekstlaag: () => {
+      assert.ok(herlezingen > 0, "de bron moet opnieuw zijn gecontroleerd vóór overslaan");
+      overgeslagen += 1;
+    },
+  });
+  const uit = await adapter.zoek(
+    {
+      fondsId: FONDS,
+      actor: { soort: "gebruiker", id: GEBRUIKER },
+      taaktype: "chat_generatie",
+      bronbeleid: { bronsoorten: ["sharepoint"] },
+      correlationId: "corr-tekstloze-scan",
+      verzoekStartOp: new Date().toISOString(),
+      resterendMs: () => 5_000,
+    },
+    {
+      naam: "primair",
+      documentScope: [scan, DOCUMENT].map((document) =>
+        maakDocumentIdentiteit(`fonds:${FONDS}:sharepoint`, document.ref)
+      ),
+      origineleVraag: "Waar staat Zandloperbaken twaalf?",
+      zoekvraag: "Zandloperbaken twaalf",
+      strategie: "gericht",
+      maxResultaten: 8,
+      maxKandidaten: 24,
+      maxContextTekens: 40_000,
+    }
+  );
+  assert.equal(uit.fout, undefined);
+  assert.equal(uit.opgehaald, 1);
+  assert.equal(overgeslagen, 1);
+  assert.ok(uit.kandidaten.length > 0);
+  assert.ok(uit.kandidaten.every((k) => k.documentIdentiteit.id ===
+    maakDocumentIdentiteit(`fonds:${FONDS}:sharepoint`, DOCUMENT.ref)));
+});
+
+test("een los tekstloos PDF-document blijft fail-closed", async () => {
+  const scan: GeregistreerdDocument = {
+    ...DOCUMENT,
+    naam: "bijlage-scan.pdf",
+    bestandstype: "pdf",
+  };
+  const adapter = maakDirecteSharePointAdapter({
+    bron: BRON,
+    tokenTenantId: BRON.tenantId,
+    accessToken: "test-token",
+    documenten: [{ document: scan }],
+    leesItem: async (id) => id === BRON.rootItemId ? root() : {
+      ...item(),
+      name: scan.naam,
+      webUrl: `https://${HOST}/sites/lab/Gedeelde%20documenten/PGB/${scan.naam}`,
+      file: { mimeType: "application/pdf" },
+    },
+    herleesBron: async () => BRON,
+    downloadImpl: async () => ({ ok: true, bytes: Buffer.from("fixture") }),
+    extractImpl: async () => ({ tekst: "", aantalPaginas: 1, segmenten: [] }),
+  });
+  const uit = await adapter.zoek(
+    {
+      fondsId: FONDS,
+      actor: { soort: "gebruiker", id: GEBRUIKER },
+      taaktype: "chat_generatie",
+      bronbeleid: { bronsoorten: ["sharepoint"] },
+      correlationId: "corr-losse-scan",
+      verzoekStartOp: new Date().toISOString(),
+      resterendMs: () => 5_000,
+    },
+    {
+      naam: "primair",
+      documentScope: [maakDocumentIdentiteit(`fonds:${FONDS}:sharepoint`, scan.ref)],
+      origineleVraag: "vraag",
+      zoekvraag: "vraag",
+      strategie: "gericht",
+      maxResultaten: 8,
+      maxKandidaten: 8,
+      maxContextTekens: 10_000,
+    }
+  );
+  assert.equal(uit.fout, "configuratiefout");
+  assert.equal(uit.kandidaten.length, 0);
+});
+
+test("een map met uitsluitend een tekstloze PDF geeft geen verzonnen bronresultaten", async () => {
+  const scan: GeregistreerdDocument = {
+    ...DOCUMENT,
+    naam: "bijlage-scan.pdf",
+    bestandstype: "pdf",
+  };
+  let overgeslagen = 0;
+  const adapter = maakDirecteSharePointAdapter({
+    bron: BRON,
+    tokenTenantId: BRON.tenantId,
+    accessToken: "test-token",
+    documenten: [{ document: scan }],
+    leesItem: async (id) => id === BRON.rootItemId ? root() : {
+      ...item(),
+      name: scan.naam,
+      webUrl: `https://${HOST}/sites/lab/Gedeelde%20documenten/PGB/${scan.naam}`,
+      file: { mimeType: "application/pdf" },
+    },
+    herleesBron: async () => BRON,
+    downloadImpl: async () => ({ ok: true, bytes: Buffer.from("fixture") }),
+    extractImpl: async () => ({ tekst: "", aantalPaginas: 1, segmenten: [] }),
+    onPdfZonderTekstlaag: () => { overgeslagen += 1; },
+  });
+  const uit = await adapter.zoek(
+    {
+      fondsId: FONDS,
+      actor: { soort: "gebruiker", id: GEBRUIKER },
+      taaktype: "chat_generatie",
+      bronbeleid: { bronsoorten: ["sharepoint"] },
+      correlationId: "corr-alleen-scan",
+      verzoekStartOp: new Date().toISOString(),
+      resterendMs: () => 5_000,
+    },
+    {
+      naam: "primair",
+      documentScope: [maakDocumentIdentiteit(`fonds:${FONDS}:sharepoint`, scan.ref)],
+      origineleVraag: "vraag",
+      zoekvraag: "vraag",
+      strategie: "gericht",
+      maxResultaten: 8,
+      maxKandidaten: 8,
+      maxContextTekens: 10_000,
+    }
+  );
+  assert.equal(uit.fout, "geen_resultaten");
+  assert.equal(uit.kandidaten.length, 0);
+  assert.equal(overgeslagen, 1);
+});
+
+test("intrekking tijdens een tekstloze PDF blijft ook voor een map fail-closed", async () => {
+  const scan: GeregistreerdDocument = {
+    ...DOCUMENT,
+    naam: "bijlage-scan.pdf",
+    bestandstype: "pdf",
+  };
+  let overgeslagen = 0;
+  const adapter = maakDirecteSharePointAdapter({
+    bron: BRON,
+    tokenTenantId: BRON.tenantId,
+    accessToken: "test-token",
+    documenten: [{ document: scan }],
+    leesItem: async (id) => id === BRON.rootItemId ? root() : {
+      ...item(),
+      name: scan.naam,
+      webUrl: `https://${HOST}/sites/lab/Gedeelde%20documenten/PGB/${scan.naam}`,
+      file: { mimeType: "application/pdf" },
+    },
+    herleesBron: async () => ({ ...BRON, status: "gestopt" }),
+    downloadImpl: async () => ({ ok: true, bytes: Buffer.from("fixture") }),
+    extractImpl: async () => ({ tekst: "", aantalPaginas: 1, segmenten: [] }),
+    onPdfZonderTekstlaag: () => { overgeslagen += 1; },
+  });
+  const uit = await adapter.zoek(
+    {
+      fondsId: FONDS,
+      actor: { soort: "gebruiker", id: GEBRUIKER },
+      taaktype: "chat_generatie",
+      bronbeleid: { bronsoorten: ["sharepoint"] },
+      correlationId: "corr-ingetrokken-scan",
+      verzoekStartOp: new Date().toISOString(),
+      resterendMs: () => 5_000,
+    },
+    {
+      naam: "primair",
+      documentScope: [maakDocumentIdentiteit(`fonds:${FONDS}:sharepoint`, scan.ref)],
+      origineleVraag: "vraag",
+      zoekvraag: "vraag",
+      strategie: "gericht",
+      maxResultaten: 8,
+      maxKandidaten: 8,
+      maxContextTekens: 10_000,
+    }
+  );
+  assert.equal(uit.fout, "toestemming_geweigerd");
+  assert.equal(overgeslagen, 0);
 });

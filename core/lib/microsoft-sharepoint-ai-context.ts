@@ -178,6 +178,7 @@ export async function maakProductieDirecteSharePointAdapter(args: {
       // Een afgeknotte Graph-boom betekent óók gedeeltelijke dekking, zelfs als
       // het zichtbare deel minder dan zes geschikte documenten bevat.
       afgekapt: selectie.afgekapt || live.afgekapt,
+      afgekaptDoorLimiet: selectie.afgekapt || live.afgekapt,
     };
     documentRijen = await Promise.all(
       mapSelectie.documenten.map((document) =>
@@ -238,6 +239,11 @@ export async function maakProductieDirecteSharePointAdapter(args: {
         ? {
             maxTotaalBytes: MAX_DIRECTE_TOTAAL_BYTES,
             maxTotaalTekens: MAX_DIRECTE_TOTAAL_TEKENS,
+            onPdfZonderTekstlaag: () => {
+              if (!mapSelectie) return;
+              mapSelectie.zonderTekstlaag += 1;
+              mapSelectie.afgekapt = true;
+            },
           }
         : {}),
     }),
@@ -385,6 +391,7 @@ export async function maakProductieGekoppeldeSharePointAdapter(args: {
   const mapSelectie: SharePointMapSelectie = {
     ...selectie,
     afgekapt: selectie.afgekapt || live.afgekapt,
+    afgekaptDoorLimiet: selectie.afgekapt || live.afgekapt,
   };
   const documentRijen = await Promise.all(
     selectie.documenten.map((document) =>
@@ -435,6 +442,16 @@ export async function maakProductieGekoppeldeSharePointAdapter(args: {
       herleesBron,
       maxTotaalBytes: MAX_DIRECTE_TOTAAL_BYTES,
       maxTotaalTekens: MAX_DIRECTE_TOTAAL_TEKENS,
+      // Bij een expliciet gekoppeld document mag een lege extractie niet
+      // stil worden overgeslagen. Alleen een map-only koppeling degradeert.
+      ...(scopes.every((scope) => scope.soort === "map")
+        ? {
+            onPdfZonderTekstlaag: () => {
+              mapSelectie.zonderTekstlaag += 1;
+              mapSelectie.afgekapt = true;
+            },
+          }
+        : {}),
     }),
     documentIdentiteiten: [...lokaalPerIdentiteit.keys()],
     scopeSoort: scopes.every((scope) => scope.soort === "map") ? "map" : "document",
