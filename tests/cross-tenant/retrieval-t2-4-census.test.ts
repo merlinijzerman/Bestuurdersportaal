@@ -148,6 +148,8 @@ test("#368 — centrale readers omvatten versie, typed evidence/preflight en par
   assert.deepEqual(context.lezingen_per_klasse.evidence.filter(centraal).sort(), [
     "core/lib/rag.ts::document_chunks",
     "core/lib/rag.ts::documenten",
+    "core/lib/retrieval/juridische-sectie-ophalen.ts::document_chunks",
+    "core/lib/retrieval/juridische-sectie-ophalen.ts::documenten",
     "core/lib/retrieval/supabase-evidence.ts::decision_objects",
     "core/lib/retrieval/supabase-evidence.ts::document_chunks",
     "core/lib/retrieval/supabase-evidence.ts::documenten",
@@ -304,7 +306,7 @@ test("#368 render-/persistboundary — vrije seedtekst kent één rendergrens en
   };
   bezoek(route);
   assert.equal(toelichtingCalls, 1);
-  assert.equal(duurzameWrites, 5);
+  assert.equal(duurzameWrites, 6);
   assert.match(
     route.text,
     /generatieGrendel\.bewaak\(\);\s*const postGeneratieSignal = generatieGrendel\.signal;/,

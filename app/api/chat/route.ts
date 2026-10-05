@@ -23,6 +23,8 @@ import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, 
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
+import { haalJuridischeSectieVoorWeergave } from "@/core/lib/retrieval/juridische-sectie-ophalen";
+import { bepaalSectiefocus, geefParagraafLetterlijk } from "@/core/lib/retrieval/juridische-sectie";
 import { maakFasemeter, type FasetijdenSamenvatting } from "@/core/lib/retrieval/fasetijden";
 import {
   leesDirecteSharePointScope,
@@ -2721,6 +2723,98 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           Connection: "keep-alive",
         },
       });
+    }
+
+    // Een verzoek om een HELE juridische paragraaf is een exacte bronopvraging.
+    // Gebruik hiervoor geen top-10 RAG-passages of modelreconstructie. Alleen
+    // een volledig afgebakende, gecontroleerde sectie wordt letterlijk getoond;
+    // bij extractiegaten krijgt de bestuurder de precieze officiële vindplaats.
+    const sectiefocus = bepaalSectiefocus(effectieveVraag);
+    if (
+      sectiefocus?.volledig && sectiefocus.nummer &&
+      !scopeActief && !agendapuntModusActief && !transformatieActief && !reflectieActief &&
+      !stukActief && !moduleScopeActief
+    ) {
+      const gevondenSectie = await haalJuridischeSectieVoorWeergave({
+        vraag: effectieveVraag,
+        fondsId,
+        peildatum: new Date().toISOString().slice(0, 10),
+        supabase,
+        signal: contextSignal,
+      });
+      if (gevondenSectie) {
+        const { sectie, bronlink, documentId, documentTitel } = gevondenSectie;
+        const antwoord = geefParagraafLetterlijk(sectie, bronlink);
+        const bron: BronVerwijzing = {
+          document_id: documentId,
+          titel: documentTitel,
+          bron: "Extern",
+          pagina: null,
+          paragraaf: `Paragraaf ${sectie.kop.nummer}`,
+          fragment: sectie.volledig
+            ? sectie.tekst.slice(0, 300)
+            : `Paragraaf ${sectie.kop.nummer}. ${sectie.kop.titel} — officiële tekst via bronlink`,
+          heeft_origineel: true,
+          documenttype: "wetgeving",
+          documentstatus: "van_kracht",
+          bronstatus: "actief",
+          bibliotheek: "generiek",
+          extern_url: bronlink,
+        };
+        const zegel = bouwInhoudZegel(vraag, antwoord);
+        try {
+          const { data: sectieLogId, error: sectieLogFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
+            contextSignal,
+            () => supabase.rpc("schrijf_ai_interactie", {
+              p_vraag: vraag,
+              p_antwoord: antwoord,
+              p_bronnen: [bron],
+              p_modus: "documenten",
+              p_model: vraagContext?.modelAangeroepen ? (vraagContext.meting?.model ?? null) : null,
+              p_retrieval_meta: {
+                geen_modelcall: !vraagContext?.modelAangeroepen,
+                methode: "gerichte_sectie",
+                opgehaald: sectie.rijen.length,
+                geselecteerd: sectie.rijen.length,
+                chunks: sectie.rijen.map((r) => ({ id: r.id, document_id: documentId, rang: null })),
+                invoer: {
+                  geen_generatiecall: true,
+                  juridische_intentie: juridischeIntentie,
+                  sectie_volledig: sectie.volledig,
+                  sectie_controle: sectie.reden,
+                },
+              },
+              p_retrieval_meta_inhoud: {},
+              p_gesprek_audit_id: gesprekAuditId,
+              p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
+              p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
+              p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
+            }).abortSignal(contextSignal)
+          );
+          if (sectieLogFout) throw sectieLogFout;
+          await rondAf(supabase, aiActieId, "voltooid", sectieLogId ? `governance_log:${sectieLogId}` : null);
+        } catch (fout) {
+          await rondAf(supabase, aiActieId, "mislukt", null);
+          console.error("Juridische sectie kon niet worden gelogd:", fout);
+          return NextResponse.json({ error: "De juridische brontekst kon niet betrouwbaar worden vastgelegd." }, { status: 500 });
+        }
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const event of [
+              { type: "meta", bronnen: [bron], modus: "documenten", chunks_gevonden: sectie.rijen.length },
+              { type: "delta", text: antwoord },
+              { type: "done" },
+            ]) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            controller.close();
+          },
+        });
+        return new Response(stream, { headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        } });
+      }
     }
 
     // ── Stream-openpunt (besluit 0087) ──────────────────────────────────────

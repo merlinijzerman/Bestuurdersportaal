@@ -258,6 +258,14 @@ function detecteerGrens(
     };
   }
 
+  // Nederlandse wetgeving gebruikt voluit geschreven structuurkoppen. Een
+  // paragraafkop mag niet aan het voorafgaande artikel blijven hangen: de
+  // sectiegrens is nodig om alle artikelen eronder gericht op te halen.
+  const hoofdstuk = regel.match(/^Hoofdstuk\s+(\d+[a-z]?(?:\.\d+)*)\.\s+\p{Lu}[^\n]{0,148}$/u);
+  if (hoofdstuk) return { type: "kop", label: `Hoofdstuk ${hoofdstuk[1]}`, sluitDefinitieSectie: true };
+  const paragraaf = regel.match(/^Paragraaf\s+(\d+(?:\.\d+)*)\.\s+\p{Lu}[^\n]{0,148}$/u);
+  if (paragraaf) return { type: "paragraaf", label: `Paragraaf ${paragraaf[1]}`, sluitDefinitieSectie: true };
+
   // Paragraaf §.
   const par = regel.match(/^§\s*(\d+(?:\.\d+)*)/);
   if (par) return { type: "paragraaf", label: `§${par[1]}`, sluitDefinitieSectie: true };

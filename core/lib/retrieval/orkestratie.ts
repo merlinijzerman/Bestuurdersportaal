@@ -21,6 +21,8 @@ import type { AdapterMeta, AdapterTellers, RetrievalMeta } from "../rag";
 import { bouwMeta, type AuditBron } from "./meta";
 import { selecteerEnVerrijk, type SelectieBron } from "./selectie";
 import { bepaalArtikelfocus } from "./artikelverwijzing";
+import { bepaalSectiefocus } from "./juridische-sectie";
+import { bepaalJuridischBeleid } from "./juridisch-beleid";
 import type { JuridischeVraagintentieResultaat } from "../vraagtype";
 import { bouwCitaties } from "./citatie";
 import {
@@ -413,6 +415,11 @@ export async function voerRetrievalUit(
       ? bepaalArtikelfocus([query.zoekvraag, query.origineleVraag], grenzen.juridischeIntentie)
       : null
   );
+  const sectiefocusPerSpoor = sporen.map(({ query, grenzen }) => {
+    const besluit = bepaalJuridischBeleid(grenzen.juridischeIntentie);
+    if (besluit?.poort !== "juridisch_anker" && besluit?.poort !== "zwak_anker_zonder_fondscontext") return null;
+    return bepaalSectiefocus(query.origineleVraag);
+  });
   try {
     // ── 1a. Filterbelofte, VÓÓR `zoek()` ─────────────────────────────────────
     const contextBronsoortenGeldig = geldigeBronsoorten(ctx.bronbeleid.bronsoorten);
@@ -449,7 +456,13 @@ export async function voerRetrievalUit(
               () =>
                 adapterVanSpoor(i).zoek(
                   spoorContext[i],
-                  artikelfocusPerSpoor[i] ? { ...query, artikelfocus: artikelfocusPerSpoor[i] ?? undefined } : query
+                  artikelfocusPerSpoor[i] || sectiefocusPerSpoor[i]
+                    ? {
+                        ...query,
+                        ...(artikelfocusPerSpoor[i] ? { artikelfocus: artikelfocusPerSpoor[i] } : {}),
+                        ...(sectiefocusPerSpoor[i] ? { sectiefocus: sectiefocusPerSpoor[i] } : {}),
+                      }
+                    : query
                 ),
               { rijen: (u) => u.kandidaten.length }
             )
@@ -571,7 +584,8 @@ export async function voerRetrievalUit(
         {
           filters: sporen[i].query.filters,
           maxResults: sporen[i].query.maxResultaten,
-          maxPerDoc: g.maxPerDoc,
+          maxPerDoc: begrensd[i].some((b) => b.rang.poging === "sectiespoor")
+            ? sporen[i].query.maxResultaten : g.maxPerDoc,
           representatieConstraints: g.representatieConstraints,
           regimeWeging: g.regimeWeging,
           relevantieDrempel: g.relevantieDrempel,

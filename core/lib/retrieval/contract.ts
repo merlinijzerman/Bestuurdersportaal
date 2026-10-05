@@ -16,6 +16,7 @@ import type { AdapterTellers, RetrievalFilters, RetrievalMeta, BronVerwijzing } 
 import type { Actor, Taaktype } from "../ai-gateway/contract";
 import type { RetrievalModus } from "../vraagtype";
 import type { Artikelfocus } from "./artikelverwijzing";
+import type { Sectiefocus } from "./juridische-sectie";
 import type { Fasemeter } from "./fasetijden";
 
 export type Bronsoort = "fonds" | "generiek" | "sharepoint" | "notulen" | "web";
@@ -139,6 +140,8 @@ export interface RetrievalQuery {
    * negeert het. Ontbreekt het, dan is de query exact die van vóór #500.
    */
   artikelfocus?: Artikelfocus;
+  /** Juridische paragraaf, uitsluitend gezet achter de juridische intentiepoort. */
+  sectiefocus?: Sectiefocus;
 }
 
 /** Twee gescheiden bewijzen met gescheiden tijdstippen — zie ontwerp §4.1. */
