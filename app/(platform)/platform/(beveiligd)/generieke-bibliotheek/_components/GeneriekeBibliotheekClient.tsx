@@ -469,23 +469,28 @@ export default function GeneriekeBibliotheekClient({
     });
   }
 
-  // Batch her-indexering: roept de platform-actie herhaaldelijk aan (één
-  // generiek document per call) tot `klaar`. Elke verwerkte document veroorzaakt
-  // her-extractie + tientallen Haiku-prefix- en embedding-calls; daarom de
-  // kostenbevestiging vooraf. `tekst` blijft onaangeraakt (omkeerbaar).
+  // Batch her-indexering (#548): roept de platform-actie herhaaldelijk aan (één
+  // generiek document per call) tot `klaar`. Elk document veroorzaakt
+  // her-extractie + Haiku-prefix- en embedding-calls; daarom de
+  // kostenbevestiging vooraf. Een mislukt document blokkeert de batch niet: de
+  // actie ruimt zijn chunks op, zet het op "mislukt" en slaat het daarna over.
+  // Mislukte documenten worden aan het eind genoemd en kunnen per document
+  // opnieuw worden geïndexeerd (knop "Herindexeer" in de rij).
   async function herindexeerGeneriek() {
     const bevestigd = window.confirm(
-      "Generieke bibliotheek opnieuw indexeren met structuur-bewuste fragmenten en " +
-        "contextuele zoekindex?\n\n" +
-        "Dit verwerkt alle nog-niet-geïndexeerde generieke documenten één voor één en " +
+      "Generieke bibliotheek opnieuw indexeren met de verbeterde PDF/DOCX-verwerking " +
+        "(leesbare alinea's, zonder paginavoeten, met juiste koppen)?\n\n" +
+        "Dit verwerkt alle nog niet bijgewerkte generieke documenten één voor één en " +
         "veroorzaakt AI-kosten (per fragment een korte Haiku-context + een nieuwe embedding). " +
-        "De getoonde brontekst en citaten blijven ongewijzigd; de bewerking is omkeerbaar."
+        "Tijdens de verwerking van een document zijn zijn fragmenten kort niet doorzoekbaar. " +
+        "Het origineel blijft ongewijzigd."
     );
     if (!bevestigd) return;
     setReindexBezig(true);
     setReindexMelding("Bezig met her-indexeren…");
     let verwerkt = 0;
     let overgeslagen = 0;
+    let mislukt = 0;
     try {
       for (let i = 0; i < 5000; i++) {
         const r = await curatieHerindexeren();
@@ -495,32 +500,54 @@ export default function GeneriekeBibliotheekClient({
         }
         if (r.status === "verwerkt") verwerkt++;
         else if (r.status === "overgeslagen") overgeslagen++;
-        // Tijdelijke/document-eigen fout (download/extractie/opslag): de resterend-
-        // teller daalt niet, dus doorgaan zou hetzelfde document blijven oppakken.
-        // Stop en toon de oorzaak zodat een mens het kan oplossen.
-        else if (r.status === "mislukt") {
-          setReindexMelding(
-            `Her-indexeren gestopt bij "${r.titel ?? r.document_id}". Controleer dit document en start daarna opnieuw. ` +
-              `Tot nu toe: ${verwerkt} verwerkt, ${overgeslagen} overgeslagen.`
-          );
-          return;
-        }
+        else if (r.status === "mislukt") mislukt++;
         setReindexMelding(
-          `Bezig… ${verwerkt} verwerkt, ${overgeslagen} overgeslagen, ${r.resterend} resterend.`
+          `Bezig… ${verwerkt} verwerkt, ${overgeslagen} overgeslagen, ${mislukt} mislukt, ${r.resterend} resterend.`
         );
         if (r.klaar) {
+          const misluktLijst = r.mislukt
+            .slice(0, 5)
+            .map((m) => `"${m.titel ?? m.document_id}" (${m.reden ?? "onbekend"})`)
+            .join(", ");
           setReindexMelding(
             `Klaar. ${verwerkt} document(en) opnieuw geïndexeerd` +
-              (overgeslagen > 0 ? `, ${overgeslagen} overgeslagen (geen origineel of niet-ondersteund type)` : "") +
-              "."
+              (overgeslagen > 0 ? `, ${overgeslagen} overgeslagen (geen origineel, scanbewijs of tekst)` : "") +
+              (r.mislukt.length > 0
+                ? `. ${r.mislukt.length} mislukt en niet doorzoekbaar: ${misluktLijst}` +
+                  (r.mislukt.length > 5 ? " …" : "") +
+                  ". Gebruik “Herindexeer” in de rij om opnieuw te proberen."
+                : ".")
           );
           router.refresh();
           return;
         }
       }
       setReindexMelding(
-        `Gestopt na de veiligheidslimiet. ${verwerkt} verwerkt, ${overgeslagen} overgeslagen. Start opnieuw om verder te gaan.`
+        `Gestopt na de veiligheidslimiet. ${verwerkt} verwerkt, ${overgeslagen} overgeslagen, ${mislukt} mislukt. Start opnieuw om verder te gaan.`
       );
+    } catch {
+      setReindexMelding("Her-indexeren mislukte door een onverwachte fout. Probeer het opnieuw.");
+    } finally {
+      setReindexBezig(false);
+    }
+  }
+
+  // Eén document (pilot of hervatten na een fout).
+  async function herindexeerEen(doc: GeneriekDocument) {
+    const bevestigd = window.confirm(
+      `"${doc.titel}" opnieuw indexeren?\n\nDit veroorzaakt AI-kosten (Haiku-context + embeddings). ` +
+        "Tijdens de verwerking zijn de fragmenten van dit document kort niet doorzoekbaar."
+    );
+    if (!bevestigd) return;
+    setReindexBezig(true);
+    setReindexMelding(`Bezig met "${doc.titel}"…`);
+    try {
+      const r = await curatieHerindexeren({ documentId: doc.id });
+      if (!r.ok) setReindexMelding(`Niet uitgevoerd: ${r.melding}`);
+      else if (r.status === "verwerkt") setReindexMelding(`"${doc.titel}" opnieuw geïndexeerd (${r.aantal_chunks} fragmenten).`);
+      else if (r.status === "overgeslagen") setReindexMelding(`"${doc.titel}" overgeslagen (${r.reden ?? "onbekend"}).`);
+      else setReindexMelding(`"${doc.titel}" mislukt (${r.reden ?? "onbekend"}); het document is niet doorzoekbaar tot een geslaagde poging.`);
+      router.refresh();
     } catch {
       setReindexMelding("Her-indexeren mislukte door een onverwachte fout. Probeer het opnieuw.");
     } finally {
@@ -934,6 +961,15 @@ export default function GeneriekeBibliotheekClient({
                           <button onClick={() => open({ soort: "bewerken", doc: d })} className="text-ink hover:underline">
                             Bewerken
                           </button>
+                          {d.opslag_pad && (
+                            <button
+                              onClick={() => herindexeerEen(d)}
+                              disabled={bezig || reindexBezig}
+                              className="text-ink hover:underline disabled:opacity-50"
+                            >
+                              Herindexeer
+                            </button>
+                          )}
                           <button onClick={() => open({ soort: "vervangen", doc: d })} className="text-ink hover:underline">
                             Vervangen
                           </button>

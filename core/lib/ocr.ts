@@ -26,6 +26,7 @@ import {
 } from "./document-extractie";
 
 import { poortCheck, isPoortGesloten, type PoortContext } from "./ai-poort";
+import { schoonOcrSegmenten } from "./pdf-bronblokken";
 
 const OCR_URL = "https://api.mistral.ai/v1/ocr";
 
@@ -377,7 +378,16 @@ export async function extractTekstMetOcrFallback(
     // (vrijwel lege) tekstlaag — anders is het corrupt/onleesbaar en heeft
     // de OCR-poging geen waarde toegevoegd.
     if (betekenisvolleTekens(ocr.tekst) > betekenisvolleTekens(basis.tekst)) {
-      return { ...ocr, ocrToegepast: true, ocrEngine: OCR_ENGINE_LABEL };
+      // #548: drukvoeten en woordafbreking ook uit OCR-tekst; daarna geldt
+      // hetzelfde alinea-per-regelformaat als voor de tekstlaag.
+      const { segmenten } = schoonOcrSegmenten(ocr.segmenten);
+      return {
+        ...ocr,
+        tekst: segmenten.map((s) => s.tekst).join("\n\n"),
+        segmenten: segmenten.map((s) => ({ ...s, opmaak: "alinea_per_regel" as const })),
+        ocrToegepast: true,
+        ocrEngine: OCR_ENGINE_LABEL,
+      };
     }
     return { ...basis, ocrToegepast: false, ocrEngine: null };
   } catch (error) {

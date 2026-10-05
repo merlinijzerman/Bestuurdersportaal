@@ -697,6 +697,18 @@ $$;
 -- ZOEK_TEKST_V2=on (+ fondsvlag zoek_tekst_v2); pariteit met zoek_chunks:
 -- supabase/checks/2026_10_03_r1_zoektekst_pariteit.sql. Rollback:
 -- supabase/rollbacks/2026_10_03_r1_zoek_chunks_begrensd_ROLLBACK.sql.
+--
+-- #548 (besluit 0219, migratie 2026_10_05_548_chunks_atomisch_vervangen.sql —
+-- AUTHORITATIEF): `public.fn_document_chunks_vervangen(p_document_id uuid,
+-- p_chunks jsonb) returns integer` vervangt de chunkset van één document in ÉÉN
+-- transactie (document → geindexeerd=false/verwerkingsstatus='embedding', oude
+-- chunks weg, nieuwe kale chunks erin; chunk_index precies 0..n-1, tekst en
+-- indexering_versie verplicht). SECURITY INVOKER (RLS blijft de grens),
+-- statement_timeout 120s, EXECUTE authenticated + service_role, niet anon.
+-- Gebruikt door de ingestworker (beide bibliotheken) en de gedeelde
+-- herindexering. Chunks met indexering_versie 'r2-bronblokken' komen uit de
+-- alinea-per-regelextractie (PDF-bronblokken, DOCX, nabewerkte OCR) en laten
+-- geen tekst weg. Controle: supabase/checks/2026_10_05_548_chunks_vervangen_rls.sql.
 
 -- ── 5. Governance log ──────────────────────────────────────
 create table if not exists public.governance_log (

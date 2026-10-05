@@ -74,7 +74,8 @@ test("R2-A3 — de intentie wordt alleen als audit én via het centrale retrieva
   // bronkaart of antwoordtekst — maakt deze test nog steeds rood.
   const gebruik = aantal(ROUTE, "juridischeIntentie");
   const alsAuditwaarde = aantal(ROUTE, "juridische_intentie: juridischeIntentie,");
-  assert.equal(alsAuditwaarde, 5, "vastgelegd in alle vijf de governance-logregels");
+  // #548: zesde logregel = de volledige-documentsectieroute.
+  assert.equal(alsAuditwaarde, 6, "vastgelegd in alle zes de governance-logregels");
   const naarContract =
     aantal(ROUTE, "const grenzenBibliotheek = { ...grenzenPrimair, juridischeIntentie };") +
     aantal(ROUTE, "relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,\n            juridischeIntentie,\n          },") +

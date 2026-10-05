@@ -56,7 +56,15 @@ import {
   mutatieFoutMelding,
 } from "@/platform/lib/generiek-mutatie-fout";
 import { herindexeerDocument } from "@/core/lib/reindex";
-import { INDEXERING_VERSIE, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
+import { PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
+import { BRONBLOKKEN_INDEXERING_VERSIE } from "@/core/lib/chunk-bouw";
+import { ruimChunksOp } from "@/core/lib/chunk-vervangen";
+import {
+  bepaalHerindexStand,
+  herindexFoutcode,
+  type HerindexDocRij,
+  type HerindexJobRij,
+} from "@/core/lib/herindex-selectie";
 import { beheerSleutel, preflightSysteem, rondAf, vingerafdruk } from "@/core/lib/ai-preflight";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
 
@@ -953,75 +961,128 @@ export async function curatieInzageUrl(documentId: string): Promise<InzageResult
   }
 }
 
-// ── 8. HER-INDEXEREN GENERIEKE BIBLIOTHEEK (R1.1 + R1.2, service-role) ───────
-// Tegenhanger van /api/documents/reindex-backfill voor de generieke bibliotheek.
-// Tenants zijn op generieke chunks read-only (RLS), dus deze re-index loopt via
-// de platform-back-office met de service-role-client. Verwerkt ÉÉN generiek
-// document per aanroep (her-extractie + prefix/embedding); de UI roept
-// herhaaldelijk aan tot `klaar`. `tekst` blijft onaangeraakt (omkeerbaar).
+// ── 8. HER-INDEXEREN GENERIEKE BIBLIOTHEEK (#548, service-role) ─────────────
+// Eenmalige herindexering van BESTAANDE generieke PDF/DOCX-documenten naar de
+// gedeelde bronblokken-indexering (BRONBLOKKEN_INDEXERING_VERSIE). Tenants zijn
+// op generieke chunks read-only (RLS), dus dit loopt via de platform-back-office
+// met de service-role-client. ÉÉN document per aanroep; de UI roept herhaaldelijk
+// aan tot `klaar`. Bestaande fondsdocumenten worden hier nooit aangeraakt: de
+// selectie leest uitsluitend documenten met bibliotheek = 'generiek'.
+//
+// Per document: herindexeerDocument (chunks atomisch vervangen, verrijken, bij
+// een fout opruimen + status 'mislukt'). De uitkomst komt als job-regel in
+// document_processing_jobs (stap 'indexering', foutcode herindex:<versie>:…),
+// zodat een mislukt of overgeslagen document — ook zonder resterende chunks —
+// terug te vinden en gericht te hervatten is. Een mislukt document blokkeert
+// de batch niet; het blijft in `mislukt` staan tot een gerichte herhaling.
 export type HerindexGeneriekResultaat =
   | {
       ok: true;
       document_id: string | null;
       titel: string | null;
       status: "verwerkt" | "overgeslagen" | "mislukt" | "klaar";
+      reden: string | null;
       aantal_chunks: number;
       resterend: number;
+      mislukt: { document_id: string; titel: string | null; reden: string | null }[];
+      overgeslagen: number;
       klaar: boolean;
     }
   | { ok: false; foutcode: string; melding: string };
 
-export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> {
+export interface HerindexGeneriekOpties {
+  /** Pilot of hervatten: precies dit generieke document (ook als het mislukt was). */
+  documentId?: string;
+}
+
+const HERINDEX_TYPES = ["pdf", "docx"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function leesHerindexStand(svc: SupabaseClient) {
+  const { data: docs, error: docErr } = await svc
+    .from("documenten")
+    .select("id, titel, geindexeerd")
+    .eq("bibliotheek", "generiek")
+    .eq("actief", true)
+    .in("bestandstype", HERINDEX_TYPES)
+    .order("titel", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(5000);
+  if (docErr) throw new Error(`herindex-selectie documenten: ${docErr.message}`);
+  // Eén rij per document: chunk 0 op de doelversie.
+  const { data: klaarRijen, error: klaarErr } = await svc
+    .from("document_chunks")
+    .select("document_id")
+    .eq("bibliotheek", "generiek")
+    .eq("chunk_index", 0)
+    .eq("indexering_versie", BRONBLOKKEN_INDEXERING_VERSIE)
+    .limit(5000);
+  if (klaarErr) throw new Error(`herindex-selectie chunks: ${klaarErr.message}`);
+  const { data: jobs, error: jobErr } = await svc
+    .from("document_processing_jobs")
+    .select("document_id, status, foutcode, aangemaakt")
+    .eq("stap", "indexering")
+    .like("foutcode", `${herindexFoutcode(BRONBLOKKEN_INDEXERING_VERSIE, "")}%`)
+    .order("aangemaakt", { ascending: false })
+    .limit(10000);
+  if (jobErr) throw new Error(`herindex-selectie jobs: ${jobErr.message}`);
+  return bepaalHerindexStand(
+    (docs ?? []) as HerindexDocRij[],
+    new Set(((klaarRijen ?? []) as { document_id: string }[]).map((r) => r.document_id)),
+    (jobs ?? []) as HerindexJobRij[],
+    BRONBLOKKEN_INDEXERING_VERSIE
+  );
+}
+
+export async function curatieHerindexeren(
+  opties: HerindexGeneriekOpties = {}
+): Promise<HerindexGeneriekResultaat> {
+  if (opties.documentId !== undefined && !UUID_RE.test(opties.documentId)) {
+    return { ok: false, foutcode: "ongeldig", melding: "Ongeldig document." };
+  }
   try {
     return await withPlatform<HerindexGeneriekResultaat>(
       {
         capability: CAP,
         handeling: "platform.generic.library.reindex",
-        doelObject: "documenten:generiek",
+        doelObject: opties.documentId ? `documenten:${opties.documentId}` : "documenten:generiek",
       },
       async (svc, { identiteit }) => {
-        const tellResterend = async (): Promise<number> => {
-          const { count } = await svc
-            .from("document_chunks")
-            .select("id", { count: "exact", head: true })
-            .eq("bibliotheek", "generiek")
-            .is("indexering_versie", null);
-          return count ?? 0;
-        };
+        const stand = await leesHerindexStand(svc);
+        const samenvatting = () => ({
+          resterend: stand.teDoen.length,
+          mislukt: stand.mislukt.map((d) => ({ document_id: d.id, titel: d.titel, reden: d.reden })),
+          overgeslagen: stand.overgeslagen.length,
+        });
 
-        // Eén nog-baseline generiek document zoeken (via een baseline-chunk).
-        const { data: chunkRij } = await svc
-          .from("document_chunks")
-          .select("document_id")
-          .eq("bibliotheek", "generiek")
-          .is("indexering_versie", null)
-          .limit(1)
-          .maybeSingle();
-
-        if (!chunkRij) {
+        const doelId = opties.documentId ?? stand.teDoen[0]?.id ?? null;
+        if (!doelId) {
           return {
             resultaat: {
               ok: true,
               document_id: null,
               titel: null,
               status: "klaar",
+              reden: null,
               aantal_chunks: 0,
-              resterend: 0,
+              ...samenvatting(),
               klaar: true,
             },
-            effect: { klaar: true, resterend: 0 },
+            effect: { klaar: true, resterend: 0, mislukt: stand.mislukt.length },
           };
         }
 
         const { data: doc } = await svc
           .from("documenten")
           .select(
-            "id, titel, opslag_pad, bestandstype, bibliotheek, documenttype, wetsgeschiedenis_subtype"
+            "id, titel, opslag_pad, bestandstype, bibliotheek, fonds_id, documenttype, wetsgeschiedenis_subtype"
           )
-          .eq("id", chunkRij.document_id)
+          .eq("id", doelId)
           .maybeSingle();
 
-        if (!doc || doc.bibliotheek !== "generiek") {
+        // Harde grens: alleen generieke documenten. Een fondsdocument-id wordt
+        // geweigerd, ook als het expliciet wordt meegegeven.
+        if (!doc || doc.bibliotheek !== "generiek" || doc.fonds_id !== null) {
           return {
             resultaat: { ok: false, foutcode: "niet_gevonden", melding: "Generiek document niet gevonden." },
             effect: { afgewezen: "niet_gevonden" },
@@ -1029,6 +1090,7 @@ export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> 
         }
 
         const correlatieId = randomUUID();
+        const gestart = new Date().toISOString();
         const pf = await preflightSysteem(svc, {
           actietype: "generiek_curatie",
           fondsId: null,
@@ -1047,7 +1109,7 @@ export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> 
             effect: { afgewezen: "ai_begrenzing" },
           };
         }
-        let res;
+        let res: Awaited<ReturnType<typeof herindexeerDocument>>;
         try {
           res = await herindexeerDocument(svc, doc, {
             gateway: {
@@ -1075,8 +1137,23 @@ export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> 
             },
           });
         } catch (e) {
-          await rondAf(svc, pf.actieId, "mislukt");
-          throw e;
+          // Onverwachte fout (bv. gateway-configuratie): dezelfde opruiming als
+          // bij een fout ná de vervanging, zodat er nooit een half verrijkte
+          // chunkset als volledig blijft staan.
+          console.error("[P1] herindexering onverwacht afgebroken:", e);
+          res = {
+            status: "mislukt",
+            aantalChunks: 0,
+            prefixModel: null,
+            embeddingsGelukt: false,
+            reden: "onverwachte_fout",
+          };
+          const { count } = await svc
+            .from("document_chunks")
+            .select("id", { count: "exact", head: true })
+            .eq("document_id", doc.id)
+            .is("embedding", null);
+          if ((count ?? 0) > 0) await ruimChunksOp(svc, doc.id);
         }
         await rondAf(
           svc,
@@ -1085,21 +1162,35 @@ export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> 
           `document:${doc.id}`
         );
 
+        // Uitkomst vastleggen (terugvindbaar, ook zonder resterende chunks).
+        const { error: jobErr } = await svc.from("document_processing_jobs").insert({
+          document_id: doc.id,
+          stap: "indexering",
+          status:
+            res.status === "verwerkt" ? "geslaagd" : res.status === "overgeslagen" ? "overgeslagen" : "mislukt",
+          foutcode: herindexFoutcode(BRONBLOKKEN_INDEXERING_VERSIE, res.reden ?? "ok"),
+          start: gestart,
+          eind: new Date().toISOString(),
+          correlatie_id: correlatieId,
+          fonds_id: null,
+        });
+        if (jobErr) console.error("[P1] herindex-job niet geschreven:", jobErr.message);
+
         // Per-run provenance: generiek → fonds_id NULL, gestart_door = platform-id.
         const { error: runErr } = await svc.from("reindex_runs").insert({
           fonds_id: null,
           bibliotheek: "generiek",
           prefix_model: res.prefixModel,
           prompt_versie: PREFIX_PROMPT_VERSIE,
-          indexering_versie: INDEXERING_VERSIE,
+          indexering_versie: BRONBLOKKEN_INDEXERING_VERSIE,
           aantal_documenten: res.status === "verwerkt" ? 1 : 0,
           aantal_chunks: res.aantalChunks,
           gestart_door: identiteit.id,
         });
         if (runErr) console.error("[P1] reindex_runs (generiek) niet geschreven:", runErr.message);
 
-        const resterend = await tellResterend();
-        if (res.status === "verwerkt") revalidatePath(LIJST_PAD);
+        const na = await leesHerindexStand(svc);
+        revalidatePath(LIJST_PAD);
 
         return {
           resultaat: {
@@ -1107,16 +1198,21 @@ export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> 
             document_id: doc.id,
             titel: doc.titel,
             status: res.status,
+            reden: res.reden ?? null,
             aantal_chunks: res.aantalChunks,
-            resterend,
-            klaar: resterend === 0,
+            resterend: na.teDoen.length,
+            mislukt: na.mislukt.map((d) => ({ document_id: d.id, titel: d.titel, reden: d.reden })),
+            overgeslagen: na.overgeslagen.length,
+            klaar: na.teDoen.length === 0,
           },
           effect: {
             document_id: doc.id,
             status: res.status,
             reden: res.reden ?? null,
             aantal_chunks: res.aantalChunks,
-            resterend,
+            resterend: na.teDoen.length,
+            mislukt: na.mislukt.length,
+            correlatie_id: correlatieId,
           },
         };
       }

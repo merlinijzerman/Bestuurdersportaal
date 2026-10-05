@@ -1,0 +1,24 @@
+[
+  {
+    "bestand": "kst-36067-90.pdf",
+    "documenttype": "wetsgeschiedenis",
+    "subtype": "aangenomen_amendement",
+    "controles": [
+      { "zinsnede": "bij de opdrachtaanvaarding, bedoeld in artikel 102a, heeft aangegeven", "pagina": 1, "label": "Amendement — wijziging — Artikel 150r" },
+      { "zinsnede": "bij de opdrachtaanvaarding, bedoeld in artikel 109a, heeft aangegeven", "pagina": 2, "label": "Amendement — wijziging — Artikel 145q" },
+      { "zinsnede": "Dit amendement regelt een tijdelijke pauze", "pagina": 2, "label": "Amendement — toelichting" },
+      { "zinsnede": "Direct nadat beide uitvoerders zijn ingevaren", "pagina": 3, "label": "Amendement — toelichting" }
+    ]
+  },
+  {
+    "bestand": "kst-36067-3.pdf",
+    "documenttype": "wetsgeschiedenis",
+    "subtype": "memorie_van_toelichting",
+    "controles": [
+      { "zinsnede": "De herziening van het pensioenstelsel die de regering met dit wetsvoorstel voor ogen heeft", "pagina": 2, "label": "Algemeen deel — §1.1" },
+      { "zinsnede": "De definitie van afkoop wordt aangepast aan de vernummering", "pagina": 354, "label": "Artikelsgewijze toelichting — Artikel I, onderdeel A" }
+    ]
+  },
+  { "bestand": "../../../Marktverkenning en prijsstrategie.pdf" },
+  { "bestand": "../../../tests/e2e/fixtures/pgb-sharepoint/bibliotheek/02 Beleid en reglementen/PGB354-PDF-001-Beleggingskader-actueel.pdf" }
+]

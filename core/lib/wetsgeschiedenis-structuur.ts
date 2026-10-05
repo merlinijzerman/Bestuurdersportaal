@@ -64,7 +64,15 @@ const MAX_KOP = 120;
 const RE_ALGEMEEN = /^(?:[IVX]+\.?\s+)?(?:algemeen(?:\s+deel)?|algemene\s+toelichting)$/i;
 const RE_ARTIKELSGEWIJS = /^(?:[IVX]+\.?\s+)?(?:artikelsgewijs|artikelsgewijze\s+toelichting|artikelgewijze\s+toelichting|artikelsgewijze\s+toelichting\s+.*)$/i;
 const RE_TOELICHTING = /^toelichting$/i;
-const RE_ARTIKEL = /^(Artikel\s+[0-9IVXLC]+[a-z]*(?:\s*,\s*onderdeel\s+[A-Z0-9]+)?)\b/i;
+// Een artikelkop begint met een hoofdletter ("Artikel"/"ARTIKEL"), heeft een
+// arabisch nummer (met letter) of een romeins hoofdletternummer, en wordt
+// gevolgd door het regeleinde, een punt, een opschrift met hoofdletter, een
+// gedachtestreepje of "en …" (koppelkop). Zo blijft een afgebroken verwijzing
+// als "artikel 102a, heeft …" lopende tekst (#548). Dat het een losse regel
+// is, borgt isKopregel.
+const RE_ARTIKEL = /^((?:Artikel|ARTIKEL)\s+(?:\d+[a-z]*|[IVXLC]+)(?:\s*,\s*onderdeel\s+[A-Z0-9]+)?)(?=$|[.:]|\s*[–—-]\s|\s+(?:en|tot\s+en\s+met)\s|\s+\p{Lu})/u;
+const RE_ROMEINS_ONDERDEEL = /^[IVXLC]{1,6}$/;
+const RE_HOOFDSTUK = /^(Hoofdstuk\s+\d+[a-z]?)\.?\s+\p{Lu}[^\n]{0,110}$/u;
 const RE_ONDERDEEL = /^(Onderdeel\s+[A-Z0-9]+)\b/;
 const RE_GENUMMERDE_KOP = /^(\d+(?:\.\d+){0,3})\.?\s+\p{Lu}[^\n]{0,110}$/u;
 
@@ -164,6 +172,15 @@ function structureerSegment(
       continue;
     }
 
+    // 1b. Wijzigingsonderdeel van een amendement: een losse romeinse regel
+    //     ("I", "II") opent een nieuw onderdeel. Zonder deze grens liep het
+    //     laatste artikel van onderdeel I door tot in onderdeel II (#548).
+    if (kop && deel === "amendement_wijziging" && RE_ROMEINS_ONDERDEEL.test(regel)) {
+      huidigArtikel = null;
+      open({ deel, type: "kop", label: `Wijzigingsonderdeel ${regel}`, tekst: ruw });
+      continue;
+    }
+
     // 2. Artikel/onderdeel — alleen in de artikelsgewijze toelichting of in de
     //    wijzigingstekst van een amendement (daar is het de structuur zelf).
     const artikelContext =
@@ -186,8 +203,13 @@ function structureerSegment(
       }
     }
 
-    // 3. Genummerde paragraafkop binnen het algemeen deel.
+    // 3. Hoofdstuk- en genummerde paragraafkop binnen het algemeen deel.
     if (kop && deel === "algemeen_deel") {
+      const hfd = regel.match(RE_HOOFDSTUK);
+      if (hfd) {
+        open({ deel, type: "kop", label: normaliseerLabel(hfd[1]), tekst: ruw });
+        continue;
+      }
       const par = regel.match(RE_GENUMMERDE_KOP);
       if (par) {
         open({ deel, type: "paragraaf", label: `§${par[1]}`, tekst: ruw });
