@@ -197,6 +197,13 @@
       "rpcs": [],
       "tabellen": []
     },
+    "core/lib/retrieval/juridische-sectie-ophalen.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
     "core/lib/retrieval/meta.ts": {
       "modules": {
         "rag": [
@@ -268,6 +275,7 @@
           "verrijkDocumentmetadata",
           "verrijkNotulenChunks",
           "vulAanMetArtikelkandidaten",
+          "vulAanMetSectiekandidaten",
           "zoekRelevanteChunksMetMeta"
         ],
         "parent-context": [

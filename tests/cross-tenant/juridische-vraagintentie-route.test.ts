@@ -64,7 +64,7 @@ test("R2-A2 — de classificatie draait ná de contextresolver en vóór elk aud
 });
 
 test("R2-A3 — de intentie wordt alleen als audit én via het centrale retrievalcontract gebruikt (R-3)", () => {
-  // R-2 was observe-only: declaratie + vier auditwaarden. R-3 (#492) voegt
+  // R-2 was observe-only: declaratie + auditwaarden. R-3 (#492) voegt
   // BEWUST precies drie gebruiksplekken toe, alle drie een doorgifte aan de
   // CENTRALE juridische laag (core/lib/retrieval/juridisch-beleid.ts, met poort):
   //   1. de grenzen van het ongescopete primaire bibliotheekspoor;
@@ -74,7 +74,7 @@ test("R2-A3 — de intentie wordt alleen als audit én via het centrale retrieva
   // bronkaart of antwoordtekst — maakt deze test nog steeds rood.
   const gebruik = aantal(ROUTE, "juridischeIntentie");
   const alsAuditwaarde = aantal(ROUTE, "juridische_intentie: juridischeIntentie,");
-  assert.equal(alsAuditwaarde, 4, "vastgelegd in alle vier de governance-logregels");
+  assert.equal(alsAuditwaarde, 5, "vastgelegd in alle vijf de governance-logregels");
   const naarContract =
     aantal(ROUTE, "const grenzenBibliotheek = { ...grenzenPrimair, juridischeIntentie };") +
     aantal(ROUTE, "relevantieDrempel: geresolveerdeVlaggen.relevantieDrempel,\n            juridischeIntentie,\n          },") +

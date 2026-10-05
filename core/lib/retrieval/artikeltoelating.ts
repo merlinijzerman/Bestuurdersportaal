@@ -119,7 +119,7 @@ export interface Toelatingsparameters {
   /** De exact aangewezen chunk-id's (≤ `ARTIKEL_TOELATING_ID_MAX`). */
   ids: readonly string[];
   /** De frasequery (`artikelFrasequery`), alleen DB-zijdig toegepast. */
-  frase: string;
+  frase: string | null;
   /** Documentscope van het spoor (`p_document_ids`); null = geen scope. */
   documentscope: readonly string[] | null;
   filters?: Zoekfilters;
@@ -221,8 +221,11 @@ export function toelatingsfilters(p: Toelatingsparameters): Toelatingsfilter[] {
     { op: "in", kolom: "id", waarden: [...new Set(p.ids)].sort() },
     { op: "eq", kolom: "documenten.actief", waarde: true },
     { op: "or", expressie: "documentstatus.is.null,documentstatus.neq.gearchiveerd" },
-    { op: "textSearch", kolom: "zoek_vector", query: p.frase, config: "dutch", type: "websearch" },
   ];
+  // Een artikelmatch vergt ook een exacte frase; een afgebakende sectie heeft
+  // al een exact document- en ID-bereik, en haar vervolgchunks hoeven de
+  // paragraaftitel niet afzonderlijk te bevatten.
+  if (p.frase !== null) uit.push({ op: "textSearch", kolom: "zoek_vector", query: p.frase, config: "dutch", type: "websearch" });
   if (p.documentscope !== null) uit.push({ op: "in", kolom: "document_id", waarden: [...p.documentscope] });
   if (f?.modus === "actueel") {
     uit.push(

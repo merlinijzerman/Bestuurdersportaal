@@ -18,6 +18,7 @@ import {
   verrijkNotulenChunks,
   verrijkDocumentmetadata,
   vulAanMetArtikelkandidaten,
+  vulAanMetSectiekandidaten,
   type DocumentChunk,
   type RetrievalMeta,
   type RetrievalOpties,
@@ -80,6 +81,7 @@ export interface SupabaseAdapterDependencies {
   verrijkDocumentmeta?: typeof verrijkDocumentmetadata;
   /** #500 — injecteerbaar gericht artikelspoor (hermetische tests). */
   artikelkandidaten?: typeof vulAanMetArtikelkandidaten;
+  sectiekandidaten?: typeof vulAanMetSectiekandidaten;
 }
 
 /**
@@ -108,6 +110,7 @@ export function maakSupabaseAdapter(
   const leesVersies = dependencies.leesVersies ?? leesSupabaseVersies;
   const doeNotulen = dependencies.verrijkNotulen ?? verrijkNotulenChunks;
   const doeDocumentmeta = dependencies.verrijkDocumentmeta ?? verrijkDocumentmetadata;
+  const doeSectie = dependencies.sectiekandidaten ?? vulAanMetSectiekandidaten;
   const doeArtikel = dependencies.artikelkandidaten ?? vulAanMetArtikelkandidaten;
 
   const behoudIdentiteit = (bron: Bronresultaat): Bronresultaat => {
@@ -182,7 +185,7 @@ export function maakSupabaseAdapter(
       // artikelfocus meegaf (juridische poort + expliciet artikel); anders is dit
       // exact de kandidatenset van vóór #500. Zelfde fonds, scope en filters als
       // het hoofdspoor; zie `vulAanMetArtikelkandidaten`.
-      const chunks = query.artikelfocus
+      const naArtikel = query.artikelfocus
         ? await doeArtikel(gerangschikt, {
             focus: query.artikelfocus,
             fondsId: ctx.fondsId,
@@ -193,6 +196,16 @@ export function maakSupabaseAdapter(
             ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter } : {}),
           })
         : gerangschikt;
+      const chunks = query.sectiefocus
+        ? await doeSectie(naArtikel, {
+            focus: query.sectiefocus,
+            fondsId: ctx.fondsId,
+            scope: ctx.scope?.documentIds,
+            filters: query.filters,
+            maxKandidaten: query.maxKandidaten,
+            signal: ctx.signal,
+          })
+        : naArtikel;
 
       const diagnostiek: Partial<RetrievalMeta> = { ...meta };
       for (const veld of SELECTIE_AFGELEID) delete (diagnostiek as Record<string, unknown>)[veld];

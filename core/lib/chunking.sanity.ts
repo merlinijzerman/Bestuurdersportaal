@@ -113,6 +113,33 @@ check("decimale artikelnummers blijven heel", () => {
   assert.equal(units[0].label, "Artikel 2.5");
 });
 
+check("voluit geschreven wettelijke paragraaf en volgend hoofdstuk begrenzen artikelen", () => {
+  const units = splitsInStructuurUnits(
+    "Artikel 17f. Klein pensioen\nSlot van artikel 17f.\n" +
+    "Paragraaf 6.2. Individuele waardeoverdracht\nUitvoering van de Pensioenwet.\n" +
+    "Artikel 17g. Overgangsrecht\nEerste artikel in de paragraaf.\n" +
+    "Artikel 18. Verzoek informatie\nTweede artikel in de paragraaf.\n" +
+    "Hoofdstuk 6a. Bestuur en toezicht fonds\nNieuwe bepalingen."
+  );
+  assert.deepEqual(units.map((u) => [u.type, u.label]), [
+    ["artikel", "Artikel 17f"],
+    ["paragraaf", "Paragraaf 6.2"],
+    ["artikel", "Artikel 17g"],
+    ["artikel", "Artikel 18"],
+    ["kop", "Hoofdstuk 6a"],
+  ]);
+  assert.ok(!units[0].tekst.includes("Paragraaf 6.2"));
+  assert.ok(!units[3].tekst.includes("Hoofdstuk 6a"));
+});
+
+check("lopende verwijzing naar een paragraaf opent geen nieuwe unit", () => {
+  const units = splitsInStructuurUnits(
+    "Artikel 18. Verzoek informatie\nVolgens\nparagraaf 6.2 van dit besluit geldt een termijn."
+  );
+  assert.equal(units.length, 1);
+  assert.equal(units[0].label, "Artikel 18");
+});
+
 check("definities komen als samenhangende, gescheiden chunks terug", () => {
   const tekst =
     "Artikel 1 Begripsbepalingen\n" +
