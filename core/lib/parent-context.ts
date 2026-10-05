@@ -92,11 +92,20 @@ export function voegSiblingsSamen(
   return uit;
 }
 
-// Kiest de siblings van een treffer binnen zijn document: op structuur_label voor
-// herkende structuur-units, anders een chunk_index-venster ±1. Puur.
+// Kiest de aaneengesloten structuur-unit rond de treffer. Hetzelfde artikellabel
+// kan later in PDF-verwijzingen terugkomen en mag geen verre tekst bijhalen.
 export function kiesSiblings(hit: SiblingRij, docChunks: SiblingRij[]): SiblingRij[] {
   if (hit.structuur_label && hit.structuur_type && STRUCTUUR_UNITS.has(hit.structuur_type)) {
-    return docChunks.filter((c) => c.structuur_label === hit.structuur_label);
+    const perIndex = new Map(docChunks.map((c) => [c.chunk_index, c]));
+    let begin = hit.chunk_index;
+    let einde = hit.chunk_index;
+    const zelfdeUnit = (index: number) => {
+      const buur = perIndex.get(index);
+      return buur?.structuur_label === hit.structuur_label && buur?.structuur_type === hit.structuur_type;
+    };
+    while (zelfdeUnit(begin - 1)) begin--;
+    while (zelfdeUnit(einde + 1)) einde++;
+    return docChunks.filter((c) => c.chunk_index >= begin && c.chunk_index <= einde);
   }
   return docChunks.filter((c) => Math.abs(c.chunk_index - hit.chunk_index) <= 1);
 }

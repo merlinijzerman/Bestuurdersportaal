@@ -244,7 +244,10 @@ function detecteerGrens(
   if (/^\|.*\|\s*$/.test(regel)) return { type: "tabel", label: null, sluitDefinitieSectie: true };
 
   // Artikel.
-  const art = regel.match(/^(?:Artikel|Art\.)\s+(\d+[a-z]?)\b/i);
+  // Een verwijzing als "artikel 21, eerste lid" begint in PDF-extractie soms
+  // op een nieuwe regel. Alleen een kop met punt of een titel na het nummer
+  // opent een nieuwe artikelunit.
+  const art = regel.match(/^(?:Artikel|ARTIKEL|artikel|Art\.|art\.)\s+(\d+(?:\.\d+)*[a-z]?)(?:\.(?!\d)\s*|\s+(?=[A-ZÀ-ÖØ-Þ]))/);
   if (art) {
     const opent = /\b(begripsbepalingen|begrippen|definities)\b/i.test(regel);
     return {
