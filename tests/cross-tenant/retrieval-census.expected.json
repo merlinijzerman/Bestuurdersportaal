@@ -126,6 +126,20 @@
         "document_chunks"
       ]
     },
+    "core/lib/chunk-vervangen.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
+    "core/lib/herindex-kern.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
+    },
     "core/lib/organisatieprofiel.ts": {
       "modules": {
         "rag": [
@@ -143,13 +157,6 @@
       },
       "rpcs": [],
       "tabellen": []
-    },
-    "core/lib/reindex.ts": {
-      "modules": {},
-      "rpcs": [],
-      "tabellen": [
-        "document_chunks"
-      ]
     },
     "core/lib/retrieval/adaptermeta-beheer.ts": {
       "modules": {
@@ -196,6 +203,13 @@
       },
       "rpcs": [],
       "tabellen": []
+    },
+    "core/lib/retrieval/document-sectie-ophalen.ts": {
+      "modules": {},
+      "rpcs": [],
+      "tabellen": [
+        "document_chunks"
+      ]
     },
     "core/lib/retrieval/juridische-sectie-ophalen.ts": {
       "modules": {},

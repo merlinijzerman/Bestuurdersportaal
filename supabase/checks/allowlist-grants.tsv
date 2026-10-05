@@ -165,6 +165,9 @@ FUNC	public	fn_doc_meta_log_hash()	function	service_role	EXECUTE
 FUNC	public	fn_doc_meta_log_immutable()	function	anon	-
 FUNC	public	fn_doc_meta_log_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_doc_meta_log_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_document_chunks_vervangen(p_document_id uuid, p_chunks jsonb)	function	anon	-
+FUNC	public	fn_document_chunks_vervangen(p_document_id uuid, p_chunks jsonb)	function	authenticated	EXECUTE
+FUNC	public	fn_document_chunks_vervangen(p_document_id uuid, p_chunks jsonb)	function	service_role	EXECUTE
 FUNC	public	fn_document_agendapunt_validatie()	function	anon	-
 FUNC	public	fn_document_agendapunt_validatie()	function	authenticated	-
 FUNC	public	fn_document_agendapunt_validatie()	function	service_role	EXECUTE

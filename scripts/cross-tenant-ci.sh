@@ -61,6 +61,9 @@ SQL_ART500_PERF="supabase/checks/2026_09_29_500_artikelspoor_performance.sql"
 # statusovergang, consistente chunkmetadata; negatieve controle met oude trigger.
 SQL_499="supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql"
 SQL_505="supabase/checks/2026_10_02_505_rls_initplan_tenantpariteit.sql"
+# #548 — atomische chunkvervanging onder echte RLS: eigen fonds wel, fonds B en
+# generiek (als tenant) niet, ongeldige set rolt volledig terug, anon geweigerd.
+SQL_548="supabase/checks/2026_10_05_548_chunks_vervangen_rls.sql"
 # R1 zoekpad (besluit 0218) — `zoek_chunks_begrensd`: pariteit met zoek_chunks
 # onder echte RLS (8 actoren × 11 scenario's, sectie-M-filtermatrix van #500,
 # negatieve controles via pg_temp-kopie, catalogus-pin, limietafwijzing P0R01,
@@ -419,6 +422,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1_ZOEKTEKST"
 echo
 echo "-- #499 (generieke metadatawijziging op 1.000 chunks: budget, atomisch, consistent) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"
+echo
+echo "-- #548 (fn_document_chunks_vervangen: RLS-grens fonds/generiek, atomisch, anon) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_548"
 echo
 echo "-- #504 (curatie-datumvelden: klein + 1.000 chunks, denorm, audit, leegmaken) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_504"

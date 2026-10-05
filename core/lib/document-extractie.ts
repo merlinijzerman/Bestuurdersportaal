@@ -8,6 +8,11 @@ import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { segmenteerTabblad } from "./xlsx-segment";
+import {
+  bouwBronblokken,
+  type PdfPaginaInvoer,
+  type PdfTekstItem,
+} from "./pdf-bronblokken";
 
 export type Bestandstype = "pdf" | "docx" | "pptx" | "xlsx";
 
@@ -35,6 +40,14 @@ export interface TekstSegment {
   pagina: number | null;
   paragraaf: string | null;
   tekst: string;
+  /**
+   * #548 — tekstformaat dat de extractor garandeert. "alinea_per_regel": elke
+   * alinea, kop, tabelrij en voetnoot staat op een eigen regel (PDF-
+   * bronblokken, DOCX-alinea's, nabewerkte OCR). De chunkbouw gebruikt dan de
+   * verbeterde structuurherkenning en laat geen korte tekst weg. Ontbreekt het
+   * veld (PPTX, XLSX, oudere aanroepers), dan blijft het bestaande gedrag.
+   */
+  opmaak?: "alinea_per_regel";
 }
 
 export interface ExtractieResultaat {
@@ -125,116 +138,56 @@ function schoonTekst(tekst: string): string {
 
 // ── PDF ──────────────────────────────────────────────────────────
 // PDF's zijn geen tekstdocumenten maar verzamelingen positionele "text items".
-// Veel generators (Word, LaTeX, rapport-tools) emiteren elk woord als los item
-// met *positionele* afstand i.p.v. een echt spatie-karakter. Een naïeve join
-// levert dan "Decommissieheefteenadviesuitgebracht" — funest voor full-text
-// search.
+// We lezen elke pagina via pdfjs (unpdf) op itemniveau en bouwen daaruit
+// leesbare bronblokken (pdf-bronblokken.ts, #548): regels op basis van de
+// basislijn, alinea's op basis van regelafstand en inspringing, woordafbreking
+// hersteld ("overdra-" + "gende"), terugkerende kop-/voetregels en
+// paginanummers uit de marge verwijderd, voetnoten en de inhoudsopgave als
+// eigen blok. Eén segment per pagina; het paginanummer is het bronnummer.
 //
-// Daarom lezen we elke pagina via pdfjs (via unpdf) op text-item-niveau en
-// reconstrueren we de leesvolgorde zelf op basis van X/Y-coördinaten:
-//  - kleine X-gap tussen items op dezelfde regel → items aan elkaar plakken
-//  - duidelijke X-gap → spatie ertussen
-//  - kleine Y-verandering → newline (regel-break)
-//  - grote Y-verandering → dubbele newline (paragraaf-break)
-//
-// Bovendien handelen we twee InDesign/typografie-conventies af:
-//  1. Woordafbreking aan einde regel ("vertegen-\nwoordigt") — gedetecteerd
-//     als 'letter-' aan het eind van een regel gevolgd door een kleine letter
-//     op de volgende regel; we plakken het woord weer aan elkaar zonder hyphen.
-//  2. Soft hyphens (U+00AD) — onzichtbaar in PDF maar wel in de extractie;
-//     worden weggehaald in schoonTekst.
-//
-// De chunker in lib/rag.ts splitst vervolgens op die paragraaf-breaks.
+// De vorige reconstructie zette elke visuele regel op een eigen regel (vaak met
+// een witregel ertussen), waardoor een afgebroken verwijzing als
+// "artikel 102a, heeft …" als kop kon worden gelezen en Kamerstuk-paginavoeten
+// in de doorzoekbare tekst stonden (zie #548 voor de meting).
+
+interface PdfjsTekstItem {
+  str?: string;
+  transform?: number[];
+  width?: number;
+  height?: number;
+}
+
+/** Leest per pagina de tekstitems met positie en lettergrootte (pdfjs). */
+export async function leesPdfPaginas(buffer: Buffer): Promise<PdfPaginaInvoer[]> {
+  const pdf = await getDocumentProxy(new Uint8Array(buffer));
+  const paginas: PdfPaginaInvoer[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    const items: PdfTekstItem[] = [];
+    for (const ruw of content.items as PdfjsTekstItem[]) {
+      if (typeof ruw.str !== "string" || !ruw.transform) continue;
+      const [a, b, c, d, x, y] = ruw.transform;
+      // Lettergrootte uit de transformatiematrix; `height` als terugval.
+      const fontSize = Math.hypot(c, d) || Math.hypot(a, b) || ruw.height || 0;
+      items.push({ str: schoonTekst(ruw.str), x, y, fontSize, width: ruw.width ?? 0 });
+    }
+    paginas.push({ pagina: i, breedte: viewport.width, hoogte: viewport.height, items });
+  }
+  return paginas;
+}
+
 export async function extractTekstUitPdf(
   buffer: Buffer
 ): Promise<ExtractieResultaat> {
-  const pdf = await getDocumentProxy(new Uint8Array(buffer));
-  const aantalPaginas = pdf.numPages;
-
-  const paginaTeksten: string[] = [];
-  const segmenten: TekstSegment[] = [];
-  for (let i = 1; i <= aantalPaginas; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const tekst = schoonTekst(voegTekstItemsSamen(content.items as PdfTextItem[]));
-    if (tekst.trim()) {
-      paginaTeksten.push(tekst);
-      // Eén segment per pagina; paginanummer is het bronnummer (1-based).
-      segmenten.push({ pagina: i, paragraaf: null, tekst });
-    }
-  }
-
+  const paginas = await leesPdfPaginas(buffer);
+  const { segmenten } = bouwBronblokken(paginas);
   return {
-    tekst: paginaTeksten.join("\n\n"),
-    aantalPaginas,
-    segmenten,
+    tekst: segmenten.map((s) => s.tekst).join("\n\n"),
+    aantalPaginas: paginas.length,
+    segmenten: segmenten.map((s) => ({ ...s, opmaak: "alinea_per_regel" as const })),
   };
-}
-
-// Subset van het pdfjs TextItem-type dat we gebruiken.
-interface PdfTextItem {
-  str: string;
-  // transform = [a, b, c, d, e, f] — affine matrix; e=x, f=y in pagina-coördinaten
-  transform: number[];
-  width: number;
-  height: number;
-  hasEOL?: boolean;
-  dir?: string;
-}
-
-function voegTekstItemsSamen(items: PdfTextItem[]): string {
-  let text = "";
-  let lastY: number | null = null;
-  let lastEndX: number | null = null;
-  let lastFontSize = 12;
-
-  for (const item of items) {
-    if (!item.str) continue;
-
-    const x = item.transform[4];
-    const y = item.transform[5];
-    const fontSize = item.height || lastFontSize;
-
-    if (lastY === null) {
-      text = item.str;
-    } else if (Math.abs(y - lastY) < fontSize * 0.3) {
-      // Zelfde visuele regel — kijk naar X-gap om te bepalen of er een spatie tussen moet.
-      // Drempel ~30% van fontgrootte = ongeveer een spatie-breedte.
-      const xGap = x - (lastEndX ?? x);
-      const heeftSpatieNodig =
-        xGap > fontSize * 0.25 &&
-        !text.endsWith(" ") &&
-        !item.str.startsWith(" ");
-      text += (heeftSpatieNodig ? " " : "") + item.str;
-    } else if (lastY - y > fontSize * 1.6) {
-      // Grote Y-sprong = paragraaf-break (witregel ertussen).
-      text += "\n\n" + item.str;
-    } else {
-      // Normale regel-break — maar check eerst op woordafbreking.
-      // Patroon: text eindigt op 'letter-' en volgend item begint met
-      // kleine letter (Nederlandse alfabet incl. accenten). Dan koppelteken
-      // weghalen en woord aan elkaar plakken zonder newline.
-      const nieuwItem = item.str.trimStart();
-      if (
-        /[A-Za-zÀ-ÿ]-$/.test(text) &&
-        /^[a-zà-ÿ]/.test(nieuwItem)
-      ) {
-        text = text.slice(0, -1) + nieuwItem;
-      } else {
-        text += "\n" + item.str;
-      }
-    }
-
-    if (item.hasEOL && !text.endsWith("\n")) {
-      text += "\n";
-    }
-
-    lastY = y;
-    lastEndX = x + (item.width || 0);
-    lastFontSize = fontSize;
-  }
-
-  return text;
 }
 
 // ── DOCX ─────────────────────────────────────────────────────────
@@ -249,7 +202,9 @@ export async function extractTekstUitDocx(
     tekst,
     aantalPaginas: null, // mammoth heeft geen pagina-concept; null is acceptabel
     // Eén segment zonder pagina — Word kent geen vaste pagina-grenzen.
-    segmenten: [{ pagina: null, paragraaf: null, tekst }],
+    // mammoth zet elke Word-alinea op een eigen regel (gescheiden door een
+    // witregel): hetzelfde formaat als de PDF-bronblokken.
+    segmenten: [{ pagina: null, paragraaf: null, tekst, opmaak: "alinea_per_regel" }],
   };
 }
 

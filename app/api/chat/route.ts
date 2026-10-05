@@ -25,6 +25,13 @@ import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import { haalJuridischeSectieVoorWeergave } from "@/core/lib/retrieval/juridische-sectie-ophalen";
 import { bepaalSectiefocus, geefParagraafLetterlijk } from "@/core/lib/retrieval/juridische-sectie";
+import { haalDocumentsectieVoorWeergave } from "@/core/lib/retrieval/document-sectie-ophalen";
+import {
+  bepaalSectieverzoek,
+  geefDocumentsectieWeer,
+  geefDubbelzinnigWeer,
+  sectieNaam,
+} from "@/core/lib/retrieval/document-sectie";
 import { maakFasemeter, type FasetijdenSamenvatting } from "@/core/lib/retrieval/fasetijden";
 import {
   leesDirecteSharePointScope,
@@ -2803,6 +2810,115 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           start(controller) {
             for (const event of [
               { type: "meta", bronnen: [bron], modus: "documenten", chunks_gevonden: sectie.rijen.length },
+              { type: "delta", text: antwoord },
+              { type: "done" },
+            ]) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            controller.close();
+          },
+        });
+        return new Response(stream, { headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        } });
+      }
+    }
+
+    // #548 — een HELE sectie (artikel/hoofdstuk/paragraaf) uit een toegelaten
+    // fonds- of generiek PDF/DOCX-document. Net als de juridische paragraaf
+    // hierboven: geen top-10 RAG-passages en geen modelreconstructie. Alleen een
+    // afgebakende sectie waarvan volledigheid aantoonbaar is (bronblokken-index,
+    // aaneengesloten, begin- en eindgrens) wordt letterlijk getoond; anders een
+    // eerlijke melding met een link naar het origineel. Een oudere index (bv.
+    // bestaande fondsdocumenten) krijgt die melding altijd.
+    if (
+      !scopeActief && !agendapuntModusActief && !transformatieActief && !reflectieActief &&
+      !stukActief && !moduleScopeActief && bepaalSectieverzoek(effectieveVraag)
+    ) {
+      const opgehaald = await haalDocumentsectieVoorWeergave({
+        vraag: effectieveVraag,
+        fondsId,
+        peildatum: new Date().toISOString().slice(0, 10),
+        supabase,
+        signal: contextSignal,
+      });
+      if (opgehaald) {
+        let antwoord: string;
+        let bronnen: BronVerwijzing[] = [];
+        let chunkIds: string[] = [];
+        let controle: Record<string, unknown>;
+        if (opgehaald.soort === "dubbelzinnig") {
+          antwoord = geefDubbelzinnigWeer(opgehaald.verzoek, opgehaald.kandidaten);
+          controle = { sectie_volledig: false, sectie_controle: "dubbelzinnig", kandidaten: opgehaald.kandidaten.map((d) => d.id) };
+        } else {
+          const { verzoek, document, sectie } = opgehaald;
+          antwoord = geefDocumentsectieWeer(verzoek, document, sectie);
+          chunkIds = sectie.volledig ? sectie.rijen.map((r) => r.id) : [];
+          bronnen = [{
+            document_id: document.id,
+            titel: document.titel,
+            bron: document.bron ?? (document.bibliotheek === "generiek" ? "Generieke bibliotheek" : "Fondsdocument"),
+            pagina: sectie.beginPagina,
+            paragraaf: sectieNaam(verzoek),
+            fragment: sectie.volledig
+              ? sectie.tekst.slice(0, 300)
+              : `${sectieNaam(verzoek)} — niet volledig te tonen; zie het origineel`,
+            heeft_origineel: Boolean(document.opslag_pad),
+            documenttype: document.documenttype,
+            documentstatus: document.status,
+            bronstatus: document.bronstatus,
+            bibliotheek: document.bibliotheek,
+            bestandstype: document.bestandstype,
+            extern_url: document.extern_url,
+          }];
+          controle = {
+            sectie_volledig: sectie.volledig,
+            sectie_controle: sectie.reden,
+            sectie_label: sectie.label,
+            sectie_paginas: [sectie.beginPagina, sectie.eindPagina],
+          };
+        }
+        const zegel = bouwInhoudZegel(vraag, antwoord);
+        try {
+          const { data: sectieLogId, error: sectieLogFout } = await voerDuurzameSchrijfBinnenDeadlineUit(
+            contextSignal,
+            () => supabase.rpc("schrijf_ai_interactie", {
+              p_vraag: vraag,
+              p_antwoord: antwoord,
+              p_bronnen: bronnen,
+              p_modus: "documenten",
+              p_model: vraagContext?.modelAangeroepen ? (vraagContext.meting?.model ?? null) : null,
+              p_retrieval_meta: {
+                geen_modelcall: !vraagContext?.modelAangeroepen,
+                methode: "gerichte_documentsectie",
+                opgehaald: chunkIds.length,
+                geselecteerd: chunkIds.length,
+                chunks: chunkIds.map((id) => ({ id, document_id: bronnen[0]?.document_id ?? null, rang: null })),
+                invoer: {
+                  geen_generatiecall: true,
+                  juridische_intentie: juridischeIntentie,
+                  ...controle,
+                },
+              },
+              p_retrieval_meta_inhoud: {},
+              p_gesprek_audit_id: gesprekAuditId,
+              p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
+              p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
+              p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
+            }).abortSignal(contextSignal)
+          );
+          if (sectieLogFout) throw sectieLogFout;
+          await rondAf(supabase, aiActieId, "voltooid", sectieLogId ? `governance_log:${sectieLogId}` : null);
+        } catch (fout) {
+          await rondAf(supabase, aiActieId, "mislukt", null);
+          console.error("Documentsectie kon niet worden gelogd:", fout);
+          return NextResponse.json({ error: "De brontekst kon niet betrouwbaar worden vastgelegd." }, { status: 500 });
+        }
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const event of [
+              { type: "meta", bronnen, modus: "documenten", chunks_gevonden: chunkIds.length },
               { type: "delta", text: antwoord },
               { type: "done" },
             ]) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));

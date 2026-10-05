@@ -38,6 +38,7 @@ import {
   MAX_OCR_PAGINAS,
   IngestCapError,
 } from "@/core/lib/ingest-caps";
+import { vervangChunksAtomisch } from "@/core/lib/chunk-vervangen";
 import { genereerSamenvatting } from "@/core/lib/samenvatting";
 import {
   preflightSysteem,
@@ -827,18 +828,14 @@ async function extracteerEnChunk(
     return await markeerGeweigerd(svc, job, doc.id, "bestand_te_groot_voor_rag");
   }
 
-  // Vervang chunks (fail-closed). Delete-then-insert maakt de extractie
-  // herhaalbaar (een eerdere, half mislukte poging laat geen wees-chunks na).
-  await svc.from("document_chunks").delete().eq("document_id", doc.id);
-  const batch = 50;
-  for (let i = 0; i < bareRecords.length; i += batch) {
-    const { error: insErr } = await svc
-      .from("document_chunks")
-      .insert(bareRecords.slice(i, i + batch));
-    if (insErr) {
-      await svc.from("document_chunks").delete().eq("document_id", doc.id);
-      return await backoff(svc, job, "chunk_insert");
-    }
+  // Vervang chunks atomisch (#548): oude weg + nieuwe erin in één transactie
+  // (fn_document_chunks_vervangen). Herhaalbaar, en er is nooit een half
+  // ingevoegde chunkset zichtbaar voor de zoekroutes. Faalt het, dan blijft de
+  // vorige chunkset (of niets, bij een eerste ingest) ongewijzigd staan.
+  const vervanging = await vervangChunksAtomisch(svc, doc.id, bareRecords);
+  if (!vervanging.ok) {
+    console.error(`[ingest-worker] chunks vervangen mislukt voor ${doc.id}: ${vervanging.fout}`);
+    return await backoff(svc, job, "chunk_insert");
   }
 
   // AI-samenvatting van een vergaderstuk (besluit C): direct ná de extractie,

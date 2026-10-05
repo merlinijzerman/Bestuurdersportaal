@@ -435,6 +435,20 @@ dezelfde transactie: geen auditregel zonder wijziging en geen wijziging zonder
 auditregel. Gemeten in `supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql`
 (M0 rechten en budget, M6 weigering onder `authenticated`/`anon`).
 
+## #548 — `public.fn_document_chunks_vervangen(uuid, jsonb)`
+
+Nieuwe `plpgsql`-functie, bewust **SECURITY INVOKER**: RLS op `documenten` en
+`document_chunks` blijft de enige grens. EXECUTE voor `authenticated` (de
+fonds-herindexering draait met de anon-key onder RLS) en `service_role`
+(ingestworker, generieke curatie); niets voor `anon` (H-18). Een tenant krijgt
+hiermee geen nieuw recht: de bestaande policies "chunks write eigen fonds" en
+"documenten update eigen fonds" staan het verwijderen en invoegen van chunks
+van een eigen-fondsdocument al toe. Nieuw is uitsluitend dat het in één
+transactie gebeurt, zodat nooit een gedeeltelijke chunkset zichtbaar is.
+Generieke documenten zijn voor tenants read-only; de functie weigert dan
+(42501) omdat de document-UPDATE onder RLS geen rij raakt.
+Controle: `supabase/checks/2026_10_05_548_chunks_atomisch_vervangen.sql`.
+
 ## R1 zoekpad (besluit 0218) — `public.zoek_chunks_begrensd(…)` (migratie 2026_10_03_r1_zoek_chunks_begrensd.sql)
 
 Nieuwe `plpgsql`-functie, bewust **SECURITY INVOKER** en qua rechten **byte-gelijk
