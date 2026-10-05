@@ -68,6 +68,10 @@ test("toegelaten SharePoint-passages bereiken de bestaande promptbrug", () => {
   assert.match(route, /scopeTitels = \[directeSharePoint!\.scopeLabel\]/);
   assert.match(route, /GESELECTEERDE SHAREPOINT-MAP/);
   assert.match(route, /sharepoint_map_afgekapt/);
+  assert.match(route, /sharepoint_map_tekstlaag_ontbreekt/);
+  assert.match(route, /zonder_tekstlaag: sharepointMapSelectie/);
+  assert.match(route, /gebruikte_documenten: gebruikteSharePointDocumenten/);
+  assert.match(productieAdapter, /onPdfZonderTekstlaag:/);
   assert.match(productieAdapter, /tekst: resultaat\.passage/);
   assert.match(productieAdapter, /bibliotheek: "sharepoint"/);
 });

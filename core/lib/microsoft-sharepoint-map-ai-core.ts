@@ -22,7 +22,24 @@ export type SharePointMapSelectie = {
   ondersteundOnderMap: number;
   kandidatenBehandeld: number;
   afgekapt: boolean;
+  /** Grenzen van de selectie/live boom; los van een geverifieerde PDF zonder tekstlaag. */
+  afgekaptDoorLimiet: boolean;
+  /** Tijdens de live extractie vastgesteld; geen documentnamen of inhoud in audit. */
+  zonderTekstlaag: number;
 };
+
+/** Inhoudsvrije, zichtbare dekkingswaarschuwing; ook bruikbaar in de prompt. */
+export function tekstlozePdfMapMelding(
+  aantal: number,
+  gekoppeld: boolean
+): string | null {
+  if (!Number.isSafeInteger(aantal) || aantal <= 0) return null;
+  const onderwerp = gekoppeld ? "de gekoppelde SharePoint-mappen" : "deze SharePoint-map";
+  const bestanden = aantal === 1 ? "1 PDF" : `${aantal} PDF's`;
+  return `In ${onderwerp} ${aantal === 1 ? "leverde" : "leverden"} ${bestanden} geen doorzoekbare tekst op. ` +
+    "Die bestanden zijn niet gebruikt; dit antwoord dekt alleen de vermelde bronnen. " +
+    "Over de niet-gelezen bestanden kan hieruit niets worden geconcludeerd.";
+}
 
 /** Telt uitsluitend SharePoint-documenten die de centrale selectie én
  * toelatingspoort werkelijk hebben doorstaan. Een passage-duplicaat uit
@@ -113,6 +130,8 @@ export function selecteerSharePointDocumentKandidaten(
     ondersteundOnderMap: ondersteund.length,
     kandidatenBehandeld: kandidaten.length,
     afgekapt: ondersteund.length > geselecteerd.length,
+    afgekaptDoorLimiet: ondersteund.length > geselecteerd.length,
+    zonderTekstlaag: 0,
   };
 }
 
