@@ -927,6 +927,7 @@ export interface RetrievalMeta {
     kandidaten: number;
     gebruikte_documenten: number;
     afgekapt: boolean;
+    zonder_tekstlaag?: number;
   };
   // Document-scope (increment 1/2). Aanwezig zodra een vraag tot één/enkele
   // document(en) is beperkt; legt voor de audit vast waarop gescoopt is en welke
@@ -952,6 +953,7 @@ export interface RetrievalMeta {
     sharepoint_soort?: "document" | "map";
     kandidaten?: number;
     gebruikte_documenten?: number;
+    zonder_tekstlaag?: number;
   };
   /** M1–M4 — gevalideerde, reproduceerbare routerbeslissing (geen vrije tekst). */
   vraagrouter?: Vraagroute;

@@ -74,6 +74,9 @@ export interface DirectSharePointAdapterDeps {
   /** Beurtbrede grenzen; PR-4 gebruikt ze voor maximaal zes mapdocumenten. */
   maxTotaalBytes?: number;
   maxTotaalTekens?: number;
+  /** Alleen voor een expliciete mapselectie: een na hercontrole tekstloze PDF
+   * overslaan en de gedeeltelijke dekking request-lokaal tellen. */
+  onPdfZonderTekstlaag?: () => void;
   downloadImpl?: (opdracht: DownloadOpdracht) => Promise<DownloadResultaat>;
   extractImpl?: (
     bytes: Buffer,
@@ -185,6 +188,7 @@ export function maakDirecteSharePointAdapter(
       let totaalBytes = 0;
       let totaalExtractieTekens = 0;
       let budgetAfgekapt = false;
+      let pdfZonderTekstlaag = 0;
       for (const { document } of deps.documenten) {
         if (ctx.resterendMs() <= 0) return foutUitkomst(t0, "timeout");
         const type = extractieType(document.bestandstype);
@@ -245,7 +249,7 @@ export function maakDirecteSharePointAdapter(
           (som, segment) => som + segment.tekst.length,
           0
         );
-        if (documentTekens <= 0 || documentTekens > MAX_DIRECTE_EXTRACTIE_TEKENS) {
+        if (documentTekens > MAX_DIRECTE_EXTRACTIE_TEKENS) {
           return foutUitkomst(t0, "configuratiefout");
         }
         if (
@@ -286,6 +290,18 @@ export function maakDirecteSharePointAdapter(
           !bronOngewijzigd(deps.bron, bronNu)
         ) {
           return foutUitkomst(t0, "toestemming_geweigerd");
+        }
+        // Een echte PDF-scan kan na een geslaagde download nul tekst opleveren.
+        // Alleen een MAP mag na alle rechten-, root- en versiecontroles met de
+        // overige documenten doorgaan. Bij een los gekozen document, een ander
+        // bestandstype of een beveiligingsfout blijft de beurt fail-closed.
+        if (documentTekens === 0) {
+          if (type !== "pdf" || !deps.onPdfZonderTekstlaag) {
+            return foutUitkomst(t0, "configuratiefout");
+          }
+          pdfZonderTekstlaag += 1;
+          deps.onPdfZonderTekstlaag();
+          continue;
         }
         const gecontroleerdOp = new Date().toISOString();
         const documentIdentiteit = maakDocumentIdentiteit(
@@ -363,6 +379,9 @@ export function maakDirecteSharePointAdapter(
         provider: "microsoft",
         latencyMs: Date.now() - t0,
         opgehaald: gelezenDocumenten,
+        ...(pdfZonderTekstlaag > 0 && kandidaten.length === 0
+          ? { fout: "geen_resultaten" as const }
+          : {}),
         ...(budgetAfgekapt ? { truncatie: { reden: "kandidaten" as const } } : {}),
       };
     },
