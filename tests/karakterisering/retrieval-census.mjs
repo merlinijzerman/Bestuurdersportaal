@@ -165,6 +165,8 @@ export const LEZINGKLASSE = {
   // ── evidencebronnen buiten en binnen de kern ──────────────────────────────
   "core/lib/rag.ts::document_chunks": { klassen: ["evidence"], doel: "de retrievalkern zelf" },
   "core/lib/rag.ts::documenten": { klassen: ["evidence"], doel: "documentmetadata bij de chunks (status, geldigheid, normgewicht)" },
+  "core/lib/retrieval/juridische-sectie-ophalen.ts::documenten": { klassen: ["evidence"], doel: "bronidentiteit, geldigheid en officiële link voor letterlijke paragraafweergave onder RLS" },
+  "core/lib/retrieval/juridische-sectie-ophalen.ts::document_chunks": { klassen: ["evidence"], doel: "volledig afgebakende paragraaftekst en extractiecontrole onder RLS" },
   "core/lib/retrieval/supabase-versie.ts::document_chunks": { klassen: ["evidence"], doel: "#367 herleest de actuele document- en indexeringsversie vóór ranking" },
   "core/lib/retrieval/supabase-evidence.ts::decision_objects": { klassen: ["evidence"], doel: "getypeerde besluitregistratie met V5, versie en centrale citation" },
   "core/lib/retrieval/supabase-evidence.ts::document_chunks": { klassen: ["evidence"], doel: "contentvrije, begrensde chunkpresentiepreflight" },

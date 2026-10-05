@@ -79,6 +79,7 @@ import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
 import { bouwCitaties } from "./retrieval/citatie";
 import type { Bronresultaat } from "./retrieval/contract";
 import { artikelFrasequery, artikelmatch, type Artikelfocus } from "./retrieval/artikelverwijzing";
+import { bakenParagraafAf, kiesJuridischDocument, kiesParagraafkop, kiesTermijnpassages, type Sectiefocus, type Sectierij } from "./retrieval/juridische-sectie";
 import {
   ARTIKEL_TOELATING_ID_MAX,
   TOELATING_SELECT,
@@ -664,6 +665,7 @@ export interface DocumentChunk {
    */
   structuur_label?: string | null;
   artikelspoor?: boolean;
+  sectiespoor?: boolean;
   documenten: {
     titel: string;
     bron: string;
@@ -1878,6 +1880,120 @@ export async function vulAanMetArtikelkandidaten(
   }
 }
 
+/** Gerichte wetsparagraaf binnen dezelfde RLS- en toelatingspoort als #500. */
+export async function vulAanMetSectiekandidaten(
+  bestaand: DocumentChunk[],
+  opdracht: {
+    focus: Sectiefocus;
+    fondsId: string | null;
+    scope?: string[] | null;
+    filters?: RetrievalFilters;
+    maxKandidaten: number;
+    signal?: AbortSignal;
+    supabase?: { from: (tabel: string) => any };
+  }
+): Promise<DocumentChunk[]> {
+  const scope = opdracht.scope?.length ? opdracht.scope : null;
+  const fondsFilter = opdracht.fondsId || null;
+  try {
+    const supabase = opdracht.supabase ?? (await createServerSupabase());
+    // De gewone zoekslag heeft het relevante juridische document al als
+    // kandidaat aangewezen. Begrens de tekstzoeking tot deze document-id's;
+    // een brede ILIKE over alle wetschunks zou onder RLS te duur zijn.
+    const kandidaatDocs = [...new Set(bestaand.map((c) => c.document_id))].slice(0, 30);
+    if (kandidaatDocs.length === 0) return bestaand;
+    let dq = supabase.from("documenten")
+      .select("id,titel,bestand_hash,scan_resultaat")
+      .eq("documenttype", "wetgeving").eq("actief", true)
+      .in("id", kandidaatDocs);
+    if (scope) dq = dq.in("id", scope);
+    const { data: docs, error: docFout } = await metSignaal(
+      dq.order("id", { ascending: true }).limit(ARTIKEL_JURIDISCHE_DOCUMENTEN_MAX),
+      opdracht.signal
+    );
+    bewaakNaIO(opdracht.signal, docFout);
+    if (docFout || !Array.isArray(docs)) return bestaand;
+    const juridischeDocs = (docs as { id: string; titel: string; bestand_hash: string | null; scan_resultaat: Record<string, unknown> | null }[])
+      .filter((d) => !isMalwarescanAan() || heeftSchoonScanbewijs(d));
+    const explicietDocument = opdracht.focus.nummer && /\bBesluit\b/i.test(opdracht.focus.vraag)
+      ? kiesJuridischDocument(opdracht.focus.vraag, juridischeDocs.map((d) => ({ ...d, extern_url: null })))
+      : null;
+    const ids = explicietDocument ? [explicietDocument.id] : juridischeDocs.map((d) => d.id);
+    if (ids.length === 0) return bestaand;
+
+    let hq = supabase.from("document_chunks")
+      .select("id,document_id,chunk_index,tekst,structuur_label")
+      .in("document_id", ids);
+    hq = opdracht.focus.nummer
+      ? hq.ilike("tekst", `%Paragraaf ${opdracht.focus.nummer}.%`)
+      : hq.ilike("tekst", "%Paragraaf%");
+    const { data: kopRijen, error: kopFout } = await metSignaal(
+      hq.order("document_id", { ascending: true }).order("chunk_index", { ascending: true }).limit(200),
+      opdracht.signal
+    );
+    bewaakNaIO(opdracht.signal, kopFout);
+    if (kopFout || !Array.isArray(kopRijen)) return bestaand;
+    const kop = kiesParagraafkop(opdracht.focus, kopRijen as Sectierij[]);
+    if (!kop) return bestaand;
+
+    const { data: sectieRijen, error: sectieFout } = await metSignaal(
+      supabase.from("document_chunks")
+        .select("id,document_id,chunk_index,tekst,structuur_label")
+        .eq("document_id", kop.rij.document_id)
+        .gte("chunk_index", kop.rij.chunk_index)
+        .lte("chunk_index", kop.rij.chunk_index + 80)
+        .order("chunk_index", { ascending: true }).limit(81),
+      opdracht.signal
+    );
+    bewaakNaIO(opdracht.signal, sectieFout);
+    if (sectieFout || !Array.isArray(sectieRijen)) return bestaand;
+    const sectie = bakenParagraafAf(kop, sectieRijen as Sectierij[]);
+    if (sectie.rijen.length < 2 || !["ok", "extractiegaten"].includes(sectie.reden)) return bestaand;
+    const passages = /\btermijn|hoe lang|binnen hoeveel/i.test(opdracht.focus.vraag)
+      ? kiesTermijnpassages(sectie, 10)
+      : sectie.rijen.slice(1, 11);
+    if (passages.length === 0) return bestaand;
+    const parameters: Toelatingsparameters = {
+      ids: passages.map((r) => r.id).slice(0, ARTIKEL_TOELATING_ID_MAX),
+      frase: null,
+      documentscope: scope,
+      filters: opdracht.filters,
+      fondsId: fondsFilter,
+      peildatum: effectievePeildatum(opdracht.filters),
+    };
+    const { data: rijen, error: toelatingsFout } = await metSignaal(
+      pasToelatingsfiltersToe(
+        supabase.from("document_chunks").select(TOELATING_SELECT),
+        toelatingsfilters(parameters)
+      ).order("chunk_index", { ascending: true }).limit(ARTIKEL_TOELATING_ID_MAX),
+      opdracht.signal
+    );
+    bewaakNaIO(opdracht.signal, toelatingsFout);
+    if (toelatingsFout || !Array.isArray(rijen)) return bestaand;
+    const perId = new Map(passages.map((r) => [r.id, r]));
+    const toegelaten = (rijen as ToelatingsRij[])
+      .filter((r) => r.documenten && perId.has(r.id) && voldoetAanZoekfilters(r, parameters))
+      .map(toelatingsrijNaarChunk);
+    const bewaakt = handhaafFondsdiscipline(toegelaten, fondsFilter, parameters.peildatum, opdracht.filters?.modus).chunks;
+    if (bewaakt.length === 0) return bestaand;
+    for (const c of bewaakt) {
+      c.structuur_label = perId.get(c.id)?.structuur_label ?? null;
+      c.sectiespoor = true;
+    }
+    const volgorde = new Map(passages.map((r, i) => [r.id, i]));
+    bewaakt.sort((a, b) => (volgorde.get(a.id) ?? 999) - (volgorde.get(b.id) ?? 999));
+    const gekozen = bewaakt.slice(0, Math.min(10, opdracht.maxKandidaten));
+    const gekozenIds = new Set(gekozen.map((c) => c.id));
+    return [...gekozen, ...bestaand.filter((c) => !gekozenIds.has(c.id))]
+      .slice(0, opdracht.maxKandidaten);
+  } catch (e) {
+    if (isAfbreking(e)) throw e;
+    bewaakNaIO(opdracht.signal, e);
+    console.error("[rag] sectiespoor mislukt — kandidaten ongewijzigd:", e);
+    return bestaand;
+  }
+}
+
 export interface HybrideDeps {
   /** Eén hybride RPC-poging; `null` bij een RPC-fout. `poging` is alleen telemetrie. */
   draai(ftsQuery: string, embedding: number[], poging?: Fasepoging): Promise<DocumentChunk[] | null>;
@@ -2704,7 +2820,7 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       score: chunk.rang ?? null,
       fts: chunk.fts_rang ?? null,
       vec: chunk.vec_rang ?? null,
-      ...(chunk.artikelspoor ? { poging: "artikelspoor" } : {}),
+      ...(chunk.sectiespoor ? { poging: "sectiespoor" } : chunk.artikelspoor ? { poging: "artikelspoor" } : {}),
     },
     curatie: { normgewicht: d.normgewicht ?? null, wettelijkRegime: d.wettelijk_regime ?? null },
     weergave: {
