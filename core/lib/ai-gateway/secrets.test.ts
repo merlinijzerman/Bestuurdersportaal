@@ -29,41 +29,6 @@ test("endpointreferentie: alleen allowlist, alleen https, anders adapter-default
   );
 });
 
-test("klant-Azure-endpoint is verplicht een Azure OpenAI v1-host", () => {
-  const c = resolveerCredentials(
-    { secretRef: "AZURE_OPENAI_API_KEY", endpointRef: "AZURE_OPENAI_BASE_URL" },
-    {
-      AZURE_OPENAI_API_KEY: "k",
-      AZURE_OPENAI_BASE_URL: "https://klant-regio.openai.azure.com/openai/v1/",
-    }
-  );
-  assert.equal(c.baseUrl, "https://klant-regio.openai.azure.com/openai/v1");
-  assert.throws(
-    () =>
-      resolveerCredentials(
-        { secretRef: "AZURE_OPENAI_API_KEY", endpointRef: "AZURE_OPENAI_BASE_URL" },
-        { AZURE_OPENAI_API_KEY: "k", AZURE_OPENAI_BASE_URL: "https://attacker.example/openai/v1" }
-      ),
-    /azure_openai_endpoint_host_ongeldig/
-  );
-  assert.throws(
-    () =>
-      resolveerCredentials(
-        { secretRef: "AZURE_OPENAI_API_KEY", endpointRef: "AZURE_OPENAI_BASE_URL" },
-        { AZURE_OPENAI_API_KEY: "k", AZURE_OPENAI_BASE_URL: "https://klant.openai.azure.com/ander-pad" }
-      ),
-    /azure_openai_endpoint_pad_ongeldig/
-  );
-  assert.throws(
-    () =>
-      resolveerCredentials(
-        { secretRef: "AZURE_OPENAI_API_KEY", endpointRef: "AZURE_OPENAI_BASE_URL" },
-        { AZURE_OPENAI_API_KEY: "k", AZURE_OPENAI_BASE_URL: "https://klant.openai.azure.com:444/openai/v1?omleiding=1" }
-      ),
-    /azure_openai_endpoint_vorm_ongeldig/
-  );
-});
-
 test("foutclassificatie is duck-typed en fail-safe", () => {
   assert.equal(classificeerProviderFout(Object.assign(new Error("x"), { status: 429 })).categorie, "rate_limit");
   assert.equal(classificeerProviderFout(Object.assign(new Error("x"), { status: 403 })).categorie, "configuratie");

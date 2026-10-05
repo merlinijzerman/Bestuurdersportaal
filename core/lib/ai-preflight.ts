@@ -32,7 +32,7 @@ import type { Actietype, WeigerReden } from "./ai-quota-kern";
 import { aiGeblokkeerd, duplicaatVerzoek, quotumBereikt } from "./api-errors";
 
 /** Providers waarvoor een kill switch bestaat. */
-export type Provider = "anthropic" | "mistral" | "openai" | "azure_openai";
+export type Provider = "anthropic" | "mistral" | "openai";
 
 /**
  * Uitkomst van de preflight.

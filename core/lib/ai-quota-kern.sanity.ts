@@ -334,8 +334,8 @@ test("De besloten quotumwaarden staan als startwaarde vast", () => {
   });
 });
 
-test("Er is één globale schakelaar en precies één schakelaar per provider", () => {
-  assert.deepEqual([...SWITCH_SLEUTELS], ["globaal", "anthropic", "mistral", "openai", "azure_openai"]);
+test("Er zijn precies vier onafhankelijk bedienbare schakelaars", () => {
+  assert.deepEqual([...SWITCH_SLEUTELS], ["globaal", "anthropic", "mistral", "openai"]);
 });
 
 console.log(`\n${n} ai-quota-kern sanity-tests geslaagd.`);
