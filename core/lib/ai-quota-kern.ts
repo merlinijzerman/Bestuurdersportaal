@@ -49,8 +49,8 @@ export const QUOTA_STANDAARD: Record<QuotaSleutel, number> = {
   ocr_fonds_maand: 1000,
 };
 
-/** De onafhankelijk bedienbare kill switches (globaal + één per provider). */
-export const SWITCH_SLEUTELS = ["globaal", "anthropic", "mistral", "openai", "azure_openai"] as const;
+/** De vier onafhankelijk bedienbare kill switches (public.ai_kill_switch). */
+export const SWITCH_SLEUTELS = ["globaal", "anthropic", "mistral", "openai"] as const;
 export type SwitchSleutel = (typeof SWITCH_SLEUTELS)[number];
 
 /**

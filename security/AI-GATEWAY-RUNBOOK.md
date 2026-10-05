@@ -134,34 +134,6 @@ De handmatige rollback
 een logregel een effortwaarde bevat. Rol eerst de code terug. Behoud/exporteer het append-only
 auditspoor en verwijder geen logregels om de rollback te forceren.
 
-### Klant-eigen Azure OpenAI — inert contract
-
-`2026_10_02_azure_openai_klantprovider.sql` opent `azure_openai` als aparte provider en
-maakt de providerswitch aan op `gestopt`. De migratie registreert bewust geen model, profiel,
-endpoint of fondsconfiguratie. De code accepteert uitsluitend de secretreferenties
-`AZURE_OPENAI_API_KEY` en `AZURE_OPENAI_BASE_URL`; de URL moet eindigen op `/openai/v1` en op
-een ondersteunde Azure AI-host staan. De Responses-aanroep gebruikt `store: false`.
-
-Voor een klantpilot zijn daarna afzonderlijk en in deze volgorde nodig:
-
-1. Leg fonds-id, Azure resource/region, exacte deploymentnaam, modelversie en ondersteunde
-   reasoning-efforts vast. Gebruik geen vrije URL of sleutel in SQL.
-2. Zet `AZURE_OPENAI_API_KEY` en `AZURE_OPENAI_BASE_URL` als afgeschermde Preview-secrets.
-3. Voeg de deploymentnaam toe aan `ai_model_allowlist`, maak één fonds-eigen
-   `provider_profiel` met beide referentienamen en wijs alle vier taakgroepen expliciet toe.
-4. Houd `azure_openai` nog gestopt en voer eerst een hermetische configuratiecheck uit.
-5. Activeer de switch via de vier-ogenprocedure en smoke minimaal gewone documentchat,
-   streaming, vraagrouter/toolcall, vergelijking en conceptgeneratie. Een model dat een gevraagd
-   effortniveau niet ondersteunt is een mislukte smoke; pas dit niet stil in code aan.
-6. Controleer het inhoudsvrije `gateway_log` op provider, deployment, taaktype, effort, tokens en
-   resultaat. Controleer tevens dat prompt, bronpassages, antwoord, endpoint en key nergens in
-   audit of foutlogging staan.
-
-Webzoek via een providertool is in deze eerste fase niet gecontracteerd en faalt gesloten. De
-gewone document-/SharePointcontext wordt door het portaal samengesteld en kan wel met de
-klantprovider worden getest. De rollback weigert zodra Azure OpenAI-configuratie of auditdata
-bestaat; exporteer en ontkoppel die gecontroleerd voordat het contract wordt teruggenomen.
-
 ### #438 — Preview-canary Opus 5.5/Sonnet 5 (PR3)
 
 Volgorde voor `portal_preview`:

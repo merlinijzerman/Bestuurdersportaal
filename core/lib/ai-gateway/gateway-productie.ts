@@ -16,7 +16,6 @@ import { maakGateway } from "./gateway";
 import { maakAnthropicAdapter } from "./adapters/anthropic";
 import { maakOpenAIAdapter } from "./adapters/openai";
 import { maakMistralAdapter } from "./adapters/mistral";
-import { maakAzureOpenAIAdapter } from "./adapters/azure-openai";
 
 let instantie: AiGateway | undefined;
 
@@ -28,7 +27,6 @@ export function productieGateway(): AiGateway {
       anthropic: maakAnthropicAdapter(),
       openai: maakOpenAIAdapter(),
       mistral: maakMistralAdapter(),
-      azure_openai: maakAzureOpenAIAdapter(),
     },
     poortCheck,
     logFout: ({ label, correlatieId, fondsId, taaktype, fout }) => {
