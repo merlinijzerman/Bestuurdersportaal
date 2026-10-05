@@ -98,6 +98,21 @@ check("artikelen worden niet samengevoegd en krijgen een label", () => {
   }
 });
 
+check("artikelverwijzing na regelafbreking opent geen artikelunit", () => {
+  const units = splitsInStructuurUnits(
+    "Artikel 21. Verzoek tot waardeoverdracht\nDe deelnemer handelt volgens\n" +
+    "artikel 18, eerste lid, van de Pensioenwet.\nDeze zin hoort bij artikel 21."
+  );
+  assert.equal(units.length, 1);
+  assert.equal(units[0].label, "Artikel 21");
+  assert.ok(units[0].tekst.includes("artikel 18, eerste lid"));
+});
+
+check("decimale artikelnummers blijven heel", () => {
+  const units = splitsInStructuurUnits("Artikel 2.5. Reikwijdte\nDeze bepaling geldt hier.");
+  assert.equal(units[0].label, "Artikel 2.5");
+});
+
 check("definities komen als samenhangende, gescheiden chunks terug", () => {
   const tekst =
     "Artikel 1 Begripsbepalingen\n" +

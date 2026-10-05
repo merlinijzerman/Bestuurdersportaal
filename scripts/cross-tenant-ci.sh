@@ -61,6 +61,13 @@ SQL_ART500_PERF="supabase/checks/2026_09_29_500_artikelspoor_performance.sql"
 # statusovergang, consistente chunkmetadata; negatieve controle met oude trigger.
 SQL_499="supabase/checks/2026_09_30_499_metadatawijziging_timeout.sql"
 SQL_505="supabase/checks/2026_10_02_505_rls_initplan_tenantpariteit.sql"
+# R1 zoekpad (besluit 0218) — `zoek_chunks_begrensd`: pariteit met zoek_chunks
+# onder echte RLS (8 actoren × 11 scenario's, sectie-M-filtermatrix van #500,
+# negatieve controles via pg_temp-kopie, catalogus-pin, limietafwijzing P0R01,
+# tiebreaker) en de CI-light performance-eis (25 runs strikt p95 < 500 ms,
+# buffers ≤ 1/3 oud, plan-assert zonder nested loop over documenten).
+SQL_R1_ZOEKTEKST="supabase/checks/2026_10_03_r1_zoektekst_pariteit.sql"
+SQL_R1_ZOEKTEKST_PERF="supabase/checks/2026_10_03_r1_zoektekst_performance.sql"
 # #504 — datumvelden (documentdatum/geldig_vanaf/volgende_review) via de #499-RPC:
 # klein document én 1.000 chunks, chunk-denorm, audit met actor/reden, leegmaken,
 # ongeldige datum → rollback; negatieve controle zonder denorm-trigger.
@@ -388,6 +395,31 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -v f505_verwacht=voor -f "$SQL_505"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/2026_10_02_505_rls_auth_uid_initplan.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_505"
 echo
+echo "-- R1 zoektekst (0218): zoek_chunks_begrensd == zoek_chunks (8 actoren × 11, sectie M, negatieve controles, catalogus, limiet, tiebreaker) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1_ZOEKTEKST"
+echo
+echo "-- R1 zoektekst performance (18.418 chunks: strikt p95 < 500 ms onder RLS, buffers ≤ 1/3 oud, plan-assert) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1_ZOEKTEKST_PERF"
+echo
+# Rollbackrondgang R1 (geen timing): migratie (idempotent) → pariteit → rollback
+# → functie weg én de V3-grants-gate schoon in de TERUGGEDRAAIDE stand (de
+# allowlist zonder de drie zoek_chunks_begrensd-regels; met de huidige allowlist
+# zou V3 terecht "ontbrekend object" melden — dat is de gate die zijn werk doet)
+# → migratie → pariteit. De suites hierna draaien dus weer mét de functie.
+echo "-- R1 zoektekst rollbackrondgang: migratie → pariteit → rollback → functie weg + V3 schoon (teruggedraaide allowlist) → migratie → pariteit --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/2026_10_03_r1_zoek_chunks_begrensd.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1_ZOEKTEKST"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/rollbacks/2026_10_03_r1_zoek_chunks_begrensd_ROLLBACK.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -c "do \$\$ begin if to_regprocedure('public.zoek_chunks_begrensd(text, int, uuid[], text[], text[], uuid[], text, date, text[], uuid)') is not null then raise exception 'R1 rollback: zoek_chunks_begrensd bestaat nog'; end if; raise notice 'R1 rollback: zoek_chunks_begrensd is weg'; end \$\$;"
+R1_RONDGANG_DIR="supabase/checks/.r1-rondgang"
+mkdir -p "$R1_RONDGANG_DIR"
+grep -v "zoek_chunks_begrensd(" supabase/checks/allowlist-grants.tsv > "$R1_RONDGANG_DIR/allowlist-grants.tsv"
+sed "s#supabase/checks/allowlist-grants.tsv#$R1_RONDGANG_DIR/allowlist-grants.tsv#" "$SQL_V3" > "$R1_RONDGANG_DIR/v3.sql"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$R1_RONDGANG_DIR/v3.sql"
+rm -rf "$R1_RONDGANG_DIR"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/2026_10_03_r1_zoek_chunks_begrensd.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1_ZOEKTEKST"
+echo
 echo "-- #499 (generieke metadatawijziging op 1.000 chunks: budget, atomisch, consistent) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"
 echo
@@ -613,6 +645,7 @@ echo "  T17 stuurinfo tab 3 biometrie reeks-isolatie + één-bron-koppeling soli
 echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-default (DB-laag)"
 echo "  G20  retrieval-filtering status/bronstatus/geldigheid                (DB-laag)"
 echo "  #505 RLS-InitPlan: tenanttoegang vóór = na, alleen expressievorm gewijzigd (DB-laag)"
+echo "  R1 zoektekst (0218): zoek_chunks_begrensd == zoek_chunks onder RLS, limiet/tiebreaker bewust, perf-gate, rollbackrondgang (DB-laag)"
 echo "  R1   tenantcorrectheid van policies + anon + search_path (gates A-E)  (DB-laag)"
 echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (DB-laag)"
 echo "  MP   maak_profiel deterministisch fonds + zelfregistratiegrens PT-1   (DB-laag)"
