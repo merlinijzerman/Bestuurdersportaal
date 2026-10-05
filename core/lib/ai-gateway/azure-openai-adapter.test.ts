@@ -28,6 +28,7 @@ test("Azure Responses houdt instructies in het portaal, gebruikt de deploymentna
   assert.equal(body.instructions, "Volg het portaalbeleid.");
   assert.equal(body.store, false);
   assert.equal(body.stream, false);
+  assert.equal(body.parallel_tool_calls, false);
   assert.deepEqual(body.reasoning, { effort: "high" });
   assert.equal(body.temperature, undefined, "sampling gaat niet mee naast reasoning effort");
   assert.equal(body.top_p, undefined);
@@ -97,6 +98,41 @@ test("functie-tools worden strict vertaald en terug genormaliseerd naar het best
     thinking: 2,
     totaal: 21,
   });
+});
+
+test("strict functie-schema maakt optionele velden nullable en vereist alle velden, ook genest", () => {
+  const body = bouwAzureOpenAIBody(
+    verzoek({
+      tools: [{
+        soort: "functie",
+        naam: "vergelijk",
+        beschrijving: "Vergelijk documenten.",
+        verplicht: true,
+        schema: {
+          type: "object",
+          properties: {
+            waarde: { type: "string" },
+            bewijs: { type: ["string", "null"] },
+            details: {
+              type: "object",
+              properties: { code: { type: "string" }, toelichting: { type: "string" } },
+              required: ["code"],
+            },
+          },
+          required: ["waarde", "details"],
+        },
+      }],
+    }),
+    false
+  );
+  const schema = (body.tools as Array<{ parameters: Record<string, unknown> }>)[0]!.parameters;
+  assert.deepEqual(schema.required, ["waarde", "bewijs", "details"]);
+  const properties = schema.properties as Record<string, Record<string, unknown>>;
+  assert.deepEqual(properties.bewijs.type, ["string", "null"]);
+  assert.equal(properties.details.additionalProperties, false);
+  assert.deepEqual(properties.details.required, ["code", "toelichting"]);
+  const details = properties.details.properties as Record<string, Record<string, unknown>>;
+  assert.deepEqual(details.toelichting.type, ["string", "null"]);
 });
 
 test("webzoek en een ontbrekende verplichte tool falen gesloten", async () => {

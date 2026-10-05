@@ -69,7 +69,31 @@ function sluitObjectSchema(schema: Record<string, unknown>): Record<string, unkn
       uit[sleutel] = waarde;
     }
   }
-  if (schema.type === "object") uit.additionalProperties = false;
+  if (schema.type === "object") {
+    uit.additionalProperties = false;
+    const eigenschappen = uit.properties;
+    if (eigenschappen && typeof eigenschappen === "object" && !Array.isArray(eigenschappen)) {
+      const namen = Object.keys(eigenschappen);
+      const oorspronkelijkVerplicht = new Set(Array.isArray(schema.required) ? schema.required : []);
+      for (const naam of namen) {
+        if (oorspronkelijkVerplicht.has(naam)) continue;
+        const veld = (eigenschappen as Record<string, unknown>)[naam];
+        if (!veld || typeof veld !== "object" || Array.isArray(veld)) {
+          throw new GatewayFout("configuratie", "azure_openai_schema_ongeldig");
+        }
+        const definitie = veld as Record<string, unknown>;
+        const typen = typeof definitie.type === "string" ? [definitie.type] : definitie.type;
+        if (!Array.isArray(typen) || !typen.every((type) => typeof type === "string")) {
+          throw new GatewayFout("configuratie", "azure_openai_optioneel_schema_ongeldig");
+        }
+        definitie.type = [...new Set([...typen, "null"])];
+        if (Array.isArray(definitie.enum) && !definitie.enum.includes(null)) {
+          definitie.enum = [...definitie.enum, null];
+        }
+      }
+      uit.required = namen;
+    }
+  }
   return uit;
 }
 
@@ -104,6 +128,7 @@ export function bouwAzureOpenAIBody(v: AdapterVerzoek, stream: boolean): Record<
     max_output_tokens: v.maxTokens,
     store: false,
     stream,
+    parallel_tool_calls: false,
     ...(effort ? { reasoning: { effort } } : {}),
     ...(!effort && typeof v.temperature === "number" ? { temperature: v.temperature } : {}),
     ...(!effort && typeof v.topP === "number" ? { top_p: v.topP } : {}),

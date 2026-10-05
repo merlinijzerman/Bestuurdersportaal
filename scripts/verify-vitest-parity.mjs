@@ -42,8 +42,8 @@ const expected = {
     titlesSha256: "1e2dc25c8736f6c495664a5322231429e3300813cf777505b28f3512c648d5d6",
   },
   "core/lib/ai-gateway/azure-openai-adapter.test.ts": {
-    count: 5,
-    titlesSha256: "d9165717ddff50765e7ba0489504d68db54ba3edb181ff548ecb03ce615aeb05",
+    count: 6,
+    titlesSha256: "d5d1ceff2deafffb5f546e664c474e2e30f502df41d603ec07489009a362f668",
   },
   "core/lib/ai-gateway/secrets.test.ts": {
     count: 4,
