@@ -133,7 +133,7 @@ let scanBezig = false;
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/health") {
-      const ready = clamdGereed();
+      const ready = await wachtOpClamd(CONFIG.clamdStartWachtMs);
       return json(res, ready ? 200 : 503, { ...herkomst, ready });
     }
     if (req.method === "POST" && req.url === "/scan") {
