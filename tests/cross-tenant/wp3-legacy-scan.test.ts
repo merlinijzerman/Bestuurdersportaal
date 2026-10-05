@@ -602,9 +602,18 @@ test("L4 — elke chunkleesweg naar model of gebruiker dwingt het scanbewijs af 
   assert.match(evidence, /if \(scanbewijsOntbreekt\(document\)\) return geweigerd/);
   assert.match(evidence, /!scanbewijsOntbreekt\(v5Document\)/);
 
-  const reindex = lees("core/lib/reindex.ts");
+  // #548: de herindexlogica staat in herindex-kern.ts (reindex.ts levert alleen
+  // de echte extractie en verrijking).
+  const reindex = lees("core/lib/herindex-kern.ts");
   assert.ok(reindex.indexOf("scanbewijs_ontbreekt") > 0);
   assert.ok(reindex.indexOf("scanbewijs_ontbreekt") < reindex.indexOf(".download(doc.opslag_pad)"), "vóór download/parser");
+
+  // #548: de volledige-sectieroute weigert een document zonder scanbewijs vóór
+  // er één chunk gelezen wordt.
+  const sectie = lees("core/lib/retrieval/document-sectie-ophalen.ts");
+  assert.match(sectie, /isMalwarescanAan\(\) && !heeftSchoonScanbewijs\(/);
+  assert.match(sectie, /DOCUMENTVELDEN =[\s\S]{0,400}bestand_hash,scan_resultaat/);
+  assert.ok(sectie.indexOf("isDocumentToegelaten(d,") < sectie.indexOf('.from("document_chunks")'), "documentpoort vóór de chunklezing");
 
   // Downloads/inzage en de UI-projecties blijven via de centrale poort.
   const download = lees("app/api/documents/[id]/bestand/route.ts");
