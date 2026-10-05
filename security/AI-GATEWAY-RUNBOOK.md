@@ -162,6 +162,36 @@ gewone document-/SharePointcontext wordt door het portaal samengesteld en kan we
 klantprovider worden getest. De rollback weigert zodra Azure OpenAI-configuratie of auditdata
 bestaat; exporteer en ontkoppel die gecontroleerd voordat het contract wordt teruggenomen.
 
+### #524 — tijdelijke Preview-pilot met eigen OpenAI-key
+
+Deze pilot gebruikt **niet** de klant-eigen `azure_openai`-provider. Fondsgebonden `openai`-
+aanroepen gebruiken de Responses API met `store: false`, streaming en functietools; de
+platform-AQLab-aanroepen houden hun bestaande Chat Completions-pad. Webzoek is niet
+gecontracteerd en faalt gesloten. Production en andere fondsen blijven ongewijzigd.
+
+1. Deploy de adaptercode naar `preview` en controleer dat de commit op
+   `app365.preview.bestuurdersportaal.com` draait.
+2. Geef de bestaande Vercel-Secret `OPENAI_API_KEY` ook toegang tot de custom environment
+   `preview-stable`, zonder de waarde in terminal, ticket of audit te tonen. Controleer
+   `OPENAI_BASE_URL` voor die omgeving; de standaard is `https://api.openai.com/v1`.
+   Een wijziging van secret-scope vereist een expliciete bevoegdheidscontrole.
+3. Bevestig in het OpenAI-account dat het model `gpt-6-luna` voor deze sleutel beschikbaar is.
+   Pas geen stil modelalternatief toe als de preflight een 404 of toegangsafwijzing geeft.
+4. Voer uitsluitend op `portal_preview` de fingerprint-geborgde seed
+   `supabase/seeds/preview/2026_10_05_openai_eigen_key_pilot.sql` uit. Alleen `m365-demo`
+   verandert; de `openai`-killswitch blijft `gestopt`.
+5. Vraag de activering van `openai` aan en laat een **andere** platformidentiteit die
+   bevestigen via de bestaande vier-ogenprocedure. Omzeil die niet met directe SQL.
+6. Rooktest met synthetische stukken: gewone documentchat (streaming), vraagrouter
+   (verplichte functietool), documentvergelijking en conceptgeneratie. Controleer het
+   inhoudsvrije gatewaylog op provider, model, effort, tokens, resultaat en actie-id.
+   Een geweigerde/afgebroken call is geen geslaagde rooktest.
+
+Bij een mislukte pilot eerst de fondsconfiguratie terugzetten met
+`supabase/rollbacks/2026_10_05_openai_eigen_key_pilot_ROLLBACK.sql`; het eerdere
+Claude-pad is daarmee weer beschikbaar. Laat bestaande gatewaylogs intact. Sluit de
+`openai`-killswitch via de beheerprocedure als ook andere OpenAI-paden moeten stoppen.
+
 ### #438 — Preview-canary Opus 5.5/Sonnet 5 (PR3)
 
 Volgorde voor `portal_preview`:
