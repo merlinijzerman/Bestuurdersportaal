@@ -64,6 +64,7 @@ const MAX_KOP = 120;
 const RE_ALGEMEEN = /^(?:[IVX]+\.?\s+)?(?:algemeen(?:\s+deel)?|algemene\s+toelichting)$/i;
 const RE_ARTIKELSGEWIJS = /^(?:[IVX]+\.?\s+)?(?:artikelsgewijs|artikelsgewijze\s+toelichting|artikelgewijze\s+toelichting|artikelsgewijze\s+toelichting\s+.*)$/i;
 const RE_TOELICHTING = /^toelichting$/i;
+const RE_EERSTE_ALGEMENE_KOP = /^1\.?\s+(?:Algemeen|Inleiding)\b/;
 // Een artikelkop begint met een hoofdletter ("Artikel"/"ARTIKEL"), heeft een
 // arabisch nummer (met letter) of een romeins hoofdletternummer, en wordt
 // gevolgd door het regeleinde, een punt, een opschrift met hoofdletter, een
@@ -170,6 +171,14 @@ function structureerSegment(
       huidigArtikel = null;
       open({ deel, type: "kop", label: PARLEMENTAIR_DEEL_LABEL[deel], tekst: ruw });
       continue;
+    }
+
+    // 1a. Zonder eigen deelkop (alleen in de inhoudsopgave, zoals de nota van
+    //     toelichting in het Staatsblad) opent de eerste genummerde kop
+    //     "1. Algemeen" of "1. Inleiding" het algemeen deel.
+    if (kop && !isAmendement && deel === "overig" && RE_EERSTE_ALGEMENE_KOP.test(regel)) {
+      deel = "algemeen_deel";
+      huidigArtikel = null;
     }
 
     // 1b. Wijzigingsonderdeel van een amendement: een losse romeinse regel
