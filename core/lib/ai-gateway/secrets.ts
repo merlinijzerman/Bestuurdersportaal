@@ -14,9 +14,14 @@ export const SECRET_REFS: ReadonlySet<string> = new Set([
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "MISTRAL_API_KEY",
+  "AZURE_OPENAI_API_KEY",
 ]);
 
-export const ENDPOINT_REFS: ReadonlySet<string> = new Set(["OPENAI_BASE_URL", "MISTRAL_CHAT_URL"]);
+export const ENDPOINT_REFS: ReadonlySet<string> = new Set([
+  "OPENAI_BASE_URL",
+  "MISTRAL_CHAT_URL",
+  "AZURE_OPENAI_BASE_URL",
+]);
 
 export interface Credentials {
   apiKey: string;
@@ -50,6 +55,16 @@ export function resolveerCredentials(
       }
       if (url.protocol !== "https:") {
         throw new GatewayFout("configuratie", "endpoint_geen_https");
+      }
+      if (refs.endpointRef === "AZURE_OPENAI_BASE_URL") {
+        const azureHost = url.hostname.endsWith(".openai.azure.com") || url.hostname.endsWith(".services.ai.azure.com");
+        if (!azureHost) throw new GatewayFout("configuratie", "azure_openai_endpoint_host_ongeldig");
+        if (url.username || url.password || url.port || url.search || url.hash) {
+          throw new GatewayFout("configuratie", "azure_openai_endpoint_vorm_ongeldig");
+        }
+        if (url.pathname.replace(/\/+$/, "") !== "/openai/v1") {
+          throw new GatewayFout("configuratie", "azure_openai_endpoint_pad_ongeldig");
+        }
       }
       uit.baseUrl = url.toString().replace(/\/+$/, "");
     }
