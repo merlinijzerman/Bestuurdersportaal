@@ -70,7 +70,10 @@ export function vindParagraafkoppen(rijen: Sectierij[]): Sectiekop[] {
   const uit: Sectiekop[] = [];
   for (const rij of rijen) {
     for (const match of rij.tekst.matchAll(PARAGRAAF_KOP)) {
-      uit.push({ nummer: match[1], titel: match[2].trim(), rij, positie: match.index + (match[0].startsWith("\n") ? 1 : 0) });
+      // De match kan meerdere regeleinden/inspringingen vóór "Paragraaf"
+      // bevatten. Begin exact bij de kop; anders herkent de afbakening de
+      // eigen kop ten onrechte als volgende sectie.
+      uit.push({ nummer: match[1], titel: match[2].trim(), rij, positie: match.index + match[0].indexOf("Paragraaf") });
     }
   }
   return uit;
