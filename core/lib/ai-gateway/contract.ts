@@ -15,7 +15,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type Provider = "anthropic" | "openai" | "mistral";
+export type Provider = "anthropic" | "openai" | "mistral" | "azure_openai";
 
 /** Configuratiegroep in de database (ai_gateway_private.fonds_configuratie). */
 export type Taakgroep = "generatie" | "hulp_sterk" | "concept" | "hulp_snel";

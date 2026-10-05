@@ -20,6 +20,7 @@ import { TAAKGROEP_VAN_TAAKTYPE, type GatewayContext, type GenereerVerzoek } fro
 import type { ConfigUitkomst, GatewayDb, GatewayLogRegel, PlatformProfielUitkomst } from "./config-db";
 import type { AdapterResultaat, AdapterVerzoek, ProviderAdapter } from "./adapters/types";
 import { maakUsage } from "./adapters/types";
+import type { Provider } from "./contract";
 
 const FONDS_A = "a1111111-1111-1111-1111-1111111111a1";
 const FONDS_B = "a2222222-2222-2222-2222-2222222222a2";
@@ -70,7 +71,7 @@ function db(over: Partial<GatewayDb> & { logboek?: GatewayLogRegel[] } = {}): Ga
         profielId: `platform-${provider}`,
         profielVersie: 1,
         provider,
-        secretRef: provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "openai" ? "OPENAI_API_KEY" : "MISTRAL_API_KEY",
+        secretRef: secretRefVoorProvider(provider),
         endpointRef: null,
       })),
     schrijfLog:
@@ -79,6 +80,19 @@ function db(over: Partial<GatewayDb> & { logboek?: GatewayLogRegel[] } = {}): Ga
         logboek.push(regel);
       }),
   };
+}
+
+function secretRefVoorProvider(provider: Provider): string {
+  switch (provider) {
+    case "anthropic":
+      return "ANTHROPIC_API_KEY";
+    case "openai":
+      return "OPENAI_API_KEY";
+    case "mistral":
+      return "MISTRAL_API_KEY";
+    case "azure_openai":
+      return "AZURE_OPENAI_API_KEY";
+  }
 }
 
 function adapter(over: Partial<ProviderAdapter> & { calls?: AdapterVerzoek[] } = {}): ProviderAdapter & { calls: AdapterVerzoek[] } {
@@ -120,7 +134,12 @@ function adapter(over: Partial<ProviderAdapter> & { calls?: AdapterVerzoek[] } =
   };
 }
 
-const ENV = { ANTHROPIC_API_KEY: "sk-ant-test", OPENAI_API_KEY: "sk-oa-test" };
+const ENV = {
+  ANTHROPIC_API_KEY: "sk-ant-test",
+  OPENAI_API_KEY: "sk-oa-test",
+  AZURE_OPENAI_API_KEY: "azure-test",
+  AZURE_OPENAI_BASE_URL: "https://klant.openai.azure.com/openai/v1",
+};
 
 type TestDb = ReturnType<typeof db>;
 
@@ -168,6 +187,71 @@ test("provider en model komen uit fonds + taaktype; de call-site kiest niets", a
   assert.equal(r.profielId, "platform-anthropic");
   assert.equal(r.configVersie, 3);
   assert.deepEqual(d.poortAanroepen, ["anthropic:claude-opus-4-8"]);
+});
+
+test("klant-eigen Azure OpenAI resolveert alleen via het fondsprofiel en passeert de eigen poort", async () => {
+  const azureConfig: ConfigUitkomst = {
+    ...configA,
+    profielId: "klant-a-azure-openai",
+    eigenaarFondsId: FONDS_A,
+    provider: "azure_openai",
+    model: "klant-gpt-deployment",
+    secretRef: "AZURE_OPENAI_API_KEY",
+    endpointRef: "AZURE_OPENAI_BASE_URL",
+  };
+  const azureAdapter = { ...adapter(), provider: "azure_openai" as const };
+  const d = deps({
+    db: db({ leesConfig: async () => azureConfig }),
+    adapters: { azure_openai: azureAdapter },
+  });
+  const resultaat = await maakGateway(d).genereer(ctx(), verzoek());
+  assert.equal(resultaat.provider, "azure_openai");
+  assert.equal(resultaat.profielId, "klant-a-azure-openai");
+  assert.deepEqual(d.poortAanroepen, ["azure_openai:klant-gpt-deployment"]);
+  assert.equal(azureAdapter.calls.length, 1);
+  assert.equal(d.db.logboek.at(-1)?.provider, "azure_openai");
+});
+
+test("Azure OpenAI weigert platformgebruik, een platformprofiel en afwijkende secretreferenties vóór de poort", async () => {
+  const platform = deps();
+  let fout = await faalt(
+    maakGateway(platform).genereer(
+      ctx({ fondsId: null }),
+      verzoek({
+        taaktype: "aqlab_generatie",
+        modelOverride: { provider: "azure_openai", model: "klant-gpt-deployment" },
+      })
+    )
+  );
+  assert.equal(fout.reden, "azure_openai_platformtaak_niet_toegestaan");
+  assert.deepEqual(platform.poortAanroepen, []);
+
+  const basisAzure: ConfigUitkomst = {
+    ...configA,
+    profielId: "klant-a-azure-openai",
+    eigenaarFondsId: null,
+    provider: "azure_openai",
+    model: "klant-gpt-deployment",
+    secretRef: "AZURE_OPENAI_API_KEY",
+    endpointRef: "AZURE_OPENAI_BASE_URL",
+  };
+  const geenEigenaar = deps({ db: db({ leesConfig: async () => basisAzure }) });
+  fout = await faalt(maakGateway(geenEigenaar).genereer(ctx(), verzoek()));
+  assert.equal(fout.reden, "azure_openai_profiel_niet_van_fonds");
+  assert.deepEqual(geenEigenaar.poortAanroepen, []);
+
+  const verkeerdeRefs = deps({
+    db: db({
+      leesConfig: async () => ({
+        ...basisAzure,
+        eigenaarFondsId: FONDS_A,
+        secretRef: "OPENAI_API_KEY",
+      }),
+    }),
+  });
+  fout = await faalt(maakGateway(verkeerdeRefs).genereer(ctx(), verzoek()));
+  assert.equal(fout.reden, "azure_openai_referenties_ongeldig");
+  assert.deepEqual(verkeerdeRefs.poortAanroepen, []);
 });
 
 test("een modelOverride op een fondsgebonden taak wordt GEWEIGERD zonder call", async () => {
