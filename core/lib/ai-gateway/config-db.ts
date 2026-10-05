@@ -110,7 +110,7 @@ async function roep<T>(sql: string, args: unknown[]): Promise<T> {
 }
 
 function isProvider(w: unknown): w is Provider {
-  return w === "anthropic" || w === "openai" || w === "mistral";
+  return w === "anthropic" || w === "openai" || w === "mistral" || w === "azure_openai";
 }
 
 export const productieGatewayDb: GatewayDb = {
