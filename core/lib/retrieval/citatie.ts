@@ -96,6 +96,13 @@ export function bouwCitaties(
       w.wetsgeschiedenisSubtype
     );
     const juridischeRolLabel = juridischeRol ? ` [${juridischeRol.label}]` : "";
+    // Een termijnpassage kan midden in een artikel beginnen. Het gevalideerde
+    // indexlabel maakt dan het artikel zichtbaar voor het model, zonder een
+    // onbeperkte metadata-string als instructie in de bronkop op te nemen.
+    const artikelLabel = w.documenttype === "wetgeving" &&
+      /^Artikel (?:\d+(?:\.\d+)*[a-z]?)$/.test(bron.locator.structuurLabel ?? "")
+      ? ` [${bron.locator.structuurLabel}]`
+      : "";
 
     // R1.6 — is de treffer uitgebreid tot zijn structuur-unit, dan is DAT de
     // brontekst; bronlabel, locatie en fragment blijven op de treffer.
@@ -118,7 +125,7 @@ export function bouwCitaties(
           : " [aanvullend uit de bibliotheek]"
         : "";
 
-    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${juridischeRolLabel}${statusLabel}${herkomstLabel}${locatie ? ` (${locatie})` : ""}`;
+    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${juridischeRolLabel}${artikelLabel}${statusLabel}${herkomstLabel}${locatie ? ` (${locatie})` : ""}`;
     // H-10: elke bron in een eigen, met een onvoorspelbare sentinel afgebakend
     // blok. Alles tussen de openings- en sluittag is DATA, nooit instructie.
     const blok = `<bron s="${sentinel}" nr="${nr}">\n${kop}:\n${brontekst}\n</bron s="${sentinel}">`;
