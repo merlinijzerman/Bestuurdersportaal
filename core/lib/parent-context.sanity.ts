@@ -138,8 +138,9 @@ async function main() {
       sib("v", "d1", 10, "ver weg", "artikel", "Artikel 5"),
     ];
     const s = kiesSiblings(hit, doc).map((c) => c.id);
-    assert.deepEqual(s.sort(), ["a", "b", "h", "v"]); // alle Artikel 5, ongeacht afstand
+    assert.deepEqual(s.sort(), ["a", "b", "h"]);
     assert.ok(!s.includes("c"));
+    assert.ok(!s.includes("v"), "verre verwijzing met hetzelfde label mag niet meekomen");
   });
 
   check("tekst-chunk → venster ±1 op chunk_index", () => {
