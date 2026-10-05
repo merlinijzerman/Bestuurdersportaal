@@ -104,12 +104,100 @@ check("aangenomen amendement: wijziging en toelichting apart", () => {
   const u = structureerParlementairStuk(AMENDEMENT, "aangenomen_amendement");
   assert.deepEqual(kort(u), [
     "amendement_wijziging|tekst|-",
+    // #548: een losse romeinse regel is een eigen wijzigingsonderdeel.
+    "amendement_wijziging|kop|Wijzigingsonderdeel I",
     "amendement_toelichting|kop|Amendement — toelichting",
   ]);
   const toel = u.find((x) => x.deel === "amendement_toelichting");
   assert.ok(toel?.tekst.includes("verlengt de termijn"));
-  const wijz = u.find((x) => x.deel === "amendement_wijziging");
+  const wijz = u.find((x) => x.label === "Wijzigingsonderdeel I");
   assert.ok(wijz?.tekst.includes("‘zes jaar’"));
+});
+
+// #548 — Kamerstuk 36 067 nr. 90 (synthetische weergave van de alinea's zoals
+// de bronblokken ze leveren, plus de oude regelweergave): een afgebroken
+// verwijzing "artikel 102a, heeft …" is geen artikelkop.
+const AMENDEMENT_90_BLOKKEN = [
+  "I",
+  "",
+  "In artikel I, onderdeel QQQ, wordt na het voorgestelde artikel 150q een nieuwe paragraaf ingevoegd, luidende:",
+  "",
+  "§ 6b.7 Aanvullende maatregelen transitieperiode voor pensioenfondsen",
+  "",
+  "Artikel 150r. Opschorting individuele waardeoverdracht",
+  "",
+  "2. Het eerste lid, onderdeel a, is niet van toepassing indien het overdragende pensioenfonds bij de opdrachtaanvaarding, bedoeld in artikel 102a, heeft aangegeven geen gebruik te maken van de mogelijkheid tot waardeoverdracht als bedoeld in artikel 150m.",
+  "",
+  "II",
+  "",
+  "In artikel VII, onderdeel MMM, wordt na het voorgestelde artikel 145p een nieuwe paragraaf ingevoegd, luidende:",
+  "",
+  "Artikel 145q. Opschorting individuele waardeoverdracht",
+  "",
+  "3. Het eerste lid, onderdeel b, is niet van toepassing indien het ontvangende pensioenfonds bij de opdrachtaanvaarding, bedoeld in artikel 109a, heeft aangegeven geen gebruik te maken van de mogelijkheid tot waardeoverdracht als bedoeld in artikel 145l.",
+  "",
+  "Toelichting",
+  "",
+  "Dit amendement regelt een tijdelijke pauze in individuele waardeoverdrachten.",
+].join("\n");
+
+check("#548 kst 36067-90: echte koppen 150r en 145q, 102a/109a blijven verwijzing", () => {
+  const u = structureerParlementairStuk(AMENDEMENT_90_BLOKKEN, "aangenomen_amendement");
+  const artikelen = u.filter((x) => x.type === "artikel").map((x) => x.label);
+  assert.deepEqual(artikelen, ["Artikel 150r", "Artikel 145q"]);
+  assert.ok(u.find((x) => x.label === "Artikel 150r")?.tekst.includes("bedoeld in artikel 102a, heeft"));
+  assert.ok(u.find((x) => x.label === "Artikel 145q")?.tekst.includes("bedoeld in artikel 109a, heeft"));
+  // Wijzigingstekst en toelichting gescheiden en in bronvolgorde.
+  assert.deepEqual(kort(u), [
+    "amendement_wijziging|kop|Wijzigingsonderdeel I",
+    "amendement_wijziging|artikel|Artikel 150r",
+    "amendement_wijziging|kop|Wijzigingsonderdeel II",
+    "amendement_wijziging|artikel|Artikel 145q",
+    "amendement_toelichting|kop|Amendement — toelichting",
+  ]);
+  // Artikel 150r loopt niet door in onderdeel II.
+  assert.ok(!u.find((x) => x.label === "Artikel 150r")?.tekst.includes("onderdeel MMM"));
+});
+
+check("#548 oude regelweergave: kleine-letter 'artikel 102a, heeft' opent geen artikel", () => {
+  const regels = [
+    "Artikel 150r. Opschorting individuele waardeoverdracht",
+    "3. Het eerste lid, onderdeel b, is niet van toepassing indien het",
+    "ontvangende pensioenfonds bij de opdrachtaanvaarding, bedoeld in",
+    "artikel 102a, heeft aangegeven geen gebruik te maken van de",
+    "mogelijkheid tot waardeoverdracht als bedoeld in artikel 150m.",
+    "artikel cijfer 3 regelt de rest",
+  ].join("\n");
+  const u = structureerParlementairStuk(regels, "aangenomen_amendement");
+  assert.deepEqual(u.filter((x) => x.type === "artikel").map((x) => x.label), ["Artikel 150r"]);
+});
+
+check("#548 artikelkoppen: koppelkop en romeins blijven herkend", () => {
+  const t = [
+    "ARTIKELSGEWIJZE TOELICHTING",
+    "Artikel I, onderdeel A en artikel VII, onderdeel A",
+    "Tekst.",
+    "Artikel II",
+    "Tekst.",
+    "Artikel 5 Pensioenwet",
+    "Tekst.",
+  ].join("\n");
+  const u = structureerParlementairStuk(t, "memorie_van_toelichting");
+  assert.deepEqual(u.filter((x) => x.type === "artikel").map((x) => x.label), [
+    "Artikel I, onderdeel A",
+    "Artikel II",
+    "Artikel 5",
+  ]);
+});
+
+check("#548 'Hoofdstuk N Titel' zonder punt is een hoofdstukkop in het algemeen deel", () => {
+  const t = ["ALGEMEEN", "Hoofdstuk 3 Wettelijk kader", "Tekst.", "3.1 Waartoe strekt dit?", "Meer tekst."].join("\n");
+  const u = structureerParlementairStuk(t, "memorie_van_toelichting");
+  assert.deepEqual(kort(u), [
+    "algemeen_deel|kop|Algemeen deel",
+    "algemeen_deel|kop|Hoofdstuk 3",
+    "algemeen_deel|paragraaf|§3.1",
+  ]);
 });
 
 check("amendement: een eigen artikelkopregel wordt als artikel herkend", () => {

@@ -123,13 +123,15 @@ test("F4-context — elke bereikte lezing is geclassificeerd", () => {
 test("F4-context — de klassenverdeling per lezing is hard gepind", () => {
   // #493 V-1: +1 lezing (`vergelijk-productie.ts::documenten`, modelcontext +
   // configuratie) — de juridische rol per gekozen document; bewust geen evidence.
+  // #548: +2 lezingen (`document-sectie-ophalen.ts::documenten` en
+  // `::document_chunks`, beide evidence) — de volledige-sectieroute.
   const k = lezingenPerKlasse() as Record<string, string[]>;
-  assert.equal(lezingen().length, 56, "het aantal lezingen op het antwoordpad is gewijzigd");
-  assert.equal(k.evidence.length, 10, `evidence: ${k.evidence.join(", ")}`);
+  assert.equal(lezingen().length, 58, "het aantal lezingen op het antwoordpad is gewijzigd");
+  assert.equal(k.evidence.length, 12, `evidence: ${k.evidence.join(", ")}`);
   assert.equal(k.modelcontext.length, 27, `modelcontext: ${k.modelcontext.join(", ")}`);
   assert.equal(k.configuratie.length, 19, `configuratie: ${k.configuratie.join(", ")}`);
   assert.equal(k.audit.length, 3, `audit: ${k.audit.join(", ")}`);
-  assert.equal(Object.keys(LEZINGKLASSE).length, 56, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
+  assert.equal(Object.keys(LEZINGKLASSE).length, 58, "LEZINGKLASSE bevat regels voor lezingen die het antwoordpad niet meer doet");
 });
 
 test("F4-context — één tabel kan meerdere hoedanigheden hebben", () => {
@@ -163,6 +165,8 @@ test("F4-context — documentgebonden evidence loopt volledig door de retrievalk
   assert.deepEqual(viaKern, [
     "core/lib/rag.ts::document_chunks",
     "core/lib/rag.ts::documenten",
+    "core/lib/retrieval/document-sectie-ophalen.ts::document_chunks",
+    "core/lib/retrieval/document-sectie-ophalen.ts::documenten",
     "core/lib/retrieval/juridische-sectie-ophalen.ts::document_chunks",
     "core/lib/retrieval/juridische-sectie-ophalen.ts::documenten",
     "core/lib/retrieval/supabase-evidence.ts::decision_objects",

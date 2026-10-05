@@ -62,20 +62,31 @@ export interface GestructureerdTekstSegment {
 export function maakChunks(
   tekst: string,
   chunkGrootte = 800,
-  overlap = 100
+  overlap = 100,
+  // #548 — alinea-per-regeltekst (PDF-bronblokken, DOCX, nabewerkte OCR):
+  //  • er valt geen korte chunk weg (anders is een sectie niet volledig);
+  //  • zinnen/woordstukken van één alinea worden met een spatie samengevoegd,
+  //    niet met een witregel, zodat de opgeslagen tekst de alinea's behoudt;
+  //  • na de overlapwoorden volgt "\n" als de chunk midden in een alinea
+  //    begint en "\n\n" bij een nieuwe alinea. Zo kan de sectieroute de
+  //    overlap exact verwijderen en de alinea's letterlijk herstellen.
+  alineaModus = false
 ): string[] {
   // Stap 1: splits op paragraaf-grenzen.
   const alineas = tekst.split(/\n{2,}/).map((a) => a.trim()).filter(Boolean);
 
   // Stap 2: splits te grote alinea's verder op zinsgrenzen, en zinnen die
   // nog steeds te groot zijn op woordgrenzen. Resultaat: een lijst van
-  // "atomen" die elk binnen chunkGrootte passen.
-  const atomen: string[] = [];
+  // "atomen" die elk binnen chunkGrootte passen. `nieuweAlinea` = het atoom
+  // begint een alinea (alleen relevant in alineaModus).
+  const atomen: { tekst: string; nieuweAlinea: boolean }[] = [];
   for (const alinea of alineas) {
     if (alinea.length <= chunkGrootte) {
-      atomen.push(alinea);
+      atomen.push({ tekst: alinea, nieuweAlinea: true });
     } else {
-      atomen.push(...splitsOpZinnen(alinea, chunkGrootte));
+      splitsOpZinnen(alinea, chunkGrootte).forEach((zin, i) =>
+        atomen.push({ tekst: zin, nieuweAlinea: i === 0 })
+      );
     }
   }
 
@@ -83,14 +94,16 @@ export function maakChunks(
   const chunks: string[] = [];
   let huidig = "";
   for (const atoom of atomen) {
-    if ((huidig + "\n\n" + atoom).length > chunkGrootte && huidig) {
+    const scheiding = alineaModus && !atoom.nieuweAlinea ? " " : "\n\n";
+    if ((huidig + scheiding + atoom.tekst).length > chunkGrootte && huidig) {
       chunks.push(huidig.trim());
       // Overlap: pak laatste paar woorden van de vorige chunk mee als context.
       const woorden = huidig.split(/\s+/);
       const overlapWoorden = Math.max(1, Math.floor(overlap / 6));
-      huidig = woorden.slice(-overlapWoorden).join(" ") + "\n\n" + atoom;
+      const naOverlap = alineaModus && !atoom.nieuweAlinea ? "\n" : "\n\n";
+      huidig = woorden.slice(-overlapWoorden).join(" ") + naOverlap + atoom.tekst;
     } else {
-      huidig = huidig ? huidig + "\n\n" + atoom : atoom;
+      huidig = huidig ? huidig + scheiding + atoom.tekst : atoom.tekst;
     }
   }
 
@@ -98,7 +111,8 @@ export function maakChunks(
     chunks.push(huidig.trim());
   }
 
-  return chunks.filter((c) => c.length > 50); // Filter te kleine chunks
+  const minLengte = alineaModus ? 0 : 50;
+  return chunks.filter((c) => c.length > minLengte); // Filter te kleine chunks
 }
 
 // Chunk per segment en tag elke chunk met de pagina/paragraaf van dat segment.
@@ -114,17 +128,47 @@ export function maakChunks(
 export function maakChunksUitSegmenten(
   segmenten: TekstSegment[],
   chunkGrootte = 800,
-  overlap = 100
+  overlap = 100,
+  opties: StructuurOpties = {}
 ): ChunkMetLocatie[] {
-  return maakChunksUitGestructureerdeSegmenten(
-    segmenten.map((seg) => ({
-      pagina: seg.pagina,
-      paragraaf: seg.paragraaf,
-      units: splitsInStructuurUnits(seg.tekst),
-    })),
-    chunkGrootte,
-    overlap
-  );
+  if (!opties.alineaPerRegel) {
+    return maakChunksUitGestructureerdeSegmenten(
+      segmenten.map((seg) => ({
+        pagina: seg.pagina,
+        paragraaf: seg.paragraaf,
+        units: splitsInStructuurUnits(seg.tekst),
+      })),
+      chunkGrootte,
+      overlap
+    );
+  }
+  // #548 — alinea-per-regeltekst: een unit die over een paginagrens doorloopt,
+  // houdt op de volgende pagina zijn type en label (anders verliest de
+  // vervolgpagina zijn sectie), en er valt geen korte tekst weg.
+  let vorige: Pick<StructuurUnit, "type" | "label"> | null = null;
+  const gestructureerd: GestructureerdTekstSegment[] = segmenten.map((seg) => {
+    const units = splitsInStructuurUnits(seg.tekst, opties);
+    const eerste = units[0];
+    if (eerste && eerste.type === "tekst" && eerste.label === null && vorige && vorige.type !== "tabel") {
+      units[0] = { ...eerste, type: vorige.type, label: vorige.label };
+    }
+    const laatste = units.at(-1);
+    if (laatste) vorige = { type: laatste.type, label: laatste.label };
+    return { pagina: seg.pagina, paragraaf: seg.paragraaf, units };
+  });
+  return maakChunksUitGestructureerdeSegmenten(gestructureerd, chunkGrootte, overlap, true);
+}
+
+/** #548 — opties voor de structuurherkenning; leeg = gedeeld (fonds)gedrag. */
+export interface StructuurOpties {
+  /**
+   * De tekst staat alinea per regel (PDF-bronblokken, DOCX, nabewerkte OCR),
+   * dus een
+   * korte losse regel is werkelijk een kop. Staat koppen toe die eindigen op
+   * een vraagteken en "Hoofdstuk N Titel" zonder punt, en weigert genummerde
+   * "koppen" die op een dubbele punt, puntkomma of komma eindigen (lijstitems).
+   */
+  alineaPerRegel?: boolean;
 }
 
 /**
@@ -135,12 +179,13 @@ export function maakChunksUitSegmenten(
 export function maakChunksUitGestructureerdeSegmenten(
   segmenten: GestructureerdTekstSegment[],
   chunkGrootte = 800,
-  overlap = 100
+  overlap = 100,
+  alineaModus = false
 ): ChunkMetLocatie[] {
   const result: ChunkMetLocatie[] = [];
   for (const seg of segmenten) {
     for (const unit of seg.units) {
-      for (const tekst of chunkUnit(unit, chunkGrootte, overlap)) {
+      for (const tekst of chunkUnit(unit, chunkGrootte, overlap, alineaModus)) {
         result.push({
           tekst,
           pagina: seg.pagina,
@@ -161,7 +206,8 @@ export function maakChunksUitGestructureerdeSegmenten(
 function chunkUnit(
   unit: StructuurUnit,
   chunkGrootte: number,
-  overlap: number
+  overlap: number,
+  alineaModus = false
 ): string[] {
   const tekst = unit.tekst.trim();
   if (!tekst) return [];
@@ -175,9 +221,9 @@ function chunkUnit(
     // Structuur-units met een herkende grens houden we heel (geen 50-char-filter);
     // pure "tekst"-units volgen de bestaande filtering via maakChunks.
     if (unit.type !== "tekst") return [tekst];
-    return maakChunks(tekst, chunkGrootte, overlap);
+    return maakChunks(tekst, chunkGrootte, overlap, alineaModus);
   }
-  return maakChunks(tekst, chunkGrootte, overlap);
+  return maakChunks(tekst, chunkGrootte, overlap, alineaModus);
 }
 
 // ── R1.1 — structuurdetectie ─────────────────────────────────────
@@ -185,7 +231,10 @@ function chunkUnit(
 // begint bij een herkende structuurgrens; tussenliggende regels horen bij de
 // lopende unit. Conservatief afgesteld op Nederlandse bestuurs-/pensioendocumenten
 // om valse grenzen (en dus over-fragmentatie) te vermijden.
-export function splitsInStructuurUnits(tekst: string): StructuurUnit[] {
+export function splitsInStructuurUnits(
+  tekst: string,
+  opties: StructuurOpties = {}
+): StructuurUnit[] {
   const regels = tekst.split("\n");
   const units: StructuurUnit[] = [];
   let huidig: StructuurUnit | null = null;
@@ -193,7 +242,7 @@ export function splitsInStructuurUnits(tekst: string): StructuurUnit[] {
 
   for (const ruw of regels) {
     const regel = ruw;
-    const grens = detecteerGrens(regel.trim(), inDefinitieSectie);
+    const grens = detecteerGrens(regel.trim(), inDefinitieSectie, opties);
     // Een tabelregel die direct op een tabel-unit volgt, hoort bij die unit.
     const isVervolgTabel =
       grens?.type === "tabel" && huidig !== null && huidig.type === "tabel";
@@ -227,7 +276,8 @@ interface GrensTreffer {
 // prioriteit. Geeft null als de regel gewoon doorlopende tekst is.
 function detecteerGrens(
   regel: string,
-  inDefinitieSectie: boolean
+  inDefinitieSectie: boolean,
+  opties: StructuurOpties = {}
 ): GrensTreffer | null {
   if (!regel) return null;
 
@@ -263,6 +313,13 @@ function detecteerGrens(
   // sectiegrens is nodig om alle artikelen eronder gericht op te halen.
   const hoofdstuk = regel.match(/^Hoofdstuk\s+(\d+[a-z]?(?:\.\d+)*)\.\s+\p{Lu}[^\n]{0,148}$/u);
   if (hoofdstuk) return { type: "kop", label: `Hoofdstuk ${hoofdstuk[1]}`, sluitDefinitieSectie: true };
+  if (opties.alineaPerRegel) {
+    // Rapporten en memories schrijven "Hoofdstuk 3 Wettelijk kader" zonder punt.
+    const kaal = regel.match(/^Hoofdstuk\s+(\d+[a-z]?)\s+\p{Lu}[^\n]{0,148}$/u);
+    if (kaal && !/[.;:,]$/.test(regel)) {
+      return { type: "kop", label: `Hoofdstuk ${kaal[1]}`, sluitDefinitieSectie: true };
+    }
+  }
   const paragraaf = regel.match(/^Paragraaf\s+(\d+(?:\.\d+)*)\.\s+\p{Lu}[^\n]{0,148}$/u);
   if (paragraaf) return { type: "paragraaf", label: `Paragraaf ${paragraaf[1]}`, sluitDefinitieSectie: true };
 
@@ -278,7 +335,8 @@ function detecteerGrens(
   // Genummerde kop ("3 Beleid", "3.2.1 Risicohouding") — kort, begint met
   // hoofdletter na het nummer; geen doorlopende zin. Lengtegrens tegen valse hits.
   const genummerd = regel.match(/^(\d+(?:\.\d+){0,3})\.?\s+\p{Lu}[^\n]{0,118}$/u);
-  if (genummerd && !/[.!?]$/.test(regel)) {
+  const genummerdSlot = opties.alineaPerRegel ? /[.!;:,]$/ : /[.!?]$/;
+  if (genummerd && !genummerdSlot.test(regel)) {
     return { type: "paragraaf", label: genummerd[1], sluitDefinitieSectie: true };
   }
 
