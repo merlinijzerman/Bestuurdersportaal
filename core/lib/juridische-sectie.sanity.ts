@@ -13,7 +13,7 @@ import {
 const doc = "besluit";
 const rijen: Sectierij[] = [
   { id: "a", document_id: doc, chunk_index: 1, tekst: "Paragraaf 6.1. Waardeoverdracht klein pensioen\nArtikel 17e. Kleine aanspraken" },
-  { id: "b", document_id: doc, chunk_index: 2, tekst: "Artikel 17f. Oude tekst\nParagraaf 6.2. Individuele waardeoverdracht\nUitvoering van de Pensioenwet" },
+  { id: "b", document_id: doc, chunk_index: 2, tekst: "Artikel 17f. Oude tekst\n\nParagraaf 6.2. Individuele waardeoverdracht\nUitvoering van de Pensioenwet" },
   { id: "c", document_id: doc, chunk_index: 3, tekst: "Artikel 18. Verzoek opgave\nBinnen één maand vraagt de uitvoerder de opgave." },
   { id: "d", document_id: doc, chunk_index: 4, tekst: "Artikel 19. Opgave informatie\nBinnen twee maanden verstrekt hij de opgave." },
   { id: "e", document_id: doc, chunk_index: 5, tekst: "Artikel 28. Behandeling aanspraken\nDe aanspraken worden behandeld.\nHoofdstuk 6a. Bestuur en toezicht fonds\nAndere regels." },
@@ -22,6 +22,7 @@ const rijen: Sectierij[] = [
 const volledig = bepaalSectiefocus('Geef de hele Paragraaf 6.2 "Individuele waardeoverdracht" van het Besluit')!;
 const kop = kiesParagraafkop(volledig, rijen)!;
 assert.equal(kop.nummer, "6.2");
+assert.equal(rijen[1].tekst.slice(kop.positie, kop.positie + 9), "Paragraaf");
 const sectie = bakenParagraafAf(kop, rijen);
 assert.equal(sectie.volledig, true);
 assert.ok(sectie.tekst.includes("Artikel 18"));

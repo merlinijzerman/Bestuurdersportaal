@@ -8,7 +8,7 @@ const DOC = "d0000000-0000-4000-8000-000000000062";
 const FONDS = "11111111-1111-4111-8111-111111111111";
 const HASH = "a".repeat(64);
 const tekst = [
-  "Artikel 17f. Vorige bepaling\nParagraaf 6.2. Individuele waardeoverdracht",
+  "Artikel 17f. Vorige bepaling\n\nParagraaf 6.2. Individuele waardeoverdracht",
   "Artikel 17g. Overgangsrecht\nBinnen zes maanden vraagt de deelnemer een opgave.",
   "Artikel 18. Verzoek opgave\nDe ontvangende uitvoerder vraagt binnen één maand een opgave.",
   "Artikel 19. Opgave\nDe overdragende uitvoerder verstrekt binnen twee maanden een opgave.",
