@@ -2,7 +2,7 @@
 
 **Status: voorstel, lokaal getest. Niets is op Preview of Productie uitgevoerd.** Elke stap hieronder — PR openen, merge naar `preview`, Preview-migratie, promotie naar `main`, Productiemigratie — vraagt een **afzonderlijk, expliciet akkoord** van de opdrachtgever. De HNSW-recall- en kwaliteitspoort van R1b blijft rood en staat los van deze borging; deze migratie activeert geen zoekroute.
 
-Wat de migratie doet: `document_chunks.document_id` en `.bibliotheek` NOT NULL; unique `documenten (id, bibliotheek)`; samengestelde FK `document_chunks (document_id, bibliotheek) → documenten (id, bibliotheek)` NO ACTION, DEFERRABLE INITIALLY DEFERRED. Geen wijziging aan RLS, grants, auth, zoek-RPC's, HNSW-indexen, triggers, vlaggen of app-code. Onderbouwing: `ZOEKPAD-R1B-B0-RAPPORT.md` §15–§19 (onderzoeksbranch `codex/r1b-b0-meting`).
+Wat de migratie doet: `document_chunks.document_id` en `.bibliotheek` NOT NULL; unique `documenten (id, bibliotheek)`; samengestelde FK `document_chunks (document_id, bibliotheek) → documenten (id, bibliotheek)` NO ACTION, DEFERRABLE INITIALLY DEFERRED. Geen wijziging aan RLS, grants, auth, zoek-RPC's, HNSW-indexen, triggers of vlaggen. De app kiest in zeven PostgREST-joins expliciet de bestaande `document_chunks_document_id_fkey`: zonder die hint maakt de tweede FK de relatie dubbelzinnig (`PGRST201`) en breken chat en zoeken. Onderbouwing: `ZOEKPAD-R1B-B0-RAPPORT.md` §15–§19 (onderzoeksbranch `codex/r1b-b0-meting`).
 
 ## 0. Bestanden en SHA-256
 
@@ -62,7 +62,7 @@ Plak `supabase/migrations/2026_10_06_r1b_chunks_bibliotheek_borging.sql` (hash g
 | 3 | `supabase/checks/2026_07_31_r1_structurele_gates.sql` | OK A1, A2, B, C, C2, E, F, G, H, D |
 | 4 | `supabase/checks/2026_08_20_v3_grants_volledig.sql` (psql vanuit de repo-root) | geen rechtenverschil door deze migratie (zij wijzigt geen grants) |
 | 5 | Driftmomentopname (ná) | gelijk aan vóór; anders verklaren vóór verdere stappen |
-| 6 | Functioneel (Preview): één herindexering via de beheerpagina en één fonds-herindexering | geen fout; chunks consistent (driftcheck `ok`) |
+| 6 | Functioneel (Preview): zoeken/chat met een bron, één herindexering via de beheerpagina en één fonds-herindexering | geen `PGRST201` of schrijffout; chunks consistent (driftcheck `ok`) |
 
 ## 5. Rollback
 
@@ -74,9 +74,9 @@ Plak `supabase/migrations/2026_10_06_r1b_chunks_bibliotheek_borging.sql` (hash g
 |---|---|---|
 | P1 | Commit en push van de branch, PR naar `preview` (`gh pr create --base preview`) | ja — opnieuw expliciet |
 | P2 | CI groen (incl. de nieuwe suite in `scripts/cross-tenant-ci.sh`) en review | — |
-| P3 | Preview: preflight (§2) → migratie (§3) → postcheck (§4) | ja |
-| P4 | Merge naar `preview` en Preview-deploy waarnemen | ja |
+| P3 | Merge naar `preview`; wacht op beide Preview-deployments en controleer dat de gepinde joins op het oude schema werken | ja |
+| P4 | Preview: preflight (§2) → migratie (§3) → postcheck (§4), inclusief zoeken/chat zonder `PGRST201` | ja |
 | P5 | Promotie `preview` → `main` met releasenotitie | ja |
 | P6 | Productie: preflight (§2, incl. hertelling) → migratie (§3) → postcheck (§4) | ja, afzonderlijk |
 
-De borging heeft geen app-code nodig en verandert geen gedrag van geldige paden; de volgorde migratie ↔ code-deploy is daardoor niet kritisch. Een eventuele fout in een niet-geïnventariseerd schrijfpad (een chunk zonder `document_id`, of een directe chunk-update die `bibliotheek` laat afwijken) komt na de migratie als 23502/23503 terug — dat is precies de bedoeling, maar vraagt bij P3/P6 een korte controle van de ingest- en herindexeerlogs.
+**De volgorde is nu kritisch:** eerst de appcode op Preview, daarna de Preview-migratie. De gepinde joins werken met één en twee FK's; de oude appcode faalt na de migratie met `PGRST201`. Bij een P4-fout is een app-redeploy geen vervanging voor het herstelplan: zet de constraint met het geteste rollbackscript terug voordat de oude appcode weer verkeer afhandelt. Een fout in een niet-geïnventariseerd schrijfpad (een chunk zonder `document_id`, of een directe chunk-update die `bibliotheek` laat afwijken) komt na de migratie als 23502/23503 terug — dat is precies de bedoeling, maar vraagt bij P4/P6 een korte controle van ingest- en herindexeerlogs.
