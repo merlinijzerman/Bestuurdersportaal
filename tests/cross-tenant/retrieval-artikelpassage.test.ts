@@ -400,7 +400,7 @@ function toelatingsRij(id: string, document_id: string, tekst: string, over: Rec
  * vastlegt als `{ soort, args, tabel }`. Drie opvragingen:
  *   documenten                       → de juridische documenten (opzoeking 1a),
  *   document_chunks (zonder embed)   → de opzoeking (1b),
- *   document_chunks (met documenten!inner) → de toelating; `toelating` krijgt de
+ *   document_chunks (met expliciete documenten-FK-join) → de toelating; `toelating` krijgt de
  *                                      id's uit `in("id", …)`.
  * `rpc` bestaat alleen om te bewijzen dat het spoor hem NIET meer aanroept.
  */
@@ -421,7 +421,7 @@ function nepSupabase(
       for (const m of ["select", "in", "or", "order", "limit", "eq", "textSearch"]) {
         builder[m] = (...args: unknown[]) => {
           log.push({ soort: m, args, tabel: soort });
-          if (m === "select" && String(args[0]).includes("documenten!inner")) soort = "toelating";
+          if (m === "select" && String(args[0]).includes("documenten!document_chunks_document_id_fkey!inner")) soort = "toelating";
           if (m === "in" && args[0] === "id" && soort === "toelating") ids = args[1] as string[];
           return builder;
         };
@@ -672,7 +672,7 @@ function postgrestNep(tabel: Tabelrij[], toegelaten: (ids: string[]) => string[]
       let limiet = Infinity;
       const builder: Record<string, unknown> = {};
       builder.select = (kolommen: string) => {
-        toelating = kolommen.includes("documenten!inner");
+        toelating = kolommen.includes("documenten!document_chunks_document_id_fkey!inner");
         return builder;
       };
       builder.order = () => builder;

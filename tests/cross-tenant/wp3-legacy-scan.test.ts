@@ -585,7 +585,7 @@ test("L4 — elke chunkleesweg naar model of gebruiker dwingt het scanbewijs af 
   assert.ok(naVerwerking.indexOf("filterOpScanbewijs") >= 0, "naVerwerking filtert op scanbewijs");
   assert.ok(naVerwerking.indexOf("filterOpScanbewijs") < naVerwerking.indexOf("rerankChunks("), "vóór de reranker");
   const dekking = rag.slice(rag.indexOf("export async function haalDocumentChunksMetDekking"), rag.indexOf("export async function haalDocumentChunks("));
-  assert.match(dekking, /documenten!inner\([^)]*bestand_hash, scan_resultaat\)/);
+  assert.match(dekking, /documenten!document_chunks_document_id_fkey!inner\([^)]*bestand_hash, scan_resultaat\)/);
   assert.equal((dekking.match(/= bewaakDekking\(/g) ?? []).length, 2, "beide returnpaden via de scanpoort");
   assert.match(rag, /function bewaakDekking[\s\S]{0,400}handhaafScanbewijs/);
   assert.match(rag, /const REFLECTIE_SELECT = [^;]*bestand_hash, scan_resultaat\)/);

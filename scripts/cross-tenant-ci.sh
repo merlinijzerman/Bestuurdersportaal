@@ -64,6 +64,12 @@ SQL_505="supabase/checks/2026_10_02_505_rls_initplan_tenantpariteit.sql"
 # #548 — atomische chunkvervanging onder echte RLS: eigen fonds wel, fonds B en
 # generiek (als tenant) niet, ongeldige set rolt volledig terug, anon geweigerd.
 SQL_548="supabase/checks/2026_10_05_548_chunks_vervangen_rls.sql"
+# R1b — integriteitsborging document_chunks.bibliotheek (I1b_nn): structuur
+# (unique, NOT NULL, FK deferred), foutieve chunk-updates geweigerd voor
+# fondsgebruiker én service_role, legitieme paden met 16-veldenpariteit, één
+# fysieke update per chunk bij een bibliotheekwissel, atomiciteit, negatieve
+# controle zonder borging.
+SQL_R1B_BORGING="supabase/checks/2026_10_06_r1b_chunks_bibliotheek_borging.sql"
 # R1 zoekpad (besluit 0218) — `zoek_chunks_begrensd`: pariteit met zoek_chunks
 # onder echte RLS (8 actoren × 11 scenario's, sectie-M-filtermatrix van #500,
 # negatieve controles via pg_temp-kopie, catalogus-pin, limietafwijzing P0R01,
@@ -425,6 +431,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_499"
 echo
 echo "-- #548 (fn_document_chunks_vervangen: RLS-grens fonds/generiek, atomisch, anon) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_548"
+echo
+echo "-- R1b borging (document_chunks.bibliotheek/document_id: FK deferred, NOT NULL, 1 update per chunk) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1B_BORGING"
 echo
 echo "-- #504 (curatie-datumvelden: klein + 1.000 chunks, denorm, audit, leegmaken) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_504"

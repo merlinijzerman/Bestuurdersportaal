@@ -75,7 +75,7 @@ export async function leesSupabaseVersies(
   const supabase = await createServerSupabase();
   let query = supabase
     .from("document_chunks")
-    .select("id, document_id, indexering_versie, documenten!inner(id, fonds_id, bibliotheek, bestand_hash, documentdatum, scan_resultaat)")
+    .select("id, document_id, indexering_versie, documenten!document_chunks_document_id_fkey!inner(id, fonds_id, bibliotheek, bestand_hash, documentdatum, scan_resultaat)")
     .in("id", [...perChunk.keys()]);
   if (signal) query = query.abortSignal(signal);
   const { data, error } = await query;
