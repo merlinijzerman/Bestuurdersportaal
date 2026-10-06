@@ -184,6 +184,7 @@ import { rolHeeftCapability } from "@/core/lib/capabilities";
 import {
   bouwAnalyseplan,
   formatteerAnalyseplan,
+  heeftExplicieteKamerstukverwijzing,
   resolveerGenoemdDocument,
   routeerVraag,
   type Vraagroute,
@@ -1336,7 +1337,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // als precies één actief/geïndexeerd/toegankelijk document onder RLS past.
     // Bij meerdere kandidaten vragen we gericht te kiezen; nooit gokken.
     if (
-      vraagrouterVlaggen.routerV2 &&
+      (vraagrouterVlaggen.routerV2 || heeftExplicieteKamerstukverwijzing(effectieveVraag)) &&
       gevraagdeScopeIds.length === 0 &&
       !agendapuntModusActief
     ) {
