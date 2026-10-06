@@ -2,6 +2,8 @@
 // PDF-index kan de kop aan het vorige artikel hebben geplakt; daarom lezen we
 // de tekst zelf en vertrouwen we niet uitsluitend op structuur_label.
 
+import { zonderOverlap } from "./document-sectie";
+
 export interface Sectiefocus {
   nummer: string | null;
   vraag: string;
@@ -14,6 +16,8 @@ export interface Sectierij {
   chunk_index: number;
   tekst: string;
   structuur_label?: string | null;
+  structuur_type?: string | null;
+  pagina?: number | null;
 }
 
 export interface Sectiekop {
@@ -110,7 +114,6 @@ export function bakenParagraafAf(kop: Sectiekop, rijen: Sectierij[]): Afgebakend
   const geordend = [...rijen]
     .filter((r) => r.document_id === kop.rij.document_id && r.chunk_index >= kop.rij.chunk_index)
     .sort((a, b) => a.chunk_index - b.chunk_index);
-  const delen: string[] = [];
   const gekozen: Sectierij[] = [];
   let einde = false;
   let onderbroken = false;
@@ -135,19 +138,26 @@ export function bakenParagraafAf(kop: Sectiekop, rijen: Sectierij[]): Afgebakend
       : volgende ? volgende.index : null;
     const afgebakend = (grens === null ? stuk : stuk.slice(0, grens)).trim();
     gekozen.push({ ...rij, tekst: afgebakend });
-    delen.push(afgebakend);
     if (grens !== null) { einde = true; break; }
   }
-  // Lange artikelen zijn met overlap in meerdere chunks verdeeld. Neem die
-  // overlap één keer op, zodat een schone bron ook echt letterlijk leesbaar is.
+  // De gedeelde lengte-chunker zet overlapwoorden vóór een regeleinde in de
+  // volgende chunk. Vergelijk woorden (niet ruwe tekens): in de vorige chunk
+  // kunnen die woorden nog over meerdere bronalinea's verdeeld staan.
   let tekst = "";
-  for (const deel of delen.filter(Boolean)) {
+  for (let i = 0; i < gekozen.length; i++) {
+    const deel = gekozen[i].tekst.trim();
+    if (!deel) continue;
     if (!tekst) { tekst = deel; continue; }
-    let overlap = 0;
-    for (let n = Math.min(300, tekst.length, deel.length); n >= 40; n--) {
-      if (tekst.endsWith(deel.slice(0, n))) { overlap = n; break; }
-    }
-    tekst += overlap ? deel.slice(overlap) : `\n\n${deel}`;
+    const vorige = gekozen[i - 1];
+    const huidige = gekozen[i];
+    const zelfdeUnit = vorige &&
+      (vorige.pagina == null || huidige.pagina == null || vorige.pagina === huidige.pagina) &&
+      (vorige.structuur_label == null || huidige.structuur_label == null || vorige.structuur_label === huidige.structuur_label) &&
+      (vorige.structuur_type == null || huidige.structuur_type == null || vorige.structuur_type === huidige.structuur_type);
+    const overlap = zelfdeUnit ? zonderOverlap(vorige.tekst, deel) : null;
+    tekst += overlap
+      ? `${overlap.vervolgAlinea ? " " : "\n\n"}${overlap.rest.trim()}`
+      : `\n\n${deel}`;
   }
   const extractiegaten = /\b(?:bedoeld in|op grond van|als bedoeld in)\s*,/i.test(tekst) ||
     /wetten\.nl\s*-\s*Regeling|\/afdrukken\s+\d+\/\d+/i.test(tekst);

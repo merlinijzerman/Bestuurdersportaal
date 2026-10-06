@@ -386,6 +386,21 @@ function titelTokens(titel: string): string[] {
     .filter((t) => t.length >= 4 && !/^20\d{2}$/.test(t) && !TITEL_STOP.has(t));
 }
 
+/** Dossier en stuknummer komen ook voor zonder de woorden "Kamerstukken II". */
+function kamerstukIdentiteit(tekst: string): { nummer: string; kamer: string | null } | null {
+  const gevonden = [...tekst.matchAll(/\b(\d{2})\s?(\d{3})\s*,?\s*nr\.?\s*(\d+[a-z]?)\b/gi)];
+  const nummers = [...tekst.matchAll(/\bnr\.?\s*(\d+[a-z]?)\b/gi)].map((m) => m[1].toLowerCase());
+  if (gevonden.length !== 1 || new Set(nummers).size !== 1) return null;
+  const match = gevonden[0];
+  const vooraf = tekst.slice(Math.max(0, match.index - 45), match.index);
+  const kamer = vooraf.match(/\bKamerstukken\s+(I{1,2})\b(?:\s+\d{4}\s*\/\s*\d{2,4})?\s*,?\s*$/i)?.[1].toUpperCase() ?? null;
+  return { nummer: `${match[1]}${match[2]}:${match[3].toLowerCase()}`, kamer };
+}
+
+export function heeftExplicieteKamerstukverwijzing(vraag: string): boolean {
+  return kamerstukIdentiteit(vraag) !== null;
+}
+
 /**
  * Matcht alleen letterlijke titeldelen die in de vraag voorkomen. Uniek binnen
  * de reeds onder RLS opgehaalde set is verplicht; bij twee Transitieplannen
@@ -395,6 +410,24 @@ export function resolveerGenoemdDocument(
   vraag: string,
   documenten: BenoembaarDocument[]
 ): GenoemdDocumentResultaat {
+  const kamerstuk = kamerstukIdentiteit(vraag);
+  if (kamerstuk) {
+    let exact = documenten.filter((doc) => {
+      const kandidaat = kamerstukIdentiteit(doc.titel);
+      return kandidaat?.nummer === kamerstuk.nummer &&
+        (!kamerstuk.kamer || !kandidaat.kamer || kandidaat.kamer === kamerstuk.kamer);
+    });
+    // Dezelfde dossier/stukcombinatie kan in Kamerstukken I en II voorkomen.
+    // Een uitdrukkelijk gevraagd amendement mag dan alleen naar de kandidaat
+    // met die documentsoort leiden; bij meer dan één blijft het dubbelzinnig.
+    if (exact.length > 1 && /\bamendement\b/i.test(vraag)) {
+      const amendementen = exact.filter((doc) => /\bamendement\b/i.test(doc.titel));
+      if (amendementen.length > 0) exact = amendementen;
+    }
+    if (exact.length === 1) return { status: "eenduidig", document: exact[0] };
+    if (exact.length > 1) return { status: "meerdere", kandidaten: exact.slice(0, 5) };
+    return { status: "geen" };
+  }
   const q = normaliseer(vraag).replace(/[^a-z0-9]+/g, " ");
   const kandidaten = documenten.filter((doc) => {
     const titel = normaliseer(doc.titel).replace(/[^a-z0-9]+/g, " ");
