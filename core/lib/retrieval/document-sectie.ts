@@ -61,6 +61,8 @@ export type SectieReden =
   | "ocr"
   | "onderbroken"
   | "geen_kop"
+  | "einde_onzeker"
+  | "structuur_onzeker"
   | "te_groot";
 
 export interface Sectiebereik {
@@ -263,6 +265,58 @@ function hoortBij(info: Labelinfo, begin: Labelinfo, v: Sectieverzoek): boolean 
   return true; // artikelen binnen een paragraaf
 }
 
+/** "6a" → [6, "a"]; null als het geen arabisch (deel)nummer is. */
+function nummerDelen(n: string): [number, string][] | null {
+  const delen = n.toLowerCase().replace(/\.$/, "").split(".");
+  const uit: [number, string][] = [];
+  for (const d of delen) {
+    const m = /^(\d+)([a-z]{0,2})$/.exec(d);
+    if (!m) return null;
+    uit.push([Number(m[1]), m[2]]);
+  }
+  return uit;
+}
+
+/**
+ * Komt nummer `n` in de documentvolgorde ná `ref`, op het niveau van `n`?
+ * "6a" na "6.2" (hoofdstuk 6a na paragraaf 6.2), "6.3" na "6.2", "7" na "6.2":
+ * ja. "6" na "6.2" (de ouder opnieuw) of "5" na "6.2" (terug): nee.
+ */
+function volgtNa(n: string, ref: string): boolean {
+  const a = nummerDelen(n);
+  const b = nummerDelen(ref);
+  if (!a || !b) return false;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i][0] !== b[i][0]) return a[i][0] > b[i][0];
+    if (a[i][1] !== b[i][1]) return a[i][1] > b[i][1];
+  }
+  return false;
+}
+
+/**
+ * Is de chunk ná de sectie een aantoonbare sectiegrens? Alleen een kop op
+ * hetzelfde of een hoger niveau die in de documentvolgorde ná de sectie komt,
+ * een ander deel of een andere (ongenummerde) kop. Een "kop" die terugspringt
+ * of van een ander soort is (een genummerde regel "5 …" midden in een artikel:
+ * een lidnummer) bewijst het einde niet; dan geen letterlijke weergave.
+ */
+function isAantoonbaarEinde(info: Labelinfo, v: Sectieverzoek): boolean {
+  if (info.soort === "deel" || info.soort === "kop") return true;
+  const n = info.nummer ?? "";
+  if (v.soort === "artikel") {
+    return info.soort === "artikel" || info.soort === "hoofdstuk" || info.soort === "paragraaf";
+  }
+  if (v.soort === "hoofdstuk") {
+    if (info.soort === "hoofdstuk" || info.soort === "genummerd" || info.soort === "paragraaf") {
+      return volgtNa(n.split(".")[0], v.nummer);
+    }
+    return false;
+  }
+  if (info.soort === "hoofdstuk") return volgtNa(n, v.nummer);
+  if (info.soort === "paragraaf" || info.soort === "genummerd") return volgtNa(n, v.nummer);
+  return false;
+}
+
 /**
  * Bakent de sectie af op de metadata van ALLE chunks van het document
  * (geordend op chunk_index). Controleert ook de indexversie, de aaneen-
@@ -303,6 +357,12 @@ export function bakenDocumentsectieAf(
   if (opties.ocrToegepast) return { reden: "ocr", ...bereik };
   // Aaneengesloten 0..n-1: er ontbreekt geen chunk (bv. door een filter).
   if (geordend.some((c, i) => c.chunk_index !== i)) return { reden: "onderbroken", ...bereik };
+  // Het einde moet aantoonbaar zijn: het einde van het document, of een kop
+  // die werkelijk een sectiegrens is. Versie en aaneengeslotenheid bewijzen
+  // dat niet.
+  if (eind + 1 < geordend.length && !isAantoonbaarEinde(infos[eind + 1], verzoek)) {
+    return { reden: "einde_onzeker", ...bereik };
+  }
   if (eind - eersteIdx + 1 > MAX_SECTIE_CHUNKS) return { reden: "te_groot", ...bereik };
   return { reden: "ok", ...bereik };
 }
@@ -348,11 +408,11 @@ export function stelSectieSamen(
   if (geordend.length !== verwacht || geordend.some((r, i) => r.chunk_index !== bereik.van! + i || typeof r.tekst !== "string")) {
     return { ...leeg, reden: "onderbroken" };
   }
-  // De eerste chunk moet met de kop zelf beginnen (niet met een vervolgregel).
+  // De eerste chunk moet met de kop zelf beginnen (niet met een vervolgregel
+  // of een verwijzing ergens in de regel).
   const info = ontleedLabel(geordend[0].structuur_label, geordend[0].structuur_type);
-  const eersteRegel = (geordend[0].tekst ?? "").trimStart().split("\n", 1)[0].toLowerCase();
-  const nummer = info.nummer ?? "";
-  if (!nummer || !eersteRegel.includes(nummer.toLowerCase())) return { ...leeg, reden: "geen_kop" };
+  const eersteRegel = (geordend[0].tekst ?? "").trimStart().split("\n", 1)[0];
+  if (!begintMetKop(eersteRegel, info)) return { ...leeg, reden: "geen_kop" };
 
   let tekst = "";
   for (let i = 0; i < geordend.length; i++) {
@@ -371,7 +431,74 @@ export function stelSectieSamen(
     tekst += (tekst ? scheiding : "") + stuk;
   }
   if (tekst.length > MAX_SECTIE_TEKENS) return { ...leeg, reden: "te_groot" };
+  // Geen niet-herkende kop binnen de sectie: staat er midden in de tekst een
+  // kop op hetzelfde of een hoger niveau ("… is van toepassing. Paragraaf 6.2.
+  // Individuele …"), dan is de opgeslagen structuur niet te vertrouwen en kan
+  // de sectie te vroeg beginnen of te laat eindigen.
+  if (bevatVreemdeKop(tekst, info)) return { ...leeg, reden: "structuur_onzeker" };
   return { ...leeg, reden: "ok", volledig: true, tekst };
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Begint de regel met de kop van dit label ("Paragraaf 6.2.", "§ 3.2", "3.2 Titel", "Artikel 150r")? */
+function begintMetKop(regel: string, info: Labelinfo): boolean {
+  const nummer = info.nummer;
+  if (!nummer) return false;
+  const n = escapeRegex(nummer);
+  const einde = "(?![\\p{L}\\p{N}]|\\.\\d)";
+  const vormen: Record<string, string> = {
+    artikel: `^artikel\\s+${n}${einde}`,
+    hoofdstuk: `^hoofdstuk\\s+${n}${einde}`,
+    paragraaf: `^(?:paragraaf\\s+|§\\s*)${n}${einde}`,
+    genummerd: `^${n}${einde}`,
+  };
+  const vorm = info.soort ? vormen[info.soort] : undefined;
+  return vorm !== undefined && new RegExp(vorm, "iu").test(regel.trim());
+}
+
+const KOPWOORDEN_HOGER: Record<string, string> = {
+  artikel: "Artikel|ARTIKEL|Paragraaf|Hoofdstuk|HOOFDSTUK|Afdeling|Titel",
+  paragraaf: "Paragraaf|Hoofdstuk|HOOFDSTUK|Afdeling|Titel",
+  genummerd: "Paragraaf|Hoofdstuk|HOOFDSTUK|Afdeling|Titel",
+  hoofdstuk: "Hoofdstuk|HOOFDSTUK",
+};
+
+/**
+ * Zoekt in de samengestelde sectietekst (behalve de eigen kop aan het begin)
+ * naar een kop op hetzelfde of een hoger niveau, of naar een gereconstrueerde
+ * inhoudsopgave (die is geen letterlijke brontekst).
+ */
+function bevatVreemdeKop(tekst: string, info: Labelinfo): boolean {
+  if (/(?:^|\n)Inhoudsopgave: /.test(tekst)) return true;
+  // Een losse deelkop ("II", "Toelichting", "Artikelsgewijze toelichting")
+  // midden in de sectie: een ander wijzigingsonderdeel of deel begint.
+  if (/\n(?:[IVXLC]{1,6}|Toelichting|TOELICHTING|Algemeen deel|ALGEMEEN|Artikelsgewijze toelichting|ARTIKELSGEWIJS)\n/.test(`${tekst}\n`)) {
+    return true;
+  }
+  const woorden = info.soort ? KOPWOORDEN_HOGER[info.soort] : undefined;
+  if (!woorden) return false;
+  // "Paragraaf 6.2. Individuele …", ook midden in een alinea na een zinseinde.
+  const kop = new RegExp(
+    `(^|\\n|[.;:\\]]\\s+)(?:${woorden})\\s+[\\dIVXLC]+[a-z]{0,2}(?:\\.\\d+[a-z]?)*\\.\\s+\\p{Lu}`,
+    "gu"
+  );
+  for (const m of tekst.matchAll(kop)) {
+    if ((m.index ?? 0) + m[1].length > 0) return true;
+  }
+  // Een meerledig genummerde kop aan een regelbegin ("2.4. (Voorwaardelijk) …")
+  // die niet bij deze sectie hoort.
+  if (info.soort !== "artikel" && info.nummer) {
+    const eigen = info.nummer;
+    for (const m of tekst.matchAll(/(?:^|\n)(\d+(?:\.\d+)+)\.?\s+[\p{Lu}(]/gu)) {
+      if ((m.index ?? 0) === 0) continue;
+      const n = m[1];
+      if (n !== eigen && !n.startsWith(`${eigen}.`)) return true;
+    }
+  }
+  return false;
 }
 
 // ── 4. Weergave ─────────────────────────────────────────────────────────────
@@ -384,6 +511,9 @@ const UITLEG: Record<Exclude<SectieReden, "ok">, string> = {
   ocr: "de tekst komt uit tekstherkenning (OCR) van een scan en is niet letterlijk te controleren",
   onderbroken: "er ontbreken passages tussen het begin en het einde",
   geen_kop: "het begin van de sectie is in de opgeslagen tekst niet eenduidig te vinden",
+  einde_onzeker: "het einde van de sectie is in de opgeslagen structuur niet aantoonbaar",
+  structuur_onzeker:
+    "in de opgeslagen tekst staat binnen de sectie een kop die niet als sectiegrens is herkend, waardoor begin of einde niet aantoonbaar juist is",
   te_groot: "de sectie is te lang om hier volledig en gecontroleerd te tonen",
 };
 

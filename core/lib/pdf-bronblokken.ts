@@ -16,8 +16,16 @@
 //  layout (regelafstand, inspringing, lettergrootte) en pas dáárna draait de
 //  structuurherkenning.
 //
-//  REIKWIJDTE. Alleen de generieke bibliotheek gebruikt dit (generieke-pdf-
-//  extractie.ts). De fondsroute houdt de gedeelde extractie ongewijzigd.
+//  REIKWIJDTE. De gedeelde PDF-extractie (document-extractie.ts) gebruikt dit
+//  voor fonds- én generieke documenten.
+//
+//  KOPPEN ZONDER EXTRA WITRUIMTE (#548-vervolg). In een wetten.nl-afdruk staat
+//  "Paragraaf 6.2. Individuele waardeoverdracht" vet, in dezelfde grootte en
+//  op gewone regelafstand tussen de lopende tekst. Het pdfjs-font per item
+//  (alleen binnen één pagina vergelijkbaar) maakt die kop zichtbaar: een
+//  fontwissel na een korte of afgesloten regel opent een nieuw blok. Hangende
+//  lidnummers ("5 | De …") horen bij hun lid; een kaal nummer in de paginaband
+//  is alleen een paginanummer als de hele regel marge is.
 //
 //  CONSERVATIEF. Woordafbreking wordt alleen hersteld bij "letter-" aan het
 //  regeleinde gevolgd door een kleine letter (en niet vóór een voegwoord als
@@ -38,6 +46,11 @@ export interface PdfTekstItem {
   y: number;
   fontSize: number;
   width: number;
+  /**
+   * Fontnaam zoals pdfjs hem levert (bv. "g_d0_f2"). Alleen binnen één pagina
+   * vergelijkbaar. Optioneel: zonder font valt de fontwissel-regel weg.
+   */
+  font?: string;
 }
 
 export interface PdfPaginaInvoer {
@@ -93,6 +106,8 @@ interface Regel {
   y: number;
   fs: number;
   cellen: Cel[];
+  /** Overheersend font van de regel (naar aantal tekens); null = onbekend. */
+  font: string | null;
 }
 
 /** Lettergrootte afgerond op 0,1 pt, voor modale bepalingen. */
@@ -200,9 +215,28 @@ function bouwRegels(items: PdfTekstItem[], diagnose: BronblokDiagnose): Regel[] 
     const opgeschoond = cellen
       .map((c) => ({ ...c, tekst: c.tekst.replace(/\s+/g, " ").trim() }))
       .filter((c) => c.tekst !== "" || c.voetnootNummer !== null);
-    if (opgeschoond.length > 0) regels.push({ y: groep.refY, fs, cellen: opgeschoond });
+    if (opgeschoond.length > 0) regels.push({ y: groep.refY, fs, cellen: opgeschoond, font: overheersendFont(groep.items) });
   }
   return regels;
+}
+
+/** Het font met de meeste tekens op de regel; null als items geen font dragen. */
+function overheersendFont(items: PdfTekstItem[]): string | null {
+  const telling = new Map<string, number>();
+  for (const i of items) {
+    if (!i.font) continue;
+    const n = i.str.replace(/\s+/g, "").length;
+    if (n > 0) telling.set(i.font, (telling.get(i.font) ?? 0) + n);
+  }
+  let beste: string | null = null;
+  let max = 0;
+  for (const [f, n] of telling) {
+    if (n > max || (n === max && beste !== null && f < beste)) {
+      beste = f;
+      max = n;
+    }
+  }
+  return beste;
 }
 
 // ── Paginamarge: kop- en voetregels ─────────────────────────────────────────
@@ -240,6 +274,16 @@ function isInhoudsopgaveRegel(regel: Regel, breedte: number): boolean {
   if (laatste.x < breedte * 0.7) return false;
   return /^\d{1,4}$/.test(laatste.tekst) || RE_BLZ_KOP.test(laatste.tekst);
 }
+
+// Een kort lid- of lijstnummer dat als eigen cel vóór de tekstkolom hangt:
+// "5", "17", "b.", "c)", "ii.", "IV". Geen datum of bedrag (te lang).
+const RE_HANGEND_NUMMER = /^(?:\d{1,3}[a-z]{0,2}|[a-z]{1,2}|[ivx]{1,5}|[IVX]{1,5})[.)°]?$/;
+
+// Expliciete kopvorm: "Artikel 17g. Overgangsrecht", "Paragraaf 6.2. Individuele
+// …", "Hoofdstuk 6a. Bestuur …", "2.1. Veroordelingen". Hoofdletterwoord +
+// nummer + hoofdletter erna; een verwijzing ("artikel 102a, heeft …") valt erbuiten.
+const RE_KOPBEGIN =
+  /^(?:(?:Hoofdstuk|HOOFDSTUK|Paragraaf|Afdeling|Titel|Artikel|ARTIKEL|Bijlage|BIJLAGE)\s+[\dIVXLC]+[a-z]{0,2}(?:\.\d+[a-z]?)*\.?|\d+(?:\.\d+)+\.?)\s+\p{Lu}/u;
 
 const RE_LIJSTBEGIN = /^(?:\d+(?:\.\d+)*\.?|[a-z]\.|[a-z]\)|[IVX]+\.?|§|•|–|-|Artikel\s+\S|Hoofdstuk\s+\S|Paragraaf\s+\S|ARTIKEL\s+\S)(?:\s|$)/;
 // Na "hoog- " volgt in een samentrekking een voegwoord ("hoog- en laag",
@@ -307,18 +351,37 @@ function bouwBlokken(
     }
   }
 
-  // Voorbereiding per regel: kantlijncel afsplitsen ("36 067 | Wijziging van
-  // …", "Nr. 90 | …": een cel ruim links van de hoofdtekstkolom op een regel
-  // die ook hoofdtekst bevat).
+  // Voorbereiding per regel:
+  //  • hangend lid-/lijstnummer samenvoegen ("5 | De ontvangende …",
+  //    "b. | de uitvoerder …"): een kort nummer links, met een tab naar de
+  //    tekstkolom, is geen tabelcel en geen kantlijn maar het begin van een
+  //    genummerd item. `tekstX` is de linkerkant van de tekst erna, zodat de
+  //    vervolgregels in die kolom niet als inspringing gelden;
+  //  • kantlijncel afsplitsen ("36 067 | Wijziging van …", "Nr. 90 | …": een
+  //    cel ruim links van de hoofdtekstkolom op een regel die ook hoofdtekst
+  //    bevat).
   const voorbereid = regels.map((regel) => {
     const cellen = regel.cellen;
+    if (
+      cellen.length === 2 &&
+      RE_HANGEND_NUMMER.test(cellen[0].tekst) &&
+      cellen[1].x - cellen[0].x <= 6 * regel.fs
+    ) {
+      const samen: Cel = {
+        x: cellen[0].x,
+        xEind: cellen[1].xEind,
+        tekst: `${cellen[0].tekst} ${cellen[1].tekst}`,
+        voetnootNummer: null,
+      };
+      return { cellen: [samen], kantlijn: null as string | null, tekstX: cellen[1].x as number | null };
+    }
     if (ctx.bodyLinks !== null && cellen.length >= 2 && cellen[0].x < ctx.bodyLinks - 3 * regel.fs) {
       const rest = cellen.slice(1);
       if (Math.abs(rest[0].x - ctx.bodyLinks) <= 3 * regel.fs) {
-        return { cellen: rest, kantlijn: cellen[0].tekst as string | null };
+        return { cellen: rest, kantlijn: cellen[0].tekst as string | null, tekstX: null as number | null };
       }
     }
-    return { cellen, kantlijn: null as string | null };
+    return { cellen, kantlijn: null as string | null, tekstX: null as number | null };
   });
   const isMeercellig = (i: number) =>
     i >= 0 && i < regels.length && !inToc.has(i) && !isVoetnootRegel(regels[i]) && voorbereid[i].cellen.length >= 2;
@@ -408,7 +471,7 @@ function bouwBlokken(
     sluitVoetnoot();
 
     // 3. Kantlijn (zie voorbereiding hierboven).
-    const { cellen, kantlijn } = voorbereid[index];
+    const { cellen, kantlijn, tekstX } = voorbereid[index];
     if (kantlijn) {
       sluitAlinea();
       sluitTabel();
@@ -447,10 +510,21 @@ function bouwBlokken(
       // een nieuw lijstitem ("b. …"); anders is het een hangende inspringing
       // van een opsommingsitem en loopt de alinea door.
       const ingesprongen = cel.x > alinea.links + 0.6 * regel.fs;
+      // Fontwissel na een korte of afgesloten regel: een kop die zich alleen
+      // typografisch onderscheidt (vet, zelfde grootte, geen extra witruimte),
+      // zoals "Paragraaf 6.2. Individuele waardeoverdracht" in een wetten.nl-
+      // afdruk, en de eerste regel ná zo'n kop. Binnen een volle regel (een
+      // cursieve zinsnede midden in een alinea) geldt dit niet.
+      const fontWissel = regel.font !== null && vorige.font !== null && regel.font !== vorige.font;
       const nieuw =
         afstand > pitch * 1.45 ||
         afstand < 0 ||
         Math.abs(regel.fs - vorige.fs) > 0.12 * vorige.fs ||
+        tekstX !== null ||
+        (fontWissel && (zinEinde || vorigeKort)) ||
+        // Twee koppen direct onder elkaar in hetzelfde font ("2. Overige
+        // antecedenten" / "2.1. Veroordelingen").
+        (vorigeKort && RE_KOPBEGIN.test(tekst)) ||
         (ingesprongen && (zinEinde || vorigeKort || lijstbegin)) ||
         (zinEinde && (vorigeKort || lijstbegin));
       if (!nieuw) {
@@ -461,7 +535,7 @@ function bouwBlokken(
       }
       sluitAlinea();
     }
-    alinea = { tekst, links: cel.x, laatste: regel };
+    alinea = { tekst, links: tekstX ?? cel.x, laatste: regel };
   });
   sluitAlles();
   return blokken;
@@ -527,12 +601,17 @@ export function bouwBronblokken(paginas: PdfPaginaInvoer[]): BronblokkenResultaa
       }
     }
   }
-  const isMargecel = (c: Cel) => {
+  // Drukvoet of herhaalde margecel: altijd weg. Een kaal paginanummer: alleen
+  // als de hele regel marge is (zie hieronder).
+  const isVasteMargecel = (c: Cel) => {
     const t = c.tekst.trim();
-    if (RE_PAGINANUMMER.test(t)) return true;
     if (DRUKVOET_PATRONEN.some((re) => re.test(t))) return true;
+    // Een kaal nummer telt nooit via herhaling ("#" komt op elke pagina voor:
+    // lidnummers), alleen via de paginanummerregel.
+    if (RE_PAGINANUMMER.test(t)) return false;
     return paginas.length >= 2 && (telling.get(normaliseerMarge(t))?.size ?? 0) >= drempel;
   };
+  const isMargecel = (c: Cel) => RE_PAGINANUMMER.test(c.tekst.trim()) || isVasteMargecel(c);
 
   const blokkenPerPagina: Bronblok[][] = perPagina.map(({ invoer, regels }) => {
     const zonderMarge: Regel[] = [];
@@ -541,8 +620,15 @@ export function bouwBronblokken(paginas: PdfPaginaInvoer[]): BronblokkenResultaa
         zonderMarge.push(r);
         continue;
       }
+      // Een kaal nummer is alleen een paginanummer als de hele regel uit
+      // marge-materiaal bestaat en er maar één kaal nummer op staat. Een
+      // lidnummer onderaan of bovenaan de pagina ("2 | Indien de overdragende
+      // …") en een tabelrij met alleen getallen ("104 | 1") blijven staan.
+      const alleenMarge =
+        r.cellen.every(isMargecel) && r.cellen.filter((c) => !isVasteMargecel(c)).length <= 1;
       const blijft = r.cellen.filter((c) => {
         if (!isMargecel(c)) return true;
+        if (!alleenMarge && !isVasteMargecel(c)) return true;
         diagnose.verwijderdeMargeregels++;
         const voorbeeld = normaliseerMarge(c.tekst);
         if (diagnose.margevoorbeelden.length < 10 && !diagnose.margevoorbeelden.includes(voorbeeld)) {
