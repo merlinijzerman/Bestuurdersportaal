@@ -1352,14 +1352,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       let titelsetCompleet = true;
       for (let vanaf = 0; vanaf < titelCap; vanaf += titelPagina) {
         let pagina;
+        let ruwePaginaLengte = 0;
         try {
           pagina = await leesModelcontext({
             context: evidenceContext, soort: "documentlabels", scope: { fondsId }, maxItems: titelPagina,
+            slaNietActueleDocumentlabelsOver: true,
             lees: async (signal) => {
               const { data, error } = await supabase.from("documenten")
                 .select("id, titel, fonds_id, bibliotheek, status, actief, geldig_vanaf, geldig_tot")
                 .not("actief", "is", false).eq("geindexeerd", true)
                 .order("id", { ascending: true }).range(vanaf, vanaf + titelPagina - 1).abortSignal(signal);
+              ruwePaginaLengte = data?.length ?? 0;
               return { data: (data ?? []).map((rij) => documentModelcontextRij(rij, {
                 fondsId: rij.fonds_id as string | null,
                 bibliotheek: rij.bibliotheek as string | null,
@@ -1387,7 +1390,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             d.fonds_id == null && d.bibliotheek === "generiek" ? "generiek" : "fonds"
           );
         }
-        if (pagina.length < titelPagina) break;
+        if (ruwePaginaLengte < titelPagina) break;
         if (vanaf + titelPagina >= titelCap) titelsetCompleet = false;
       }
       const naamResultaat = resolveerGenoemdDocument(
