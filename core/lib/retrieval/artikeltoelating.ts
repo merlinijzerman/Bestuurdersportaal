@@ -81,7 +81,7 @@ export const TOELATING_SELECT =
   "id, document_id, tekst, pagina, paragraaf, chunk_index, documentstatus, bronstatus, documentdatum, " +
   "geldig_vanaf, geldig_tot, procesinstantie_id, bronorganisatie, normgewicht, extern_url, " +
   "wettelijk_regime, bibliotheek, " +
-  "documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, volgende_review, actief)";
+  "documenten!document_chunks_document_id_fkey!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, volgende_review, actief)";
 
 /** Eén rij zoals de toelatingsopvraging haar teruggeeft. */
 export interface ToelatingsRij {
