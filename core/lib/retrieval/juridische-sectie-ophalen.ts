@@ -69,7 +69,7 @@ export async function haalJuridischeSectieVoorWeergave(opdracht: {
   if (!bronlink) return null;
 
   const { data: kopRijen, error: kopFout } = await opdracht.supabase.from("document_chunks")
-    .select("id,document_id,chunk_index,tekst")
+    .select("id,document_id,chunk_index,tekst,pagina,structuur_type,structuur_label")
     .eq("document_id", gekozen.id)
     .ilike("tekst", `%Paragraaf ${focus.nummer}.%`)
     .order("chunk_index", { ascending: true })
@@ -80,7 +80,7 @@ export async function haalJuridischeSectieVoorWeergave(opdracht: {
   if (!kop) return null;
 
   const { data: sectieRijen, error: sectieFout } = await opdracht.supabase.from("document_chunks")
-    .select("id,document_id,chunk_index,tekst,documentstatus,bronstatus,geldig_vanaf,geldig_tot")
+    .select("id,document_id,chunk_index,tekst,pagina,structuur_type,structuur_label,documentstatus,bronstatus,geldig_vanaf,geldig_tot")
     .eq("document_id", gekozen.id)
     .gte("chunk_index", kop.rij.chunk_index)
     .lte("chunk_index", kop.rij.chunk_index + 80)

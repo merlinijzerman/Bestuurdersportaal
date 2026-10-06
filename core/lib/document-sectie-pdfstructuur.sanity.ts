@@ -42,6 +42,7 @@ import {
   stelSectieSamen,
   type SectieChunk,
 } from "./retrieval/document-sectie";
+import { bakenParagraafAf, bepaalSectiefocus, kiesParagraafkop } from "./retrieval/juridische-sectie";
 
 let n = 0;
 async function check(naam: string, fn: () => void | Promise<void>) {
@@ -144,6 +145,18 @@ async function main() {
     const uit = geefDocumentsectieWeer(v, { id: "D", titel: "Besluit uitvoering Pensioenwet en Wvb" }, s);
     assert.match(uit, /^\*\*Paragraaf 6\.2\*\* — “Besluit uitvoering Pensioenwet en Wvb” \(pagina 23–27\)/);
     assert.ok(uit.endsWith("[Open het origineel](/api/documents/D/bestand#page=23)"));
+  });
+
+  await check("Besluit: juridische sectieroute verwijdert chunkoverlap zonder bronwoorden te dupliceren", () => {
+    const focus = bepaalSectiefocus(VRAAG_62)!;
+    const juridischRijen = besluitChunks.map((r) => ({ ...r, document_id: "d", tekst: r.tekst ?? "" }));
+    const kop = kiesParagraafkop(focus, juridischRijen)!;
+    const juridisch = bakenParagraafAf(kop, juridischRijen);
+    const gedeeld = sectie(VRAAG_62, besluitChunks).s;
+    assert.equal(juridisch.reden, "ok");
+    const woorden = (tekst: string) => tekst.replace(/\*\[pagina \d+\]\*/g, "").trim().split(/\s+/);
+    assert.deepEqual(woorden(juridisch.tekst), woorden(gedeeld.tekst));
+    assert.equal(juridisch.tekst.split("pensioendatum; en").length - 1, 1);
   });
 
   await check("Besluit: §6.1 en losse artikelen eindigen exact op de volgende kop", () => {
