@@ -155,6 +155,7 @@ interface PdfjsTekstItem {
   transform?: number[];
   width?: number;
   height?: number;
+  fontName?: string;
 }
 
 /** Leest per pagina de tekstitems met positie en lettergrootte (pdfjs). */
@@ -171,7 +172,7 @@ export async function leesPdfPaginas(buffer: Buffer): Promise<PdfPaginaInvoer[]>
       const [a, b, c, d, x, y] = ruw.transform;
       // Lettergrootte uit de transformatiematrix; `height` als terugval.
       const fontSize = Math.hypot(c, d) || Math.hypot(a, b) || ruw.height || 0;
-      items.push({ str: schoonTekst(ruw.str), x, y, fontSize, width: ruw.width ?? 0 });
+      items.push({ str: schoonTekst(ruw.str), x, y, fontSize, width: ruw.width ?? 0, font: ruw.fontName });
     }
     paginas.push({ pagina: i, breedte: viewport.width, hoogte: viewport.height, items });
   }

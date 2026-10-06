@@ -161,3 +161,56 @@ De bestaande juridische paragraafroute (wetgeving met BWB-link) heeft voorrang. 
 - **Fondsdocumenten in `concept`** krijgen geen volledige-sectieweergave (modus actueel). Ze gaan via de gewone RAG.
 - **OCR-limiet.** Drie generieke PDF's in Production zijn langer dan 200 pagina's. Hebben ze een tekstlaag, dan raakt de OCR-limiet ze niet. Ze zijn nog niet individueel gecontroleerd.
 - **Vóór/na-antwoorden** van gewone vragen met het model zijn niet lokaal gedraaid (kosten). Dat volgt in de Preview-pilot.
+
+## 6. Vervolg na de Productiepilot: koppen, lidnummers en aantoonbare grenzen (r3)
+
+**Aanleiding (5 oktober 2026).** Na de pilotherindexering stond in het *Besluit uitvoering Pensioenwet en Wvb* (64 p.) de kop `Paragraaf 6.2. Individuele waardeoverdracht` midden in chunk 222 (p. 23, `structuur_type=tabel`, label `NULL`). De vraag om de hele paragraaf 6.2 gaf een veilige weigering.
+
+**Oorzaken (gemeten op de echte PDF, p. 22–27).**
+
+| Oorzaak | Gevolg |
+|---|---|
+| In de wetten.nl-afdruk onderscheidt een kop zich alleen typografisch: vet, dezelfde 10,5 pt, gewone regelafstand. De bronblokken kenden geen font. | Kop, regel "Bepalingen ter uitvoering …", artikelkop en lid 1 werden één alinea. De structuurregex (kop = hele regel) greep niet. |
+| Lidnummers en onderdeelletters hangen als eigen cel links van de tekstkolom (`5 │ De ontvangende …`, `b. │ de uitvoerder …`). | Twee zulke regels dicht bij elkaar werden een "tabel"; korte lidregels werden een valse genummerde kop (`paragraaf 5`). |
+| Tekst ná een tabelregel werd aan de tabel-unit geplakt. | Lopende tekst (waaronder de §6.2-kop) kreeg `tabel` en label `NULL`. |
+| In de paginaband (bovenste 6 %, onderste 12 %) gold elk kaal getal als paginanummer. | 96 tekens tekstverlies in dit document: lidnummers zoals lid 2 van art. 18 (p. 23) en leden 1–2 van art. 27 (p. 27). |
+| Artikelnummers met twee letters (`1ca`, `14ba`) en paragraafnummers met een letter (`9b.5`) pasten niet in de kopregex. | Artikel 1c liep door tot in 1ca/1cb/1cc. |
+
+**Reparatie (gedeelde keten: fonds + generiek, PDF; DOCX profiteert van de structuur- en routewijzigingen).**
+
+1. `document-extractie.ts` geeft de pdfjs-fontnaam per tekstitem door; `pdf-bronblokken.ts` bepaalt per regel het overheersende font.
+2. Een **fontwissel na een korte of afgesloten regel** opent een nieuw blok. Ook **twee koppen direct onder elkaar** in hetzelfde font (`2. Overige …` / `2.1. Veroordelingen`) worden gesplitst. Een cursieve volle regel midden in een alinea splitst niet.
+3. Een **hangend lid-/lijstnummer** wordt met zijn tekst samengevoegd en opent een nieuwe alinea. Het wordt geen tabelcel en geen kantlijn.
+4. Een **kaal getal in de paginaband** is alleen een paginanummer als de hele regel marge is en er één kaal getal op staat.
+5. **Structuur** (`chunking.ts`, alleen bij alinea-per-regel): een tabel erft het label van de sectie waarin hij staat. Tekst na de tabel is weer gewone sectietekst. Artikel `\d+[a-z]{0,2}` en `Paragraaf 9b.5` worden als kop herkend.
+6. **Wetsgeschiedenis**: staat "Algemeen deel" alleen in de inhoudsopgave, dan opent de kop `1. Algemeen`/`1. Inleiding` het algemeen deel. (Zonder deze regel verloor de nota van toelichting `stb-2023-217` zijn §-labels, omdat de margebug de inhoudsopgaveregel eerder toevallig als kop liet staan.)
+7. **Indexversie `r3-bronblokken`.** Een r2-index kan die koppen en lidnummers missen. Daarom geldt r2 niet meer als bewijs van volledigheid; de route geeft `oude_index`.
+
+**Volledige sectie: begin, einde en inhoud aantoonbaar** (`document-sectie.ts`). Een versiestempel en een aaneengesloten `chunk_index` bewijzen geen juiste sectiegrens. Daarom gelden nu ook deze voorwaarden:
+
+- **Begin:** de eerste regel van de eerste chunk begint met de kop zelf (`^Paragraaf 6.2`, `^Artikel 150r`, `^§ 3.2`, `^3.2`). Een verwijzing ergens in de regel telt niet → `geen_kop`.
+- **Einde** (`einde_onzeker`): de chunk ná de sectie is het einde van het document, een ander deel, een ongenummerde kop, of een kop die in de documentvolgorde ná de sectie komt (`Hoofdstuk 6a` na `6.2`: ja; `Hoofdstuk 6` of een genummerde regel `5` na `6.2`: nee). Bij een artikel telt alleen een andere artikel-, paragraaf- of hoofdstukkop.
+- **Inhoud** (`structuur_onzeker`): in de samengestelde tekst staat geen kop op hetzelfde of een hoger niveau die niet als grens is herkend. Voorbeelden: `… is van toepassing. Paragraaf 6.2. Individuele …`, een losse `II`/`Toelichting`, een meerledig nummer `2.4. (…)` buiten de sectie, of een gereconstrueerde `Inhoudsopgave:` (die is geen letterlijke brontekst).
+
+**Meting** (lokaal, zonder DB/model; scripts en fixture in de PR):
+
+| Meting | main (`19d98d8`) | branch |
+|---|---|---|
+| Besluit: chunks / labels | 525 / 152 | 576 / 202 |
+| Besluit: `Paragraaf 6.2`-chunk | geen (kop in chunk 222, `tabel`/`NULL`) | 1 (chunk 229, p. 23, begint met de kop) |
+| Exacte vraag §6.2 | `niet_gevonden` (weigering) | `ok`, p. 23–27, art. 17g t/m 28, 19.096 tekens |
+| Letterlijk: tekens bron tussen kop §6.2 en kop H6a vs. sectie | – | 15.924 = 15.924; 0 ontbrekend, 0 extra |
+| Besluit: tekstverlies t.o.v. PDF-tekstitems | 96 tekens (lidnummers) | 0 |
+| Alle 199 artikel-/paragraaf-/hoofdstukverzoeken in het Besluit | – | 190 `ok`; 9 terechte weigeringen (zie onder) |
+| Corpus (24 wetsgeschiedenis-PDF's × 2 routes, 9 fondsfixtures, 6 overige PDF's) | 496 tabelchunks zonder label | 10; 0 valse artikelkoppen; §-labels behouden |
+| Verliesvrij (reconstructie uit chunks = bronblokken), 64 runs, 2.644 pagina's | – | 0 afwijkingen |
+| Amendement 36 067 nr. 90 | 150r p. 1, 145q p. 2 `ok` | identiek; 102a/109a blijven verwijzingen |
+
+**Waar letterlijke volledigheid nog niet gegarandeerd is.**
+
+- **PDF's zonder fontverschil tussen kop en tekst.** Dan blijft een kop zonder extra witruimte aan de tekst plakken. De route weigert dan (`niet_gevonden` / `structuur_onzeker` / `einde_onzeker`); ze toont geen verkeerd begrensde tekst. Zo'n kop wordt pas zichtbaar met de **expliciete kopvorm** (punt 2) of met extra witruimte.
+- **Hoofdstukken in het Besluit** (2–6) geven `meerdere`: de bijlage nummert opnieuw (`2. Overige …`). Hoofdstuk 10 en artikel 51a bevatten de boetetabellen. Die worden als inhoudsopgave gelezen (`(blz. N)` is daar boetecategorie N) en geven daarom `structuur_onzeker`. Hoofdstuk 11 en artikel 64 eindigen op een bijlagekop en geven `einde_onzeker`.
+- **OCR-documenten** krijgen nog steeds nooit een letterlijke sectie.
+- **Volgordebewijs** is per pagina de leesvolgorde van boven naar beneden. Echte meerkoloms opmaak wordt nog niet herkend (zie §5).
+
+**Na release nodig.** Een tweede pilotherindexering van dezelfde drie generieke documenten (naar `r3-bronblokken`). Tot dan geven ze `oude_index`. Daarna volgt de Productie-hertest van de exacte vraag en van gewone termijnvragen (zie PR).

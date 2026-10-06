@@ -145,15 +145,17 @@ export function maakChunksUitSegmenten(
   // #548 — alinea-per-regeltekst: een unit die over een paginagrens doorloopt,
   // houdt op de volgende pagina zijn type en label (anders verliest de
   // vervolgpagina zijn sectie), en er valt geen korte tekst weg.
+  // `vorige` is de laatste unit die geen tabel is: de sectie waarin een tabel
+  // en de tekst erna staan, ook over de paginagrens.
   let vorige: Pick<StructuurUnit, "type" | "label"> | null = null;
   const gestructureerd: GestructureerdTekstSegment[] = segmenten.map((seg) => {
-    const units = splitsInStructuurUnits(seg.tekst, opties);
+    const units = splitsInStructuurUnits(seg.tekst, opties, vorige);
     const eerste = units[0];
-    if (eerste && eerste.type === "tekst" && eerste.label === null && vorige && vorige.type !== "tabel") {
+    if (eerste && eerste.type === "tekst" && eerste.label === null && vorige) {
       units[0] = { ...eerste, type: vorige.type, label: vorige.label };
     }
-    const laatste = units.at(-1);
-    if (laatste) vorige = { type: laatste.type, label: laatste.label };
+    const laatsteSectie = units.filter((u) => u.type !== "tabel").at(-1);
+    if (laatsteSectie) vorige = { type: laatsteSectie.type, label: laatsteSectie.label };
     return { pagina: seg.pagina, paragraaf: seg.paragraaf, units };
   });
   return maakChunksUitGestructureerdeSegmenten(gestructureerd, chunkGrootte, overlap, true);
@@ -233,12 +235,18 @@ function chunkUnit(
 // om valse grenzen (en dus over-fragmentatie) te vermijden.
 export function splitsInStructuurUnits(
   tekst: string,
-  opties: StructuurOpties = {}
+  opties: StructuurOpties = {},
+  /** #548 — alleen alineaPerRegel: de sectie die van de vorige pagina doorloopt. */
+  doorlopend: Pick<StructuurUnit, "type" | "label"> | null = null
 ): StructuurUnit[] {
   const regels = tekst.split("\n");
   const units: StructuurUnit[] = [];
   let huidig: StructuurUnit | null = null;
   let inDefinitieSectie = false;
+  // #548 — de laatste sectie-unit (geen tabel). In alinea-per-regeltekst hoort
+  // een tabel bij de sectie waarin hij staat (label erven), en de lopende
+  // tekst ná de tabel is weer gewone sectietekst, geen tabel zonder label.
+  let sectie: Pick<StructuurUnit, "type" | "label"> | null = opties.alineaPerRegel ? doorlopend : null;
 
   for (const ruw of regels) {
     const regel = ruw;
@@ -246,15 +254,22 @@ export function splitsInStructuurUnits(
     // Een tabelregel die direct op een tabel-unit volgt, hoort bij die unit.
     const isVervolgTabel =
       grens?.type === "tabel" && huidig !== null && huidig.type === "tabel";
+    const naTabel =
+      opties.alineaPerRegel && !grens && huidig !== null && huidig.type === "tabel" && regel.trim() !== "";
     if (grens && !isVervolgTabel) {
       // Nieuwe structuur-unit; sluit de lopende af.
       if (huidig) units.push(huidig);
-      huidig = { type: grens.type, label: grens.label, tekst: regel };
+      const label = grens.type === "tabel" && opties.alineaPerRegel && grens.label === null ? sectie?.label ?? null : grens.label;
+      huidig = { type: grens.type, label, tekst: regel };
+    } else if (naTabel && huidig) {
+      units.push(huidig);
+      huidig = { type: sectie?.type ?? "tekst", label: sectie?.label ?? null, tekst: regel };
     } else if (huidig) {
       huidig.tekst += "\n" + regel;
     } else {
-      huidig = { type: "tekst", label: null, tekst: regel };
+      huidig = { type: sectie?.type ?? "tekst", label: sectie?.label ?? null, tekst: regel };
     }
+    if (huidig && huidig.type !== "tabel") sectie = { type: huidig.type, label: huidig.label };
     if (grens) {
       // Definitie-sectie-vlag: aan bij een definitie-kop, uit bij een hogere grens.
       if (grens.opentDefinitieSectie) inDefinitieSectie = true;
@@ -297,7 +312,8 @@ function detecteerGrens(
   // Een verwijzing als "artikel 21, eerste lid" begint in PDF-extractie soms
   // op een nieuwe regel. Alleen een kop met punt of een titel na het nummer
   // opent een nieuwe artikelunit.
-  const art = regel.match(/^(?:Artikel|ARTIKEL|artikel|Art\.|art\.)\s+(\d+(?:\.\d+)*[a-z]?)(?:\.(?!\d)\s*|\s+(?=[A-ZÀ-ÖØ-Þ]))/);
+  // #548 — ook twee letters na het nummer ("Artikel 1ca.", "Artikel 14ba.").
+  const art = regel.match(/^(?:Artikel|ARTIKEL|artikel|Art\.|art\.)\s+(\d+(?:\.\d+)*[a-z]{0,2})(?:\.(?!\d)\s*|\s+(?=[A-ZÀ-ÖØ-Þ]))/);
   if (art) {
     const opent = /\b(begripsbepalingen|begrippen|definities)\b/i.test(regel);
     return {
@@ -320,7 +336,8 @@ function detecteerGrens(
       return { type: "kop", label: `Hoofdstuk ${kaal[1]}`, sluitDefinitieSectie: true };
     }
   }
-  const paragraaf = regel.match(/^Paragraaf\s+(\d+(?:\.\d+)*)\.\s+\p{Lu}[^\n]{0,148}$/u);
+  // #548 — ook een letter in het nummer ("Paragraaf 9b.5. Interne …").
+  const paragraaf = regel.match(/^Paragraaf\s+(\d+[a-z]{0,2}(?:\.\d+[a-z]{0,2})*)\.\s+\p{Lu}[^\n]{0,148}$/u);
   if (paragraaf) return { type: "paragraaf", label: `Paragraaf ${paragraaf[1]}`, sluitDefinitieSectie: true };
 
   // Paragraaf §.
