@@ -19,6 +19,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { voerVolledigeRetrievalUit, foutcategorieVoor, type Spoor } from "@/core/lib/retrieval/orkestratie";
 import { bouwBronstatusDto } from "@/core/lib/retrieval/bronstatus-dto";
 import { juridischeAntwoordgrens } from "@/core/lib/retrieval/juridisch-beleid";
+import { brondekkingsinstructie } from "@/core/lib/retrieval/brondekking";
 import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, bewaakNaIO, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
@@ -4036,6 +4037,19 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       : null;
 
     // Bouw prompt op basis van modus, met persoonlijke context
+    // #548-R5 — antwoordgrens voor afwezigheidsclaims: alleen in de
+    // bibliotheekpaden, en alleen als er een juridische bron (wetgeving/
+    // wetsgeschiedenis) in de context staat. Bronafhankelijk, niet via de
+    // intentie (R2-A3). Een vaste instructie in de GEBRUIKERSprompt; de toon-
+    // systeemprompt blijft ongewijzigd. Geen juridische bron: leeg.
+    const brondekking = brondekkingsinstructie(
+      chunks.map((c) => ({
+        documenttype: c.documenten.documenttype,
+        wetsgeschiedenisSubtype: c.documenten.wetsgeschiedenis_subtype,
+      }))
+    );
+    const brondekkingBlok = brondekking ? `${brondekking}\n\n` : "";
+
     let systeemBlokken: TekstBlok[];
     let gebruikersPrompt: string;
     const tekstlozePdfDekking = tekstlozePdfMapMelding(
@@ -4301,7 +4315,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       );
       gebruikersPrompt =
         chunks.length > 0
-          ? `${portaalContextPrefix}BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\n${vraagBlok}`
+          ? `${portaalContextPrefix}BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\n${brondekkingBlok}${vraagBlok}`
           : `${portaalContextPrefix}Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\n${vraagBlok}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
     } else {
       // documenten (strikte modus)
@@ -4316,7 +4330,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       );
       gebruikersPrompt =
         chunks.length > 0
-          ? `${portaalContextPrefix}BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\n${vraagBlok}`
+          ? `${portaalContextPrefix}BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\n${brondekkingBlok}${vraagBlok}`
           : `${portaalContextPrefix}Er zijn geen relevante documenten gevonden voor deze vraag.\n\n${vraagBlok}\n\nGeef aan dat er geen relevante bronnen zijn gevonden en stel voor welk type document zou kunnen helpen.`;
     }
 
