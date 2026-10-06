@@ -18,6 +18,7 @@ import { haalSupabaseSiblings } from "../../core/lib/retrieval/supabase-parent";
 import { RetrievalAfgebroken } from "../../core/lib/retrieval/afbreken";
 import {
   fondsModelcontextRij,
+  generiekModelcontextRij,
   geverifieerdeModelcontextGeldigheid,
   leesModelcontext,
   ModelcontextWeigering,
@@ -307,6 +308,45 @@ test("#438 modelcontextreader — alleen documentlabels mogen historische vergel
       })
     )], error: null }),
   }), /modelcontext_niet_actueel/);
+});
+
+test("#548 titelzoekactie slaat historische labels over zonder scopecontrole te verzwakken", async () => {
+  const signal = new AbortController().signal;
+  const actueel = generiekModelcontextRij(
+    { id: "amendement-90", titel: "Aangenomen amendement 36 067 nr. 90" }, null,
+    geverifieerdeModelcontextGeldigheid({
+      status: "van_kracht", actief: true, geldigVanaf: null, geldigTot: null,
+    })
+  );
+  const historisch = generiekModelcontextRij(
+    { id: "oude-wet", titel: "Oude wet" }, null,
+    geverifieerdeModelcontextGeldigheid({
+      status: "historisch", actief: true, geldigVanaf: null, geldigTot: null,
+    })
+  );
+  const basis = {
+    context: { ...context, signal, bronbeleid: { bronsoorten: ["fonds", "generiek"] as RetrievalContext["bronbeleid"]["bronsoorten"] } },
+    soort: "documentlabels" as const,
+    scope: { fondsId: "fonds-a" }, maxItems: 3,
+    lees: async () => ({ data: [historisch, actueel], error: null }),
+  };
+  await assert.rejects(() => leesModelcontext(basis), /modelcontext_niet_actueel/);
+  const labels = await leesModelcontext({ ...basis, slaNietActueleDocumentlabelsOver: true });
+  assert.deepEqual(labels.map((d) => d.id), ["amendement-90"]);
+  await assert.rejects(() => leesModelcontext({
+    ...basis, scope: { fondsId: "fonds-a", privateRefs: ["amendement-90"] },
+    slaNietActueleDocumentlabelsOver: true,
+  }), /modelcontext_providerfout/);
+  await assert.rejects(() => leesModelcontext({
+    ...basis,
+    lees: async () => ({ data: [historisch, fondsModelcontextRij(
+      { id: "vreemd", titel: "Niet voor dit fonds" }, "fonds-b", null,
+      geverifieerdeModelcontextGeldigheid({
+        status: "van_kracht", actief: true, geldigVanaf: null, geldigTot: null,
+      })
+    )], error: null }),
+    slaNietActueleDocumentlabelsOver: true,
+  }), /modelcontext_buiten_scope/);
 });
 
 test("#368 modelcontextreader — ontbrekende servermetadata en private binding falen gesloten", async () => {
