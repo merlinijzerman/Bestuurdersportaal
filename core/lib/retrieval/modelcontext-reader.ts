@@ -248,6 +248,9 @@ export async function leesModelcontext<T>(opdracht: {
   scope: ModelcontextScope;
   maxItems: number;
   levenscyclusbeleid?: ModelcontextLevenscyclusbeleid;
+  // Alleen voor een brede, ongescopete titelzoekactie: historische of verlopen
+  // documenten mogen de hele toegankelijke titelset niet onbruikbaar maken.
+  slaNietActueleDocumentlabelsOver?: boolean;
   lees: (signal: AbortSignal) => PromiseLike<ModelcontextProviderResult<T>>;
 }): Promise<T[]> {
   const { context, scope } = opdracht;
@@ -257,6 +260,10 @@ export async function leesModelcontext<T>(opdracht: {
     !["actueel", "vergelijkbare_versies"].includes(levenscyclusbeleid) ||
     (levenscyclusbeleid === "vergelijkbare_versies" && opdracht.soort !== "documentlabels")
   ) throw new ModelcontextWeigering("providerfout");
+  if (opdracht.slaNietActueleDocumentlabelsOver &&
+    (opdracht.soort !== "documentlabels" || (scope.privateRefs?.length ?? 0) > 0)) {
+    throw new ModelcontextWeigering("providerfout");
+  }
   if (!Array.isArray(context.bronbeleid.bronsoorten)
     || context.bronbeleid.bronsoorten.some((soort) => !BRONSOORTEN.has(soort))) {
     throw new ModelcontextWeigering("providerfout");
@@ -281,6 +288,7 @@ export async function leesModelcontext<T>(opdracht: {
   if (rows.length > Math.max(0, Math.floor(opdracht.maxItems))) throw new ModelcontextWeigering("afgekapt");
   const refs = new Set(scope.privateRefs ?? []);
   const peildatum = context.verzoekStartOp.slice(0, 10);
+  const toegestaneRijen: ModelcontextRij<T>[] = [];
   for (const rij of rows) {
     if (!rij.scope || !rij.geldigheid || !("privateRef" in rij)) throw new ModelcontextWeigering("buiten_scope");
     switch (rij.scope.soort) {
@@ -308,8 +316,10 @@ export async function leesModelcontext<T>(opdracht: {
     if (refs.size > 0 && rij.privateRef == null) throw new ModelcontextWeigering("buiten_scope");
     if (rij.privateRef != null && !refs.has(rij.privateRef)) throw new ModelcontextWeigering("buiten_scope");
     if (!isToegestaanVolgensLevenscyclus(rij.geldigheid, peildatum, levenscyclusbeleid)) {
+      if (opdracht.slaNietActueleDocumentlabelsOver) continue;
       throw new ModelcontextWeigering("niet_actueel");
     }
+    toegestaneRijen.push(rij);
   }
-  return rows.map((rij) => rij.waarde);
+  return toegestaneRijen.map((rij) => rij.waarde);
 }
