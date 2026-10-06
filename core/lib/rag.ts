@@ -2548,7 +2548,7 @@ async function zoekViaFTS(
     pagina,
     paragraaf,
     chunk_index,
-    documenten!inner(titel, bron, bibliotheek, opslag_pad, normgewicht, fonds_id, documentstatus:status, bronstatus, volgende_review)
+    documenten!document_chunks_document_id_fkey!inner(titel, bron, bibliotheek, opslag_pad, normgewicht, fonds_id, documentstatus:status, bronstatus, volgende_review)
   `;
 
   if (zoekterm.length > 0) {
@@ -2948,7 +2948,7 @@ export async function haalDocumentChunksMetDekking(
       .from("document_chunks")
       .select(
         `id, document_id, tekst, pagina, paragraaf, chunk_index,
-         documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review, bestand_hash, scan_resultaat)`
+         documenten!document_chunks_document_id_fkey!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review, bestand_hash, scan_resultaat)`
       )
       .in("document_id", documentIds)
       .eq("documenten.actief", true)
@@ -3077,7 +3077,7 @@ export function planReflectieKandidatenPagina(van: number): { van: number; tot: 
   };
 }
 const REFLECTIE_SELECT = `id, document_id, tekst, pagina, paragraaf, chunk_index, indexering_versie,
-  documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status,
+  documenten!document_chunks_document_id_fkey!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status,
     bronstatus, documentdatum, geldig_tot, volgende_review, bestand_hash, scan_resultaat)`;
 
 export interface BevrorenChunksResultaat {

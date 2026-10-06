@@ -550,7 +550,11 @@ create table if not exists public.notulen_segmenten (
 -- document_metadata_log atomisch in één transactie).
 create table if not exists public.document_chunks (
   id            uuid primary key default uuid_generate_v4(),
-  document_id   uuid references public.documenten(id) on delete cascade,
+  -- R1b-borging (migratie 2026_10_06_r1b_chunks_bibliotheek_borging, authoritatief):
+  -- document_id en bibliotheek NOT NULL; samengestelde FK (document_id, bibliotheek)
+  -- → documenten (id, bibliotheek) NO ACTION DEFERRABLE INITIALLY DEFERRED
+  -- (unique documenten_id_bibliotheek_key). Hier niet volledig gespiegeld.
+  document_id   uuid not null references public.documenten(id) on delete cascade,
   chunk_index   int not null,
   tekst         text not null,
   pagina        int,
@@ -588,7 +592,7 @@ create table if not exists public.document_chunks (
   -- dekt de generiek-geldigheid al; deze 4 zijn de aanvullende bronsoort-velden.
   -- Index idx_chunks_bronsoort en de fn_chunk_denorm*-functies/triggers leven in
   -- de migratie (niet hier gespiegeld; schema.sql mag op dat punt achterlopen).
-  bibliotheek     text,
+  bibliotheek     text not null,  -- R1b: NOT NULL + samengestelde FK (zie document_id)
   bronorganisatie text,
   normgewicht     text,
   extern_url      text,

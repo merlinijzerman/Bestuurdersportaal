@@ -210,7 +210,7 @@ export async function controleerChunkPresentie(
   try {
     let query = supabase
       .from("document_chunks")
-      .select("document_id, documenten!inner(id, fonds_id, bibliotheek, status, bronstatus, actief, geldig_vanaf, geldig_tot, volgende_review)")
+      .select("document_id, documenten!document_chunks_document_id_fkey!inner(id, fonds_id, bibliotheek, status, bronstatus, actief, geldig_vanaf, geldig_tot, volgende_review)")
       .in("document_id", refs)
       .limit(MAX_PRESENTIE_RIJEN + 1);
     if (opdracht.context.signal) query = query.abortSignal(opdracht.context.signal);

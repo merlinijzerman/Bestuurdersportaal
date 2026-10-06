@@ -20,7 +20,7 @@ export async function haalSupabaseSiblings(opdracht: {
     .from("document_chunks")
     .select(
       `id, document_id, tekst, pagina, paragraaf, chunk_index, indexering_versie, structuur_type, structuur_label,
-       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, documentdatum, bestand_hash, volgende_review)`
+       documenten!document_chunks_document_id_fkey!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, documentdatum, bestand_hash, volgende_review)`
     )
     .in("document_id", [...opdracht.privateDocumentRefs])
     .eq("documenten.actief", true)

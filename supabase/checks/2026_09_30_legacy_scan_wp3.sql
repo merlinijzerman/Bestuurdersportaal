@@ -270,21 +270,57 @@ end $$;
 
 -- ── L6: negatieve controle — zonder insert-denorm is L4 rood ────────────────
 rollback to savepoint l4_voor;
+-- R1b-borging (2026_10_06_r1b_chunks_bibliotheek_borging.sql): de samengestelde
+-- FK document_chunks_document_bibliotheek_fkey is DEFERRABLE INITIALLY DEFERRED.
+-- De seed-inserts vóór de savepoint hebben daardoor nog openstaande FK-controles,
+-- en PostgreSQL weigert ALTER TABLE op een tabel met pending trigger events.
+-- Alleen DEZE constraint is op document_chunks uitstelbaar; hem bij naam direct
+-- toetsen handelt de controles af (de seed is geldig), daarna weer uitgesteld.
+set constraints document_chunks_document_bibliotheek_fkey immediate;
+set constraints document_chunks_document_bibliotheek_fkey deferred;
 alter table public.document_chunks disable trigger trg_chunk_denorm_before_insert;
-select pg_temp.herindexeer();
+-- Zelfde herindexering, maar `bibliotheek` expliciet gelijk aan het document:
+-- zonder denormtrigger zou de kolom NULL blijven en zou de insert al op NOT NULL
+-- (23502) stranden. Dan werd L6 rood door de borging in plaats van door de
+-- ontbrekende denormalisatie. Nu ontbreken uitsluitend de overige 15
+-- gedenormaliseerde velden — precies wat controleer_metadata moet vangen.
+create or replace function pg_temp.herindexeer_zonder_denorm() returns void language sql as $$
+  delete from public.document_chunks where document_id = '1e9ac000-0000-4000-8000-000000000001';
+  insert into public.document_chunks
+    (document_id, chunk_index, tekst, pagina, paragraaf, structuur_type, structuur_label,
+     context_prefix, prefix_model, indexering_versie, bibliotheek)
+  select '1e9ac000-0000-4000-8000-000000000001', c,
+         'Artikel ' || l.nr || '. Nieuwe passage over informatieverstrekking aan de deelnemer.',
+         c / 4 + 1, null, 'artikel', 'Artikel ' || l.nr, null, null, 'r1-structuur-contextueel', 'generiek'
+    from generate_series(0, 967) c
+    cross join lateral (select case c when 600 then '150d' when 601 then '150d' when 599 then '150c'
+                                      else (c + 1)::text end as nr) l;
+$$;
+-- Buiten een exception-blok: faalt de helper zelf, dan is de suite rood.
+select pg_temp.herindexeer_zonder_denorm();
 do $$
-declare v_rood boolean := false;
+declare v_rood boolean := false; v_melding text;
 begin
   begin
     perform pg_temp.controleer_metadata('L6');
   exception when others then
     v_rood := true;
+    v_melding := sqlerrm;
   end;
   if not v_rood then
     raise exception 'LEK L6: metadatacheck bleef groen zonder denormtrigger — de check bewijst niets.';
   end if;
-  raise notice 'OK L6: negatieve controle — zonder trg_chunk_denorm_before_insert is de metadatacheck rood.';
+  -- Het rood moet INHOUDELIJK zijn (ontbrekende documentmetadata), niet een
+  -- NOT NULL-/FK-fout of een andere afbreking.
+  if v_melding not like 'LEK L6: % van 968 chunks dragen de documentmetadata%' then
+    raise exception 'LEK L6: negatieve controle rood om de verkeerde reden: %', v_melding;
+  end if;
+  raise notice 'OK L6: negatieve controle — zonder trg_chunk_denorm_before_insert is de metadatacheck inhoudelijk rood (%).', v_melding;
 end $$;
+-- De L6-inserts staan weer als uitgestelde FK-controles open: afhandelen vóór de
+-- tweede ALTER TABLE (de rijen zijn geldig: bibliotheek = 'generiek').
+set constraints document_chunks_document_bibliotheek_fkey immediate;
+set constraints document_chunks_document_bibliotheek_fkey deferred;
 alter table public.document_chunks enable trigger trg_chunk_denorm_before_insert;
 
 rollback;
