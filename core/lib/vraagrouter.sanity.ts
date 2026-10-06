@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   bouwAnalyseplan,
+  heeftExplicieteKamerstukverwijzing,
   isModelRouterKandidaat,
   resolveerGenoemdDocument,
   routeerVraag,
@@ -141,6 +142,31 @@ assert.equal(
   "meerdere"
 );
 assert.equal(resolveerGenoemdDocument("Wat is de planning?", docs).status, "geen");
+
+// Een expliciete Kamerstukidentiteit wint van brede titelwoorden als
+// "aangenomen amendement" en "waardeoverdracht". Dit pad werkt ook wanneer
+// de optionele vraagrouter voor een fonds uit staat.
+const kamerstukken = [
+  { id: "a90", titel: "Aangenomen amendement — Kamerstukken II 2022/23, 36 067, nr. 90 — Opschorting individuele waardeoverdracht tijdens transitie" },
+  { id: "a91", titel: "Aangenomen amendement — Kamerstukken II 2022/23, 36 067, nr. 91 — Waardeoverdracht tijdens transitie" },
+  { id: "m90", titel: "Memorie van antwoord — Kamerstukken I 2022/23, 36 067, nr. 90" },
+];
+const amendementVraag = "Wat verandert aangenomen amendement 36 067 nr. 90 aan de opschorting?";
+assert.equal(heeftExplicieteKamerstukverwijzing(amendementVraag), true);
+assert.deepEqual(resolveerGenoemdDocument(amendementVraag, kamerstukken), {
+  status: "eenduidig", document: kamerstukken[0],
+});
+assert.equal(resolveerGenoemdDocument("Wat zegt 36 067 nr. 90?", kamerstukken).status, "meerdere");
+assert.deepEqual(resolveerGenoemdDocument(amendementVraag, kamerstukken.slice(0, 2)), {
+  status: "eenduidig", document: kamerstukken[0],
+});
+assert.deepEqual(resolveerGenoemdDocument("Wat verandert aangenomen amendement Kamerstukken II 2022/23, 36 067, nr. 90?", kamerstukken), {
+  status: "eenduidig", document: kamerstukken[0],
+});
+assert.equal(resolveerGenoemdDocument(amendementVraag, [...kamerstukken.slice(0, 2), { ...kamerstukken[0], id: "dubbel" }]).status, "meerdere");
+assert.equal(resolveerGenoemdDocument("Wat verandert Kamerstukken II 2022/23, 36 067, nr. 92?", kamerstukken).status, "geen");
+assert.equal(heeftExplicieteKamerstukverwijzing("Welke termijnen gelden voor individuele waardeoverdracht?"), false);
+assert.equal(heeftExplicieteKamerstukverwijzing("Vergelijk Kamerstukken II 2022/23, 36 067, nr. 90 met nr. 91"), false);
 
 // Modelantwoord kan geen scope of uitputtend bewijs scheppen.
 const ambigu = routeerVraag("Beoordeel dit stuk", {
