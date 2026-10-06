@@ -506,6 +506,7 @@ export type InlineMeldingType =
   | "onzekerheid_besluit"
   | "afgekapt"
   | "sharepoint_map_afgekapt"
+  | "sharepoint_map_tekstlaag_ontbreekt"
   // 30-07-2026 — de actualiteitsfilter nam ALLE treffers weg: er zijn wél
   // fondsstukken over dit onderwerp, maar ze zijn niet vastgesteld. Vervangt
   // 'geen_fondstreffer', want die melding leidt hier tot de omgekeerde conclusie.
@@ -539,6 +540,8 @@ const INLINE_MELDING_TEKST: Record<InlineMeldingType, string> = {
     "Dit antwoord is afgekapt op de lengtelimiet. Vraag om een vervolg of om het resterende deel.",
   sharepoint_map_afgekapt:
     "Deze SharePoint-map bevat meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt.",
+  sharepoint_map_tekstlaag_ontbreekt:
+    "Een PDF in de gekozen SharePoint-map bevat geen doorzoekbare tekst. Het antwoord dekt alleen de vermelde bronnen; over dit bestand kan niets worden geconcludeerd.",
   // Placeholder: de zichtbare tekst is afhankelijk van het AANTAL en wordt
   // opgebouwd door meldingNietVastgesteldeStukken(). Deze vaste variant wordt
   // alleen gebruikt als er (onverwacht) geen aantal bekend is.

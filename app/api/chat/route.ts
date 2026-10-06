@@ -41,6 +41,7 @@ import {
 } from "@/core/lib/microsoft-sharepoint-ai-context";
 import {
   telGebruikteSharePointDocumenten,
+  tekstlozePdfMapMelding,
   type SharePointMapSelectie,
 } from "@/core/lib/microsoft-sharepoint-map-ai-core";
 import { microsoftSharePointAiContextActief } from "@/core/lib/microsoft-sharepoint-ai-gate";
@@ -3666,7 +3667,11 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       if (sharepointMapSelectie && voltooid.truncatie) {
         // Ook een beurtbreed byte-/teken- of contextplafond betekent dat niet
         // alle geselecteerde mapinhoud in het antwoord terechtkwam.
-        sharepointMapSelectie = { ...sharepointMapSelectie, afgekapt: true };
+        sharepointMapSelectie = {
+          ...sharepointMapSelectie,
+          afgekapt: true,
+          afgekaptDoorLimiet: true,
+        };
       }
       chunks = [
         ...retrieval.chunksVoor(voltooid.geselecteerd),
@@ -3723,6 +3728,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           kandidaten: sharepointMapSelectie?.kandidatenBehandeld ?? 0,
           gebruikte_documenten: gebruikteSharePointDocumenten,
           afgekapt: sharepointMapSelectie?.afgekapt ?? false,
+          zonder_tekstlaag: sharepointMapSelectie?.zonderTekstlaag ?? 0,
         };
       }
       // Besluit 0138 (addendum op 0087) — één betekenisvolle retrieval-regel i.p.v.
@@ -3761,8 +3767,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ...(sharepointMapSelectie
             ? {
                 kandidaten: sharepointMapSelectie.kandidatenBehandeld,
-                gebruikte_documenten: sharepointMapSelectie.documenten.length,
+                gebruikte_documenten: gebruikteSharePointDocumenten,
                 afgekapt: sharepointMapSelectie.afgekapt,
+                zonder_tekstlaag: sharepointMapSelectie.zonderTekstlaag,
               }
             : {}),
           // 12-08-2026 — leg vast dat het gekozen stuk het ONDERWERP was en niet
@@ -4027,6 +4034,10 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
     // Bouw prompt op basis van modus, met persoonlijke context
     let systeemBlokken: TekstBlok[];
     let gebruikersPrompt: string;
+    const tekstlozePdfDekking = tekstlozePdfMapMelding(
+      sharepointMapSelectie?.zonderTekstlaag ?? 0,
+      agendapuntSharePointActief
+    );
 
     if (reflectieActief) {
       // ── Plateau B — de reflectiebeurt ─────────────────────────────────────
@@ -4142,8 +4153,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           ? `\n\n=== BRONNEN UIT DE BIBLIOTHEEK ===\nEr zijn geen stukken aan dit agendapunt gekoppeld. De bronnen hieronder komen uit de bibliotheek van het fonds en zijn erbij gezocht op de titel en toelichting van het agendapunt; ze zijn dus GEEN vergaderstukken bij dit punt. Duid ze als zodanig.\n\n${contextTekst}`
           : chunks.length > 0
           ? `\n\n=== BRONNEN BIJ DIT AGENDAPUNT ===\nDe aan dit agendapunt gekoppelde stukken zijn gemarkeerd met [gekoppeld stuk]. Bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken van het fonds en zijn er ter duiding en vergelijking bij gezocht.${
-              agendapuntSharePointActief && sharepointMapSelectie?.afgekapt
+              agendapuntSharePointActief && sharepointMapSelectie?.afgekaptDoorLimiet
                 ? " Niet alle ondersteunde documenten uit de gekoppelde SharePoint-bronnen pasten binnen één veilige beurt; doe geen uitspraak over niet-geraadpleegde documenten en benoem deze gedeeltelijke dekking expliciet."
+                : ""
+            }${
+              tekstlozePdfDekking
+                ? ` ${tekstlozePdfDekking} Benoem deze gedeeltelijke dekking expliciet.`
                 : ""
             }\n\n${contextTekst}`
           : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
@@ -4229,8 +4244,12 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
       if (sharepointMapActief) {
         gebruikersPrompt = chunks.length > 0
           ? `GESELECTEERDE SHAREPOINT-MAP: ${titelLabel}\n\nBESCHIKBARE BRONNEN — deze documenten zijn live toegankelijk bevonden en op relevantie voor de vraag geselecteerd uit de gekozen map en haar submappen:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord uitsluitend op basis van de geselecteerde documenten. Verwijs met [Bron N].${
-              sharepointMapSelectie?.afgekapt
+              sharepointMapSelectie?.afgekaptDoorLimiet
                 ? " De map bevat meer ondersteunde documenten dan binnen één veilige beurt konden worden geraadpleegd. Doe daarom geen uitspraak over niet-geraadpleegde documenten en benoem deze gedeeltelijke dekking expliciet."
+                : ""
+            }${
+              tekstlozePdfDekking
+                ? ` ${tekstlozePdfDekking} Benoem deze gedeeltelijke dekking expliciet.`
                 : ""
             }`
           : `In de gekozen SharePoint-map ${titelLabel} zijn voor deze vraag geen bruikbare passages geselecteerd.\n\nVRAAG: ${vraag}\n\nGeef aan dat het antwoord niet uit de geraadpleegde mapdocumenten kan worden vastgesteld. Verzin niets en gebruik geen algemene kennis.`;
@@ -5006,12 +5025,22 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           if (finaleMsg.stopReden === "max_tokens") {
             inlineMeldingenFinaal.push(AFGEKAPT_MELDING);
           }
-          if (sharepointMapSelectie?.afgekapt) {
+          if (sharepointMapSelectie?.afgekaptDoorLimiet) {
             inlineMeldingenFinaal.push({
               type: "sharepoint_map_afgekapt",
               tekst: agendapuntSharePointActief
                 ? "De gekoppelde SharePoint-bronnen bevatten meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt."
                 : "Deze SharePoint-map bevat meer ondersteunde documenten dan veilig in één vraag konden worden geraadpleegd. Het antwoord gebruikt de hoogst gerangschikte selectie; de bronverwijzingen tonen welke documenten zijn gebruikt.",
+            });
+          }
+          const tekstlozePdfMelding = tekstlozePdfMapMelding(
+            sharepointMapSelectie?.zonderTekstlaag ?? 0,
+            agendapuntSharePointActief
+          );
+          if (tekstlozePdfMelding) {
+            inlineMeldingenFinaal.push({
+              type: "sharepoint_map_tekstlaag_ontbreekt",
+              tekst: tekstlozePdfMelding,
             });
           }
 

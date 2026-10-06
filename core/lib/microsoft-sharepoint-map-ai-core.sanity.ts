@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   selecteerSharePointMapDocumenten,
   SHAREPOINT_MAP_MAX_DOCUMENTEN,
+  tekstlozePdfMapMelding,
   type MapDocumentKandidaat,
 } from "./microsoft-sharepoint-map-ai-core";
 
@@ -20,6 +21,8 @@ assert.equal(selectie.documenten[0].naam, "Zandloperbaken beleidsnotitie.docx");
 assert.equal(selectie.totaalOnderMap, 8);
 assert.equal(selectie.ondersteundOnderMap, 8);
 assert.equal(selectie.afgekapt, true);
+assert.equal(selectie.afgekaptDoorLimiet, true);
+assert.equal(selectie.zonderTekstlaag, 0);
 assert.ok(!selectie.documenten.some((d) => d.mappad === "Andere map"));
 
 const ongeschikt = selecteerSharePointMapDocumenten([
@@ -29,5 +32,8 @@ const ongeschikt = selecteerSharePointMapDocumenten([
 assert.equal(ongeschikt.documenten.length, 0);
 assert.equal(ongeschikt.totaalOnderMap, 2);
 assert.equal(ongeschikt.ondersteundOnderMap, 0);
+assert.match(tekstlozePdfMapMelding(1, false) ?? "", /1 PDF geen doorzoekbare tekst/);
+assert.match(tekstlozePdfMapMelding(2, true) ?? "", /gekoppelde SharePoint-mappen leverden 2 PDF's/);
+assert.equal(tekstlozePdfMapMelding(0, false), null);
 
 console.log("  ✓ SharePoint-mapselectie is vraaggestuurd, recursief en begrensd");
