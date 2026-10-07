@@ -122,6 +122,69 @@ function slaap(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Providerheaders en foutbodies zijn onbetrouwbare invoer. Log uitsluitend
+// begrensde diagnosevelden, nooit de body, foutmelding, URL of PDF-inhoud.
+function veiligHeaderGetal(waarde: string | null): number | null {
+  if (!waarde || !/^\d{1,10}$/.test(waarde)) return null;
+  return Number(waarde);
+}
+
+function veiligRetryAfter(waarde: string | null): string | null {
+  if (!waarde || waarde.length > 80) return null;
+  if (/^\d{1,10}$/.test(waarde)) return waarde;
+  if (!/^[A-Za-z0-9, :+-]+$/.test(waarde)) return null;
+  const datum = Date.parse(waarde);
+  return Number.isFinite(datum) ? new Date(datum).toUTCString() : null;
+}
+
+function veiligRequestId(waarde: string | null): string | null {
+  return waarde && /^[A-Za-z0-9_.:-]{1,128}$/.test(waarde) ? waarde : null;
+}
+
+function veiligeRateLimitFout(detail: string): { type: string | null; categorie: string } {
+  try {
+    const data: unknown = JSON.parse(detail);
+    if (!data || typeof data !== "object") return { type: null, categorie: "onbekend" };
+    const buiten = data as Record<string, unknown>;
+    const fout = buiten.error && typeof buiten.error === "object"
+      ? buiten.error as Record<string, unknown>
+      : buiten;
+    const waarde = fout.type ?? fout.code;
+    const type = typeof waarde === "string" && [
+      "rate_limited", "rate_limit_error", "rate_limit_exceeded", "too_many_requests",
+      "insufficient_credits", "insufficient_quota", "quota_exceeded",
+    ].includes(waarde) ? waarde : null;
+    const melding = typeof fout.message === "string" ? fout.message.slice(0, 1000) : "";
+    const aanwijzing = `${type ?? ""} ${melding}`;
+    const categorie = /credit|billing|payment|saldo/i.test(aanwijzing) ? "billing"
+      : /quota/i.test(aanwijzing) ? "quota"
+      : /capacity|overload/i.test(aanwijzing) ? "capacity"
+      : /rate.?limit|too.many.requests/i.test(aanwijzing) ? "rate_limit"
+      : "onbekend";
+    return { type, categorie };
+  } catch {
+    return { type: null, categorie: "onbekend" };
+  }
+}
+
+function logOcrRateLimit(res: Response, detail: string, poging: number): void {
+  const fout = veiligeRateLimitFout(detail);
+  console.warn("[OCR][provider_429]", JSON.stringify({
+    provider: OCR_PROVIDER,
+    status: res.status,
+    poging,
+    retry_after: veiligRetryAfter(res.headers.get("retry-after")),
+    rate_limit_limit: veiligHeaderGetal(res.headers.get("x-ratelimit-limit")),
+    rate_limit_remaining: veiligHeaderGetal(res.headers.get("x-ratelimit-remaining")),
+    rate_limit_reset: veiligHeaderGetal(res.headers.get("x-ratelimit-reset")),
+    request_id: veiligRequestId(
+      res.headers.get("x-request-id") ?? res.headers.get("x-mistral-request-id")
+    ),
+    error_type: fout.type,
+    error_category: fout.categorie,
+  }));
+}
+
 // Telt betekenisvolle tekens (witruimte weggelaten) — maat voor "is hier tekst?".
 function betekenisvolleTekens(tekst: string): number {
   return tekst.replace(/\s+/g, "").length;
@@ -264,12 +327,16 @@ export async function ocrPdfNaarResultaat(
     }
 
     const tijdelijkeFoutcode = classificeerTijdelijkeOcrHttpStatus(res.status);
+    const rateLimitDetail = res.status === 429 ? await res.text().catch(() => "") : null;
+    if (rateLimitDetail !== null) logOcrRateLimit(res, rateLimitDetail, poging + 1);
     if (tijdelijkeFoutcode && poging < MAX_RETRIES) {
       await slaap(1000 * 2 ** poging); // 1s → 2s → 4s (OCR is trager dan embed)
       continue;
     }
-    const detail = await res.text().catch(() => "");
-    const melding = `Mistral OCR ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`;
+    const detail = rateLimitDetail ?? await res.text().catch(() => "");
+    const melding = res.status === 429
+      ? "Mistral OCR 429"
+      : `Mistral OCR ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`;
     if (tijdelijkeFoutcode) {
       throw new OcrTijdelijkeFout(tijdelijkeFoutcode, melding, res.status);
     }
