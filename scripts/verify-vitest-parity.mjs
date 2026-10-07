@@ -27,9 +27,10 @@ const expected = {
   },
   // Productie-incident 30-09-2026: een uitgeputte Mistral-OCR-retrylus op 429
   // moet tijdelijk blijven; een definitieve 400 behoudt de lege fallback.
+  // OCR-diagnose 07-10-2026: +1 geval voor onveilige providerresponsen.
   "core/lib/ocr.test.ts": {
-    count: 2,
-    titlesSha256: "c77257b9d0ea8989d1701428fb2db737865a49c27ffb11e02f213ac04966b351",
+    count: 3,
+    titlesSha256: "56a0e4fb96cfc8dce955877af4df73ef2786f375b1c7ef1dbbffbc5c1e3cb91d",
   },
   // #311 T3 — contracttests van de AI-gateway (gateway.test.ts) en de
   // secret-/foutlaag (secrets.test.ts); klant-Azure voegt de fonds-/refgrens toe.
