@@ -78,7 +78,7 @@ function bouwMeta(methode: RetrievalMeta["methode"], opgehaald: number, geselect
 import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
 import { bouwCitaties } from "./retrieval/citatie";
 import type { Bronresultaat } from "./retrieval/contract";
-import { artikelFrasequery, artikelmatch, type Artikelfocus } from "./retrieval/artikelverwijzing";
+import { artikelFrasequery, artikelmatch, genoemdeJuridischeDocumenten, type Artikelfocus } from "./retrieval/artikelverwijzing";
 import { bakenParagraafAf, kiesJuridischDocument, kiesParagraafkop, kiesTermijnpassages, type Sectiefocus, type Sectierij } from "./retrieval/juridische-sectie";
 import {
   ARTIKEL_TOELATING_ID_MAX,
@@ -666,6 +666,11 @@ export interface DocumentChunk {
   structuur_label?: string | null;
   artikelspoor?: boolean;
   sectiespoor?: boolean;
+  /**
+   * #548-R5 — adapterprivaat, alleen gezet door `vulAanMetArtikelkandidaten`:
+   * de vraag noemt dit juridische document letterlijk (bronbinding).
+   */
+  genoemd_document?: boolean;
   documenten: {
     titel: string;
     bron: string;
@@ -1174,6 +1179,10 @@ export interface RetrievalMeta {
         geboost: number;
         geboost_geselecteerd: number;
         via_artikelspoor: number;
+        // #548-R5 — alleen als de focus aan een letterlijk genoemd document
+        // gebonden was; het document zelf komt er niet in.
+        document_genoemd?: true;
+        andere_bron_gedemoveerd?: number;
       };
     };
   };
@@ -1745,6 +1754,12 @@ export async function vulAanMetArtikelkandidaten(
     maxKandidaten: number;
     signal?: AbortSignal;
     supabase?: { from: (tabel: string) => any };
+    /**
+     * #548-R5 — de vraagrepresentaties (zoekvraag, originele vraag) waarin een
+     * letterlijk genoemde documenttitel wordt gezocht. Alleen voor de
+     * bronbinding; komt niet in de audit of in een query.
+     */
+    naamteksten?: readonly (string | null | undefined)[];
     /** #500 — fasetijden (inhoudsvrij) van de drie begrensde queries. */
     fasemeter?: Fasemeter;
   }
@@ -1760,7 +1775,7 @@ export async function vulAanMetArtikelkandidaten(
     // 1a. De juridische documenten (onder RLS, klein).
     let dq = supabase
       .from("documenten")
-      .select("id, bestand_hash, scan_resultaat")
+      .select("id, titel, documenttype, bestand_hash, scan_resultaat")
       .in("documenttype", [...JURIDISCHE_DOCUMENTTYPEN])
       .eq("actief", true);
     if (scope) dq = dq.in("id", scope);
@@ -1779,13 +1794,37 @@ export async function vulAanMetArtikelkandidaten(
     // artikelkandidaten (de toelatingspoort zou ze weigeren, en een onbekende
     // versie zou de parentverrijking vóór die poort laten struikelen).
     const wp3 = isMalwarescanAan();
-    const juridisch = (docs as { id: string; bestand_hash?: string | null; scan_resultaat?: Record<string, unknown> | null }[])
+    const juridischeRijen = (docs as {
+      id: string;
+      titel?: string | null;
+      documenttype?: string | null;
+      bestand_hash?: string | null;
+      scan_resultaat?: Record<string, unknown> | null;
+    }[])
       .filter((d) => !wp3 || heeftSchoonScanbewijs({
         bestand_hash: d.bestand_hash ?? null,
         scan_resultaat: d.scan_resultaat ?? null,
-      }))
+      }));
+    if (juridischeRijen.length === 0) return bestaand;
+
+    // #548-R5 — BRONBINDING. Noemt de vraag letterlijk de titel van een van
+    // deze (onder RLS zichtbare, schoon gescande) juridische documenten, dan
+    // zoekt het spoor alleen nog daarin — plus wetsgeschiedenis, zodat een
+    // bedoelingsvraag over een genoemde wet haar toelichting houdt; de
+    // selectie weegt die rol centraal. Elke kandidaat van het genoemde
+    // document krijgt de vlag, zodat de selectie gelijkgenummerde artikelen
+    // uit een andere regeling niet boost. Geen genoemde titel → het
+    // #500-gedrag, ongewijzigd.
+    const genoemd = new Set(
+      opdracht.naamteksten ? genoemdeJuridischeDocumenten(opdracht.naamteksten, juridischeRijen) : []
+    );
+    const markeerGenoemd = (lijst: DocumentChunk[]) => {
+      for (const c of lijst) if (genoemd.has(c.document_id)) c.genoemd_document = true;
+    };
+    markeerGenoemd(bestaand);
+    const juridisch = juridischeRijen
+      .filter((d) => genoemd.size === 0 || genoemd.has(d.id) || d.documenttype === "wetsgeschiedenis")
       .map((d) => d.id);
-    if (juridisch.length === 0) return bestaand;
 
     // 1b. De exacte passages, alleen binnen die documenten.
     const q = supabase
@@ -1817,7 +1856,10 @@ export async function vulAanMetArtikelkandidaten(
       if (r) c.structuur_label = r.structuur_label;
     }
     const bekend = new Set(bestaand.map((c) => c.id));
-    const nieuw = [...exact.values()].filter((r) => !bekend.has(r.id));
+    // #548-R5 — passages van het genoemde document eerst binnen de id-grens.
+    const nieuw = [...exact.values()]
+      .filter((r) => !bekend.has(r.id))
+      .sort((a, b) => Number(genoemd.has(b.document_id)) - Number(genoemd.has(a.document_id)));
     if (nieuw.length === 0) return bestaand;
 
     // 2. Toelating: id-begrensd, onder RLS, met de zoek_chunks-semantiek.
@@ -1861,6 +1903,7 @@ export async function vulAanMetArtikelkandidaten(
       c.structuur_label = nieuwPerId.get(c.id)?.structuur_label ?? null;
       c.artikelspoor = true;
     }
+    markeerGenoemd(bewaakt);
 
     // Binnen de kandidatenpool blijven: de zwakste NIET-exacte kandidaten
     // (van achteren) maken plaats. Exacte kandidaten worden nooit verdrongen.
@@ -2823,6 +2866,8 @@ export function chunkAlsBronresultaat(chunk: DocumentChunk, positie = 0): Bronre
       fts: chunk.fts_rang ?? null,
       vec: chunk.vec_rang ?? null,
       ...(chunk.sectiespoor ? { poging: "sectiespoor" } : chunk.artikelspoor ? { poging: "artikelspoor" } : {}),
+      // #548-R5 — alleen aanwezig als het artikelspoor het document als genoemd bond.
+      ...(chunk.genoemd_document ? { artikelbron: "genoemd_document" as const } : {}),
     },
     curatie: { normgewicht: d.normgewicht ?? null, wettelijkRegime: d.wettelijk_regime ?? null },
     weergave: {

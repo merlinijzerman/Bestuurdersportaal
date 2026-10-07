@@ -190,6 +190,71 @@ export function artikelFrasequery(focus: Pick<Artikelfocus, "artikelen">): strin
   return focus.artikelen.flatMap((n) => [`"artikel ${n}"`, `"art ${n}"`]).join(" OR ");
 }
 
+// ── #548-R5 — bronbinding: het letterlijk genoemde juridische document ───────
+// HET PROBLEEM (Productiehertest 6 oktober 2026). "Wat staat in artikel 19a,
+// 19b en 22 van het Besluit uitvoering Pensioenwet en Wet verplichte
+// beroepspensioenregeling …" kreeg de focus 19a/19b/22 zonder regime (de titel
+// noemt beide wetten). De boost nam per document één passage (Besluit → 19a)
+// en boostte daarnaast artikel 22 van de Pensioenwet en van de Wvb; het
+// budget verdrong daarna 19b en 22 van het Besluit. Het antwoord citeerde
+// art. 22 Pensioenwet (hoorrecht) en verklaarde 19b/22 van het Besluit afwezig.
+//
+// DE OPLOSSING. (1) Noemt de vraag LETTERLIJK de titel van een juridisch
+// document, dan bindt dat document de artikelfocus: alleen zijn exacte
+// passages worden geboost; gelijkgenummerde artikelen uit een andere regeling
+// gaan achteraan (toelichting blijft toegestaan als het beleid daar om vraagt).
+// (2) Per (document, artikel) één kop, zodat meerdere genoemde artikelen elk
+// een plek krijgen in plaats van één per document.
+//
+// Strikt: alleen de volledige titel (zonder vindplaats tussen haakjes), na
+// normalisatie, met woordgrenzen. Een titel die alleen BINNEN een langere
+// genoemde titel voorkomt ("Pensioenwet" in "Besluit uitvoering Pensioenwet en
+// …") bindt niet. Geen losse woorden, geen afkortingen, geen documentlijst in
+// de code: de titels komen onder RLS uit de database.
+
+/** Minimale lengte van een genormaliseerde titel om als documentnaam te gelden. */
+const MIN_TITEL = 8;
+
+function naamvorm(tekst: string): string {
+  return ` ${normaliseer(tekst).replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim()} `;
+}
+
+/** De titel zonder vindplaats/toevoeging tussen haakjes ("(BWBR0020892)"). */
+function titelkern(titel: string): string {
+  return naamvorm(titel.replace(/\([^)]*\)/g, " ")).trim();
+}
+
+/**
+ * Welke juridische documenten de vraag letterlijk noemt. Een document wiens
+ * titel alleen binnen de genoemde titel van een ANDER document voorkomt, valt
+ * af (de langste naam wint). Volgorde = invoervolgorde; leeg = geen binding.
+ */
+export function genoemdeJuridischeDocumenten(
+  teksten: readonly (string | null | undefined)[],
+  documenten: readonly { id: string; titel?: string | null }[]
+): string[] {
+  const vragen = teksten.filter((t): t is string => Boolean(t)).map(naamvorm);
+  if (vragen.length === 0) return [];
+  type Treffer = { id: string; vraag: number; van: number; tot: number };
+  const treffers: Treffer[] = [];
+  const kernen = new Map<string, number>();
+  for (const d of documenten) {
+    const kern = titelkern(d.titel ?? "");
+    if (kern.length < MIN_TITEL) continue;
+    kernen.set(d.id, kern.length);
+    vragen.forEach((v, vraag) => {
+      for (let i = v.indexOf(` ${kern} `); i >= 0; i = v.indexOf(` ${kern} `, i + 1)) {
+        treffers.push({ id: d.id, vraag, van: i, tot: i + kern.length + 2 });
+      }
+    });
+  }
+  const ingesloten = (t: Treffer) =>
+    treffers.some((o) => o.id !== t.id && o.vraag === t.vraag && (kernen.get(o.id) ?? 0) > (kernen.get(t.id) ?? 0) &&
+      o.van <= t.van && o.tot >= t.tot);
+  const vrij = new Set(treffers.filter((t) => !ingesloten(t)).map((t) => t.id));
+  return documenten.filter((d) => vrij.has(d.id)).map((d) => d.id);
+}
+
 /** De velden die de boost van een kandidaat leest. */
 export interface ArtikelKandidaat {
   documentId: string;
@@ -199,24 +264,49 @@ export interface ArtikelKandidaat {
   tekst?: string | null;
   titel?: string | null;
   wettelijkRegime?: string | null;
+  /**
+   * #548-R5 — de adapter stelde vast dat de vraag dit document letterlijk noemt
+   * (`genoemdeJuridischeDocumenten`). Draagt minstens één kandidaat deze vlag,
+   * dan is de artikelfocus aan die documenten gebonden.
+   */
+  genoemdDocument?: boolean;
 }
 
 export interface ArtikelBoost<T> {
-  /** De nieuwe volgorde: geboostte passages vooraan, de rest ongewijzigd. */
+  /** De nieuwe volgorde: geboostte passages vooraan, verdrongen achteraan, de rest ongewijzigd. */
   volgorde: T[];
   /** Kandidaten die exact bij een gevraagd artikel horen (juridisch, verenigbaar). */
   exact: T[];
   /** De geboostte kandidaten, in volgorde. */
   geboost: T[];
+  /**
+   * #548-R5 — exacte, gelijkgenummerde passages uit een NIET genoemde regeling
+   * terwijl de focus aan een genoemd document gebonden is. Ze gaan achteraan.
+   */
+  verdrongen: T[];
+  /** #548-R5 — de focus was gebonden aan een letterlijk genoemd document. */
+  documentGenoemd: boolean;
+}
+
+export interface ArtikelBoostOpties {
+  /**
+   * #548-R5 — bij een gebonden focus: mag een exacte passage uit
+   * WETSGESCHIEDENIS van een niet-genoemd document toch mee (bedoelings- of
+   * gecombineerde vraag)? Standaard niet.
+   */
+  toelichtingToegestaan?: boolean;
 }
 
 /**
- * Zet per document de beste exacte JURIDISCHE passage vooraan (hooguit
- * `MAX_ARTIKEL_BOOST`), in hun onderlinge volgorde; alle andere kandidaten
- * houden hun relatieve volgorde. Een niet-juridische bron (fondsdocument,
- * beleidsstuk) wordt nooit geboost, ook niet als hij een "Artikel 5" draagt.
- * `vastVan` markeert kandidaten die hun plek houden (de door de regime-
- * weging gedemoveerde); die worden niet geboost.
+ * Zet per (document, gevraagd artikel) de beste exacte JURIDISCHE passage
+ * vooraan (hooguit `max(MAX_ARTIKEL_BOOST, aantal artikelen)`), het genoemde
+ * document eerst en daarna in de volgorde van de vraag; alle andere
+ * kandidaten houden hun relatieve volgorde. Met één artikel en zonder
+ * genoemd document is dit exact het #500-gedrag (één per document, hooguit 3).
+ * Een niet-juridische bron (fondsdocument, beleidsstuk) wordt nooit geboost,
+ * ook niet als hij een "Artikel 5" draagt. `vastVan` markeert kandidaten die
+ * hun plek houden (de door de regimeweging gedemoveerde); die worden niet
+ * geboost en niet verdrongen.
  *
  * Geen exacte kandidaat → exact dezelfde array (zelfde referentie).
  */
@@ -224,25 +314,65 @@ export function boostArtikelpassages<T>(
   items: T[],
   focus: Artikelfocus,
   lees: (item: T) => ArtikelKandidaat,
-  vastVan: (item: T) => boolean = () => false
+  vastVan: (item: T) => boolean = () => false,
+  opties: ArtikelBoostOpties = {}
 ): ArtikelBoost<T> {
+  const gelezen = new Map(items.map((item) => [item, lees(item)] as const));
+  // Gebonden per DOCUMENT: één gemarkeerde passage volstaat, zodat ook een
+  // passage die via een ander spoor binnenkwam bij het genoemde document hoort.
+  const genoemdeDocumenten = new Set(
+    [...gelezen.values()].filter((k) => k.genoemdDocument === true).map((k) => k.documentId)
+  );
+  const documentGenoemd = genoemdeDocumenten.size > 0;
   const exact: T[] = [];
-  const bestePerDocument = new Map<string, { item: T; match: Artikelmatch }>();
-  for (const item of items) {
-    if (vastVan(item)) continue;
-    const k = lees(item);
-    if (juridischeRolVan(k.documenttype, k.wetsgeschiedenisSubtype) === null) continue;
-    const match = artikelmatch(focus, k);
-    if (!match || !wetVerenigbaar(focus, k)) continue;
-    exact.push(item);
-    const eerder = bestePerDocument.get(k.documentId);
-    if (!eerder || (eerder.match === "label" && match === "kop")) {
-      bestePerDocument.set(k.documentId, { item, match });
+  const verdrongen: T[] = [];
+  type Beste = { item: T; match: Artikelmatch; artikel: number; positie: number; genoemd: boolean };
+  const bestePerSleutel = new Map<string, Beste>();
+  items.forEach((item, positie) => {
+    if (vastVan(item)) return;
+    const k = gelezen.get(item)!;
+    const rol = juridischeRolVan(k.documenttype, k.wetsgeschiedenisSubtype);
+    if (rol === null) return;
+    if (!wetVerenigbaar(focus, k)) return;
+    const artikelen = focus.artikelen
+      .map((n, i) => ({ i, match: artikelmatch({ artikelen: [n] }, k) }))
+      .filter((a): a is { i: number; match: Artikelmatch } => a.match !== null);
+    if (artikelen.length === 0) return;
+    const genoemd = genoemdeDocumenten.has(k.documentId);
+    if (documentGenoemd && !genoemd && !(rol === "wetsgeschiedenis" && opties.toelichtingToegestaan)) {
+      verdrongen.push(item);
+      return;
     }
+    exact.push(item);
+    for (const { i, match } of artikelen) {
+      const sleutel = `${k.documentId}\u0000${i}`;
+      const eerder = bestePerSleutel.get(sleutel);
+      if (!eerder || (eerder.match === "label" && match === "kop")) {
+        bestePerSleutel.set(sleutel, { item, match, artikel: i, positie, genoemd });
+      }
+    }
+  });
+  if (exact.length === 0 && verdrongen.length === 0) {
+    return { volgorde: items, exact, geboost: [], verdrongen, documentGenoemd };
   }
-  if (exact.length === 0) return { volgorde: items, exact, geboost: [] };
-  const kandidaten = new Set([...bestePerDocument.values()].map((b) => b.item));
-  const geboost = items.filter((c) => kandidaten.has(c)).slice(0, MAX_ARTIKEL_BOOST);
-  const gebooststSet = new Set(geboost);
-  return { volgorde: [...geboost, ...items.filter((c) => !gebooststSet.has(c))], exact, geboost };
+  const cap = Math.max(MAX_ARTIKEL_BOOST, focus.artikelen.length);
+  const geboost: T[] = [];
+  for (const b of [...bestePerSleutel.values()].sort(
+    (a, b) => Number(b.genoemd) - Number(a.genoemd) || a.artikel - b.artikel || a.positie - b.positie
+  )) {
+    if (geboost.length >= cap) break;
+    if (!geboost.includes(b.item)) geboost.push(b.item);
+  }
+  // #500-gedrag behouden: zonder genoemd document blijven de geboostte
+  // passages in hun onderlinge (relevantie)volgorde.
+  if (!documentGenoemd) geboost.sort((a, b) => items.indexOf(a) - items.indexOf(b));
+  const vooraan = new Set(geboost);
+  const achteraan = new Set(verdrongen);
+  return {
+    volgorde: [...geboost, ...items.filter((c) => !vooraan.has(c) && !achteraan.has(c)), ...verdrongen],
+    exact,
+    geboost,
+    verdrongen,
+    documentGenoemd,
+  };
 }

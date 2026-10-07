@@ -193,6 +193,8 @@ export function maakSupabaseAdapter(
             filters: query.filters,
             maxKandidaten: query.maxKandidaten,
             signal: ctx.signal,
+            // #548-R5 — alleen voor de bronbinding (letterlijk genoemde titel).
+            naamteksten: [query.zoekvraag, query.origineleVraag],
             ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter } : {}),
           })
         : gerangschikt;

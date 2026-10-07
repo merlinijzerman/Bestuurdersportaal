@@ -215,6 +215,8 @@ function alsSelectieBron(b: Bronresultaat): SelectieBron {
     // #500 — alleen aanwezig als de adapter het artikelspoor draaide.
     ...(b.locator.structuurLabel !== undefined ? { structuurLabel: b.locator.structuurLabel } : {}),
     ...(b.rang.poging === "artikelspoor" ? { artikelspoor: true } : {}),
+    // #548-R5 — alleen aanwezig als de adapter de artikelfocus aan dit document bond.
+    ...(b.rang.artikelbron === "genoemd_document" ? { genoemdDocument: true } : {}),
   };
 }
 

@@ -51,6 +51,11 @@ export interface SelectieBron {
   structuurLabel?: string | null;
   /** #500 — de kandidaat kwam binnen via het gerichte artikelspoor van de adapter. */
   artikelspoor?: boolean;
+  /**
+   * #548-R5 — de adapter stelde vast dat de vraag dit juridische document
+   * letterlijk noemt; bindt de artikelboost aan dat document.
+   */
+  genoemdDocument?: boolean;
 }
 import { weegBronsoort, constraintsVoorProfiel } from "../weeg-bronsoort";
 import { weegRegime, isExternKaderVoorFonds } from "../weeg-regime";
@@ -139,6 +144,11 @@ function juridischeDiagnostiek(
             geboost: artikel.boost.geboost.length,
             geboost_geselecteerd: artikel.boost.geboost.filter((c) => gekozen.has(c)).length,
             via_artikelspoor: kandidaten.filter((c) => c.artikelspoor === true).length,
+            // #548-R5 — alleen bij een aan een genoemd document gebonden focus;
+            // anders blijft de #500-diagnostiek byte-identiek.
+            ...(artikel.boost.documentGenoemd
+              ? { document_genoemd: true, andere_bron_gedemoveerd: artikel.boost.verdrongen.length }
+              : {}),
           },
         }
       : {}),
@@ -203,8 +213,12 @@ function weegEnSelecteer(
             tekst: c.tekst,
             titel: c.titel,
             wettelijkRegime: c.wettelijkRegime,
+            genoemdDocument: c.genoemdDocument,
           }),
-          vastDoorRegime
+          vastDoorRegime,
+          // #548-R5 — bij een gebonden focus mag toelichting uit een ander
+          // document alleen mee als het beleid om wetsgeschiedenis vraagt.
+          { toelichtingToegestaan: juridisch.beleid !== "geldend_recht" }
         )
       : null;
   const herordening = juridisch

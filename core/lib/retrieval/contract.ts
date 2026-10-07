@@ -259,7 +259,18 @@ export interface Bronresultaat {
     geldigTot?: string | null;
     actueel: boolean;
   };
-  rang: { positie: number; score?: number | null; fts?: number | null; vec?: number | null; poging?: string };
+  rang: {
+    positie: number;
+    score?: number | null;
+    fts?: number | null;
+    vec?: number | null;
+    poging?: string;
+    /**
+     * #548-R5 — alleen bij een artikelfocus: de adapter stelde vast dat de vraag
+     * het document van deze passage letterlijk noemt. Bindt de artikelboost.
+     */
+    artikelbron?: "genoemd_document";
+  };
   /** SharePoint: alleen `true` ná een geslaagde permission-check. */
   previewMogelijk?: boolean;
   /**
