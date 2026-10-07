@@ -33,9 +33,15 @@ describe("OCR-providerfouten", () => {
   test("429 blijft na vier interne pogingen tijdelijk voor workerbackoff", async () => {
     vi.useFakeTimers();
     vi.stubEnv("MISTRAL_API_KEY", "test-key");
+    const waarschuwing = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchMock = vi.fn(async () => new Response(
-      JSON.stringify({ type: "rate_limited" }),
-      { status: 429 }
+      JSON.stringify({ type: "rate_limited", message: "PRIVATE-PDF-CONTENT" }),
+      { status: 429, headers: {
+        "retry-after": "7",
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": "60",
+        "x-request-id": "mistral-req-123",
+      } }
     ));
     vi.stubGlobal("fetch", fetchMock);
     const reserveer = vi.fn(async (_paginas: number, _poging: number) => true);
@@ -55,6 +61,58 @@ describe("OCR-providerfouten", () => {
     await tijdelijkeFout;
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(reserveer.mock.calls.map(([, poging]) => poging)).toEqual([1, 2, 3, 4]);
+    expect(waarschuwing).toHaveBeenCalledTimes(4);
+    expect(waarschuwing.mock.calls.map(([label, data]) => [label, JSON.parse(data as string)])).toEqual(
+      [1, 2, 3, 4].map((poging) => ["[OCR][provider_429]", {
+        provider: "mistral",
+        status: 429,
+        poging,
+        retry_after: "7",
+        rate_limit_remaining: 0,
+        rate_limit_reset: 60,
+        request_id: "mistral-req-123",
+        error_type: "rate_limited",
+      }])
+    );
+    expect(JSON.stringify(waarschuwing.mock.calls)).not.toContain("PRIVATE-PDF-CONTENT");
+    expect(JSON.stringify(waarschuwing.mock.calls)).not.toContain("test-key");
+  });
+
+  test("429-log weigert onveilige providervelden en behoudt de tijdelijke fout", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("MISTRAL_API_KEY", "test-key");
+    const waarschuwing = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ error: { type: "PRIVATE-PDF-CONTENT", message: "SECRET" } }),
+      { status: 429, headers: {
+        "retry-after": "PRIVATE-PDF-CONTENT",
+        "x-ratelimit-remaining": "SECRET",
+        "x-request-id": "PRIVATE PDF CONTENT",
+      } }
+    )));
+
+    const resultaat = extractTekstMetOcrFallback(Buffer.from("pdf"), "pdf", {
+      maxOcrPaginas: 40,
+      poort: poort(),
+      reserveerOcr: async () => true,
+    });
+    const tijdelijkeFout = expect(resultaat).rejects.toMatchObject({
+      foutcode: "ocr_rate_limit",
+      status: 429,
+      message: "Mistral OCR 429",
+    });
+    await vi.runAllTimersAsync();
+    await tijdelijkeFout;
+
+    expect(waarschuwing).toHaveBeenCalledTimes(4);
+    const diagnostiek = JSON.parse(waarschuwing.mock.calls[0][1] as string);
+    expect(diagnostiek).toMatchObject({
+      retry_after: null,
+      rate_limit_remaining: null,
+      request_id: null,
+      error_type: null,
+    });
+    expect(JSON.stringify(waarschuwing.mock.calls)).not.toMatch(/PRIVATE|SECRET|test-key/);
   });
 
   test("niet-tijdelijke providerafwijzing behoudt de bestaande lege fallback", async () => {
