@@ -591,7 +591,9 @@ test("L4 — elke chunkleesweg naar model of gebruiker dwingt het scanbewijs af 
   assert.match(rag, /const REFLECTIE_SELECT = [^;]*bestand_hash, scan_resultaat\)/);
   const bevroren = rag.slice(rag.indexOf("export async function haalBevrorenChunks"), rag.indexOf("// Increment D — verrijk opgehaalde chunks"));
   assert.equal((bevroren.match(/handhaafScanbewijs\(/g) ?? []).length, 2, "legacy- én opaque-resolutie");
-  assert.match(rag, /\.select\("id, bestand_hash, scan_resultaat"\)\s*\.in\("documenttype"/);
+  // #548-R5: het artikelspoor leest daarnaast titel en documenttype (bronbinding);
+  // de scankolommen blijven verplicht in dezelfde documentopzoeking.
+  assert.match(rag, /\.select\("id, titel, documenttype, bestand_hash, scan_resultaat"\)\s*\.in\("documenttype"/);
 
   const t8 = lees("platform/lib/semantische-extractie-job.ts");
   assert.equal((t8.match(/isMalwarescanAan\(\) && !heeftSchoonScanbewijs\(doc\)/g) ?? []).length, 2, "enqueue én worker");

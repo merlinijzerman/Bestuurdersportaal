@@ -38,6 +38,23 @@ export interface Citaatuitkomst {
 
 const GEEN_TREFFERS = "Er zijn geen relevante documenten gevonden in de bibliotheek.";
 
+/**
+ * #548-R5 — het structuurlabel van een JURIDISCHE bron als vindplaats, maar
+ * alleen in een gesloten vorm ("Artikel 19a", "Artikelsgewijze toelichting —
+ * Artikel 22", "Paragraaf 6.2", "Hoofdstuk 6a"). Het label komt uit de
+ * documenttekst (chunkbouw); de kop is app-geschreven en mag dus geen vrije
+ * documenttekst dragen. Fondsbronnen en bronnen zonder label: niets (kop
+ * byte-identiek aan vóór #548-R5).
+ */
+const STRUCTUURLABEL_VORM =
+  /^(?:(?:Artikelsgewijze toelichting — )?Artikel \d{1,4}[a-z]{0,2}(?:, onderdeel [A-Z]{1,3})?|Paragraaf \d{1,3}(?:\.\d{1,3}){0,3}[a-z]?|Hoofdstuk \d{1,3}[a-z]?)$/;
+function juridischStructuurlabel(bron: Bronresultaat): string | null {
+  const label = bron.locator.structuurLabel?.trim();
+  if (!label || !STRUCTUURLABEL_VORM.test(label)) return null;
+  const w = bron.weergave ?? {};
+  return juridischeDuiding(w.documenttype, w.wetsgeschiedenisSubtype) ? label : null;
+}
+
 export function bouwCitaties(
   bronnen: Bronresultaat[],
   opdracht: CitaatOpdracht & { maxContextTekens: number }
@@ -69,6 +86,10 @@ export function bouwCitaties(
     const bronLabel = `[Bron ${nr}]`;
     const w = bron.weergave ?? {};
     const locatie = [
+      // #548-R5 — bij een juridische bron het artikel/de paragraaf uit het
+      // structuurlabel, zodat ook een vervolgpassage zonder eigen artikelkop
+      // aan haar artikel gebonden blijft ("Artikel 19a, pag. 24").
+      juridischStructuurlabel(bron),
       bron.locator.paragraaf && `${bron.locator.paragraaf}`,
       bron.locator.pagina && `pag. ${bron.locator.pagina}`,
     ]
