@@ -38,6 +38,7 @@ describe("OCR-providerfouten", () => {
       JSON.stringify({ type: "rate_limited", message: "PRIVATE-PDF-CONTENT" }),
       { status: 429, headers: {
         "retry-after": "7",
+        "x-ratelimit-limit": "625",
         "x-ratelimit-remaining": "0",
         "x-ratelimit-reset": "60",
         "x-request-id": "mistral-req-123",
@@ -68,10 +69,12 @@ describe("OCR-providerfouten", () => {
         status: 429,
         poging,
         retry_after: "7",
+        rate_limit_limit: 625,
         rate_limit_remaining: 0,
         rate_limit_reset: 60,
         request_id: "mistral-req-123",
         error_type: "rate_limited",
+        error_category: "rate_limit",
       }])
     );
     expect(JSON.stringify(waarschuwing.mock.calls)).not.toContain("PRIVATE-PDF-CONTENT");
@@ -111,6 +114,7 @@ describe("OCR-providerfouten", () => {
       rate_limit_remaining: null,
       request_id: null,
       error_type: null,
+      error_category: "onbekend",
     });
     expect(JSON.stringify(waarschuwing.mock.calls)).not.toMatch(/PRIVATE|SECRET|test-key/);
   });
