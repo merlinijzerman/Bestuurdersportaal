@@ -1,0 +1,56 @@
+name: Bug
+description: Leg een afwijking vast met reproduceerbaar verwacht en feitelijk gedrag.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Deze repository is publiek. Plaats geen klantgegevens, geheimen, exploiteerbare beveiligingsdetails of vertrouwelijk bewijs in dit formulier. Een actief security- of privacyincident volgt de afgeschermde meldroute.
+  - type: textarea
+    id: afwijking
+    attributes:
+      label: Verwacht en feitelijk gedrag
+      description: Beschrijf beide afzonderlijk.
+    validations:
+      required: true
+  - type: textarea
+    id: stappen
+    attributes:
+      label: Reproductie of waarneming
+      description: Geef veilige stappen, tijdstip en een neutrale bewijsverwijzing. Meld ook als reproductie nog niet lukt.
+    validations:
+      required: true
+  - type: input
+    id: omgeving
+    attributes:
+      label: Omgeving en getroffen versie
+      placeholder: Preview of Productie, host/component, commit of release indien bekend
+    validations:
+      required: true
+  - type: dropdown
+    id: urgentie
+    attributes:
+      label: Voorlopige urgentie
+      description: De eigenaar bevestigt de classificatie; dit is geen incidentseverity.
+      options:
+        - Nog te bepalen
+        - Kritiek
+        - Hoog
+        - Middel
+        - Laag
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact en veilige tijdelijke maatregel
+      description: Wie of wat is geraakt? Is er een workaround of reden om de uitrol te stoppen?
+    validations:
+      required: true
+  - type: textarea
+    id: herstel
+    attributes:
+      label: Herstel- en regressiecriterium
+      description: Welke observatie bewijst de fix en welk eerder gedrag moet behouden blijven?
+    validations:
+      required: true
