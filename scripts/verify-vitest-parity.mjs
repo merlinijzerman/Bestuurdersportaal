@@ -37,18 +37,22 @@ const expected = {
     titlesSha256: "9855d560e589d0f70dd06c3dc9a29382fb44602e58ce74f07c41dba4e3048816",
   },
   // #311 T3 — contracttests van de AI-gateway (gateway.test.ts) en de
-  // secret-/foutlaag (secrets.test.ts); titels gepind zoals de overige suites.
+  // secret-/foutlaag (secrets.test.ts); klant-Azure voegt de fonds-/refgrens toe.
   "core/lib/ai-gateway/gateway.test.ts": {
-    count: 15,
-    titlesSha256: "c1d5e1c0509e156781ac9e731c7c3b2d4ac51c43d953059f0ac33810bf5dd5de",
+    count: 17,
+    titlesSha256: "a00e0e25d2cea6c7ab489c77a8844af8f60fa105e6c1e1db2145f9815b23c014",
   },
   "core/lib/ai-gateway/anthropic-adapter.test.ts": {
     count: 6,
     titlesSha256: "1e2dc25c8736f6c495664a5322231429e3300813cf777505b28f3512c648d5d6",
   },
+  "core/lib/ai-gateway/azure-openai-adapter.test.ts": {
+    count: 6,
+    titlesSha256: "d5d1ceff2deafffb5f546e664c474e2e30f502df41d603ec07489009a362f668",
+  },
   "core/lib/ai-gateway/secrets.test.ts": {
-    count: 3,
-    titlesSha256: "f6a62443a9230d63ee92130df0a2984c004a20960fe47127ad1a93881849d5a4",
+    count: 4,
+    titlesSha256: "df287120841f604a8ea771e66e721b2fffe91cc6339aaca3c70b4dc6fc7a4868",
   },
   "platform/lib/aqlab-checks.test.ts": {
     count: 17,
