@@ -4,13 +4,12 @@
 // ----------------------------------------------------------------------------
 //  PUUR en PROVIDERNEUTRAAL: geen I/O, geen DB, geen chunkvorm.
 //
-//  HET PROBLEEM (Productie 8 oktober 2026, correlatie 563b709d). "Welke
-//  beheersmaatregelen noemt DNB in de Good practice ESG risicobeheer
-//  pensioenfondsen voor ESG-risico's?" in een vrije chat, zonder gekozen
-//  documentscope. Het hybride pad viel na een DB-time-out terug op het
-//  tekstzoekpad; de OR-terugval kreeg zes titelwoorden van acht termen, en
-//  omdat `zoek_vector` de contextprefix (met de titel) van ELKE chunk bevat,
-//  wonnen de titel- en inleidingspagina's (p. 1/3/5) de rangschikking. De
+//  HET PROBLEEM. Een vrije vraag naar een openbaar DNB-document noemt de
+//  volledige titel, maar heeft geen gekozen documentscope. Als het hybride
+//  pad na een DB-time-out terugvalt op tekstzoeken, krijgt de OR-terugval
+//  veel titelwoorden. `zoek_vector` bevat de contextprefix (met de titel)
+//  van ELKE chunk; daardoor wonnen de titel- en inleidingspagina's (p. 1/3/5)
+//  de rangschikking. De
 //  maatregelen op p. 17 kwamen niet in de antwoordcontext. De twee bestaande
 //  bindingen dekten de vraag niet: M3 (`resolveerGenoemdDocument`) staat achter
 //  de vlag `vraagrouter_v2`, en #548-R5 bindt alleen juridische documenten.
