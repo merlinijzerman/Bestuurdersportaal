@@ -276,6 +276,15 @@ export interface RetrievalVlaggen {
    *  fondsvlag `zoek_tekst_v2` = true (ontbrekende vlag ⇒ uit). Beide
    *  standaard uit; uitrol per gekozen pilotfonds. */
   zoekTekstV2: boolean;
+  /** Documentspoor (letterlijk genoemd document in een vrije vraag). Zelfde
+   *  waarheidstabel als R1: alleen aan bij env `DOCUMENTSPOOR` = on én
+   *  fondsvlag `documentspoor` = true; ontbrekend ⇒ uit. */
+  documentspoor: boolean;
+}
+
+/** Waarheidstabel van het documentspoor; `fondsvlag` = undefined zonder rij. */
+export function documentspoorActief(env: string | undefined, fondsvlag: boolean | undefined): boolean {
+  return env === "on" && fondsvlag === true;
 }
 
 export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<RetrievalVlaggen> {
@@ -298,6 +307,8 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
       "generatie_timeout_ms",
       // R1 (0218) — nieuw tekstzoekpad; env ZOEK_TEKST_V2 is de hoofdstop.
       ZOEK_TEKST_V2_FONDSVLAG,
+      // Documentspoor — env DOCUMENTSPOOR is de hoofdstop.
+      "documentspoor",
     ]);
 
   const m = new Map<string, JsonWaarde>();
@@ -330,6 +341,10 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
     zoekTekstV2: zoekTekstV2Actief(
       process.env[ZOEK_TEKST_V2_ENV],
       m.has(ZOEK_TEKST_V2_FONDSVLAG) ? flagAlsBoolean(m.get(ZOEK_TEKST_V2_FONDSVLAG)!) : undefined
+    ),
+    documentspoor: documentspoorActief(
+      process.env.DOCUMENTSPOOR,
+      m.has("documentspoor") ? flagAlsBoolean(m.get("documentspoor")!) : undefined
     ),
   };
 }
