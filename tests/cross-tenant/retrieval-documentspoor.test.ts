@@ -2,12 +2,11 @@
 //  §15-matrix — Documentspoor: letterlijk genoemd (niet-juridisch) document in
 //  een vrije vraag. Hermetisch: geen netwerk, geen database.
 //
-//  Het faalpatroon (Productie 8 oktober 2026, correlatie 563b709d, fonds
-//  Horizon, vrije chat zonder documentscope): "Welke beheersmaatregelen noemt
-//  DNB in de Good practice ESG risicobeheer pensioenfondsen voor ESG-risico's?"
-//  De hybride RPC liep na 8.047 ms tegen 57014; het R1-tekstpad gaf 30
-//  kandidaten; de selectie nam tien generieke passages, uit het DNB-document
-//  alleen p. 1/3/5 (titel, inhoud, inleiding). De maatregelen (GP6/GP7, p. 17)
+//  Synthetische regressiecasus: een vrije vraag noemt de volledige titel van
+//  een openbaar DNB-document, maar heeft geen documentscope. Na een time-out
+//  van de hybride RPC geeft het R1-tekstpad kandidaten; de selectie neemt
+//  uit het DNB-document alleen p. 1/3/5 (titel, inhoud, inleiding). De
+//  maatregelen (GP6/GP7, p. 17)
 //  kwamen niet in de antwoordcontext.
 //
 //  WAT DEZE TEST WEL EN NIET BEWIJST. De DNB-fixture hieronder is SYNTHETISCH
@@ -19,14 +18,10 @@
 //  dus de BINDING, de GRENZEN, de SELECTIE en de CONTEXTOPBOUW — niet de
 //  Postgres-rangschikking, niet de echte RPC onder RLS en niet het modelantwoord.
 //
-//  Read-only Productiefeiten (opdrachtgever, 8-10-2026), hier als invoer:
-//   - titel van 2745d314: exact "Good practice ESG risicobeheer pensioenfondsen",
-//     actief, geïndexeerd, generiek;
-//   - Horizon: fondsvlag zoek_tekst_v2 = true; GEEN fondsrij voor
-//     parent_retrieval of documentspoor (env PARENT_RETRIEVAL onbekend);
-//   - ts_rank_cd van de restvraag-OR binnen de 131 chunks: p. 17 chunk 96 op
-//     gedeelde rang 1–3 (1,4, gelijk met p. 11/13), chunk 98 lager. De RPC
-//     sorteert `rang desc, chunk_index asc`, dus chunk 96 valt binnen de vier.
+//  Het publieke document heet "Good practice ESG risicobeheer pensioenfondsen".
+//  Een afzonderlijke read-only rangmeting liet zien dat een maatregelenpassage
+//  binnen de top vier van het documentspoor kan vallen; dit bestand bevat
+//  uitsluitend synthetische tekst en testidentiteiten.
 //
 //  Lagen:
 //   (B) BINDING   — welk document de vraag letterlijk noemt; M3 ter vergelijking.
@@ -64,10 +59,10 @@ import type {
 } from "../../core/lib/retrieval/contract";
 
 // ── Fixture ─────────────────────────────────────────────────────────────────
-const HORIZON = "c9f583dc-0000-4000-8000-00000000000a";
+const FONDS_A = "c9f583dc-0000-4000-8000-00000000000a";
 const ANDER_FONDS = "c9f583dc-0000-4000-8000-00000000000b";
 const VRAAG = "Welke beheersmaatregelen noemt DNB in de Good practice ESG risicobeheer pensioenfondsen voor ESG-risico’s?";
-// Exact de Productietitel van 2745d314 (read-only bevestigd door de opdrachtgever, 8-10-2026).
+// Openbare documenttitel; de inhoud van de fixture is synthetisch.
 const ESG_TITEL = "Good practice ESG risicobeheer pensioenfondsen";
 const HASH = "a".repeat(64);
 const SCHOON = { verdict: "clean", sha256: HASH };
@@ -89,7 +84,7 @@ const D = {
   compliance: "e5000000-0000-4000-8000-000000000003",
   liquiditeit: "e5000000-0000-4000-8000-000000000004",
   pf: "e5000000-0000-4000-8000-000000000005",
-  horizonBeleid: "e5000000-0000-4000-8000-000000000006",
+  fondsBeleid: "e5000000-0000-4000-8000-000000000006",
   anderFonds: "e5000000-0000-4000-8000-000000000007",
   pw: "e5000000-0000-4000-8000-000000000008",
 };
@@ -99,7 +94,7 @@ const BASIS_DOCS: Doc[] = [
   { id: D.compliance, titel: "Good Practice inrichting compliancefunctie bij pensioenfondsen", bibliotheek: "generiek", fonds_id: null, documenttype: null, status: "van_kracht", geindexeerd: true, scan: true },
   { id: D.liquiditeit, titel: "Good Practice Beheersing Liquiditeitsrisico", bibliotheek: "generiek", fonds_id: null, documenttype: null, status: "van_kracht", geindexeerd: true, scan: true },
   { id: D.pf, titel: "Duurzaam en verantwoord beleggen good practice", bibliotheek: "generiek", fonds_id: null, documenttype: null, status: "van_kracht", geindexeerd: true, scan: true },
-  { id: D.horizonBeleid, titel: "Beleid maatschappelijk verantwoord beleggen Horizon 2026", bibliotheek: "fonds", fonds_id: HORIZON, documenttype: null, status: "van_kracht", geindexeerd: true, scan: true },
+  { id: D.fondsBeleid, titel: "Beleid maatschappelijk verantwoord beleggen Fonds A", bibliotheek: "fonds", fonds_id: FONDS_A, documenttype: null, status: "van_kracht", geindexeerd: true, scan: true },
   { id: D.anderFonds, titel: "Risicobeheer ESG ander fonds", bibliotheek: "fonds", fonds_id: ANDER_FONDS, documenttype: null, status: "van_kracht", geindexeerd: true, scan: true },
   { id: D.pw, titel: "Pensioenwet", bibliotheek: "generiek", fonds_id: null, documenttype: "wetgeving", status: "van_kracht", geindexeerd: true, scan: true },
 ];
@@ -121,7 +116,7 @@ const OVERIG_RIJEN: Rij[] = [
   { id: "comp-1", document_id: D.compliance, pagina: 2, chunk_index: 1, tekst: "Good practice compliancefunctie bij pensioenfondsen: rol van de compliancefunctie." },
   { id: "liq-1", document_id: D.liquiditeit, pagina: 3, chunk_index: 2, tekst: "Good practice liquiditeitsrisico: beheersmaatregelen voor liquiditeit." },
   { id: "pf-1", document_id: D.pf, pagina: 6, chunk_index: 5, tekst: "Good practice duurzaam beleggen: ESG-integratie door pensioenfondsen." },
-  { id: "hor-1", document_id: D.horizonBeleid, pagina: 2, chunk_index: 1, tekst: "Horizon hanteert ESG-uitsluitingen en engagement in het beleggingsbeleid." },
+  { id: "fonds-1", document_id: D.fondsBeleid, pagina: 2, chunk_index: 1, tekst: "Fonds A hanteert ESG-uitsluitingen en engagement in het beleggingsbeleid." },
 ];
 
 // ── Nep-PostgREST voor `documenten` (RLS: generiek + eigen fonds) ───────────
@@ -179,7 +174,7 @@ const doorzoekbaar = (r: Rij, docs: Doc[]) => `${docs.find((d) => d.id === r.doc
 
 /** Productievolgorde van het hoofdspoor: DNB p. 1/3/5 voorop, p. 17 afwezig. */
 function hoofdspoorKandidaten(docs: Doc[]): DocumentChunk[] {
-  const volgorde = ["esg-p1", "esg-p3", "esg-p5", "ren-1", "comp-1", "pf-1", "liq-1", "esg-p20", "hor-1", "esg-p9"];
+  const volgorde = ["esg-p1", "esg-p3", "esg-p5", "ren-1", "comp-1", "pf-1", "liq-1", "esg-p20", "fonds-1", "esg-p9"];
   const alle = [...ESG_RIJEN, ...OVERIG_RIJEN];
   return volgorde.map((id, i) => chunkVan(alle.find((r) => r.id === id)!, docs, 1 - i / 100));
 }
@@ -228,7 +223,7 @@ interface Draai {
   vraag?: string;
   /** Herschreven zoekvraag (gereformuleerd = true); ontbreekt = gelijk aan `vraag`. */
   zoekvraag?: string;
-  /** R1-tekstpad (fondsvlag zoek_tekst_v2, env ZOEK_TEKST_V2=on). Standaard aan, zoals Horizon. */
+  /** R1-tekstpad (fondsvlag zoek_tekst_v2, env ZOEK_TEKST_V2=on). Standaard aan in deze fixture. */
   r1?: { fondsvlag: boolean; env: string | undefined };
   docs?: Doc[];
   spoorAan?: boolean;
@@ -239,7 +234,7 @@ interface Draai {
 }
 async function draai(o: Draai = {}) {
   const docs = o.docs ?? BASIS_DOCS;
-  const fonds = o.fonds ?? HORIZON;
+  const fonds = o.fonds ?? FONDS_A;
   const vraag = o.vraag ?? VRAAG;
   const log: Aanroep[] = [];
   const zoekAanroepen: ZoekAanroep[] = [];
@@ -379,8 +374,8 @@ test("(E) zonder spoor (vlag uit) reproduceert de fixture het Productiepatroon: 
 // GP6 binnen het document op 1, maar GP7 eindigt gelijk met de titelpagina's op
 // plek 6, dus BUITEN de vier van het spoor; ook in Productie staat chunk 98
 // lager dan chunk 96. GP7 komt dan alleen mee via de parent-uitbreiding (±1
-// chunk) of de vectorarm (R1b). Horizon heeft geen fondsrij parent_retrieval en
-// de env-default is onbekend: GP7 is dus NIET bewezen. Deze test borgt GP6.
+// chunk) of de vectorarm (R1b). De stand van parent_retrieval is hier geen
+// testvoorwaarde: GP7 is dus NIET bewezen. Deze test borgt GP6.
 test("(E) met spoor: GP6 (p. 17) staat in de selectie én in de modelcontext", async () => {
   const { uit, naAdapter, zoekAanroepen, spoor } = await draai();
   // Passage-selectie. Binnen het document scoren p. 5 en p. 17 lexicaal gelijk
@@ -465,7 +460,7 @@ test("(G) fail-closed op R1: documentspoor aan maar R1-tekstpad uit ⇒ geen tit
 });
 
 test("(G) een gekozen documentscope wint: geen documentspoor", async () => {
-  const { log, zoekAanroepen, spoor } = await draai({ scope: [D.horizonBeleid] });
+  const { log, zoekAanroepen, spoor } = await draai({ scope: [D.fondsBeleid] });
   assert.equal(log.length, 0);
   assert.equal(zoekAanroepen.length, 1);
   assert.equal(spoor, undefined);
@@ -507,8 +502,8 @@ test("(G) een afgebroken beurt blijft afgebroken (het spoor slikt de afbreking n
   ac.abort();
   await assert.rejects(
     vulAanMetGenoemdDocument([], {
-      teksten: [VRAAG, VRAAG], fondsId: HORIZON, filters: FILTERS, maxKandidaten: 30, signal: ac.signal,
-      supabase: documentenNep(BASIS_DOCS, HORIZON, []), zoek: nepZoek(BASIS_DOCS, []),
+      teksten: [VRAAG, VRAAG], fondsId: FONDS_A, filters: FILTERS, maxKandidaten: 30, signal: ac.signal,
+      supabase: documentenNep(BASIS_DOCS, FONDS_A, []), zoek: nepZoek(BASIS_DOCS, []),
     })
   );
 });
@@ -517,7 +512,7 @@ test("(G) een afgebroken beurt blijft afgebroken (het spoor slikt de afbreking n
 const metEsg = (patch: Partial<Doc>) => BASIS_DOCS.map((d) => (d.id === D.esg ? { ...d, ...patch } : d));
 
 test("(N) ambigu: dezelfde titel ook als fondsdocument ⇒ geen binding, oud gedrag", async () => {
-  const docs = [...BASIS_DOCS, { ...BASIS_DOCS[0], id: "e5000000-0000-4000-8000-0000000000f1", bibliotheek: "fonds" as const, fonds_id: HORIZON }];
+  const docs = [...BASIS_DOCS, { ...BASIS_DOCS[0], id: "e5000000-0000-4000-8000-0000000000f1", bibliotheek: "fonds" as const, fonds_id: FONDS_A }];
   const { spoor, zoekAanroepen } = await draai({ docs });
   assert.deepEqual(spoor, { status: "meerdere", toegevoegd: 0 });
   assert.equal(zoekAanroepen.length, 1);
@@ -529,8 +524,8 @@ test("(N) ander fonds: een titel die alleen in een ander fonds bestaat, bindt no
   assert.equal(zoekAanroepen.length, 1);
 });
 
-test("(N) ander fonds, omgekeerd: het eigen fondsdocument van Horizon bindt niet voor een ander fonds", async () => {
-  const vraag = "Wat staat in Beleid maatschappelijk verantwoord beleggen Horizon 2026 over uitsluitingen?";
+test("(N) ander fonds, omgekeerd: het eigen fondsdocument van Fonds A bindt niet voor een ander fonds", async () => {
+  const vraag = "Wat staat in Beleid maatschappelijk verantwoord beleggen Fonds A over uitsluitingen?";
   assert.deepEqual((await draai({ vraag })).spoor?.status, "toegevoegd");
   const ander = await draai({ vraag, fonds: ANDER_FONDS });
   assert.deepEqual(ander.spoor, { status: "geen", toegevoegd: 0 });
