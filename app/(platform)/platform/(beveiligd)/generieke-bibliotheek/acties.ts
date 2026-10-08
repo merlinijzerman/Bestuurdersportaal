@@ -67,6 +67,7 @@ import {
 } from "@/core/lib/herindex-selectie";
 import { beheerSleutel, preflightSysteem, rondAf, vingerafdruk } from "@/core/lib/ai-preflight";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import { generiekeHerindexOcrReservering } from "@/platform/lib/generieke-ocr-reservering";
 
 const LIJST_PAD = "/platform/generieke-bibliotheek";
 const CAP = "platform.generic.library.manage" as const;
@@ -1123,18 +1124,7 @@ export async function curatieHerindexeren(
                 label: "generieke-herindexering",
               },
             },
-            reserveerOcr: async (paginas, poging) => {
-              const ocrPf = await preflightSysteem(svc, {
-                actietype: "ocr_generiek",
-                fondsId: null,
-                provider: "mistral",
-                model: "mistral-ocr-latest",
-                ocrPaginas: paginas,
-                idempotentie: `${beheerSleutel("ocr_generiek")}:${poging}`,
-                vingerafdruk: vingerafdruk({ documentId: doc.id, paginas, poging }),
-              });
-              return ocrPf.uitkomst === "nieuw";
-            },
+            reserveerOcr: generiekeHerindexOcrReservering(svc, doc.id),
           });
         } catch (e) {
           // Onverwachte fout (bv. gateway-configuratie): dezelfde opruiming als

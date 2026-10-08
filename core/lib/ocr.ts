@@ -38,9 +38,16 @@ const OCR_URL = "https://api.mistral.ai/v1/ocr";
  *                tekstlaag al genoeg opleverde.
  * @param poging  1-based volgnummer; elke retry reserveert opnieuw, want de
  *                provider factureert die ook opnieuw.
- * @returns       false als het quotum op is; de aanroeper slaat OCR dan over.
+ * @returns       false als het quotum op is; een toegestane reservering kan
+ *                optioneel een callback bevatten om juist déze poging af te
+ *                ronden. Oudere boolean-aanroepers blijven ondersteund.
  */
-export type OcrReservering = (paginas: number, poging: number) => Promise<boolean>;
+export type OcrReservering = (paginas: number, poging: number) => Promise<
+  boolean | {
+    toegestaan: true;
+    afronden: (status: "voltooid" | "mislukt") => Promise<void>;
+  }
+>;
 
 /** OCR is bewust niet uitgevoerd. Draagt de reden, zodat de melding eerlijk is. */
 export class OcrGeweigerdError extends Error {
@@ -257,90 +264,106 @@ export async function ocrPdfNaarResultaat(
     if (paginas == null) {
       throw new OcrGeweigerdError("paginas_onbekend");
     }
-    const toegestaan = await reserveer(paginas, poging + 1);
+    const reservering = await reserveer(paginas, poging + 1);
+    const toegestaan = reservering === true ||
+      (typeof reservering === "object" && reservering.toegestaan);
     if (!toegestaan) {
       throw new OcrGeweigerdError("quotum_bereikt");
     }
-    await poortCheck(poort, "mistral", OCR_MODEL);
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
-
-    let res: Response;
+    let pogingStatus: "voltooid" | "mislukt" = "mislukt";
     try {
-      res = await fetch(OCR_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
-        body,
-        signal: controller.signal,
-      });
-    } catch (error) {
-      // Abort/netwerkfout: behandel als tijdelijk en retry tot het maximum.
-      if (poging < MAX_RETRIES) {
-        await slaap(1000 * 2 ** poging);
+      await poortCheck(poort, "mistral", OCR_MODEL);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
+
+      let res: Response;
+      try {
+        res = await fetch(OCR_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          },
+          body,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        // Abort/netwerkfout: behandel als tijdelijk en retry tot het maximum.
+        if (poging < MAX_RETRIES) {
+          await slaap(1000 * 2 ** poging);
+          continue;
+        }
+        const reden =
+          error instanceof Error && error.name === "AbortError"
+            ? `timeout na ${OCR_TIMEOUT_MS} ms`
+            : error instanceof Error
+              ? error.message
+              : String(error);
+        throw new OcrTijdelijkeFout(
+          error instanceof Error && error.name === "AbortError"
+            ? "ocr_timeout"
+            : "ocr_provider_onbereikbaar",
+          `Mistral OCR: ${reden}`
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (res.ok) {
+        const data = (await res.json()) as MistralOcrResponse;
+        const paginas = [...(data.pages ?? [])].sort((a, b) => a.index - b.index);
+
+        // Kosten/usage zichtbaar in de logs (acceptatiecriterium §11) — niet opgeslagen.
+        console.info(
+          `[OCR] Mistral verwerkte ${data.usage_info?.pages_processed ?? paginas.length} pagina('s).`
+        );
+
+        const paginaTeksten: string[] = [];
+        const segmenten: TekstSegment[] = [];
+        for (const p of paginas) {
+          const tekst = schoonOcrMarkdown(p.markdown ?? "");
+          if (tekst.trim()) {
+            paginaTeksten.push(tekst);
+            // index is 0-based bij Mistral; ons bronnummer is 1-based.
+            segmenten.push({ pagina: p.index + 1, paragraaf: null, tekst });
+          }
+        }
+
+        pogingStatus = "voltooid";
+        return {
+          tekst: paginaTeksten.join("\n\n"),
+          aantalPaginas: paginas.length || null,
+          segmenten,
+        };
+      }
+
+      const tijdelijkeFoutcode = classificeerTijdelijkeOcrHttpStatus(res.status);
+      const rateLimitDetail = res.status === 429 ? await res.text().catch(() => "") : null;
+      if (rateLimitDetail !== null) logOcrRateLimit(res, rateLimitDetail, poging + 1);
+      if (tijdelijkeFoutcode && poging < MAX_RETRIES) {
+        await slaap(1000 * 2 ** poging); // 1s → 2s → 4s (OCR is trager dan embed)
         continue;
       }
-      const reden =
-        error instanceof Error && error.name === "AbortError"
-          ? `timeout na ${OCR_TIMEOUT_MS} ms`
-          : error instanceof Error
-            ? error.message
-            : String(error);
-      throw new OcrTijdelijkeFout(
-        error instanceof Error && error.name === "AbortError"
-          ? "ocr_timeout"
-          : "ocr_provider_onbereikbaar",
-        `Mistral OCR: ${reden}`
-      );
+      const detail = rateLimitDetail ?? await res.text().catch(() => "");
+      const melding = res.status === 429
+        ? "Mistral OCR 429"
+        : `Mistral OCR ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`;
+      if (tijdelijkeFoutcode) {
+        throw new OcrTijdelijkeFout(tijdelijkeFoutcode, melding, res.status);
+      }
+      throw new Error(melding);
     } finally {
-      clearTimeout(timeout);
-    }
-
-    if (res.ok) {
-      const data = (await res.json()) as MistralOcrResponse;
-      const paginas = [...(data.pages ?? [])].sort((a, b) => a.index - b.index);
-
-      // Kosten/usage zichtbaar in de logs (acceptatiecriterium §11) — niet opgeslagen.
-      console.info(
-        `[OCR] Mistral verwerkte ${data.usage_info?.pages_processed ?? paginas.length} pagina('s).`
-      );
-
-      const paginaTeksten: string[] = [];
-      const segmenten: TekstSegment[] = [];
-      for (const p of paginas) {
-        const tekst = schoonOcrMarkdown(p.markdown ?? "");
-        if (tekst.trim()) {
-          paginaTeksten.push(tekst);
-          // index is 0-based bij Mistral; ons bronnummer is 1-based.
-          segmenten.push({ pagina: p.index + 1, paragraaf: null, tekst });
+      if (typeof reservering === "object") {
+        try {
+          await reservering.afronden(pogingStatus);
+        } catch {
+          // De provideruitkomst mag niet worden vervangen door een fout in de
+          // administratieve afronding. De lease blijft dan als vangnet bestaan.
+          console.error("[OCR] actie-afronding mislukt");
         }
       }
-
-      return {
-        tekst: paginaTeksten.join("\n\n"),
-        aantalPaginas: paginas.length || null,
-        segmenten,
-      };
     }
-
-    const tijdelijkeFoutcode = classificeerTijdelijkeOcrHttpStatus(res.status);
-    const rateLimitDetail = res.status === 429 ? await res.text().catch(() => "") : null;
-    if (rateLimitDetail !== null) logOcrRateLimit(res, rateLimitDetail, poging + 1);
-    if (tijdelijkeFoutcode && poging < MAX_RETRIES) {
-      await slaap(1000 * 2 ** poging); // 1s → 2s → 4s (OCR is trager dan embed)
-      continue;
-    }
-    const detail = rateLimitDetail ?? await res.text().catch(() => "");
-    const melding = res.status === 429
-      ? "Mistral OCR 429"
-      : `Mistral OCR ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`;
-    if (tijdelijkeFoutcode) {
-      throw new OcrTijdelijkeFout(tijdelijkeFoutcode, melding, res.status);
-    }
-    throw new Error(melding);
   }
   throw new OcrTijdelijkeFout(
     "ocr_provider_tijdelijk",

@@ -25,6 +25,7 @@ import {
   type Bestandstype,
 } from "../../core/lib/document-extractie";
 import { extractTekstMetOcrFallback } from "../../core/lib/ocr";
+import { ocrReserveringMetAfronding } from "../../core/lib/ocr-actie-afronding";
 import {
   preflightSysteem,
   rondAf,
@@ -182,7 +183,7 @@ export async function verwerkGeneriekBestand(
           idempotentie: systeemSleutel(documentId, "ocr_generiek", poging),
           vingerafdruk: vingerafdruk({ documentId, versieId, paginas }),
         });
-        return uitkomst.uitkomst === "nieuw";
+        return ocrReserveringMetAfronding(svc, uitkomst);
       },
     });
   } catch (e) {

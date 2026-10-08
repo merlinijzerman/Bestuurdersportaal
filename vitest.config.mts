@@ -9,6 +9,7 @@ const nodeTestbestanden = [
   "core/lib/vraagtype.test.ts",
   "core/lib/provider-fout.test.ts",
   "core/lib/ocr.test.ts",
+  "platform/lib/generieke-ocr-reservering.test.ts",
   "core/lib/ai-gateway/gateway.test.ts",
   "core/lib/ai-gateway/anthropic-adapter.test.ts",
   "core/lib/ai-gateway/azure-openai-adapter.test.ts",

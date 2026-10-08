@@ -29,8 +29,12 @@ const expected = {
   // moet tijdelijk blijven; een definitieve 400 behoudt de lege fallback.
   // OCR-diagnose 07-10-2026: +1 geval voor onveilige providerresponsen.
   "core/lib/ocr.test.ts": {
+    count: 5,
+    titlesSha256: "a9b09cfd15a11ff7558805d95a05f48cc353af8a32eaf40f57e02c1689365d5f",
+  },
+  "platform/lib/generieke-ocr-reservering.test.ts": {
     count: 3,
-    titlesSha256: "56a0e4fb96cfc8dce955877af4df73ef2786f375b1c7ef1dbbffbc5c1e3cb91d",
+    titlesSha256: "9855d560e589d0f70dd06c3dc9a29382fb44602e58ce74f07c41dba4e3048816",
   },
   // #311 T3 — contracttests van de AI-gateway (gateway.test.ts) en de
   // secret-/foutlaag (secrets.test.ts); klant-Azure voegt de fonds-/refgrens toe.
