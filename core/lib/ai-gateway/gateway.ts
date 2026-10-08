@@ -89,6 +89,9 @@ async function resolveer(deps: GatewayDeps, ctx: GatewayContext, verzoek: Genere
     // Platformbreed (AQLab): geen fonds, expliciete keuze binnen de allowlist.
     if (ctx.fondsId !== null) throw new GatewayFout("configuratie", "fonds_bij_platformbrede_taak");
     if (!verzoek.modelOverride) throw new GatewayFout("configuratie", "model_override_vereist");
+    if (verzoek.modelOverride.provider === "azure_openai") {
+      throw new GatewayFout("configuratie", "azure_openai_platformtaak_niet_toegestaan");
+    }
     const profiel = await deps.db.leesPlatformProfiel(verzoek.modelOverride.provider);
     if (!profiel.ok) throw new GatewayFout("configuratie", profiel.reden);
     provider = profiel.provider;
@@ -105,8 +108,17 @@ async function resolveer(deps: GatewayDeps, ctx: GatewayContext, verzoek: Genere
     }
     const cfg = await deps.db.leesConfig(ctx.fondsId, taakgroep);
     if (!cfg.ok) throw new GatewayFout("configuratie", cfg.reden);
+    if (cfg.provider === "azure_openai" && cfg.eigenaarFondsId !== ctx.fondsId) {
+      throw new GatewayFout("configuratie", "azure_openai_profiel_niet_van_fonds");
+    }
     if (cfg.eigenaarFondsId !== null && cfg.eigenaarFondsId !== ctx.fondsId) {
       throw new GatewayFout("configuratie", "profiel_niet_van_fonds");
+    }
+    if (
+      cfg.provider === "azure_openai" &&
+      (cfg.secretRef !== "AZURE_OPENAI_API_KEY" || cfg.endpointRef !== "AZURE_OPENAI_BASE_URL")
+    ) {
+      throw new GatewayFout("configuratie", "azure_openai_referenties_ongeldig");
     }
     provider = cfg.provider;
     model = cfg.model;
@@ -122,9 +134,10 @@ async function resolveer(deps: GatewayDeps, ctx: GatewayContext, verzoek: Genere
   return { provider, model, profielId, configVersie, taakgroep, credentials, adapter };
 }
 
-function adapterVerzoek(verzoek: GenereerVerzoek, model: string): AdapterVerzoek {
+function adapterVerzoek(verzoek: GenereerVerzoek, model: string, taakgroep: Taakgroep | null): AdapterVerzoek {
   return {
     model,
+    taakgroep,
     systeem: verzoek.systeem,
     berichten: verzoek.berichten,
     maxTokens: verzoek.maxTokens,
@@ -244,7 +257,7 @@ export function maakGateway(deps: GatewayDeps): AiGateway {
       const start = nu();
       let r: AdapterResultaat;
       try {
-        r = await res.adapter.genereer(adapterVerzoek(verzoek, res.model), res.credentials);
+        r = await res.adapter.genereer(adapterVerzoek(verzoek, res.model, res.taakgroep), res.credentials);
       } catch (e) {
         const fout = classificeerProviderFout(e, verzoek.signal);
         await schrijfLog(ctx, verzoek, res, { ok: false, fout }, nu() - start);
@@ -259,7 +272,7 @@ export function maakGateway(deps: GatewayDeps): AiGateway {
       const start = nu();
       let adapterStream;
       try {
-        adapterStream = res.adapter.stream(adapterVerzoek(verzoek, res.model), res.credentials);
+        adapterStream = res.adapter.stream(adapterVerzoek(verzoek, res.model, res.taakgroep), res.credentials);
       } catch (e) {
         const fout = classificeerProviderFout(e, verzoek.signal);
         await schrijfLog(ctx, verzoek, res, { ok: false, fout }, nu() - start);
