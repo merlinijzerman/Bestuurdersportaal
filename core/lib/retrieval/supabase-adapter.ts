@@ -18,6 +18,7 @@ import {
   verrijkNotulenChunks,
   verrijkDocumentmetadata,
   vulAanMetArtikelkandidaten,
+  vulAanMetGenoemdDocument,
   vulAanMetSectiekandidaten,
   type DocumentChunk,
   type RetrievalMeta,
@@ -26,6 +27,7 @@ import {
 import { verrijkMetParents } from "../parent-context";
 import { alsActueleVersiestand, leesSupabaseVersies } from "./supabase-versie";
 import { GEEN_FASEMETER } from "./fasetijden";
+import { ZOEK_TEKST_V2_ENV, zoekTekstV2Actief } from "./zoektekst-vlag";
 import type {
   AdapterCapabilities,
   AdapterUitkomst,
@@ -81,6 +83,7 @@ export interface SupabaseAdapterDependencies {
   verrijkDocumentmeta?: typeof verrijkDocumentmetadata;
   /** #500 — injecteerbaar gericht artikelspoor (hermetische tests). */
   artikelkandidaten?: typeof vulAanMetArtikelkandidaten;
+  documentspoor?: typeof vulAanMetGenoemdDocument;
   sectiekandidaten?: typeof vulAanMetSectiekandidaten;
 }
 
@@ -112,6 +115,7 @@ export function maakSupabaseAdapter(
   const doeDocumentmeta = dependencies.verrijkDocumentmeta ?? verrijkDocumentmetadata;
   const doeSectie = dependencies.sectiekandidaten ?? vulAanMetSectiekandidaten;
   const doeArtikel = dependencies.artikelkandidaten ?? vulAanMetArtikelkandidaten;
+  const doeDocument = dependencies.documentspoor ?? vulAanMetGenoemdDocument;
 
   const behoudIdentiteit = (bron: Bronresultaat): Bronresultaat => {
     const eerder = identiteitPerRef.get(bron.ref);
@@ -154,6 +158,21 @@ export function maakSupabaseAdapter(
     async zoek(ctx: RetrievalContext, query: RetrievalQuery): Promise<AdapterUitkomst> {
       const t0 = Date.now();
       const meter = ctx.fasemeter ?? GEEN_FASEMETER;
+      const zoekOpties = {
+        ...vlaggen,
+        gateway: rerank.gateway,
+        rerankClient: rerank.client,
+        origineleVraag: query.origineleVraag,
+        stopNaRangschikking: true,
+        // PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt.
+        signal: ctx.signal,
+        // #500 — fasetijden (inhoudsvrij) van embedding, zoek-RPC's per poging,
+        // scanbewijs en rerank.
+        ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter } : {}),
+        // #500 — begrensde volscans: ALLEEN bij een juridische artikelfocus
+        // (dezelfde poort als het artikelspoor). Zie `RetrievalOpties`.
+        ...(query.artikelfocus && artikelfocusBegrenzingAan() ? { begrensVolscans: true } : {}),
+      };
       const { chunks: gerangschikt, meta } = await zoek(
         query.zoekvraag,
         ctx.fondsId,
@@ -164,21 +183,7 @@ export function maakSupabaseAdapter(
         // uiteenlopen, en dan zoekt een spoor stil breder of smaller.
         ctx.scope?.documentIds,
         query.filters,
-        {
-          ...vlaggen,
-          gateway: rerank.gateway,
-          rerankClient: rerank.client,
-          origineleVraag: query.origineleVraag,
-          stopNaRangschikking: true,
-          // PR-B — het samengestelde afbreek-/deadlinesignaal van de beurt.
-          signal: ctx.signal,
-          // #500 — fasetijden (inhoudsvrij) van embedding, zoek-RPC's per poging,
-          // scanbewijs en rerank.
-          ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter } : {}),
-          // #500 — begrensde volscans: ALLEEN bij een juridische artikelfocus
-          // (dezelfde poort als het artikelspoor). Zie `RetrievalOpties`.
-          ...(query.artikelfocus && artikelfocusBegrenzingAan() ? { begrensVolscans: true } : {}),
-        }
+        zoekOpties
       );
 
       // #500 — het gerichte artikelspoor. Alleen als de orkestratie een
@@ -198,7 +203,7 @@ export function maakSupabaseAdapter(
             ...(ctx.fasemeter ? { fasemeter: ctx.fasemeter } : {}),
           })
         : gerangschikt;
-      const chunks = query.sectiefocus
+      const chunksNaSectie = query.sectiefocus
         ? await doeSectie(naArtikel, {
             focus: query.sectiefocus,
             fondsId: ctx.fondsId,
@@ -208,6 +213,42 @@ export function maakSupabaseAdapter(
             signal: ctx.signal,
           })
         : naArtikel;
+
+      // Documentspoor — een vrije vraag die letterlijk de volledige titel van
+      // één niet-juridisch document noemt. Alleen zonder documentscope (een
+      // gekozen scope wint altijd) en zonder artikel- of sectiefocus (juridische
+      // vragen houden exact het #500/#548-gedrag). Aanvullend: de gewone
+      // kandidaten blijven; zie `vulAanMetGenoemdDocument`.
+      // Fail-closed: ALLEEN als het R1-tekstpad (`zoek_chunks_begrensd`) voor dit
+      // fonds werkelijk actief is — dezelfde waarheidstabel als de retrievalkern.
+      // Anders zou de extra zoekslag via het oude, trage `zoek_chunks` lopen.
+      const documentspoorAan =
+        vlaggen.documentspoor === true &&
+        zoekTekstV2Actief(process.env[ZOEK_TEKST_V2_ENV], vlaggen.zoekTekstV2) &&
+        !(ctx.scope?.documentIds?.length) && !query.artikelfocus && !query.sectiefocus;
+      // Observeerbaarheid zonder auditschema-wijziging: de fasemeter (inhoudsvrije
+      // logregel per beurt). `ok` + rijen = toegevoegde passages; `overgeslagen`
+      // = geen of geen eenduidige binding; `fout` = fout of eigen tijdslimiet.
+      // Een `retrieval_meta`-sleutel vraagt een `meta_projectie()`-migratie (PR-C).
+      const naDocument = documentspoorAan
+        ? await meter.meet("documentspoor", () => doeDocument(chunksNaSectie, {
+            // Zoals #548-R5: de herschreven zoekvraag én de letterlijke
+            // gebruikersvraag. Een herformulering kan de titel kwijtraken.
+            teksten: [query.zoekvraag, query.origineleVraag],
+            fondsId: ctx.fondsId,
+            filters: query.filters,
+            maxKandidaten: query.maxKandidaten,
+            opties: zoekOpties,
+            zoek,
+            signal: ctx.signal,
+          }), {
+            rijen: (u) => u.meta.toegevoegd,
+            status: (u) => (u.meta.status === "toegevoegd" ? "ok"
+              : u.meta.status === "fout" || u.meta.status === "timeout" ? "fout"
+              : "overgeslagen"),
+          })
+        : null;
+      const chunks = naDocument?.chunks ?? chunksNaSectie;
 
       const diagnostiek: Partial<RetrievalMeta> = { ...meta };
       for (const veld of SELECTIE_AFGELEID) delete (diagnostiek as Record<string, unknown>)[veld];
