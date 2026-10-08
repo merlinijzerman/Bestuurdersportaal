@@ -1,0 +1,35 @@
+name: Onderzoek
+description: Leg een open vraag en het benodigde besluit vast zonder een oplossing voor te schrijven.
+title: "[Onderzoek] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Deze repository is publiek. Gebruik neutrale verwijzingen voor vertrouwelijke bronnen en bevindingen.
+  - type: textarea
+    id: vraag
+    attributes:
+      label: Onderzoeksvraag en aanleiding
+    validations:
+      required: true
+  - type: textarea
+    id: afbakening
+    attributes:
+      label: Afbakening en geraakte omgeving
+      description: Benoem wat wel en niet onderzocht wordt. Productieacties vragen een afzonderlijk akkoord volgens de releaseweg.
+    validations:
+      required: true
+  - type: textarea
+    id: bewijs
+    attributes:
+      label: Benodigde meting of bewijs
+      description: Welke feiten maken een besluit mogelijk? Benoem bronnen en onzekerheden.
+    validations:
+      required: true
+  - type: textarea
+    id: besluit
+    attributes:
+      label: Besliscriteria en verwachte uitkomst
+      description: Beschrijf de keuze die het onderzoek moet ondersteunen, niet een vooraf vaststaande implementatie.
+    validations:
+      required: true
