@@ -1,0 +1,52 @@
+name: Wijziging of userstory
+description: Beschrijf een gewenste verandering en hoe we die aantoonbaar accepteren.
+title: "[Wijziging] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Deze repository is publiek. Plaats hier geen klantgegevens, geheimen, exploiteerbare beveiligingsdetails of vertrouwelijk testbewijs. Verwijs neutraal naar afgeschermd bewijs.
+  - type: textarea
+    id: behoefte
+    attributes:
+      label: Behoefte en gebruiker
+      description: Welk probleem of welke behoefte heeft wie?
+      placeholder: Als ... wil ik ... zodat ...
+    validations:
+      required: true
+  - type: textarea
+    id: uitkomst
+    attributes:
+      label: Gewenste uitkomst en afbakening
+      description: Wat moet veranderen en wat valt buiten deze wijziging?
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact en afhankelijkheden
+      description: Denk aan gebruikers, processen, data, tenantgrenzen, beveiliging, privacy, AI/retrieval, integraties, beheer en kosten. Motiveer niet van toepassing.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptatiecriteria
+      description: Nummer de criteria en formuleer waarneembaar gedrag, inclusief relevante fout- en toegangsgevallen.
+      placeholder: "AC-1: Bij ... gebeurt ...; AC-2: Bij ... wordt toegang geweigerd."
+    validations:
+      required: true
+  - type: textarea
+    id: toetsing
+    attributes:
+      label: Voorgestelde toetsing
+      description: Welke test of waarneming, op welke omgeving, kan ieder criterium aantonen? Vermeld open onzekerheden.
+    validations:
+      required: false
+  - type: input
+    id: release
+    attributes:
+      label: Beoogde release of venster
+      description: Laat leeg als dit nog niet is besloten; de feitelijke release volgt pas uit het vrijgavebesluit.
+    validations:
+      required: false
