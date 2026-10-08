@@ -15,6 +15,7 @@ import type {
   ReasoningEffort,
   StopReden,
   StopDetailsCategorie,
+  Taakgroep,
   TekstBlok,
   Usage,
 } from "../contract";
@@ -22,6 +23,8 @@ import type { Credentials } from "../secrets";
 
 export interface AdapterVerzoek {
   model: string;
+  /** null voor platformtaken (AQLab); fondsgebonden taken gebruiken het productpad. */
+  taakgroep?: Taakgroep | null;
   systeem: string | TekstBlok[];
   berichten: Bericht[];
   maxTokens: number;

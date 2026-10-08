@@ -137,7 +137,7 @@ export function bouwAzureOpenAIBody(v: AdapterVerzoek, stream: boolean): Record<
   };
 }
 
-function requestSignal(v: AdapterVerzoek): AbortSignal | undefined {
+export function requestSignal(v: AdapterVerzoek): AbortSignal | undefined {
   const signalen: AbortSignal[] = [];
   if (v.signal) signalen.push(v.signal);
   if (typeof v.timeoutMs === "number" && v.timeoutMs > 0) signalen.push(AbortSignal.timeout(v.timeoutMs));
@@ -220,7 +220,7 @@ export function normaliseerAzureOpenAIResponse(
   };
 }
 
-function controleerVerplichteTool(v: AdapterVerzoek, resultaat: AdapterResultaat): void {
+export function controleerVerplichteTool(v: AdapterVerzoek, resultaat: AdapterResultaat): void {
   const vereist = v.tools?.find(
     (tool): tool is Extract<NeutraleTool, { soort: "functie" }> =>
       tool.soort === "functie" && Boolean(tool.verplicht)
@@ -241,7 +241,7 @@ async function haalJson(res: Response): Promise<AzureOpenAIResponse> {
   return (await res.json()) as AzureOpenAIResponse;
 }
 
-async function verwerkSse(
+export async function verwerkSse(
   res: Response,
   opDelta: (delta: string) => void
 ): Promise<AzureOpenAIResponse> {

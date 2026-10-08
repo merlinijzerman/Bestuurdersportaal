@@ -162,6 +162,22 @@ gewone document-/SharePointcontext wordt door het portaal samengesteld en kan we
 klantprovider worden getest. De rollback weigert zodra Azure OpenAI-configuratie of auditdata
 bestaat; exporteer en ontkoppel die gecontroleerd voordat het contract wordt teruggenomen.
 
+### #524 — Responses-adapter op main, zonder Productieactivering
+
+Fondsgebonden `openai`-aanroepen gebruiken de Responses API met `store: false`,
+streaming en functietools; platform-AQLab houdt het bestaande Chat Completions-pad.
+Dit codecontract is iets anders dan de klant-eigen `azure_openai`-provider.
+De Preview-pilotconfiguratie en haar seed/rollback worden niet naar Productie
+overgenomen. Op Productie blijven de `openai`-killswitch, modelallowlist en
+fondsconfiguraties ongewijzigd. Een Production-deploy bewijst dus geen live
+OpenAI-call of klantacceptatie.
+
+Controleer vóór en na de deploy afzonderlijk dat `openai` en `azure_openai`
+op `gestopt` staan, dat er geen actieve OpenAI-fondsconfiguraties of modellen
+zijn toegevoegd, en dat bestaande Claude-aanroepen blijven werken. Een latere
+activering vereist een eigen besluit, providerconfiguratie en synthetische smoke.
+Webzoek via een providertool is niet gecontracteerd en faalt gesloten.
+
 ### #438 — Preview-canary Opus 5.5/Sonnet 5 (PR3)
 
 Volgorde voor `portal_preview`:

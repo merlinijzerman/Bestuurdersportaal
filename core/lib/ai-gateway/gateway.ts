@@ -134,9 +134,10 @@ async function resolveer(deps: GatewayDeps, ctx: GatewayContext, verzoek: Genere
   return { provider, model, profielId, configVersie, taakgroep, credentials, adapter };
 }
 
-function adapterVerzoek(verzoek: GenereerVerzoek, model: string): AdapterVerzoek {
+function adapterVerzoek(verzoek: GenereerVerzoek, model: string, taakgroep: Taakgroep | null): AdapterVerzoek {
   return {
     model,
+    taakgroep,
     systeem: verzoek.systeem,
     berichten: verzoek.berichten,
     maxTokens: verzoek.maxTokens,
@@ -256,7 +257,7 @@ export function maakGateway(deps: GatewayDeps): AiGateway {
       const start = nu();
       let r: AdapterResultaat;
       try {
-        r = await res.adapter.genereer(adapterVerzoek(verzoek, res.model), res.credentials);
+        r = await res.adapter.genereer(adapterVerzoek(verzoek, res.model, res.taakgroep), res.credentials);
       } catch (e) {
         const fout = classificeerProviderFout(e, verzoek.signal);
         await schrijfLog(ctx, verzoek, res, { ok: false, fout }, nu() - start);
@@ -271,7 +272,7 @@ export function maakGateway(deps: GatewayDeps): AiGateway {
       const start = nu();
       let adapterStream;
       try {
-        adapterStream = res.adapter.stream(adapterVerzoek(verzoek, res.model), res.credentials);
+        adapterStream = res.adapter.stream(adapterVerzoek(verzoek, res.model, res.taakgroep), res.credentials);
       } catch (e) {
         const fout = classificeerProviderFout(e, verzoek.signal);
         await schrijfLog(ctx, verzoek, res, { ok: false, fout }, nu() - start);

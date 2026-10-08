@@ -50,6 +50,10 @@ const expected = {
     count: 6,
     titlesSha256: "d5d1ceff2deafffb5f546e664c474e2e30f502df41d603ec07489009a362f668",
   },
+  "tests/unit/openai-adapter.test.ts": {
+    count: 5,
+    titlesSha256: "0843d1b066f81b8191775be361d41093c4e121c2a754b56cddafee22b32ac823",
+  },
   "core/lib/ai-gateway/secrets.test.ts": {
     count: 4,
     titlesSha256: "df287120841f604a8ea771e66e721b2fffe91cc6339aaca3c70b4dc6fc7a4868",
