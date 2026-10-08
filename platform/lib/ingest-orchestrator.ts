@@ -61,6 +61,7 @@ import {
 } from "@/platform/lib/legacy-scan";
 import { isProviderAuthenticatieFout } from "@/core/lib/provider-fout";
 import { bepaalDocumentIngestAiScope } from "@/core/lib/document-ingest-ai-scope";
+import { ocrReserveringMetAfronding } from "@/core/lib/ocr-actie-afronding";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
 const TIJDBUDGET_MS = 240_000; // ruim binnen maxDuration 300s
@@ -788,7 +789,7 @@ async function extracteerEnChunk(
           ),
           vingerafdruk: vingerafdruk({ documentId: doc.id, paginas }),
         });
-        return uitkomst.uitkomst === "nieuw";
+        return ocrReserveringMetAfronding(svc, uitkomst);
       },
     });
   } catch (e) {
