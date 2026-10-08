@@ -15,6 +15,7 @@ import { rateLimited } from "@/core/lib/api-errors";
 import { herindexeerDocument } from "@/core/lib/reindex";
 import { INDEXERING_VERSIE, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
 import { productieGateway } from "@/core/lib/ai-gateway/gateway-productie";
+import { ocrReserveringMetAfronding } from "@/core/lib/ocr-actie-afronding";
 
 // ============================================================================
 //  POST /api/documents/reindex-backfill — gedeelde R1.1+R1.2-re-index (fonds).
@@ -148,7 +149,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen"
           idempotentie: systeemSleutel(doc.id, "ocr_reindex", poging),
           vingerafdruk: vingerafdruk({ documentId: doc.id, paginas }),
         });
-        return uitkomst.uitkomst === "nieuw";
+        return ocrReserveringMetAfronding(supabase, uitkomst);
       },
     });
     await rondAf(supabase, actieId, res.status === "mislukt" ? "mislukt" : "voltooid");

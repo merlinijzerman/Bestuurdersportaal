@@ -197,6 +197,32 @@ test("AI-begrenzing — elke kostendragende ingang roept de preflight aan", () =
   );
 });
 
+test("generieke OCR-herindexering rondt de eigen reservering per poging af", () => {
+  const actie = lees("app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts");
+  const reservering = lees("platform/lib/generieke-ocr-reservering.ts");
+  const afronding = lees("core/lib/ocr-actie-afronding.ts");
+  assert.match(actie, /reserveerOcr:\s*generiekeHerindexOcrReservering\(svc, doc\.id\)/);
+  assert.match(reservering, /actietype:\s*"ocr_generiek"/);
+  assert.match(reservering, /return ocrReserveringMetAfronding\(svc, ocrPf\)/);
+  assert.match(afronding, /if \(uitkomst\.uitkomst !== "nieuw" \|\| !uitkomst\.actieId\) return false;/);
+  assert.match(afronding, /afronden:\s*async \(status\)\s*=>/);
+  assert.match(afronding, /svc\.rpc\("fn_ai_actie_afronden"/);
+  assert.match(afronding, /data !== true/);
+});
+
+test("alle OCR-ingangen koppelen elke reservering aan dezelfde actie-afronding", () => {
+  for (const [bestand, client] of [
+    ["platform/lib/ingest-orchestrator.ts", "svc"],
+    ["platform/lib/generiek-pipeline.ts", "svc"],
+    ["app/api/documents/reindex-backfill/route.ts", "supabase"],
+  ]) {
+    const inhoud = lees(bestand);
+    assert.match(inhoud, /reserveerOcr:\s*async \(paginas, poging\) =>/);
+    assert.match(inhoud, new RegExp(`return ocrReserveringMetAfronding\\(${client}, uitkomst\\)`));
+    assert.doesNotMatch(inhoud, /return uitkomst\.uitkomst === "nieuw"/);
+  }
+});
+
 // ── (4) De poort is niet te omzeilen via een geëxporteerde client ──────────
 
 test("AI-begrenzing — de poort exporteert geen kale providerclient", () => {

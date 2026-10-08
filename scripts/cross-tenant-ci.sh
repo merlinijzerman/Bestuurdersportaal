@@ -497,6 +497,8 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BB"
 echo
 echo "-- AI-begrenzing (quota, kill switch, modelallowlist, vier-ogenheractivering) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIB"
+echo "-- OCR-actielifecycle: preflight, provideruitkomst, retry en afronding per actie-ID --"
+SEED_DOELOMGEVING=local TEST_DATABASE_URL="$DB_URL" node --import tsx scripts/test-ocr-actie-lifecycle.mts
 echo
 
 echo "-- T3 negatieve cross-tenant RLS (write-policies zonder WITH CHECK + append-only-triggers) --"
@@ -643,6 +645,7 @@ echo
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
 echo "  AI-beg quota/kill switch/vier ogen            (DB-laag; race apart)"
+echo "  OCR   reservering/afronding per providerpoging, inclusief negatieve controle (DB + gemockte provider)"
 echo "  T1–T4  host→fonds + fail-closed enforce      (app-laag)"
 echo "  T5/T8  auditfonds server-side afgeleid        (app-laag guard + DB append-only)"
 echo "  T9/T10 platform-routing surface-isolatie      (app-laag)"
