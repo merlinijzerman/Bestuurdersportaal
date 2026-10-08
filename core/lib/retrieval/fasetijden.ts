@@ -43,6 +43,7 @@ export const FASEN = [
   "artikel_documenten", // #500 artikelspoor: juridische documenten
   "artikel_opzoeking", // #500 artikelspoor: exacte passages
   "artikel_toelating", // #500 artikelspoor: id-begrensde toelating
+  "documentspoor", // letterlijk genoemd document: titelopzoeking + tekstzoekslag
   "versies", // versiebewijs (leesSupabaseVersies)
   "parent",
   "notulen",

@@ -79,6 +79,7 @@ import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
 import { bouwCitaties } from "./retrieval/citatie";
 import type { Bronresultaat } from "./retrieval/contract";
 import { artikelFrasequery, artikelmatch, genoemdeJuridischeDocumenten, type Artikelfocus } from "./retrieval/artikelverwijzing";
+import { bindGenoemdDocument, titelzoektermen } from "./retrieval/genoemd-document";
 import { bakenParagraafAf, kiesJuridischDocument, kiesParagraafkop, kiesTermijnpassages, type Sectiefocus, type Sectierij } from "./retrieval/juridische-sectie";
 import {
   ARTIKEL_TOELATING_ID_MAX,
@@ -300,6 +301,13 @@ export interface RetrievalOpties {
   gateway?: { gateway: import("./ai-gateway/contract").AiGateway; ctx: import("./ai-gateway/contract").GatewayContext };
   relevantieDrempel?: boolean; // R1.5 ilike-uitsluiting (b1) + scoredrempel (b2)
   jargonExpansie?: boolean; // R1.4 FTS-jargonexpansie
+  /**
+   * Documentspoor — een letterlijk genoemd document in een vrije vraag (zie
+   * `vulAanMetGenoemdDocument`). Standaard UIT; alleen de chatroute zet hem,
+   * uit env `DOCUMENTSPOOR` = on én fondsvlag `documentspoor` = true. De adapter
+   * draait het spoor bovendien alleen als het R1-tekstpad (`zoekTekstV2`) actief is.
+   */
+  documentspoor?: boolean;
   parentRetrieval?: boolean; // R1.6 small-to-big
   representatieConstraints?: boolean; // T1 representatie-constraintlaag (bibliotheek/bron-minima)
   regimeWeging?: boolean; // T4 regime-demotie (weegRegime); env-default REGIME_WEGING (AAN, tenzij "off")
@@ -671,6 +679,11 @@ export interface DocumentChunk {
    * de vraag noemt dit juridische document letterlijk (bronbinding).
    */
   genoemd_document?: boolean;
+  /**
+   * Documentspoor — adapterprivaat, alleen gezet door `vulAanMetGenoemdDocument`:
+   * de passage komt uit het letterlijk genoemde document van een vrije vraag.
+   */
+  documentspoor?: boolean;
   documenten: {
     titel: string;
     bron: string;
@@ -2036,6 +2049,156 @@ export async function vulAanMetSectiekandidaten(
     bewaakNaIO(opdracht.signal, e);
     console.error("[rag] sectiespoor mislukt — kandidaten ongewijzigd:", e);
     return bestaand;
+  }
+}
+
+// ── Documentspoor: letterlijk genoemd document in een vrije vraag ──────────
+/** Hoeveel passages het documentspoor vooraan zet (onder `maxPerDoc` 5 bij 10). */
+export const DOCUMENTSPOOR_MAX = 4;
+/** Boven zoveel titels die een zoekterm delen leidt het spoor niets af (fail-closed). */
+export const DOCUMENTSPOOR_TITELS_MAX = 50;
+/**
+ * Harde wandklok voor het hele spoor (titelopzoeking + tekstzoekslag). Daarna
+ * gaat de beurt door met de gewone kandidaten; het spoor verlengt de beurt dus
+ * hooguit zoveel.
+ */
+export const DOCUMENTSPOOR_TIMEOUT_MS = 1500;
+
+export type DocumentspoorStatus =
+  | "geen_zoektermen"
+  | "geen"
+  | "meerdere"
+  | "titelset_te_groot"
+  | "bronsoort_buiten_filter"
+  | "geen_passages"
+  | "toegevoegd"
+  | "timeout"
+  | "fout";
+
+export interface DocumentspoorUitkomst {
+  chunks: DocumentChunk[];
+  /** Inhoudsvrij, voor `retrieval_meta.documentspoor`. */
+  meta: { status: DocumentspoorStatus; toegevoegd: number };
+}
+
+/**
+ * Noemt een vrije vraag letterlijk de volledige titel van precies één
+ * niet-juridisch document, dan zoekt dit spoor daarbinnen en zet de beste
+ * passages vooraan. Zie `core/lib/retrieval/genoemd-document.ts` voor het waarom.
+ *
+ * Kosten, bewust begrensd:
+ *   - geen documentquery als de vraag geen woord van ≥ 6 tekens heeft;
+ *   - anders één versmalde titelquery (ilike op die woorden, ≤ 51 rijen);
+ *   - alleen bij een eenduidige binding één tekstzoekslag op dat ene document,
+ *     via het R1-tekstpad: GEEN hybride RPC, geen embedding, geen reranker.
+ *     De hybride RPC kan onder RLS bij ~8 s tegen 57014 lopen (R1b); een
+ *     tweede aanroep zou de beurt opnieuw zo lang maken;
+ *   - een harde klok van DOCUMENTSPOOR_TIMEOUT_MS over het geheel.
+ *
+ * Grenzen: alleen documenten die onder RLS zichtbaar, actief en geïndexeerd
+ * zijn, met schoon scanbewijs als WP3 aan staat. De zoekslag past de status-,
+ * peildatum-, bronstatus-, fonds- en scanfilters van het hoofdspoor opnieuw toe;
+ * een concept, gearchiveerd of ongescand document levert dus geen passages.
+ * Juridische documenten blijven bij #548-R5. Elke fout, time-out of twijfel:
+ * de kandidaten ongewijzigd.
+ */
+export async function vulAanMetGenoemdDocument(
+  bestaand: DocumentChunk[],
+  opdracht: {
+    /** [zoekvraag, origineleVraag] — zie `bindGenoemdDocument`. */
+    teksten: readonly (string | null | undefined)[];
+    fondsId: string | null;
+    filters?: RetrievalFilters;
+    maxKandidaten: number;
+    opties?: RetrievalOpties;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    supabase?: { from: (tabel: string) => any };
+    zoek?: typeof zoekRelevanteChunksMetMeta;
+  }
+): Promise<DocumentspoorUitkomst> {
+  const ongewijzigd = (status: DocumentspoorStatus): DocumentspoorUitkomst => ({
+    chunks: bestaand,
+    meta: { status, toegevoegd: 0 },
+  });
+  const termen = titelzoektermen(opdracht.teksten);
+  if (termen.length === 0) return ongewijzigd("geen_zoektermen");
+
+  const klok = new AbortController();
+  const timer = setTimeout(() => klok.abort(), opdracht.timeoutMs ?? DOCUMENTSPOOR_TIMEOUT_MS);
+  const signaal = opdracht.signal ? AbortSignal.any([opdracht.signal, klok.signal]) : klok.signal;
+  try {
+    const supabase = opdracht.supabase ?? (await createServerSupabase());
+    const { data: docs, error: docFout } = await metSignaal(
+      supabase.from("documenten")
+        .select("id, titel, documenttype, bibliotheek, fonds_id, bestand_hash, scan_resultaat")
+        .eq("actief", true)
+        .eq("geindexeerd", true)
+        .or(termen.map((t) => `titel.ilike.%${t}%`).join(","))
+        .order("id", { ascending: true })
+        .limit(DOCUMENTSPOOR_TITELS_MAX + 1),
+      signaal
+    );
+    bewaakNaIO(signaal, docFout);
+    if (docFout || !Array.isArray(docs)) {
+      if (docFout) console.error("[rag] documentspoor: titelopzoeking mislukt — kandidaten ongewijzigd:", docFout);
+      return ongewijzigd("fout");
+    }
+    if (docs.length > DOCUMENTSPOOR_TITELS_MAX) return ongewijzigd("titelset_te_groot");
+
+    const wp3 = isMalwarescanAan();
+    const rijen = (docs as {
+      id: string;
+      titel: string | null;
+      documenttype: string | null;
+      bibliotheek: string | null;
+      fonds_id: string | null;
+      bestand_hash: string | null;
+      scan_resultaat: Record<string, unknown> | null;
+    }[]).filter((d) =>
+      !(JURIDISCHE_DOCUMENTTYPEN as readonly string[]).includes(d.documenttype ?? "") &&
+      (!wp3 || heeftSchoonScanbewijs({ bestand_hash: d.bestand_hash ?? null, scan_resultaat: d.scan_resultaat ?? null }))
+    );
+    const binding = bindGenoemdDocument(opdracht.teksten, rijen);
+    if (binding.status === "geen") return ongewijzigd("geen");
+    if (binding.status === "meerdere") return ongewijzigd("meerdere");
+
+    const doc = rijen.find((d) => d.id === binding.documentId)!;
+    const bronsoort = doc.fonds_id == null && doc.bibliotheek === "generiek" ? "generiek" : "fonds";
+    if (opdracht.filters?.bronsoort?.length && !opdracht.filters.bronsoort.includes(bronsoort)) {
+      return ongewijzigd("bronsoort_buiten_filter");
+    }
+
+    const zoek = opdracht.zoek ?? zoekRelevanteChunksMetMeta;
+    const { chunks: binnen } = await zoek(
+      binding.restvraag,
+      opdracht.fondsId ?? "",
+      DOCUMENTSPOOR_MAX,
+      // Bewust het tekstpad: zie de kostenparagraaf hierboven.
+      false,
+      [doc.id],
+      opdracht.filters,
+      { ...opdracht.opties, rerank: false, signal: signaal, stopNaRangschikking: true }
+    );
+    bewaakNaIO(signaal);
+    // De zoekslag kreeg één document-id; alles daarbuiten is een defect, geen bron.
+    const gekozen = binnen.filter((c) => c.document_id === doc.id).slice(0, DOCUMENTSPOOR_MAX);
+    if (gekozen.length === 0) return ongewijzigd("geen_passages");
+    for (const c of gekozen) c.documentspoor = true;
+    const gekozenIds = new Set(gekozen.map((c) => c.id));
+    return {
+      chunks: [...gekozen, ...bestaand.filter((c) => !gekozenIds.has(c.id))].slice(0, opdracht.maxKandidaten),
+      meta: { status: "toegevoegd", toegevoegd: gekozen.length },
+    };
+  } catch (e) {
+    // De beurt zelf afgebroken: doorgeven. Alleen de eigen klok: stil terug.
+    if (opdracht.signal?.aborted) throw e;
+    if (klok.signal.aborted) return ongewijzigd("timeout");
+    if (isAfbreking(e)) throw e;
+    console.error("[rag] documentspoor mislukt — kandidaten ongewijzigd:", e);
+    return ongewijzigd("fout");
+  } finally {
+    clearTimeout(timer);
   }
 }
 
