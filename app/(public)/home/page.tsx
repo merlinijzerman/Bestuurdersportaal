@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
+import ProductFeed from "../_components/ProductFeed";
 import { OPEN_GRAPH_IMAGE } from "../open-graph";
 
 // Homepage v0.8 — productomschrijving, drie momenten, bestuurlijk geheugen,
@@ -112,62 +112,7 @@ export default function Pagina() {
       </section>
 
 
-      <section className="sec-app" id="product">
-        <div className="wrap">
-          <div className="sec-head">
-            <div className="eyebrow-label">In het product</div>
-            <h2>Alles wat een besluit nodig heeft.</h2>
-            <p className="lede">Zes impressies van wat het product biedt.</p>
-          </div>
-
-          <div className="pcards">
-
-            <article className="pcard">
-              <div className="pshot"><Image src="/website/01-voorbereiding-agendapunt.png" width={1200} height={675} loading="lazy" alt="Productweergave: een agendapunt met het voorstel, de samenvatting en de verdiepingsvragen bij elkaar." /></div>
-              <h3>Voorbereiding bij het agendapunt</h3>
-              <p>Voorstel, samenvatting en gerichte verdieping staan bij het onderwerp waarover wordt besloten.</p>
-              <span className="where">Vergaderingen · assistent</span>
-            </article>
-
-            <article className="pcard">
-              <div className="pshot"><Image src="/website/02-antwoorden-zichtbare-bronnen.png" width={1200} height={675} loading="lazy" alt="Productweergave: een antwoord met daarnaast het paneel Onderbouwing en bronnen met drie gebruikte bronnen." /></div>
-              <h3>Antwoorden met zichtbare bronnen</h3>
-              <p>Onder ieder antwoord blijft zichtbaar welke documenten en kaders zijn gebruikt.</p>
-              <span className="where">AI-assistent</span>
-            </article>
-
-            <article className="pcard">
-              <div className="pshot"><Image src="/website/03-risicos-en-aannames.png" width={1200} height={675} loading="lazy" alt="Productweergave: het onderbouwingspaneel met aannames, risico's en voorwaarden bij een besluit." /></div>
-              <h3>De afweging wordt expliciet</h3>
-              <p>Aannames, risico&apos;s, voorwaarden en afwijkende standpunten krijgen een vaste plek.</p>
-              <span className="where">Besluitdossier</span>
-            </article>
-
-            <article className="pcard">
-              <div className="pshot"><Image src="/website/04-besluit-heeft-een-route.png" width={1200} height={675} loading="lazy" alt="Productweergave: de fasen van een besluitproces met de actieve stap en de openstaande vereisten." /></div>
-              <h3>Het besluit heeft een route</h3>
-              <p>Per fase is zichtbaar wat gereed is, wat ontbreekt en wie aan zet is.</p>
-              <span className="where">Procedures</span>
-            </article>
-
-            <article className="pcard">
-              <div className="pshot"><Image src="/website/05-besluit-en-voorwaarden.png" width={1200} height={675} loading="lazy" alt="Productweergave: een vastgelegd besluit met motivering, afgewogen alternatieven en voorwaarden." /></div>
-              <h3>Besluit en voorwaarden vastgelegd</h3>
-              <p>Formulering, motivering, verworpen alternatieven en voorwaarden blijven bijeen.</p>
-              <span className="where">Besluitdossier</span>
-            </article>
-
-            <article className="pcard">
-              <div className="pshot"><Image src="/website/06-microsoft-365-sharepoint.png" width={1200} height={675} loading="lazy" alt="Illustratie van een optionele integratie tussen Microsoft 365, SharePoint en het besluitdossier." /></div>
-              <h3>Integratie met Microsoft 365</h3>
-              <p>Bestuurdersportaal kan worden gekoppeld aan Microsoft 365 en SharePoint, met documenten als bron en inloggen via het vertrouwde werkaccount.</p>
-              <span className="where">Integratiemogelijkheid · illustratieve weergave</span>
-            </article>
-
-          </div>
-        </div>
-      </section>
-
+      <ProductFeed id="product" />
 
       <section className="sec-cool" id="ai">
         <div className="wrap">

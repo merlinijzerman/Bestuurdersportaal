@@ -34,6 +34,11 @@ import {
   ZOEK_TEKST_V2_FONDSVLAG,
   zoekTekstV2Actief,
 } from "@/core/lib/retrieval/zoektekst-vlag";
+import {
+  ZOEK_HYBRIDE_V2_ENV,
+  ZOEK_HYBRIDE_V2_FONDSVLAG,
+  zoekHybrideV2Actief,
+} from "@/core/lib/retrieval/zoekhybride-vlag";
 
 // Re-export zodat consumenten (route) het type naast de async resolver kunnen
 // betrekken uit deze server-laag; de definitie leeft in fonds-config-core.
@@ -280,6 +285,8 @@ export interface RetrievalVlaggen {
    *  waarheidstabel als R1: alleen aan bij env `DOCUMENTSPOOR` = on én
    *  fondsvlag `documentspoor` = true; ontbrekend ⇒ uit. */
   documentspoor: boolean;
+  /** R1b — env-hoofdstop én expliciete fondsvlag; standaard uit. */
+  zoekHybrideV2: boolean;
 }
 
 /** Waarheidstabel van het documentspoor; `fondsvlag` = undefined zonder rij. */
@@ -309,6 +316,8 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
       ZOEK_TEKST_V2_FONDSVLAG,
       // Documentspoor — env DOCUMENTSPOOR is de hoofdstop.
       "documentspoor",
+      // R1b — env ZOEK_HYBRIDE_V2 is de hoofdstop.
+      ZOEK_HYBRIDE_V2_FONDSVLAG,
     ]);
 
   const m = new Map<string, JsonWaarde>();
@@ -345,6 +354,10 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
     documentspoor: documentspoorActief(
       process.env.DOCUMENTSPOOR,
       m.has("documentspoor") ? flagAlsBoolean(m.get("documentspoor")!) : undefined
+    ),
+    zoekHybrideV2: zoekHybrideV2Actief(
+      process.env[ZOEK_HYBRIDE_V2_ENV],
+      m.has(ZOEK_HYBRIDE_V2_FONDSVLAG) ? flagAlsBoolean(m.get(ZOEK_HYBRIDE_V2_FONDSVLAG)!) : undefined
     ),
   };
 }

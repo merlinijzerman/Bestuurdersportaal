@@ -162,21 +162,40 @@ gewone document-/SharePointcontext wordt door het portaal samengesteld en kan we
 klantprovider worden getest. De rollback weigert zodra Azure OpenAI-configuratie of auditdata
 bestaat; exporteer en ontkoppel die gecontroleerd voordat het contract wordt teruggenomen.
 
-### #524 — Responses-adapter op main, zonder Productieactivering
+### #524 — Responses-adapter op main; eigen OpenAI-key alleen in Preview-pilot
 
 Fondsgebonden `openai`-aanroepen gebruiken de Responses API met `store: false`,
 streaming en functietools; platform-AQLab houdt het bestaande Chat Completions-pad.
-Dit codecontract is iets anders dan de klant-eigen `azure_openai`-provider.
-De Preview-pilotconfiguratie en haar seed/rollback worden niet naar Productie
-overgenomen. Op Productie blijven de `openai`-killswitch, modelallowlist en
-fondsconfiguraties ongewijzigd. Een Production-deploy bewijst dus geen live
-OpenAI-call of klantacceptatie.
+Dit codecontract staat al op main en is iets anders dan de klant-eigen
+`azure_openai`-provider. Webzoek via een providertool is niet gecontracteerd en
+faalt gesloten.
 
-Controleer vóór en na de deploy afzonderlijk dat `openai` en `azure_openai`
-op `gestopt` staan, dat er geen actieve OpenAI-fondsconfiguraties of modellen
-zijn toegevoegd, en dat bestaande Claude-aanroepen blijven werken. Een latere
-activering vereist een eigen besluit, providerconfiguratie en synthetische smoke.
-Webzoek via een providertool is niet gecontracteerd en faalt gesloten.
+De pilot is op `portal_preview` uitgevoerd voor `m365-demo` met
+`gpt-6-luna` en de bestaande `OPENAI_API_KEY` in `preview-stable`. De
+Preview-seed en rollback staan uitsluitend onder `supabase/seeds/preview/`
+en `supabase/rollbacks/`; beide weigeren zonder de Preview-tenantfingerprint.
+Ze zijn handmatige SQL-stappen en worden niet door de applicatiedeploy of
+`scripts/testdb-apply-migrations.sh` uitgevoerd. Op 5 oktober is de
+Preview-`openai`-killswitch volgens de centrale registry met een expliciet
+geautoriseerde directe override geactiveerd en geaudit, zonder tweede
+platformidentiteit. Dit is een historische pilotuitzondering, geen toestemming
+voor een nieuwe override.
+
+Een codepromotie verandert geen Productie-providerconfiguratie. Controleer
+vóór en na Productiedeploy live dat `openai` en `azure_openai` op `gestopt`
+staan, de modelallowlist en fondsconfiguraties niet zijn geactiveerd, en het
+bestaande Claude-pad werkt. Neem de Preview-seed/rollback niet als
+Productiemigratie op. Een latere Productieactivering vereist een afzonderlijk
+besluit, configuratiecontrole en synthetische smoke.
+
+Voor een herstel van de Preview-pilot: controleer eerst de huidige
+`m365-demo`-configuratie en voer dan alleen op `portal_preview`
+`supabase/rollbacks/2026_10_05_openai_eigen_key_pilot_ROLLBACK.sql` uit.
+Deze rollback herstelt de fondsconfiguratie naar Claude en laat allowlist,
+gatewaylogs en killswitch intact; sluit de killswitch zo nodig via de
+beheerprocedure. De pilotacceptatie met een tekstloze SharePoint-PDF bleef
+onvolledig doordat de scannerafhankelijke bron niet geraadpleegd kon worden.
+
 
 ### #438 — Preview-canary Opus 5.5/Sonnet 5 (PR3)
 

@@ -1,0 +1,36 @@
+-- ============================================================================
+-- R1b fase P1 — partiële HNSW-index CONCURRENT bouwen (vóór de migratie P2)
+-- psql, autocommit, directe verbinding. Nooit in de SQL-editor.
+--   psql "$DB" -v ON_ERROR_STOP=1 -v doelomgeving=<lokaal|preview|productie> -v fase=P1 \
+--        -f scripts/ops/r1b/p1-partiele-index-concurrent.psql
+-- Mislukt de bouw, dan blijft een ONGELDIGE partiële index achter: ruim die op
+-- met h4b-partiele-index-verwijderen.psql (fase H4b) en STOP; niet opnieuw
+-- proberen zonder analyse (lock-/geheugen-/schijfoorzaak).
+-- ============================================================================
+\set ON_ERROR_STOP on
+\ir _doelguard.psql
+set statement_timeout = 0;
+-- Serieel: een parallelle HNSW-bouw gebruikt gedeeld geheugen (/dev/shm) en
+-- faalde lokaal daarop. Bewust parallel: -v bouw_parallel=2.
+\if :{?bouw_parallel}
+\else
+  \set bouw_parallel 0
+\endif
+set max_parallel_maintenance_workers = :bouw_parallel;
+\echo 'P1: CREATE INDEX CONCURRENTLY idx_chunks_embedding_generiek_r1b'
+create index concurrently idx_chunks_embedding_generiek_r1b
+  on public.document_chunks using hnsw (embedding vector_cosine_ops)
+  with (m = 32, ef_construction = 256)
+  where bibliotheek = 'generiek';
+do $$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid = i.indexrelid
+     where i.indrelid = 'public.document_chunks'::regclass and c.relname = 'idx_chunks_embedding_generiek_r1b'
+       and i.indisvalid and i.indisready
+       and pg_catalog.pg_get_indexdef(i.indexrelid) = 'CREATE INDEX idx_chunks_embedding_generiek_r1b ON public.document_chunks USING hnsw (embedding vector_cosine_ops) WITH (m=''32'', ef_construction=''256'') WHERE (bibliotheek = ''generiek''::text)'
+  ) then
+    raise exception 'R1b P1: partiële index niet geldig/gereed of definitie wijkt af — STOP, ruim op met H4b';
+  end if;
+end $$;
+\echo 'P1: partiële index geldig en gereed. Volgende stap (apart akkoord): P2-migratie.'
