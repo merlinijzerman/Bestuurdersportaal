@@ -24,8 +24,8 @@ const verbindingen = [
     betekenis: "Het actuele voorstel staat in verband met eerdere besluiten, risico’s en openstaande acties.",
   },
   {
-    naam: "Bestuurlijk geheugen",
-    betekenis: "De redenen, aannames en voorwaarden achter een besluit blijven terug te vinden.",
+    naam: "Institutioneel geheugen",
+    betekenis: "Redenen, aannames en voorwaarden blijven over bestuursperiodes heen vindbaar, ook wanneer bestuurders wisselen.",
   },
   {
     naam: "Bestuurdersperspectief AI",
@@ -33,7 +33,7 @@ const verbindingen = [
   },
   {
     naam: "Sectorgerichte duiding",
-    betekenis: "Relevante sectorbronnen kunnen naast de eigen documentatie worden geraadpleegd.",
+    betekenis: "Relevante wet- en regelgeving en toezichtkaders worden actief betrokken bij de afweging, met zichtbare bronnen.",
   },
   {
     naam: "Beheerste AI",
@@ -112,15 +112,15 @@ export default function Pagina() {
                 <span className="waarde-moment">Later · de herbeoordeling</span>
                 <h3>Gelden onze redenen nog?</h3>
                 <p>
-                  Bij een nieuwe bespreking zijn de eerdere afweging en voorwaarden
+                  Ook na een bestuurswisseling zijn de eerdere afweging en voorwaarden
                   beschikbaar. Het bestuur kan toetsen wat is opgevolgd, wat veranderde
                   en welke vragen nu opnieuw gesteld moeten worden.
                 </p>
               </article>
             </div>
             <p className="waarde-casus-slot">
-              De verbinding tussen deze momenten maakt van vastlegging een bruikbaar
-              bestuurlijk geheugen.
+              De verbinding tussen deze momenten maakt van vastlegging een institutioneel
+              geheugen dat bestuursperiodes overbrugt.
             </p>
           </div>
         </section>
@@ -155,11 +155,12 @@ export default function Pagina() {
             </div>
             <div>
               <p>
-                Bij een nieuwe bespreking kan de assistent eerdere aannames, de eigen
-                stukken en relevante sectorbronnen bij elkaar brengen. Zij helpt
-                kritische vragen formuleren en toont waarop haar antwoorden steunen.
-                Zo kan het bestuur de bijdrage controleren en zelf wegen wat die
-                betekent voor het besluit van vandaag.
+                Bij een nieuwe bespreking kan de assistent eerdere aannames en de eigen
+                stukken verbinden met relevante wet- en regelgeving en toezichtinformatie.
+                Zij brengt die kaders actief in bij de voorbereiding, helpt kritische
+                vragen formuleren en toont waarop haar antwoorden steunen. Zo kan het
+                bestuur de bijdrage controleren en zelf wegen wat die betekent voor het
+                besluit van vandaag.
               </p>
               <a href="/governance-ai" className="waarde-donker-link">
                 Lees hoe het AI-gebruik is begrensd →
