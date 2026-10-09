@@ -214,4 +214,3 @@ De bestaande juridische paragraafroute (wetgeving met BWB-link) heeft voorrang. 
 - **Volgordebewijs** is per pagina de leesvolgorde van boven naar beneden. Echte meerkoloms opmaak wordt nog niet herkend (zie §5).
 
 **Na release nodig.** Een tweede pilotherindexering van dezelfde drie generieke documenten (naar `r3-bronblokken`). Tot dan geven ze `oude_index`. Daarna volgt de Productie-hertest van de exacte vraag en van gewone termijnvragen (zie PR).
-
