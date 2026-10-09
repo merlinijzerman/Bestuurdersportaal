@@ -1,0 +1,29 @@
+-- ============================================================================
+-- R1b fase P5 — CUTOVER: volledige HNSW-index CONCURRENT verwijderen
+-- Alleen na een eigen akkoord én nadat de oude RPC zonder volledige index
+-- aantoonbaar correct en operationeel bruikbaar is (zie draaiboek §2/§5).
+-- psql, autocommit, directe verbinding.
+--   psql "$DB" -v ON_ERROR_STOP=1 -v doelomgeving=<…> -v fase=P5 \
+--        -f scripts/ops/r1b/p5-cutover-volledige-index-verwijderen.psql
+-- Terug: fase H (h-volledige-index-herstel.psql) — een zware herbouw.
+-- ============================================================================
+\set ON_ERROR_STOP on
+\ir _doelguard.psql
+-- DROP INDEX CONCURRENTLY wacht op lopende transacties; lock_timeout (5 s, uit
+-- de guard) breekt af in plaats van verkeer op te houden.
+\echo 'P5: DROP INDEX CONCURRENTLY idx_chunks_embedding'
+drop index concurrently public.idx_chunks_embedding;
+do $$
+begin
+  if to_regclass('public.idx_chunks_embedding') is not null then
+    raise exception 'R1b P5: idx_chunks_embedding bestaat nog (mogelijk ongeldig na afbreking) — herhaal P5 of ga naar H';
+  end if;
+  if not exists (
+    select 1 from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid = i.indexrelid
+     where i.indrelid = 'public.document_chunks'::regclass and c.relname = 'idx_chunks_embedding_generiek_r1b'
+       and i.indisvalid and i.indisready
+  ) then
+    raise exception 'R1b P5: partiële index niet meer geldig — INCIDENT, direct fase H';
+  end if;
+end $$;
+\echo 'P5: alleen de partiële index staat er nog (geldig).'

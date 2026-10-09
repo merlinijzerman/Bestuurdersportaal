@@ -506,6 +506,13 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T3"
 echo
 echo "-- T4 retrieval-fondsdiscipline (zoek_chunks/_hybride: fondsgrens + published-only-generiek) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4"
+echo "-- R1b hybride kandidaat: dezelfde T4-tenantmatrix op de nieuwe RPC (FTS-arm, vector NULL) --"
+R1B_T4_DIR="supabase/checks/.r1b-t4"
+mkdir -p "$R1B_T4_DIR"
+sed 's/zoek_chunks_hybride/zoek_chunks_hybride_begrensd/g' "$SQL_T4" > "$R1B_T4_DIR/r1b-fondsdiscipline.sql"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$R1B_T4_DIR/r1b-fondsdiscipline.sql"
+rm -f "$R1B_T4_DIR/r1b-fondsdiscipline.sql"
+rmdir "$R1B_T4_DIR"
 echo
 echo "-- P3-B rol via service-role-pad (bevriezing-trigger vrij, rol-CHECK weigert ongeldig) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3B"

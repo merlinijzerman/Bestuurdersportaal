@@ -90,6 +90,8 @@ export type Retrievaluitkomst = "ok" | "timeout" | "annulering" | "fout";
  * Gesloten enum: inhoudsvrij, dus toegestaan op basisniveau én in de logregel.
  */
 export type Tekstzoekpad = "nieuw" | "fallback_pgrst202";
+/** R1b — alleen aanwezig wanneer de hybride env- én fondsvlag aan staan. */
+export type Hybridezoekpad = "nieuw" | "fallback_pgrst202";
 
 /** Wat in `retrieval_meta.invoer.retrieval_fasetijden` en in de logregel staat. */
 export interface FasetijdenSamenvatting {
@@ -102,6 +104,7 @@ export interface FasetijdenSamenvatting {
   fasen: Fasemeting[];
   /** R1 (0218) — alleen aanwezig met de vlag ZOEK_TEKST_V2 aan. */
   tekstzoekpad?: Tekstzoekpad;
+  hybridezoekpad?: Hybridezoekpad;
 }
 
 export interface MeetOpties<T> {
@@ -125,6 +128,7 @@ export interface Fasemeter {
    * terugval in de beurt maakt de hele beurt een terugvalbeurt.
    */
   markeerTekstzoekpad(pad: Tekstzoekpad): void;
+  markeerHybridezoekpad(pad: Hybridezoekpad): void;
   /** Relatieve tijd sinds het begin van de meter. */
   nu(): number;
   samenvatting(uitkomst: Retrievaluitkomst, budgetMs?: number | null): FasetijdenSamenvatting;
@@ -163,6 +167,7 @@ interface Staat {
   afgekapt: number;
   klok: () => number;
   tekstzoekpad?: Tekstzoekpad;
+  hybridezoekpad?: Hybridezoekpad;
 }
 
 function maakMeter(staat: Staat, spoor: number | null): Fasemeter {
@@ -228,6 +233,9 @@ function maakMeter(staat: Staat, spoor: number | null): Fasemeter {
     markeerTekstzoekpad(pad) {
       if (staat.tekstzoekpad !== "fallback_pgrst202") staat.tekstzoekpad = pad;
     },
+    markeerHybridezoekpad(pad) {
+      if (staat.hybridezoekpad !== "fallback_pgrst202") staat.hybridezoekpad = pad;
+    },
     nu() {
       return staat.klok();
     },
@@ -242,6 +250,7 @@ function maakMeter(staat: Staat, spoor: number | null): Fasemeter {
         fasen: [...staat.metingen].sort((a, b) => a.start_ms - b.start_ms),
         // R1 — alleen met de vlag aan; anders ontbreekt de sleutel (byte-gelijk).
         ...(staat.tekstzoekpad ? { tekstzoekpad: staat.tekstzoekpad } : {}),
+        ...(staat.hybridezoekpad ? { hybridezoekpad: staat.hybridezoekpad } : {}),
       };
     },
   };
@@ -264,6 +273,7 @@ export const GEEN_FASEMETER: Fasemeter = {
   noteer: () => undefined,
   voorSpoor: () => GEEN_FASEMETER,
   markeerTekstzoekpad: () => undefined,
+  markeerHybridezoekpad: () => undefined,
   nu: () => Date.now(),
   samenvatting: (uitkomst, budgetMs = null) => ({
     versie: 1,
