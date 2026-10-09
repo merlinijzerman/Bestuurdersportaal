@@ -215,12 +215,13 @@ export function artikelFrasequery(focus: Pick<Artikelfocus, "artikelen">): strin
 /** Minimale lengte van een genormaliseerde titel om als documentnaam te gelden. */
 const MIN_TITEL = 8;
 
-function naamvorm(tekst: string): string {
+/** Vorm voor letterlijke naamvergelijking; ook gebruikt door `genoemd-document.ts`. */
+export function naamvorm(tekst: string): string {
   return ` ${normaliseer(tekst).replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim()} `;
 }
 
 /** De titel zonder vindplaats/toevoeging tussen haakjes ("(BWBR0020892)"). */
-function titelkern(titel: string): string {
+export function titelkern(titel: string): string {
   return naamvorm(titel.replace(/\([^)]*\)/g, " ")).trim();
 }
 
