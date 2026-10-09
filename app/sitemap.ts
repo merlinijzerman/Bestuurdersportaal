@@ -37,6 +37,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
+      url: `${origin}/meerwaarde`,
+      lastModified: nu,
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    {
       url: `${origin}/voor-wie`,
       lastModified: nu,
       changeFrequency: "monthly",

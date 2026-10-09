@@ -7,6 +7,7 @@ import type { NavKey } from "./Header";
 const ITEMS: { href: string; label: string }[] = [
   { href: "/#werkwijze", label: "Werkwijze" },
   { href: "/product", label: "Product" },
+  { href: "/meerwaarde", label: "Meerwaarde" },
   { href: "/voor-wie", label: "Voor wie" },
   { href: "/governance-ai", label: "AI & governance" },
   { href: "/over-ons", label: "Over ons" },

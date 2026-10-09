@@ -10,6 +10,7 @@ import MobileMenu from "./MobileMenu";
 // lichte huisstijl.
 export type NavKey =
   | "/product"
+  | "/meerwaarde"
   | "/voor-wie"
   | "/governance-ai"
   | null;
@@ -17,6 +18,7 @@ export type NavKey =
 const NAV: { href: string; label: string }[] = [
   { href: "/#werkwijze", label: "Werkwijze" },
   { href: "/product", label: "Product" },
+  { href: "/meerwaarde", label: "Meerwaarde" },
   { href: "/voor-wie", label: "Voor wie" },
   { href: "/governance-ai", label: "AI & governance" },
 ];

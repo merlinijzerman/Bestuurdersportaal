@@ -47,6 +47,7 @@ export const MARKETING_PUBLIEKE_PADEN = new Set<string>([
   "/contact",
   "/privacy",
   "/product",
+  "/meerwaarde",
   "/voor-wie",
   "/sectoren",
   "/sectoren/pensioenfondsen",

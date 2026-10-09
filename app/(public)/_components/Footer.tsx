@@ -13,6 +13,7 @@ export default function Footer({
         <div className="wrap wide foot-links">
           <Link href="/">Home</Link>
           <Link href="/product">Product</Link>
+          <Link href="/meerwaarde">Meerwaarde</Link>
           <Link href="/voor-wie">Voor wie</Link>
           <Link href="/over-ons">Over ons</Link>
           <Link href="/contact">Contact</Link>
@@ -32,6 +33,7 @@ export default function Footer({
         <div className="foot-links">
           <Link href="/#werkwijze">Werkwijze</Link>
           <Link href="/product">Product</Link>
+          <Link href="/meerwaarde">Meerwaarde</Link>
           <Link href="/voor-wie">Voor wie</Link>
           <Link href="/governance-ai">AI &amp; governance</Link>
           <Link href="/over-ons">Over ons</Link>
