@@ -79,7 +79,17 @@ import { selecteerEnVerrijk, alsSelectieBron } from "./retrieval/selectie";
 import { bouwCitaties } from "./retrieval/citatie";
 import type { Bronresultaat } from "./retrieval/contract";
 import { artikelFrasequery, artikelmatch, genoemdeJuridischeDocumenten, type Artikelfocus } from "./retrieval/artikelverwijzing";
-import { bindGenoemdDocument, titelzoektermen } from "./retrieval/genoemd-document";
+import {
+  bindGenoemdDocument,
+  classificeerIdentificatoren,
+  herkenIdentificatoren,
+  MAX_IDENTIFICATOREN,
+  isVervolg,
+  reeksImatch,
+  reeksVan,
+  titelzoektermen,
+  type Sectierij as DocumentSectierij,
+} from "./retrieval/genoemd-document";
 import { bakenParagraafAf, kiesJuridischDocument, kiesParagraafkop, kiesTermijnpassages, type Sectiefocus, type Sectierij } from "./retrieval/juridische-sectie";
 import {
   ARTIKEL_TOELATING_ID_MAX,
@@ -2058,6 +2068,13 @@ export const DOCUMENTSPOOR_MAX = 4;
 /** Boven zoveel titels die een zoekterm delen leidt het spoor niets af (fail-closed). */
 export const DOCUMENTSPOOR_TITELS_MAX = 50;
 /**
+ * Bovengrens op de reeksopzoeking binnen het ene gebonden document. Wordt hij
+ * gehaald, dan blijft elke uitkomst veilig: een niet-gevonden sectie van een
+ * bekende reeks ⇒ niets toegevoegd; een reeks zonder gevonden kop ⇒ het oude
+ * FTS-pad.
+ */
+export const DOCUMENTSPOOR_SECTIE_OPZOEK_MAX = 80;
+/**
  * Harde wandklok voor het hele spoor (titelopzoeking + tekstzoekslag). Daarna
  * gaat de beurt door met de gewone kandidaten; het spoor verlengt de beurt dus
  * hooguit zoveel.
@@ -2071,6 +2088,12 @@ export type DocumentspoorStatus =
   | "titelset_te_groot"
   | "bronsoort_buiten_filter"
   | "geen_passages"
+  /** De vraag noemt secties van een reeks die het document als kop kent, maar geen ervan is gevonden. */
+  | "sectie_niet_gevonden"
+  /** Een deel van de gevraagde secties is gevonden: alles-of-niets ⇒ niets toegevoegd. */
+  | "sectie_onvolledig"
+  /** Meer benoemde identificatoren dan het begrensde spoor veilig kan verwerken. */
+  | "te_veel_secties"
   | "toegevoegd"
   | "timeout"
   | "fout";
@@ -2169,6 +2192,26 @@ export async function vulAanMetGenoemdDocument(
       return ongewijzigd("bronsoort_buiten_filter");
     }
 
+    // Benoemde secties ("GP6 en GP7"): de koppassages van die secties, niet de
+    // tekstrangschikking (die negeert korte identificatoren). Zie het blok
+    // "Benoemde secties" in genoemd-document.ts. Een vraag naar secties krijgt
+    // alle gevraagde secties of niets extra — nooit een FTS-aanvulling. Alleen
+    // inhoudstermen ("CO2", geen kopreeks in het document) ⇒ het FTS-pad hieronder.
+    const identificatoren = herkenIdentificatoren(binding.restvraag);
+    if (identificatoren.length > MAX_IDENTIFICATOREN) return ongewijzigd("te_veel_secties");
+    if (identificatoren.length > 0) {
+      const sectie = await sectiekandidaten(supabase, doc.id, identificatoren, opdracht, signaal);
+      if (sectie.soort === "secties") {
+        for (const c of sectie.chunks) c.documentspoor = true;
+        const ids = new Set(sectie.chunks.map((c) => c.id));
+        return {
+          chunks: [...sectie.chunks, ...bestaand.filter((c) => !ids.has(c.id))].slice(0, opdracht.maxKandidaten),
+          meta: { status: "toegevoegd", toegevoegd: sectie.chunks.length },
+        };
+      }
+      if (sectie.soort !== "inhoudstermen") return ongewijzigd(sectie.soort);
+    }
+
     const zoek = opdracht.zoek ?? zoekRelevanteChunksMetMeta;
     const { chunks: binnen } = await zoek(
       binding.restvraag,
@@ -2200,6 +2243,113 @@ export async function vulAanMetGenoemdDocument(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Uitkomst van de sectieopzoeking. Alleen `secties` voegt iets toe. */
+type Sectieuitkomst =
+  | { soort: "secties"; chunks: DocumentChunk[] }
+  /** Geen enkele identificator hoort bij een kopreeks van dit document. */
+  | { soort: "inhoudstermen" }
+  | { soort: "sectie_niet_gevonden" | "sectie_onvolledig" | "fout" };
+
+/**
+ * De koppassages (plus directe vervolgchunk) van benoemde secties binnen één
+ * gebonden document, door dezelfde id-begrensde toelating als het artikelspoor
+ * (`toelatingsfilters` + `voldoetAanZoekfilters` + fondsdiscipline). Volgorde:
+ * eerst de koppen in vraagvolgorde, dan hun vervolg; samen hooguit
+ * DOCUMENTSPOOR_MAX. Alles-of-niets: weigert de toelating een gevraagde kop
+ * (bv. concept onder modus actueel), dan is het resultaat onvolledig. Drie
+ * queries, alle drie op dit ene document.
+ */
+async function sectiekandidaten(
+  supabase: { from: (tabel: string) => any },
+  documentId: string,
+  identificatoren: readonly string[],
+  opdracht: { fondsId: string | null; filters?: RetrievalFilters },
+  signaal: AbortSignal
+): Promise<Sectieuitkomst> {
+  // 1. Kandidaatrijen: elk los woord van de gevraagde REEKSEN, alleen in dit document.
+  const reeksen = [...new Set(identificatoren.map(reeksVan))];
+  const { data: rijen, error } = await metSignaal(
+    supabase.from("document_chunks")
+      .select("id, document_id, chunk_index, tekst")
+      .eq("document_id", documentId)
+      .or(reeksen.map((r) => `tekst.imatch."${reeksImatch(r)}"`).join(","))
+      .order("chunk_index", { ascending: true })
+      .limit(DOCUMENTSPOOR_SECTIE_OPZOEK_MAX),
+    signaal
+  );
+  bewaakNaIO(signaal, error);
+  if (error || !Array.isArray(rijen)) {
+    if (error) console.error("[rag] documentspoor: sectieopzoeking mislukt — kandidaten ongewijzigd:", error);
+    return { soort: "fout" };
+  }
+  // Een volle pagina kan afgekapt zijn. Dan mogen latere koppen niet als
+  // "inhoudsterm" worden geclassificeerd met een willekeurige FTS-terugval.
+  if (rijen.length >= DOCUMENTSPOOR_SECTIE_OPZOEK_MAX) return { soort: "sectie_onvolledig" };
+  const keuze = classificeerIdentificatoren(
+    identificatoren,
+    (rijen as (DocumentSectierij & { document_id?: string })[]).filter((r) => r.document_id === documentId)
+  );
+  if (keuze.koppen.length === 0 && keuze.ontbrekend.length === 0) return { soort: "inhoudstermen" };
+  if (keuze.ontbrekend.length > 0) {
+    return { soort: keuze.koppen.length === 0 ? "sectie_niet_gevonden" : "sectie_onvolledig" };
+  }
+
+  // 2. De directe vervolgchunk van elke kop (zelfde document, chunk_index + 1).
+  const volgIndexen = [...new Set(keuze.koppen.map((k) => k.rij.chunk_index + 1))];
+  const { data: volg, error: volgFout } = await metSignaal(
+    supabase.from("document_chunks")
+      .select("id, document_id, chunk_index, tekst")
+      .eq("document_id", documentId)
+      .in("chunk_index", volgIndexen)
+      .order("chunk_index", { ascending: true })
+      .limit(volgIndexen.length),
+    signaal
+  );
+  bewaakNaIO(signaal, volgFout);
+  const volgPerIndex = new Map(
+    (!volgFout && Array.isArray(volg) ? (volg as (DocumentSectierij & { document_id?: string })[]) : [])
+      .filter((r) => r.document_id === documentId)
+      .map((r) => [r.chunk_index, r] as const)
+  );
+  const koppenIds = keuze.koppen.map((k) => k.rij.id);
+  const vervolgIds = keuze.koppen.flatMap((k) => {
+    const volgende = volgPerIndex.get(k.rij.chunk_index + 1);
+    return volgende && isVervolg(k.id, volgende) ? [volgende.id] : [];
+  });
+  const volgorde = [...new Set([...koppenIds, ...vervolgIds])].slice(0, DOCUMENTSPOOR_MAX);
+
+  // 3. Toelating: id-begrensd, onder RLS, met de zoek_chunks-semantiek.
+  const parameters: Toelatingsparameters = {
+    ids: volgorde,
+    frase: null,
+    documentscope: [documentId],
+    filters: opdracht.filters,
+    fondsId: opdracht.fondsId || null,
+    peildatum: effectievePeildatum(opdracht.filters),
+  };
+  const { data: toegelatenRijen, error: toelatingsFout } = await metSignaal(
+    pasToelatingsfiltersToe(supabase.from("document_chunks").select(TOELATING_SELECT), toelatingsfilters(parameters))
+      .order("chunk_index", { ascending: true })
+      .limit(DOCUMENTSPOOR_MAX),
+    signaal
+  );
+  bewaakNaIO(signaal, toelatingsFout);
+  if (toelatingsFout || !Array.isArray(toegelatenRijen)) {
+    if (toelatingsFout) console.error("[rag] documentspoor: sectietoelating mislukt — kandidaten ongewijzigd:", toelatingsFout);
+    return { soort: "fout" };
+  }
+  const toegelaten = (toegelatenRijen as ToelatingsRij[])
+    .filter((r) => r.documenten && volgorde.includes(r.id) && voldoetAanZoekfilters(r, parameters))
+    .map(toelatingsrijNaarChunk);
+  const bewaakt = handhaafFondsdiscipline(toegelaten, parameters.fondsId, parameters.peildatum, opdracht.filters?.modus).chunks;
+  const perId = new Map(bewaakt.map((c) => [c.id, c]));
+  // Alles-of-niets ook na de toelating: elke gevraagde kop moet erdoor.
+  if (koppenIds.some((id) => !perId.has(id))) {
+    return { soort: perId.size === 0 ? "sectie_niet_gevonden" : "sectie_onvolledig" };
+  }
+  return { soort: "secties", chunks: volgorde.map((id) => perId.get(id)).filter((c): c is DocumentChunk => Boolean(c)) };
 }
 
 export interface HybrideDeps {
