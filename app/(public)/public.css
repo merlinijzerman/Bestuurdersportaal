@@ -1892,6 +1892,8 @@
 .bp-public .waarde-casus-slot {font-family:var(--serif);font-size:24px;line-height:1.35;max-width:46ch;margin:32px auto 0;text-align:center}
 .bp-public .waarde-bouwstenen-grid {display:grid;grid-template-columns:.9fr 1.1fr;gap:72px;align-items:start}
 .bp-public .waarde-bouwstenen-grid > div > p {color:var(--muted);max-width:52ch}
+.bp-public #meerwaarde {scroll-margin-top:68px}
+.bp-public .waarde-bouwstenen-link {margin-top:22px}
 .bp-public .waarde-bouwstenen dl {border-top:1px solid var(--app-line-strong)}
 .bp-public .waarde-bouwstenen dl > div {display:grid;grid-template-columns:190px 1fr;gap:18px;padding:16px 0;border-bottom:1px solid var(--app-line)}
 .bp-public .waarde-bouwstenen dt {font-family:var(--serif);font-size:18px;line-height:1.3}

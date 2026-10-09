@@ -18,29 +18,6 @@ export const metadata: Metadata = {
   },
 };
 
-const verbindingen = [
-  {
-    naam: "Integraal overzicht",
-    betekenis: "Het actuele voorstel staat in verband met eerdere besluiten, risico’s en openstaande acties.",
-  },
-  {
-    naam: "Institutioneel geheugen",
-    betekenis: "Redenen, aannames en voorwaarden blijven over bestuursperiodes heen vindbaar, ook wanneer bestuurders wisselen.",
-  },
-  {
-    naam: "Bestuurdersperspectief AI",
-    betekenis: "De assistent helpt vragen stellen over de afweging die nu voorligt.",
-  },
-  {
-    naam: "Sectorgerichte duiding",
-    betekenis: "Relevante wet- en regelgeving en toezichtkaders worden actief betrokken bij de afweging, met zichtbare bronnen.",
-  },
-  {
-    naam: "Beheerste AI",
-    betekenis: "De bijdrage van de assistent blijft begrensd, brongebonden en controleerbaar.",
-  },
-] as const;
-
 export default function Pagina() {
   return (
     <div className="bp-page bp-meerwaarde">
@@ -122,28 +99,6 @@ export default function Pagina() {
               De verbinding tussen deze momenten maakt van vastlegging een institutioneel
               geheugen dat bestuursperiodes overbrugt.
             </p>
-          </div>
-        </section>
-
-        <section className="sec-cool waarde-bouwstenen">
-          <div className="wrap waarde-bouwstenen-grid">
-            <div>
-              <div className="eyebrow-label">Hoe de onderdelen samenkomen</div>
-              <h2>Vijf invalshoeken. Eén doorlopende lijn.</h2>
-              <p>
-                Elk onderdeel voegt iets toe aan hetzelfde vraagstuk. Samen helpen ze
-                een bestuur om bij een volgend besluit sneller bij de relevante context
-                en de juiste vragen te komen.
-              </p>
-            </div>
-            <dl>
-              {verbindingen.map((verbinding) => (
-                <div key={verbinding.naam}>
-                  <dt>{verbinding.naam}</dt>
-                  <dd>{verbinding.betekenis}</dd>
-                </div>
-              ))}
-            </dl>
           </div>
         </section>
 
