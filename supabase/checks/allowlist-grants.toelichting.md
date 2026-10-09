@@ -472,3 +472,19 @@ verwijdert de functie. Een rollback hoort dan óók deze drie regels terug te
 draaien: de V3-gate meldt anders terecht "ontbrekend object" (de rollbackrondgang
 in `scripts/cross-tenant-ci.sh` bewijst dat V3 in de teruggedraaide stand — de
 allowlist zonder deze drie regels — schoon is).
+
+## R1b hybride kandidaat — `public.zoek_chunks_hybride_begrensd(…)`
+
+De nieuwe functie heeft dezelfde 13 invoerparameters, 25 retourkolommen en
+EXECUTE-rechten als `zoek_chunks_hybride`: alleen `authenticated` en
+`service_role`, niet `anon` of `public`. Daarom zijn precies drie regels aan de
+allowlist toegevoegd. De functie is `SECURITY INVOKER`; RLS blijft de primaire
+tenantgrens. De partiële HNSW-index verleent geen eigen toegang. De app gebruikt
+de functie uitsluitend wanneer zowel `ZOEK_HYBRIDE_V2=on` als de expliciete
+fondsvlag `zoek_hybride_v2=true` gelden; standaard blijft het oude pad actief.
+
+De lokale rollback verwijdert alleen de nieuwe functie en index. Bij een
+daadwerkelijke rollback moeten ook deze drie allowlistregels en de eventuele
+fidelitypin in een afzonderlijke codewijziging worden teruggedraaid. De
+kwaliteitspoort voor HNSW-recall op echte vragen staat nog open; de allowlist
+is geen goedkeuring voor activering.

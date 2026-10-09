@@ -20,6 +20,7 @@ import {
   type Tekstzoekpad,
 } from "./retrieval/fasetijden";
 import { ZOEK_TEKST_V2_ENV, zoekTekstV2Actief } from "./retrieval/zoektekst-vlag";
+import { ZOEK_HYBRIDE_V2_ENV, zoekHybrideV2Actief } from "./retrieval/zoekhybride-vlag";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
@@ -380,6 +381,8 @@ export interface RetrievalOpties {
    * met een warn-logregel en de marker `fallback_pgrst202`. Standaard uit.
    */
   zoekTekstV2?: boolean;
+  /** R1b — nieuwe hybride RPC, uitsluitend bij env `on` én fondsvlag true. */
+  zoekHybrideV2?: boolean;
 }
 
 /** #500 — `fallback_reason` wanneer een volscan na een DB-time-out bewust uitbleef. */
@@ -427,6 +430,7 @@ type VolledigeOpties = {
   fasemeter: Fasemeter;
   begrensVolscans: boolean;
   zoekTekstV2: boolean;
+  zoekHybrideV2: boolean;
 };
 
 /**
@@ -461,6 +465,7 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     // R1 — dezelfde waarheidstabel, óók voor een al geresolveerde fondsvlag:
     // alleen aan bij ZOEK_TEKST_V2=on én een meegegeven `zoekTekstV2: true`.
     zoekTekstV2: zoekTekstV2Actief(process.env[ZOEK_TEKST_V2_ENV], o?.zoekTekstV2),
+    zoekHybrideV2: zoekHybrideV2Actief(process.env[ZOEK_HYBRIDE_V2_ENV], o?.zoekHybrideV2),
   };
 }
 
@@ -1575,21 +1580,34 @@ export function maakHybrideRpc(
   gedeeldeParams: Record<string, unknown>,
   signal?: AbortSignal,
   /** #500 — fasetijden per poging, en een melding van de foutvorm (nooit de tekst). */
-  meting?: { meter?: Fasemeter; bijFout?: (fout: unknown) => void }
+  meting?: { meter?: Fasemeter; bijFout?: (fout: unknown) => void; zoekHybrideV2?: boolean; waarschuw?: (melding: string) => void }
 ): (ftsQuery: string, embedding: number[], poging?: Fasepoging) => Promise<DocumentChunk[] | null> {
   const meter = meting?.meter ?? GEEN_FASEMETER;
+  let pad: "nieuw" | "fallback_pgrst202" | undefined = meting?.zoekHybrideV2 ? "nieuw" : undefined;
+  if (pad) meter.markeerHybridezoekpad(pad);
+  const waarschuw = meting?.waarschuw ?? ((melding: string) => console.warn(melding));
   return async (ftsQuery, embedding, poging) => {
     const { data, error } = await meter.meet(
       "rpc_hybride",
-      () =>
-        metSignaal(
-          supabase.rpc("zoek_chunks_hybride", {
-            p_query: ftsQuery,
-            p_embedding: naarVectorLiteral(embedding),
-            ...gedeeldeParams,
-          }),
-          signal
-        ) as Promise<{ data: unknown; error: unknown }>,
+      async () => {
+        const args = {
+          p_query: ftsQuery,
+          p_embedding: naarVectorLiteral(embedding),
+          ...gedeeldeParams,
+        };
+        if (pad === "nieuw") {
+          const nieuw = await metSignaal(
+            supabase.rpc("zoek_chunks_hybride_begrensd", args), signal
+          ) as { data: unknown; error: unknown };
+          if (!isPgrst202(nieuw.error)) return nieuw;
+          if (pad === "nieuw") {
+            pad = "fallback_pgrst202";
+            meter.markeerHybridezoekpad(pad);
+            waarschuw("[retrieval][hybridezoekpad] nieuwe R1b-RPC ontbreekt (PGRST202); eenmalige terugval op de bestaande hybride RPC");
+          }
+        }
+        return metSignaal(supabase.rpc("zoek_chunks_hybride", args), signal) as Promise<{ data: unknown; error: unknown }>;
+      },
       {
         ...(poging ? { poging } : {}),
         rijen: (u) => (Array.isArray(u.data) ? u.data.length : undefined),
@@ -2591,6 +2609,7 @@ export async function zoekRelevanteChunksMetMeta(
   const uitkomst = await voerHybridePogingenUit(vraag, ftsQuery, vector, opties?.origineleVraag, {
     draai: maakHybrideRpc(supabase, gedeeldeRpcParams, opt.signal, {
       meter: opt.fasemeter,
+      zoekHybrideV2: opt.zoekHybrideV2,
       bijFout: (fout) => {
         if (isDbTimeout(fout)) hybrideDbTimeout = true;
       },
