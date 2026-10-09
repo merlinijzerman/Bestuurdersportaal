@@ -1,0 +1,20 @@
+-- ============================================================================
+-- R1b fase H4b — partiële HNSW-index CONCURRENT verwijderen (eigen poort)
+-- Alleen ná H4a (rollback van de R1b-functie) en terwijl de volledige index
+-- geldig is (de guard dwingt beide af). Ook te gebruiken om na een mislukte P1
+-- een ONGELDIGE partiële index op te ruimen (dan bestaat de functie nog niet).
+-- psql, autocommit, directe verbinding.
+--   psql "$DB" -v ON_ERROR_STOP=1 -v doelomgeving=<…> -v fase=H4b \
+--        -f scripts/ops/r1b/h4b-partiele-index-verwijderen.psql
+-- ============================================================================
+\set ON_ERROR_STOP on
+\ir _doelguard.psql
+\echo 'H4b: DROP INDEX CONCURRENTLY IF EXISTS idx_chunks_embedding_generiek_r1b'
+drop index concurrently if exists public.idx_chunks_embedding_generiek_r1b;
+do $$
+begin
+  if to_regclass('public.idx_chunks_embedding_generiek_r1b') is not null then
+    raise exception 'R1b H4b: partiële index bestaat nog — herhaal H4b';
+  end if;
+end $$;
+\echo 'H4b: partiële index verwijderd; volledige index ongemoeid.'

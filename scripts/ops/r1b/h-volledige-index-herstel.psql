@@ -1,0 +1,98 @@
+-- ============================================================================
+-- R1b fase H — HERSTEL van de volledige HNSW-index (H1–H3 van het draaiboek)
+-- ----------------------------------------------------------------------------
+-- UITSLUITEND via psql met een directe databaseverbinding (geen transactie-
+-- pooler, geen SQL-editor): CREATE/DROP INDEX CONCURRENTLY mag niet in een
+-- transactieblok, en de SQL-editor/Management API bieden een script met
+-- meerdere statements als één transactie aan. psql draait dit in autocommit.
+--
+--   psql "$DB" -v ON_ERROR_STOP=1 -v doelomgeving=<lokaal|preview|productie> -v fase=H \
+--        -f scripts/ops/r1b/h-volledige-index-herstel.psql
+--
+-- Volgorde (H0 = ZOEK_HYBRIDE_V2/fondsvlag UIT is al gedaan):
+--   guard  doelomgeving + directe sessie + bekende indexstand (_doelguard.psql);
+--   H1     ruim een ONGELDIGE idx_chunks_embedding op (DROP INDEX CONCURRENTLY);
+--   H2     bouw idx_chunks_embedding concurrent (standaard serieel) opnieuw;
+--   H3     controleer geldig + gereed + definitie; anders STOP (exit ≠ 0);
+--   H4a/b  pas DAARNA de R1b-functie (rollbackscript, transactioneel) en
+--          daarna, met eigen poort, de partiële index (h4b-…psql, concurrent).
+-- Idempotent: staat de volledige index er al geldig, dan is dit een no-op + controle.
+-- Laat de partiële index en de nieuwe functie ONGEMOEID.
+-- ============================================================================
+\set ON_ERROR_STOP on
+-- Doelomgeving, directe sessie (lock_timeout 5 s) en bekende indexstand.
+\ir _doelguard.psql
+-- De herbouw zelf mag lang duren (Productie: ~200 MB HNSW); geen statementlimiet.
+set statement_timeout = 0;
+-- Standaard SERIEEL bouwen. Een parallelle HNSW-bouw (pgvector ≥ 0.7) gebruikt
+-- dynamisch gedeeld geheugen; lokaal (Docker, /dev/shm 64 MB) faalde een
+-- herstelbouw daardoor met "could not resize shared memory segment … No space
+-- left on device" en bleef een ONGELDIGE index achter (9-10-2026). Voor een
+-- hersteloperatie gaat voorspelbaarheid boven snelheid. Bewust parallel:
+--   psql … -v herstel_parallel=2 -f …
+\if :{?herstel_parallel}
+\else
+  \set herstel_parallel 0
+\endif
+set max_parallel_maintenance_workers = :herstel_parallel;
+
+-- H0-controle. Wat dit script WEL afdwingt (naast de guard): het weigert als er
+-- al een indexbouw op document_chunks loopt. Wat het NIET hoeft af te dwingen: een
+-- open transactie — psql -f draait autocommit, en CONCURRENTLY faalt binnen een
+-- transactieblok zelf direct, vóór er iets verandert. Is er op dit moment GEEN
+-- enkele geldige HNSW-index (volledige weg/ongeldig én partiële weg/ongeldig),
+-- dan meldt het script dat als INCIDENT maar gaat het door: juist dan is het
+-- herstel van de volledige index nodig. Het weigert dus niet.
+select
+  exists (select 1 from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid = i.indexrelid
+           where c.relname = 'idx_chunks_embedding' and i.indrelid = 'public.document_chunks'::regclass
+             and not (i.indisvalid and i.indisready)) as volledig_ongeldig,
+  exists (select 1 from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid = i.indexrelid
+           where c.relname = 'idx_chunks_embedding' and i.indrelid = 'public.document_chunks'::regclass
+             and i.indisvalid and i.indisready) as volledig_geldig,
+  (select count(*) from pg_catalog.pg_stat_progress_create_index
+    where relid = 'public.document_chunks'::regclass) > 0 as bouw_loopt,
+  not exists (select 1 from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid = i.indexrelid
+               where i.indrelid = 'public.document_chunks'::regclass
+                 and c.relname in ('idx_chunks_embedding', 'idx_chunks_embedding_generiek_r1b')
+                 and i.indisvalid and i.indisready) as geen_hnsw
+\gset
+\if :geen_hnsw
+  \echo 'R1b-HERSTEL INCIDENT: op dit moment is GEEN enkele HNSW-index geldig; herstel van de volledige index gaat door.'
+\endif
+\if :bouw_loopt
+  \echo 'R1b-HERSTEL GEWEIGERD: er loopt al een indexbouw op document_chunks; wacht of annuleer die eerst.'
+  select 1/0 as herstel_geweigerd;
+\endif
+
+-- H1 — achtergebleven ongeldige volledige index opruimen.
+\if :volledig_ongeldig
+  \echo 'H1: ongeldige idx_chunks_embedding gevonden; DROP INDEX CONCURRENTLY'
+  drop index concurrently if exists public.idx_chunks_embedding;
+\endif
+
+-- H2 — concurrent herbouwen (alleen als hij nu niet geldig bestaat).
+\if :volledig_geldig
+  \echo 'H2: idx_chunks_embedding bestaat al geldig; geen herbouw'
+\else
+  \echo 'H2: CREATE INDEX CONCURRENTLY idx_chunks_embedding'
+  create index concurrently idx_chunks_embedding
+    on public.document_chunks using hnsw (embedding vector_cosine_ops);
+\endif
+
+-- H3 — eindcontrole; faalt hard als de index niet exact hersteld is.
+do $$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_index i
+    join pg_catalog.pg_class c on c.oid = i.indexrelid
+    where i.indrelid = 'public.document_chunks'::regclass
+      and c.relname = 'idx_chunks_embedding'
+      and i.indisvalid and i.indisready
+      and pg_catalog.pg_get_indexdef(i.indexrelid) =
+        'CREATE INDEX idx_chunks_embedding ON public.document_chunks USING hnsw (embedding vector_cosine_ops)'
+  ) then
+    raise exception 'R1b-HERSTEL H3: idx_chunks_embedding niet geldig/gereed of definitie wijkt af — STOP, niet verder naar H4';
+  end if;
+end $$;
+\echo 'H3: idx_chunks_embedding geldig, gereed, definitie gelijk. H4 (rollback RPC/partieel) is nu toegestaan.'

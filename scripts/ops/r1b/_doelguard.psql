@@ -1,0 +1,132 @@
+-- ============================================================================
+-- R1b-indexwissel — gedeelde DOEL- en STANDGUARD (via \ir, vóór elke DDL)
+-- ----------------------------------------------------------------------------
+-- Vereist psql-variabelen:  -v doelomgeving=lokaal|preview|productie  -v fase=P1|P5|H|H4b
+-- Weigert (ON_ERROR_STOP ⇒ exit ≠ 0) vóór enige wijziging als:
+--   1. doelomgeving of fase ontbreekt of onbekend is;
+--   2. de rol tenant_domains niet volledig kan lezen (geen eigenaar/BYPASSRLS);
+--   3. de tenantdomeinen niet bij de opgegeven doelomgeving passen
+--      (lokaal: geen *bestuurdersportaal.com + loopback/docker-adres;
+--       preview: alleen *.preview.bestuurdersportaal.com;
+--       productie: *.bestuurdersportaal.com en geen preview-host);
+--   4. de sessie geen directe/sessieverbinding is (transactiepooler: andere
+--      backend-pid of een SET die niet blijft staan) of request.jwt.claims gezet is;
+--   5. de catalogus-/indexstand niet EXACT de voor deze fase verwachte is,
+--      er een onbekende HNSW-index op document_chunks staat, of er al een
+--      indexbouw loopt.
+-- Het project-ref zelf is in SQL niet te zien: de operator verifieert dat de
+-- verbindingshost het bedoelde project is (draaiboek, stap 0).
+-- ============================================================================
+\set ON_ERROR_STOP on
+\if :{?doelomgeving}
+\else
+  \echo 'R1B-GUARD: -v doelomgeving=lokaal|preview|productie ontbreekt'
+  select 1/0 as doelomgeving_ontbreekt;
+\endif
+\if :{?fase}
+\else
+  \echo 'R1B-GUARD: -v fase=P1|P5|H|H4b ontbreekt'
+  select 1/0 as fase_ontbreekt;
+\endif
+select set_config('r1b.doel', :'doelomgeving', false), set_config('r1b.fase', :'fase', false);
+
+-- 4. Sessietoets: een transactiepooler geeft per statement mogelijk een andere
+--    backend en laat een SET niet staan; CONCURRENTLY + lock_timeout vereisen
+--    één sessie.
+select pg_catalog.pg_backend_pid() as r1b_pid \gset
+set lock_timeout = '5s';
+select pg_catalog.pg_backend_pid() = :r1b_pid and current_setting('lock_timeout') = '5s' as r1b_sessie_ok \gset
+\if :r1b_sessie_ok
+\else
+  \echo 'R1B-GUARD: geen stabiele sessie (transactiepooler?); gebruik een directe databaseverbinding'
+  select 1/0 as geen_directe_sessie;
+\endif
+
+do $r1b_guard$
+declare
+  v_doel text := current_setting('r1b.doel', true);
+  v_fase text := current_setting('r1b.fase', true);
+  v_rol  oid  := (select oid from pg_catalog.pg_roles where rolname = current_user);
+  v_addr inet := inet_server_addr();
+  v_prod int; v_prev int; v_alle int;
+  v_vol_bestaat bool; v_vol_ok bool; v_par_bestaat bool; v_par_ok bool;
+  v_onbekend int; v_ongeldig_overig int; v_bouw int; v_functie int;
+begin
+  if v_doel not in ('lokaal', 'preview', 'productie') then
+    raise exception 'R1B-GUARD: doelomgeving % onbekend', v_doel;
+  end if;
+  if v_fase not in ('P1', 'P5', 'H', 'H4b') then
+    raise exception 'R1B-GUARD: fase % onbekend', v_fase;
+  end if;
+  if nullif(current_setting('request.jwt.claims', true), '') is not null then
+    raise exception 'R1B-GUARD: request.jwt.claims gezet (PostgREST-sessie); geweigerd';
+  end if;
+
+  -- 2 + 3. Doelomgeving uit de tenantdomeinen.
+  if not coalesce((select rolbypassrls from pg_catalog.pg_roles where oid = v_rol), false)
+     and (select relowner from pg_catalog.pg_class where oid = 'public.tenant_domains'::regclass) <> v_rol then
+    raise exception 'R1B-GUARD: rol % kan public.tenant_domains niet volledig lezen; geweigerd', current_user;
+  end if;
+  select count(*) filter (where host like '%bestuurdersportaal.com' and host not like '%.preview.bestuurdersportaal.com'),
+         count(*) filter (where host like '%.preview.bestuurdersportaal.com'),
+         count(*)
+    into v_prod, v_prev, v_alle
+    from public.tenant_domains;
+  if v_doel = 'lokaal' and (v_prod + v_prev > 0
+       or (v_addr is not null and not (v_addr <<= inet '127.0.0.0/8' or v_addr = inet '::1'
+           or v_addr <<= inet '172.16.0.0/12' or v_addr <<= inet '10.0.0.0/8' or v_addr <<= inet '192.168.0.0/16'))) then
+    raise exception 'R1B-GUARD: doel lokaal, maar tenantdomeinen/serveradres wijzen op een remote omgeving; geweigerd';
+  end if;
+  if v_doel = 'preview' and (v_prev = 0 or v_prod > 0) then
+    raise exception 'R1B-GUARD: doel preview, maar de tenantdomeinen passen niet (preview %, productie %); geweigerd', v_prev, v_prod;
+  end if;
+  if v_doel = 'productie' and (v_prod = 0 or v_prev > 0) then
+    raise exception 'R1B-GUARD: doel productie, maar de tenantdomeinen passen niet (productie %, preview %); geweigerd', v_prod, v_prev;
+  end if;
+
+  -- 5. Catalogus-/indexstand.
+  select bool_or(c.relname = 'idx_chunks_embedding'),
+         bool_or(c.relname = 'idx_chunks_embedding' and i.indisvalid and i.indisready
+                 and pg_catalog.pg_get_indexdef(i.indexrelid) = 'CREATE INDEX idx_chunks_embedding ON public.document_chunks USING hnsw (embedding vector_cosine_ops)'),
+         bool_or(c.relname = 'idx_chunks_embedding_generiek_r1b'),
+         bool_or(c.relname = 'idx_chunks_embedding_generiek_r1b' and i.indisvalid and i.indisready
+                 and pg_catalog.pg_get_indexdef(i.indexrelid) = 'CREATE INDEX idx_chunks_embedding_generiek_r1b ON public.document_chunks USING hnsw (embedding vector_cosine_ops) WITH (m=''32'', ef_construction=''256'') WHERE (bibliotheek = ''generiek''::text)'),
+         count(*) filter (where am.amname = 'hnsw' and c.relname not in ('idx_chunks_embedding', 'idx_chunks_embedding_generiek_r1b')),
+         count(*) filter (where not (i.indisvalid and i.indisready) and c.relname not in ('idx_chunks_embedding', 'idx_chunks_embedding_generiek_r1b'))
+    into v_vol_bestaat, v_vol_ok, v_par_bestaat, v_par_ok, v_onbekend, v_ongeldig_overig
+    from pg_catalog.pg_index i
+    join pg_catalog.pg_class c on c.oid = i.indexrelid
+    join pg_catalog.pg_am am on am.oid = c.relam
+   where i.indrelid = 'public.document_chunks'::regclass;
+  v_vol_bestaat := coalesce(v_vol_bestaat, false); v_vol_ok := coalesce(v_vol_ok, false);
+  v_par_bestaat := coalesce(v_par_bestaat, false); v_par_ok := coalesce(v_par_ok, false);
+  select count(*) into v_bouw from pg_catalog.pg_stat_progress_create_index where relid = 'public.document_chunks'::regclass;
+  select count(*) into v_functie from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'zoek_chunks_hybride_begrensd';
+
+  if v_onbekend > 0 or v_ongeldig_overig > 0 then
+    raise exception 'R1B-GUARD: onbekende HNSW-index (%) of andere ongeldige index (%) op document_chunks; stand onbekend, geweigerd', v_onbekend, v_ongeldig_overig;
+  end if;
+  if v_bouw > 0 then
+    raise exception 'R1B-GUARD: er loopt al een indexbouw op document_chunks; geweigerd';
+  end if;
+  if v_fase = 'P1' and not (v_vol_ok and not v_par_bestaat and v_functie = 0) then
+    raise exception 'R1B-GUARD P1: verwacht volledige index geldig, geen partiële index, geen R1b-functie (nu: volledig_ok %, partieel %, functie %)', v_vol_ok, v_par_bestaat, v_functie;
+  end if;
+  if v_fase = 'P5' and not (v_vol_ok and v_par_ok and v_functie = 1) then
+    raise exception 'R1B-GUARD P5: verwacht beide indexen geldig met gepinde definitie en de R1b-functie (nu: volledig_ok %, partieel_ok %, functie %)', v_vol_ok, v_par_ok, v_functie;
+  end if;
+  if v_fase = 'H' and v_par_bestaat and not v_par_ok then
+    raise exception 'R1B-GUARD H: partiële index bestaat maar is ongeldig of wijkt af; handmatige analyse vóór herstel';
+  end if;
+  if v_fase = 'H' and v_vol_bestaat and not v_vol_ok and exists (
+       select 1 from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid = i.indexrelid
+        where i.indrelid = 'public.document_chunks'::regclass and c.relname = 'idx_chunks_embedding'
+          and i.indisvalid and i.indisready) then
+    raise exception 'R1B-GUARD H: idx_chunks_embedding is geldig maar heeft een AFWIJKENDE definitie; handmatige analyse, geen automatisch herstel';
+  end if;
+  if v_fase = 'H4b' and not (v_vol_ok and v_functie = 0) then
+    raise exception 'R1B-GUARD H4b: verwacht volledige index geldig én R1b-functie al verwijderd (H4a) (nu: volledig_ok %, functie %)', v_vol_ok, v_functie;
+  end if;
+end $r1b_guard$;
+\echo 'R1B-GUARD: doelomgeving' :doelomgeving ', fase' :fase ': stand zoals verwacht.'
