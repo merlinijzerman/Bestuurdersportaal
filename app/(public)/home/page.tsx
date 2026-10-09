@@ -32,7 +32,7 @@ const verbindingen = [
   },
   {
     naam: "Bestuurdersperspectief AI",
-    betekenis: "De assistent helpt vragen stellen over de afweging die nu voorligt.",
+    betekenis: "De assistent redeneert mee vanuit het perspectief van een bestuurder en helpt belangen, risico’s, alternatieven en gevolgen voor de organisatie expliciet te maken.",
   },
   {
     naam: "Sectorgerichte duiding",

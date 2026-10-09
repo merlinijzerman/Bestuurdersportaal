@@ -112,8 +112,10 @@ export default function Pagina() {
               <p>
                 Bij een nieuwe bespreking kan de assistent eerdere aannames en de eigen
                 stukken verbinden met relevante wet- en regelgeving en toezichtinformatie.
-                Zij brengt die kaders actief in bij de voorbereiding, helpt kritische
-                vragen formuleren en toont waarop haar antwoorden steunen. Zo kan het
+                Zij brengt die kaders actief in bij de voorbereiding en redeneert mee
+                vanuit het perspectief van een bestuurder: welke belangen, risico’s,
+                alternatieven en gevolgen voor de organisatie verdienen aandacht?
+                Zij toont waarop haar antwoorden steunen. Zo kan het
                 bestuur de bijdrage controleren en zelf wegen wat die betekent voor het
                 besluit van vandaag.
               </p>
