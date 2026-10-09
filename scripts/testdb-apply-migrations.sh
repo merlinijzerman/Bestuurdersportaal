@@ -49,6 +49,36 @@ if [ -z "$DB_URL" ]; then
   exit 1
 fi
 
+# Loopback-eis vóór de eerste DDL. Dit script bouwt een wegwerp-DB op (baseline,
+# loginfixtures, alle migraties én de lokale R1b-voorbereiding P1 met een
+# HNSW-indexbouw). Een remote host — ook via DATABASE_URL — wordt geweigerd,
+# zodat geen van die stappen ooit per ongeluk een Preview/Productie-DB raakt.
+# Alle CI-workflows gebruiken 127.0.0.1:54322.
+# libpq leest ook URI-queryparameters (?host=, ?hostaddr=, ?service=) en de
+# omgeving (PGHOSTADDR, PGSERVICE): dan is de host in de URL niet per se de
+# echte bestemming. Daarom: alleen postgresql:// of postgres://, géén query,
+# géén fragment, en geen PGHOSTADDR/PGSERVICE in de omgeving.
+if [ -n "${PGHOSTADDR:-}" ] || [ -n "${PGSERVICE:-}" ]; then
+  echo "FOUT: PGHOSTADDR/PGSERVICE gezet; die kunnen de bestemming omleggen. Weigert." >&2
+  exit 1
+fi
+db_host="$(node -e '
+  try {
+    const u = new URL(process.argv[1]);
+    if (!["postgresql:", "postgres:"].includes(u.protocol) || u.search !== "" || u.hash !== "") process.exit(2);
+    process.stdout.write(u.hostname);
+  } catch { process.exit(1) }' "$DB_URL" 2>/dev/null)" || {
+  echo "FOUT: database-URL geweigerd: alleen postgresql:// of postgres:// zonder query/fragment naar 127.0.0.1|localhost|[::1]." >&2
+  exit 1
+}
+case "$db_host" in
+  127.0.0.1|localhost|"[::1]"|::1) ;;
+  *)
+    echo "FOUT: testdb-apply-migrations weigert host '$db_host': alleen een loopback-test-DB (127.0.0.1, localhost, ::1)." >&2
+    exit 1
+    ;;
+esac
+
 if ! command -v psql >/dev/null 2>&1; then
   echo "FOUT: psql niet gevonden op PATH." >&2
   exit 1
@@ -214,10 +244,25 @@ SQL
 echo "OK: ephemere loginfixtures aanwezig."
 echo
 
+# Expliciete lokale voorbereidingsstappen. Een migratie die een vooraf en BUITEN
+# een transactie gebouwde index eist (R1b P2 bouwt bewust zelf niets), krijgt
+# hier exact dezelfde ops-stap als het draaiboek voorschrijft, met de lokale
+# doelguard. Geen stille bouw in de migratie zelf.
+lokale_voorbereiding() {
+  case "$(basename "$1")" in
+    2026_10_08_r1b_hybride_begrensd.sql)
+      echo "    ↳ lokale voorbereiding R1b-P1: partiële HNSW-index concurrent (scripts/ops/r1b)"
+      psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -v doelomgeving=lokaal -v fase=P1 \
+        -f scripts/ops/r1b/p1-partiele-index-concurrent.psql >/dev/null
+      ;;
+  esac
+}
+
 echo "Voorwaartse migraties ná $BASELINE_CUTOFF toepassen (${#MIGRATIES[@]} bestanden)…"
 if [ "${#MIGRATIES[@]}" -gt 0 ]; then
   for f in "${MIGRATIES[@]}"; do
     echo "  › $(basename "$f")"
+    lokale_voorbereiding "$f"
     # ON_ERROR_STOP: de eerste falende migratie breekt de apply af (fail-fast).
     psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$f"
   done
