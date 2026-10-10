@@ -97,8 +97,9 @@ const PIN = {
   // B-opt tranche 4a (besluit 0168): het tegenperspectief-blok — u vraagt om het
   // tegenargument, u levert het niet. Nieuw, additief; raakt geen bestaande hash.
   SP_REFLECTIE_TEGENPERSPECTIEF: "985c93fa72c732266485db1f31b57066a453e37fe27d462263fe16c130735406",
-  static_feitelijk_combineren: "720677da5a653ce08bbe08e051dad1c065a8246c7fa9964ef23d1b16e004cb6e",
-  static_sparring_combineren: "bf11b83970b44857951fa520b51022b92968f6d59875e975a5665e5120c14118",
+  // 10-10-2026: bronplicht voor expliciet gevraagde cijfers met bron/periode.
+  static_feitelijk_combineren: "b0647c627973632451aed461526a983274902dc597bbb0b479e3084ddb12cd07",
+  static_sparring_combineren: "189f95207cc2b18977e5bb26b110227ca16921a40bfc0a613fcddd467b480fdc",
   // #368: providernaam en fondsnaam zijn uit trusted SYSTEM verwijderd; de
   // dynamische basis bevat alleen nog vaste rolmapping en een verwijzing naar
   // de afzonderlijk gemarkeerde portaalcontext.

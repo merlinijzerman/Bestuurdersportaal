@@ -63,6 +63,7 @@ const contextRegister = JSON.parse(readFileSync(CONTEXT_REGISTER_PAD, "utf8")) a
 };
 
 test("F4-context — het antwoordpadregister is exact bevroren", () => {
+  // 10-10-2026: +1 pure module brongebonden-cijfers.ts; geen nieuwe DB-lezing.
   const nu = contextCensus();
   assert.deepEqual(
     nu.bestanden, contextRegister.contextbronnen,
