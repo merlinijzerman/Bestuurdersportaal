@@ -23,6 +23,12 @@ import { brondekkingsinstructie } from "@/core/lib/retrieval/brondekking";
 import { TIMEOUT_DEFAULT_MS, timeoutUitConfig, maakAfbreekgrendel, isAfbreking, bewaakNaIO, RetrievalAfgebroken as BeurtAfgebroken } from "@/core/lib/retrieval/afbreken";
 import type { Afbreekgrendel } from "@/core/lib/retrieval/afbreken";
 import { generatieTimeoutUitConfig, effectiefGeneratiebudget } from "@/core/lib/generatie-budget";
+import {
+  BRONGEBONDEN_CIJFERS_INSTRUCTIE,
+  BRONGEBONDEN_CIJFERS_TERUGVAL,
+  vraagtBrongebondenCijferInGesprek,
+  heeftBronloosCijfer,
+} from "@/core/lib/brongebonden-cijfers";
 import { maakSupabaseAdapter } from "@/core/lib/retrieval/supabase-adapter";
 import { haalJuridischeSectieVoorWeergave } from "@/core/lib/retrieval/juridische-sectie-ophalen";
 import { bepaalSectiefocus, geefParagraafLetterlijk } from "@/core/lib/retrieval/juridische-sectie";
@@ -4848,6 +4854,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           // toont per ontwerp geen inhoudelijke vervolgvragen (ANTWOORDPAD §4);
           // beide clients rekenen daar expliciet op.
           const metVervolgvragen = !transformatieActief && !reflectieActief;
+          // Brongebonden kwantitatieve vragen worden pas getoond nadat de hele
+          // output is gecontroleerd: een laat ontdekt bronloos bedrag mag nooit
+          // al als SSE-delta bij de bestuurder zijn aangekomen. Ook als de
+          // webtool beschikbaar is maar niet gebruikt wordt, geldt deze poort.
+          // Alleen een documentcitatie kan hier een getal vrijgeven; voor een
+          // uitsluitend op web gestoeld cijfer volgt een voorzichtige terugval.
+          const bufferBrongebondenCijfers =
+            vraagtBrongebondenCijferInGesprek(
+              effectieveVraag,
+              messages.slice(0, -1).filter((m) => m.role === "user").map((m) => m.content)
+            ) &&
+            !reflectieActief &&
+            !transformatieActief &&
+            !opstelTaak;
           // Scenario A — voeg het webbronnen-instructieblok toe wanneer de
           // web_search-tool voor dit antwoord is ingeschakeld (injection-sandboxing,
           // weging, citatieplicht, geen PII in de zoekopdracht).
@@ -4857,6 +4877,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
           const streamSysteem = [
             ...systeemBlokken,
             ...webBlok,
+            ...(bufferBrongebondenCijfers
+              ? [{ type: "text" as const, text: BRONGEBONDEN_CIJFERS_INSTRUCTIE }]
+              : []),
             ...(scopeActief && !transformatieActief && !reflectieActief
               ? [
                   {
@@ -4933,7 +4956,7 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             volledig += delta;
             // B-opt tranche 3b — de verdiepingsvraag wordt niet gestreamd: accumuleer
             // alleen, valideer straks ná finalMessage en toon dan in één keer.
-            if (bufferReflectievraag) return;
+            if (bufferReflectievraag || bufferBrongebondenCijfers) return;
             if (markerGezien) return;
             const idx = volledig.indexOf(VERVOLGVRAGEN_MARKER);
             if (idx !== -1) {
@@ -4990,6 +5013,17 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
             volledig = definitief;
             send({ type: "delta", text: definitief });
             verzonden = definitief.length;
+          } else if (bufferBrongebondenCijfers) {
+            const kandidaat = splitsVervolgvragen(volledig).zichtbaar;
+            if (heeftBronloosCijfer(kandidaat, bronnen.length)) {
+              // De vaste terugval vermeldt bewust geen waarde. De ruwe output
+              // is nooit gestreamd en komt ook niet in het auditantwoord.
+              volledig = BRONGEBONDEN_CIJFERS_TERUGVAL;
+              console.warn("Brongebonden cijfer zonder documentcitatie afgekeurd");
+            }
+            const zichtbaar = splitsVervolgvragen(volledig).zichtbaar;
+            send({ type: "delta", text: zichtbaar });
+            verzonden = zichtbaar.length;
           } else if (!markerGezien && verzonden < volledig.length) {
             // Flush de resterende zichtbare staart als de marker nooit kwam.
             send({ type: "delta", text: volledig.slice(verzonden) });
