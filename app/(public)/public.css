@@ -1869,3 +1869,59 @@
   .bp-public .product-story-image img {transition:none}
   .bp-public .product-story-button:hover img {transform:none}
 }
+
+/* Meerwaarde: de context tussen twee besluitmomenten. */
+.bp-public .waarde-hero-layout {display:grid;grid-template-columns:1.12fr .88fr;gap:64px;align-items:center}
+.bp-public .waarde-hero h1 {max-width:14ch}
+.bp-public .waarde-hero .lede {max-width:55ch}
+.bp-public .waarde-hero .cta {margin-top:28px}
+.bp-public .waarde-hero-kader {background:var(--navy-deep);color:#fff;padding:30px 32px;border-radius:12px;box-shadow:0 18px 48px var(--schaduw)}
+.bp-public .waarde-kader-label {display:block;color:#AFC0D2;font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:20px}
+.bp-public .waarde-hero-kader p {display:flex;gap:18px;align-items:baseline;font-family:var(--serif);font-size:20px;padding:16px 0;border-top:1px solid rgba(255,255,255,.2)}
+.bp-public .waarde-hero-kader p span {font-family:var(--sans);font-size:11px;letter-spacing:.1em;color:#9CC3E4;min-width:55px}
+.bp-public .waarde-kader-slot {font-size:13px;color:#AFC0D2;padding-top:18px;border-top:1px solid rgba(255,255,255,.2)}
+.bp-public .waarde-inleiding-grid {display:grid;grid-template-columns:220px 1fr;gap:44px;align-items:start}
+.bp-public .waarde-inleiding h2 {max-width:24ch}
+.bp-public .waarde-inleiding p {font-size:17px;color:var(--muted);max-width:72ch}
+.bp-public #in-de-praktijk {scroll-margin-top:68px}
+.bp-public .waarde-casus-grid {display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+.bp-public .waarde-casus-grid article {background:var(--app-surface);border:1px solid var(--app-line-strong);border-radius:12px;padding:30px;min-height:270px}
+.bp-public .waarde-moment {display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);font-weight:600;margin-bottom:24px}
+.bp-public .waarde-casus-grid h3 {font-size:26px;margin-bottom:13px}
+.bp-public .waarde-casus-grid p {font-size:15.5px;color:var(--muted);max-width:52ch}
+.bp-public .waarde-casus-slot {font-family:var(--serif);font-size:24px;line-height:1.35;max-width:46ch;margin:32px auto 0;text-align:center}
+.bp-public .waarde-bouwstenen-grid {display:grid;grid-template-columns:.9fr 1.1fr;gap:72px;align-items:start}
+.bp-public .waarde-bouwstenen-grid > div > p {color:var(--muted);max-width:52ch}
+.bp-public #meerwaarde {scroll-margin-top:68px}
+.bp-public .waarde-bouwstenen-link {margin-top:22px}
+.bp-public .waarde-bouwstenen dl {border-top:1px solid var(--app-line-strong)}
+.bp-public .waarde-bouwstenen dl > div {display:grid;grid-template-columns:190px 1fr;gap:18px;padding:16px 0;border-bottom:1px solid var(--app-line)}
+.bp-public .waarde-bouwstenen dt {font-family:var(--serif);font-size:18px;line-height:1.3}
+.bp-public .waarde-bouwstenen dd {color:var(--muted);font-size:14px}
+.bp-public .waarde-ai-grid {display:grid;grid-template-columns:1fr 1fr;gap:68px;align-items:start}
+.bp-public .waarde-ai h2 {max-width:18ch}
+.bp-public .waarde-ai-grid > div > p {color:#AFC0D2;font-size:17px;max-width:60ch}
+.bp-public .waarde-donker-link {display:inline-block;margin-top:22px;color:#C6E1F7;text-decoration:none;border-bottom:1px solid currentColor;font-size:14px}
+.bp-public .waarde-donker-link:hover {color:#fff}
+@media (min-width:1101px) {
+  .bp-public .nav {gap:16px}
+  .bp-public nav.links {gap:16px;font-size:13.5px}
+  .bp-public nav.links .btn-sm {padding:10px 13px;font-size:13px}
+}
+@media (max-width:1100px) {
+  .bp-public nav.links a.navitem {display:none}
+  .bp-public .hamburger {display:flex}
+}
+@media (max-width:900px) {
+  .bp-public .waarde-hero-layout,.bp-public .waarde-bouwstenen-grid,.bp-public .waarde-ai-grid {grid-template-columns:1fr;gap:32px}
+  .bp-public .waarde-inleiding-grid {grid-template-columns:1fr;gap:4px}
+  .bp-public .waarde-bouwstenen dl > div {grid-template-columns:170px 1fr}
+}
+@media (max-width:620px) {
+  .bp-public .waarde-hero-kader {padding:24px}
+  .bp-public .waarde-hero-kader p {font-size:18px}
+  .bp-public .waarde-casus-grid {grid-template-columns:1fr}
+  .bp-public .waarde-casus-grid article {min-height:0;padding:24px}
+  .bp-public .waarde-casus-slot {font-size:21px}
+  .bp-public .waarde-bouwstenen dl > div {grid-template-columns:1fr;gap:4px}
+}
